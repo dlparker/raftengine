@@ -115,7 +115,8 @@ class MemoryLog(LogAPI):
         rec = self.records.get_last_entry()
         return rec.term
     
-
+    def close(self):
+        pass
 
 
         

@@ -12,7 +12,9 @@ from raftengine.hull.hull import Hull
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.base_message import BaseMessage
-from dev_tools.memory_log_v2 import MemoryLog
+from dev_tools.memory_log import MemoryLog
+from dev_tools.sqlite_log import SqliteLog
+
 from raftengine.hull.api import PilotAPI
 
 def setup_logging():
@@ -470,10 +472,19 @@ class NetManager:
             node.hull.cluster_config.node_uris =  list(self.full_cluster.nodes.keys())
         self.segments = None
                 
+
+def setup_sqlite_log(uri):
+    number = uri.split('/')[-1]
+    path = Path('/tmp', f"pserver_{number}.sqlite")
+    if path.exists():
+        path.unlink()
+    log = SqliteLog(path)
+    log.start()
+    return log
         
 class PausingServer(PilotAPI):
 
-    def __init__(self, uri, cluster):
+    def __init__(self, uri, cluster, use_log=MemoryLog):
         self.uri = uri
         self.cluster = cluster
         self.cluster_config = None
@@ -483,7 +494,10 @@ class PausingServer(PilotAPI):
         self.out_messages = []
         self.lost_out_messages = []
         self.logger = logging.getLogger("PausingServer")
-        self.log = MemoryLog()
+        if use_log == MemoryLog:
+            self.log = MemoryLog()
+        elif use_log == SqliteLog:
+            self.log = setup_sqlite_log(uri)
         self.trigger_set = None
         self.trigger = None
         self.break_on_message_code = None
@@ -580,6 +594,7 @@ class PausingServer(PilotAPI):
             
         self.hull = None
         del hull
+        self.log.close()
 
     def clear_triggers(self):
         self.trigger = None
@@ -643,7 +658,7 @@ class PausingServer(PilotAPI):
     
 class PausingCluster:
 
-    def __init__(self, node_count):
+    def __init__(self, node_count, use_log=MemoryLog):
         self.node_uris = []
         self.nodes = dict()
         self.logger = logging.getLogger("PausingCluster")
@@ -653,7 +668,7 @@ class PausingCluster:
             nid = i + 1
             uri = f"mcpy://{nid}"
             self.node_uris.append(uri)
-            t1s = PausingServer(uri, self)
+            t1s = PausingServer(uri, self, use_log=use_log)
             self.nodes[uri] = t1s
         self.net_mgr = NetManager(self.nodes, self.nodes)
         net = self.net_mgr.setup_network()
