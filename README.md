@@ -22,7 +22,7 @@ remaining are:
    which in turn derive from the original paper found in raft.pdf.
 2. The structure of the state classes, where the specific states
    derive from a base class.
-3. The names of the mmessages and states directories.
+3. The names of the messages and states directories.
 
 As a result of the extent of these changes, I have changed the license
 file to include me as copyright holder, and removed Bao Nguyen's name.
@@ -41,6 +41,6 @@ This project is designed to provide a frame on which to build such servers.
 ## References
 
 - [raftos](https://github.com/zhebrak/raftos)
-- [protocol extensions]https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
+- [protocol extensions](https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11)
 - [simpleRaft](https://github.com/streed/simpleRaft/tree/master/simpleRaft)
 - [Raft visualization](http://thesecretlivesofdata.com/raft/)
