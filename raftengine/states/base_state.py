@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from enum import Enum
-from raftframe.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftframe.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
+from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 
 class StateCode(str, Enum):
 
@@ -13,13 +13,13 @@ class StateCode(str, Enum):
     """ Transitioning from one state to another """
     changing = "CHANGING"
 
-    """ Follower state, as defined in raftframe protocol """
+    """ Follower state, as defined in raftengine protocol """
     follower = "FOLLOWER"
 
-    """ Candidate state, as defined in raftframe protocol """
+    """ Candidate state, as defined in raftengine protocol """
     candidate = "CANDIDATE"
 
-    """ Leader state, as defined in raftframe protocol """
+    """ Leader state, as defined in raftengine protocol """
     leader = "LEADER"
     
 class Substate(str, Enum):

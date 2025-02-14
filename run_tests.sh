@@ -11,7 +11,7 @@ if [[ `which pytest` != $VIRTUAL_ENV/bin/pytest ]]; then
    source .venv/bin/activate
 fi
 if [ $# -eq 0 ]; then
-    pytest --verbose  --cov-config=coverage.cfg  --cov-report=html --cov-report=term -x --pdb --pdbcls=IPython.terminal.debugger:TerminalPdb -s --cov=raftframe tests
+    pytest --verbose  --cov-config=coverage.cfg  --cov-report=html --cov-report=term -x --pdb --pdbcls=IPython.terminal.debugger:TerminalPdb -s --cov=raftengine tests
 else
-    pytest --verbose  --cov-config=coverage.cfg --cov-report=html --cov-report=term -x --pdb --pdbcls=IPython.terminal.debugger:TerminalPdb -s  --cov=raftframe $@
+    pytest --verbose  --cov-config=coverage.cfg --cov-report=html --cov-report=term -x --pdb --pdbcls=IPython.terminal.debugger:TerminalPdb -s  --cov=raftengine $@
 fi

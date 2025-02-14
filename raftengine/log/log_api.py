@@ -40,7 +40,7 @@ class LogRec:
 class LogAPI(metaclass=abc.ABCMeta):
     """
     Abstract base class that functions as an interface definition for 
-    implmentations of Log storage that can be used by the raftframe state classes
+    implmentations of Log storage that can be used by the raftengine state classes
     to create and view log records to implement the algorythm.
     """
     

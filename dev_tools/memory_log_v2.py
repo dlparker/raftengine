@@ -3,12 +3,12 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 from copy import deepcopy
 import logging
-from raftframe.log.log_api import LogRec, LogAPI
+from raftengine.log.log_api import LogRec, LogAPI
 
 class Records:
 
     def __init__(self):
-        # log record indexes start at 1, per raftframe spec
+        # log record indexes start at 1, per raftengine spec
         self.index = 0
         self.entries = []
 

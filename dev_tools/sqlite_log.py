@@ -6,12 +6,12 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 from copy import deepcopy
 import logging
-from raftframe.log.log_api import LogRec, LogAPI, RecordCode
+from raftengine.log.log_api import LogRec, LogAPI, RecordCode
 
 class Records:
 
     def __init__(self, storage_dir: os.PathLike):
-        # log record indexes start at 1, per raftframe spec
+        # log record indexes start at 1, per raftengine spec
         self.filepath = Path(storage_dir, "log.sqlite").resolve()
         self.index = 0
         self.entries = []
