@@ -13,6 +13,7 @@ from servers import WhenHasLogIndex
 from servers import WhenInMessageCount, WhenElectionDone
 from servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from servers import PausingCluster, cluster_maker
+from servers import SNormalElection
 from servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
@@ -21,28 +22,15 @@ setup_logging(extra_logging)
 async def test_command_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
 
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
     
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
@@ -170,28 +158,14 @@ async def test_command_sqlite_1(cluster_maker):
     from dev_tools.sqlite_log import SqliteLog
     cluster = cluster_maker(3, use_log=SqliteLog)
     cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
-    
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
+
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
@@ -225,28 +199,14 @@ async def test_command_sqlite_1(cluster_maker):
 async def test_command_2_leaders_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
     
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1

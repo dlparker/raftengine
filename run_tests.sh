@@ -2,7 +2,7 @@
 set -x
 export PYTHONBREAKPOINT=ipdb.set_trace
 #export PYTHONPATH="`pwd`:$(dirname `pwd`)"
-export PYTHONPATH="."
+export PYTHONPATH=.
 
 if [ -z ${VIRTUAL_ENV+x} ]; then
    source .venv/bin/activate
