@@ -7,7 +7,8 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from servers import setup_logging
 
-setup_logging()
+extra_logging = [dict(name=__name__, level="debug"),]
+setup_logging(extra_logging)
 
 from servers import WhenElectionDone
 from servers import PausingCluster, cluster_maker
@@ -57,10 +58,7 @@ async def test_partition_1(cluster_maker):
     await cluster.start_auto_comms()
     command_result = await ts_1.hull.apply_command("add 1")
     assert command_result is not None
-    assert command_result['result'] is not None
-    res1,err1 = command_result['result']
-    assert res1 is not None
-    assert err1 is None
+    assert command_result.result is not None
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -79,10 +77,7 @@ async def test_partition_1(cluster_maker):
     logger.info('--------- Everbody has first record, partition done, repleating command')
     command_result = await ts_1.hull.apply_command("add 1")
     assert command_result is not None
-    assert command_result['result'] is not None
-    res1,err1 = command_result['result']
-    assert res1 is not None
-    assert err1 is None
+    assert command_result.result is not None
     assert ts_1.operations.total == 2
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 2
@@ -91,10 +86,7 @@ async def test_partition_1(cluster_maker):
     logger.info('--------- Main partition has update, doing it again')
     command_result = await ts_1.hull.apply_command("add 1")
     assert command_result is not None
-    assert command_result['result'] is not None
-    res1,err1 = command_result['result']
-    assert res1 is not None
-    assert err1 is None
+    assert command_result.result is not None
     assert ts_1.operations.total == 3
     assert ts_2.operations.total == 3
     assert ts_3.operations.total == 3
@@ -151,10 +143,7 @@ async def test_partition_1(cluster_maker):
     if False:
         command_result = await ts_1.hull.apply_command("add 1")
         assert command_result is not None
-        assert command_result['result'] is not None
-        res1,err1 = command_result['result']
-        assert res1 is not None
-        assert err1 is None
+        assert command_result.result is not None
         assert ts_1.operations.total == 4
         assert ts_2.operations.total == 4
         assert ts_3.operations.total == 4

@@ -4,6 +4,7 @@ import time
 import pytest
 import functools
 import dataclasses
+import traceback
 from pathlib import Path
 from logging.config import dictConfig
 from collections import defaultdict
@@ -17,8 +18,9 @@ from dev_tools.sqlite_log import SqliteLog
 
 from raftengine.hull.api import PilotAPI
 
-def setup_logging():
-    lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+def setup_logging(additions=None):
+    #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    lfstring = '[%(levelname)s] %(name)s: %(message)s'
     log_formaters = dict(standard=dict(format=lfstring))
     logfile_path = Path('.', "test.log")
     if False:
@@ -38,7 +40,7 @@ def setup_logging():
     if False:
         log_handlers = dict(file=file_handler, stdout=stdout_handler)
         handler_names = ['file', 'stdout']
-    log_loggers = set_levels(handler_names)
+    log_loggers = set_levels(handler_names, additions=additions)
     log_config = dict(version=1, disable_existing_loggers=False,
                       formatters=log_formaters,
                       handlers=log_handlers,
@@ -52,7 +54,7 @@ def setup_logging():
         raise
     return log_config
 
-def set_levels(handler_names):
+def set_levels(handler_names, additions=None):
     log_loggers = dict()
     err_log = dict(handlers=handler_names, level="ERROR", propagate=False)
     warn_log = dict(handlers=handler_names, level="WARNING", propagate=False)
@@ -62,12 +64,25 @@ def set_levels(handler_names):
     log_loggers[''] = root_log
     log_loggers['PausingServer'] = debug_log
     default_log =  info_log
+    default_log =  debug_log
     log_loggers['Leader'] = default_log
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
     log_loggers['SimulatedNetwork'] = debug_log
+    if additions:
+        for add in additions:
+            if add['level'] == "debug":
+                log_loggers[add['name']] = debug_log
+            elif add['level'] == "info":
+                log_loggers[add['name']] = info_log
+            elif add['level'] == "warn":
+                log_loggers[add['name']] = warn_log
+            elif add['level'] == "error":
+                log_loggers[add['name']] = error_log
+            else:
+                raise Exception('Invalid level')
     return log_loggers
 
 @pytest.fixture
@@ -277,8 +292,9 @@ class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the
     # post election quiet period
 
-    def __init__(self):
+    def __init__(self, voters=None):
         self.announced = defaultdict(dict)
+        self.voters = voters
         
     def __repr__(self):
         msg = f"{self.__class__.__name__}"
@@ -288,7 +304,10 @@ class WhenElectionDone(PauseTrigger):
         logger = logging.getLogger("Triggers")
         quiet = []
         have_leader = False
-        for uri, node in server.cluster.nodes.items():
+        if self.voters is None:
+            self.voters = list(server.cluster.nodes.keys())
+        for uri in self.voters:
+            node = server.cluster.nodes[uri]
             if node.hull.get_state_code() == "LEADER":
                 have_leader = True
                 rec = self.announced[uri]
@@ -301,7 +320,7 @@ class WhenElectionDone(PauseTrigger):
                 if "is_quiet" not in rec:
                     rec['is_quiet'] = True
                     logger.debug('%s is now quiet, total quiet == %d', uri, len(quiet))
-        if have_leader and len(quiet) == len(server.cluster.nodes):
+        if have_leader and len(quiet) == len(self.voters):
             return True
         return False
     
@@ -412,7 +431,15 @@ class Network:
         self.logger.debug("%s handling message %s", node.uri, msg)
         await node.hull.on_message(msg)
         return msg
-        
+
+    async def drop_next_in_msg(self, node):
+        if len(node.in_messages) == 0:
+            return None
+        msg = node.in_messages.pop(0)
+        if msg:
+            self.logger.debug("%s DROPPING message %s", node.uri, msg)
+        return msg
+    
     async def do_next_out_msg(self, node):
         if node.uri not in self.nodes:
             raise Exception(f'botched network setup, {node.uri} not in {self.nodes}')
@@ -423,14 +450,25 @@ class Network:
         msg = node.out_messages.pop(0)
         target = self.get_node_by_uri(msg.receiver)
         if not target:
-            self.logger.debug("%s losing message %s", node.uri, msg)
+            self.logger.debug("%s !!!!!!!!!  message %s", node.uri, msg)
             node.lost_out_messages.append(msg)
             return msg
         else:
             self.logger.debug("%s forwarding message %s", node.uri, msg)
+            if target.block_messages or node.block_messages:
+                self.logger.debug("DROPPING message %s", msg)
+                return None
             target.in_messages.append(msg)
             return msg
         
+    async def drop_next_out_msg(self, node):
+        if len(node.out_messages) == 0:
+            return None
+        msg = node.out_messages.pop(0)
+        if msg:
+            self.logger.debug("%s DROPPING message %s", node.uri, msg)
+        return msg
+    
         
 class NetManager:
 
@@ -502,6 +540,9 @@ class PausingServer(PilotAPI):
         self.trigger = None
         self.break_on_message_code = None
         self.network = None
+        self.block_messages = False
+        self.blocked_in_messages = None
+        self.blocked_out_messages = None
 
     def set_configs(self, local_config, cluster_config):
         self.cluster_config = cluster_config
@@ -538,16 +579,44 @@ class PausingServer(PilotAPI):
             self.logger.info("%s changing networks, must be partition or heal", self.uri)
             self.logger.info("%s new network has %d nodes", self.uri, len(network.nodes))
         self.network = network
-        
+
+    def block_network(self):
+        self.blocked_in_messages = []
+        self.blocked_out_messages = []
+        self.block_messages = True
+    
+    def unblock_network(self, deliver=False):
+        self.block_messages = False
+        if not deliver:
+            self.blocked_in_messages = None
+            self.blocked_out_messages = None
+            return
+        for msg in self.blocked_in_messages:
+            self.in_messages.append(msg)
+        for msg in self.blocked_out_messages:
+            self.out_messages.append(msg)
+
     async def accept_in_msg(self, message):
         # called by cluster on behalf of sender
         self.logger.debug("queueing sent %s", message)
         self.in_messages.append(message)
         
     async def do_next_in_msg(self):
+        if self.block_messages:
+            msg = await self.network.drop_next_in_msg(self)
+            if msg:
+                self.logger.debug("%s blocking in message %s", self.uri, msg)
+                self.blocked_in_messages.append(msg)
+            return None
         return await self.network.do_next_in_msg(self)
         
     async def do_next_out_msg(self):
+        if self.block_messages:
+            msg = await self.network.drop_next_out_msg(self)
+            if msg:
+                self.logger.debug("%s blocking out message %s", self.uri, msg)
+                self.blocked_out_messages.append(msg)
+            return None
         return await self.network.do_next_out_msg(self)
 
     async def do_next_msg(self):
@@ -572,6 +641,8 @@ class PausingServer(PilotAPI):
         
     async def flush_one_out_message(self, message):
         if len(self.out_messages) == 0:
+            return None
+        if self.block_messages:
             return None
         new_list = []
         for msg in self.out_messages:
@@ -720,6 +791,8 @@ class PausingCluster:
         while any:
             any = False
             for uri, node in self.nodes.items():
+                if node.block_messages:
+                    continue
                 if len(node.in_messages) > 0 and not out_only:
                     msg = await node.do_next_in_msg()
                     in_ledger.append(msg)

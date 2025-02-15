@@ -9,7 +9,8 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from servers import PausingCluster, cluster_maker
 from servers import setup_logging
 
-setup_logging()
+extra_logging = [dict(name=__name__, level="debug"),]
+setup_logging(extra_logging)
 
 
 async def test_election_1(cluster_maker):
@@ -62,7 +63,7 @@ async def test_election_1(cluster_maker):
     assert len(ts_3.in_messages) == 1
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
-
+    
     # now deliver those, we should get two replies at first one,
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()

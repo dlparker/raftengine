@@ -7,6 +7,7 @@ from raftengine.states.base_state import StateCode, BaseState
 from raftengine.states.follower import Follower
 from raftengine.states.candidate import Candidate
 from raftengine.states.leader import Leader
+from raftengine.states.leader import CommandResult
 from raftengine.hull.api import PilotAPI
 
 class Hull:
@@ -81,13 +82,13 @@ class Hull:
 
     async def apply_command(self, command):
         if self.state.state_code == StateCode.leader:
-            result = await self.state.apply_command(command)
-            return dict(result=result, retry=None, redirect=None)
+            return await self.state.apply_command(command)
         elif self.state.state_code == StateCode.follower:
-            return dict(result=None, retry=None, redirect=self.state.leader_uri)
+            return CommandResult(command, redirect=self.state.leader_uri)
         elif self.state.state_code == StateCode.candidate:
-            return dict(result=None, retry=1, redirect=None)
-
+            return CommandResult(command, retry=1)
+        return None
+    
     async def state_after_runner(self, target):
         if self.state.stopped:
             return

@@ -8,7 +8,9 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 
 from servers import setup_logging
 
-setup_logging()
+extra_logging = [dict(name=__name__, level="debug"),]
+setup_logging(extra_logging)
+
 
 from servers import WhenMessageOut, WhenMessageIn
 from servers import WhenIsLeader, WhenHasLeader

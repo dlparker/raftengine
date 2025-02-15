@@ -10,7 +10,8 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from tests.servers import PausingCluster, cluster_maker
 from tests.servers import setup_logging
 
-setup_logging()
+extra_logging = [dict(name=__name__, level="debug"),]
+setup_logging(extra_logging)
 
 async def test_bogus_pilot(cluster_maker):
     cluster = cluster_maker(3)

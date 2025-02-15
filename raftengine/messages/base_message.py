@@ -30,8 +30,5 @@ class BaseMessage:
     def get_code(cls):
         return cls.code
 
-    def is_type(self, type_val):
-        return self._code == type_val
-
     
 

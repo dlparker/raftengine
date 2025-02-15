@@ -137,7 +137,8 @@ class Follower(BaseState):
                                                 prevLogIndex=message.prevLogIndex,
                                                 prevLogTerm=message.prevLogTerm,
                                                 myPrevLogIndex=await self.log.get_last_index(),
-                                                myPrevLogTerm=await self.log.get_last_term())
+                                                myPrevLogTerm=await self.log.get_last_term(),
+                                                leaderId=self.leader_uri)
         await self.hull.send_response(message, append_response)
         
     async def leader_lost(self):
@@ -163,7 +164,8 @@ class Follower(BaseState):
                                                 prevLogIndex=message.prevLogIndex,
                                                 prevLogTerm=message.prevLogTerm,
                                                 myPrevLogIndex=await self.log.get_last_index(),
-                                                myPrevLogTerm=await self.log.get_last_term())
+                                                myPrevLogTerm=await self.log.get_last_term(),
+                                                leaderId=self.leader_uri)
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):

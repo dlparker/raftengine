@@ -10,7 +10,9 @@ from servers import WhenElectionDone
 from servers import PausingCluster, cluster_maker
 from servers import setup_logging
 
-setup_logging()
+extra_logging = [dict(name=__name__, level="debug"),]
+setup_logging(extra_logging)
+
 
 async def test_restart_during_heartbeat(cluster_maker):
     cluster = cluster_maker(3)

@@ -152,6 +152,10 @@ class BaseState:
         data = dict(success=False,
                     last_index=await self.log.get_last_index(),
                     last_term=await self.log.get_last_term())
+        if self.state_code == "FOLLOWER":
+            leaderId = self.leader_uri
+        else:
+            leaderId = ''
         reply = AppendResponseMessage(message.receiver,
                                       message.sender,
                                       term=await self.log.get_term(),
@@ -160,7 +164,8 @@ class BaseState:
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
                                       myPrevLogTerm=await self.log.get_last_term(),
-                                      myPrevLogIndex=await self.log.get_last_index())
+                                      myPrevLogIndex=await self.log.get_last_index(),
+                                      leaderId=leaderId)
         await self.hull.send_response(message, reply)
 
     async def send_reject_vote_response(self, message):
