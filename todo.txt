@@ -1,0 +1,115 @@
+Immediatly:
+
+1. !!!!! IMPORTANT !!!! Figure out how to reconcile candidates always uping the term with healing
+                         back to an older term. Must have misread something in the raft doc.
+			 build tests for it and make em work. Need PreVote and CheckQuorum.
+
+			 https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
+
+4X. Add "caller_context" to command ops
+4y. rough out ideas for cluster class
+    1. Knows about "static config" provided at startup. Can be programatically changed?
+    2. Knows about "dynamic config" resulting from cluster changes while running.
+    3. teach candidate and leader to use it
+    4. build quorum feature such that (if configed) there is a minimum dynamic cluster
+       size for starting election, with default of 1/2 + 1 of static config. Prove this
+       prevents the inconsistent values at same log index problem after partition heal
+
+6. Think deep about reporting errors in raft code, and detecting them in testing. Break something
+   such as rejected append entries and fiddle.
+
+70. Examine whether the entries element of the append response can be removed. Probably.
+
+DONE!!!!!!7. !!!!! IMPORTANT !!!! change log api to be async
+
+DONE! 8. fiddle with test logging to make it more helpful. different loggers for things, for example
+       
+
+DONE! 1. Messaege classes update
+   a. Also remove leaderCommit from vote.
+   b. Consider removing the data stuff from the messages too, it is not requred except for
+      append entries sequences
+   c. Look at each one for simplifications and clarifications. Build short and long __rep__
+      for each
+
+DONE! 2. Condense comms and DSL into a single structure, something like "pilot".
+
+DONE 3. Make command call part of base state with appropriate response if not leader. Follower replies
+   "redirect: uri", candiate response "retry". Build a test sequence for this.
+
+DONE! 4. Build test wrapper (maybe an implementation of "pilot"?) that supports
+   a. message pausing based on patterns, e.g. after sending an apppend entries response. DONE!
+   b. Have it also know how to perform simulated timer triggers
+      1. Figure out a clean way to manage call_later tasks from base state or from hull
+         so that code looks sensible but supports manipulation during testing.
+   c. Add support for firing breakpoint in on_message when condition met. Maybe subclass
+      hull? Maybe monkey patch it? DONE!
+
+DONE! 4W. Pull message transport code into simnet class, teach it to simulate partions.
+    a. Keep granular api in current server and cluster that allows individual messages
+       and the deliver_all_pending functions, along with the condition variable stuff
+
+
+DONE! 5. Need timeout mechanism for command (timeout supplied to condition.wait)
+
+   
+DONE 6. fix the asyncio fixture setting problem in tests, have to update the re-election tests
+
+
+9. Think about providing an optional uri map implementation for users.
+
+10. Consider adding the state map logic or something like it so that "pilot" can receive
+    callbacks to notify about state changes. Prolly simpler than the original. Maybe
+    something that can be implemented in base_state or even hull.
+
+11. Figure out how to log config changes, and in the process make general mechanism for
+    non-command records.
+
+20, Change log api to support multiple record types, command, cluster_config, for sure maybe others.
+
+21. Change command processor sequence to provide unsaved log record with message then save the result.
+   Check raft.pdf to see if there is an implication that a restarted leader might have uncommitted
+   records to apply, and if not then get rid of whole committed/not committed logic everywhere. Otherwise
+   think about how to store them, maybe separate table so that there is no confusion about what the
+   log actually looks like?
+
+
+30. Add config read and write and config-to-and-from-json to hull. Think about defining
+    and API for the hull (probably not since it needs stuff at init)
+
+# REVIEW
+2. Message ops
+XXX   a. Add some means for the caller of the on_message function to tell the target how to send a response back,
+      probably and async callable (awaitable then, I guess). Think about what else might allow the caller
+      to just put this in the loop and ignore it if the comm mechanism is not call/response, and how it
+      would best work if the comm mechanism IS rpc.
+
+XXX   b. Add mechanism to tell states (via hull) how to send messages that are not responses. Should use
+       the same kind of opaque id stuff used in the protocol messages.
+    
+XXX 3. Clearify the support for writing uncommitted records to log, that is only done by the leader,
+   and each record is committed once the majority concurrence is noted. Maybe just a little renaming
+   and some comments.
+
+XXX 4. Think about how to structure the "start raft logged write" process in such a way that the raft
+   code can say "no, I am not leader, here is the leader id, send it to them".
+
+XXX 5. Game a scenario where we use the raft log to just persist a reference to something stored elsewhere,
+   see if that can make sense. This allows an alternative to building your own logAPI implementation
+   so that raft records can be stored in app storage. Think about it especially in terms of how you'd
+   do it in Dora, saving Dora log records locally and expecting remote nodes to save them too, then the
+   append entries operation (on remotes) would want to try to sync with that state. Could it work
+   where the Dora log record has not yet arrived? Maybe set up a periodic sweep that looks for
+   raft claims in advance of local state and requests resend of Dora record? That might actually
+   work for recovery of a follower after crash, but look for a complete edge case definition.
+
+XXX 6. Need to make sure this line from the doc is true: "if one servers term is smaller than anothers
+(on message) then it updates its term to the larger value"
+
+7. Need to write up implications of recovery processing, i.e. that operations that were done at a server
+   might be overwritten, so if you persist stuff based on the command execution there needs to be
+   an undo operation (and this library needs to support it, which means follower needs to call undo
+   steps on records that are being overwritten). Should explain how this can be handled by supplying
+   a custom logAPI module so that raft log operations can be transactional with "real" state storage
+   operations.
+
