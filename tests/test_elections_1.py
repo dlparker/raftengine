@@ -25,12 +25,8 @@ async def test_election_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
     await cluster.start()
-    uri_1 = cluster.node_uris[0]
-    ts_1 = cluster.nodes[uri_1]
-    uri_2 = cluster.node_uris[1]
-    ts_2 = cluster.nodes[uri_2]
-    uri_3 = cluster.node_uris[2]
-    ts_3 = cluster.nodes[uri_3]
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     # tell first one to start election, should send request vote messages to other two
     await ts_1.hull.start_campaign()
@@ -84,18 +80,9 @@ async def test_election_2(cluster_maker):
     cluster = cluster_maker(5)
     cluster.set_configs()
     await cluster.start()
+    uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
+    ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-    uri_4 = cluster.node_uris[4]
-    uri_5 = cluster.node_uris[4]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-    ts_4 = cluster.nodes[uri_4]
-    ts_5 = cluster.nodes[uri_5]
     await ts_1.hull.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
@@ -112,15 +99,9 @@ async def test_reelection_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
     await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-
     await ts_1.hull.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
@@ -144,13 +125,8 @@ async def test_reelection_2(cluster_maker):
     cluster.set_configs()
     await cluster.start()
     
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.hull.start_campaign()
     # vote requests, then vote responses
@@ -174,13 +150,8 @@ async def test_reelection_2(cluster_maker):
 async def test_reelection_3(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     # make sure that we can control timeouts and get
     # things to happend that way

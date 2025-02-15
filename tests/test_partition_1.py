@@ -5,49 +5,30 @@ import pytest
 import time
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+
+from servers import WhenElectionDone
+from servers import PausingCluster, cluster_maker
+from servers import SNormalElection
 from servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]
 setup_logging(extra_logging)
 
-from servers import WhenElectionDone
-from servers import PausingCluster, cluster_maker
-
 async def test_partition_1(cluster_maker):
     cluster = cluster_maker(5)
     cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-    uri_4 = cluster.node_uris[3]
-    uri_5 = cluster.node_uris[4]
 
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-    ts_4 = cluster.nodes[uri_4]
-    ts_5 = cluster.nodes[uri_5]
+    uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
+    ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
-    ts_4.set_trigger(WhenElectionDone())
-    ts_5.set_trigger(WhenElectionDone())
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers(),
-                         ts_4.run_till_triggers(),
-                         ts_5.run_till_triggers())
+
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
     
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
-    ts_4.clear_triggers()
-    ts_5.clear_triggers()
+
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
@@ -139,11 +120,3 @@ async def test_partition_1(cluster_maker):
         assert await node.do_next_in_msg() is not None
         assert node.operations.total == 3
         # Life is good
-    
-    if False:
-        command_result = await ts_1.hull.apply_command("add 1")
-        assert command_result is not None
-        assert command_result.result is not None
-        assert ts_1.operations.total == 4
-        assert ts_2.operations.total == 4
-        assert ts_3.operations.total == 4

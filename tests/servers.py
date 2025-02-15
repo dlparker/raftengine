@@ -155,9 +155,23 @@ class WhenMessageOut(PauseTrigger):
                 elif self.message_target == message.receiver:
                     done = True
         if done and self.flush_when_done:
-            await server.flush_one_out_message(message)            
+            await self.flush_one_out_message(server, message)  
         return done
-    
+
+    async def flush_one_out_message(self, server, message):
+        if len(server.out_messages) == 0:
+            return None
+        if server.block_messages:
+            return None
+        new_list = []
+        for msg in server.out_messages:
+            if msg == message:
+                server.logger.debug("FLUSH forwarding message %s", msg)
+                await server.cluster.post_in_message(msg)
+            else:
+                new_list.append(msg)
+        server.out_messages = new_list
+        
 class WhenMessageIn(PauseTrigger):
     # Whenn a particular message have been transported
     # from a different server and placed in the input
@@ -420,6 +434,30 @@ class Network:
             return None
         return self.nodes[uri]
 
+    async def post_in_message(self, message):
+        node = self.nodes[message.receiver]
+        node.in_messages.append(message)
+        
+    async def deliver_all_pending(self, out_only=False):
+        in_ledger = []
+        out_ledger = []
+        any = True
+        # want to bounce around, not deliver each ts completely
+        while any:
+            any = False
+            for uri, node in self.nodes.items():
+                if node.block_messages:
+                    continue
+                if len(node.in_messages) > 0 and not out_only:
+                    msg = await node.do_next_in_msg()
+                    in_ledger.append(msg)
+                    any = True
+                if len(node.out_messages) > 0:
+                    msg = await node.do_next_out_msg()
+                    out_ledger.append(msg)
+                    any = True
+        return dict(in_ledger=in_ledger, out_ledger=out_ledger)
+
     async def do_next_in_msg(self, node):
         if node.uri not in self.nodes:
             raise Exception(f'botched network setup, {node.uri} not in {self.nodes}')
@@ -469,14 +507,66 @@ class Network:
             self.logger.debug("%s DROPPING message %s", node.uri, msg)
         return msg
     
+class TimeoutTaskGroup(Exception):
+    """Exception raised to terminate a task group due to timeout."""
         
+class TestServerTimeout(Exception):
+    """Exception raised because of unexpected timeout in running test server support code."""
+        
+class StdSequence:
+
+    def __init__(self, cluster, name):
+        self.name = name
+        self.cluster = cluster
+
+class SNormalElection(StdSequence):
+
+    def __init__(self, cluster, timeout=1):
+        super().__init__(cluster=cluster, name="NormalElection")
+        self.timeout = timeout
+        self.logger = logging.getLogger('PausingServer')
+        self.done_count = 0
+        self.expected_count = 0
+
+    async def do_setup(self):
+        for uri,node in self.cluster.nodes.items():
+            node.clear_triggers()
+            node.set_trigger(WhenElectionDone())
+            self.expected_count += 1
+
+    async def runner_wrapper(self, node):
+        await node.run_till_triggers()
+        self.done_count += 1
+        
+    async def wait_till_done(self):
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while self.done_count < self.expected_count:
+                await asyncio.sleep(timeout/100.0)
+            if time.time() - start_time >= timeout:
+                raise TimeoutTaskGroup()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for uri,node in self.cluster.nodes.items():
+                    tg.create_task(self.runner_wrapper(node))
+                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
+                tg.create_task(do_timeout(self.timeout))
+        except* TimeoutTaskGroup:
+            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        
+    async def do_teardown(self):
+        for uri,node in self.cluster.nodes.items():
+            node.clear_triggers()
+            
+
 class NetManager:
 
     def __init__(self, all_nodes:dict, start_nodes:dict):
         self.all_nodes = all_nodes
         self.start_nodes = start_nodes
         self.full_cluster = None
-        self.segments = None
+        self.quorum_segment = None
+        self.other_segments = None
         self.logger = logging.getLogger("SimulatedNetwork")
 
     def setup_network(self):
@@ -494,22 +584,52 @@ class NetManager:
                 assert node not in node_set
                 node_set.add(node)
         # all legal, no dups
-        self.segments = []
+        self.other_segments = []
         for part in segments:
-            disp.append(f"{len(part)}")
+            seg_len = len(part)
+            disp.append(f"{seg_len}")
             net = Network(part, self)
-            self.segments.append(net)
-        
+            if seg_len > len(self.full_cluster.nodes) / 2:
+                self.quorum_segment = net
+            else:
+                self.other_segments.append(net)
         self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into {','.join(disp)}")
 
     def unsplit(self):
-        if self.segments is None:
+        if self.other_segments is None:
             return
         for uri,node in self.full_cluster.nodes.items():
             self.full_cluster.add_node(node)
             node.hull.cluster_config.node_uris =  list(self.full_cluster.nodes.keys())
-        self.segments = None
-                
+        self.quorum_segment = None
+        self.other_segments = None
+
+    async def post_in_message(self, message):
+        if self.quorum_segment is None:
+            await self.full_cluster.post_in_message(message)
+            return
+        if message.receiver in self.quorum_segment.nodes:
+            await self.quorum.post_in_message(message)
+            return
+        for seg in other_segments:
+            if message.receiver in seg.nodes:
+                await seg.post_in_message(message)
+                return
+
+    async def deliver_all_pending(self,  quorum_only=False, out_only=False):
+        if self.quorum_segment is None:
+            net1 = self.full_cluster
+        else:
+            net1 = self.quorum_segment
+        first_res = await net1.deliver_all_pending(out_only=out_only)
+        if self.quorum_segment is None or quorum_only:
+            first_res['multiple_networks'] = False
+            return first_res
+        res = dict(multiple_networks=True, result_list=[first_res,])
+        for net in self.other_segments:
+            seg_res = await net.deliver_all_pending(out_only=out_only)
+            res['result_list'].append(seg_res)
+        return res
 
 def setup_sqlite_log(uri):
     number = uri.split('/')[-1]
@@ -597,11 +717,12 @@ class PausingServer(PilotAPI):
             self.out_messages.append(msg)
 
     async def accept_in_msg(self, message):
-        # called by cluster on behalf of sender
+        # called by network on behalf of sender
         self.logger.debug("queueing sent %s", message)
         self.in_messages.append(message)
         
     async def do_next_in_msg(self):
+        # called by network when running simulation
         if self.block_messages:
             msg = await self.network.drop_next_in_msg(self)
             if msg:
@@ -611,6 +732,7 @@ class PausingServer(PilotAPI):
         return await self.network.do_next_in_msg(self)
         
     async def do_next_out_msg(self):
+        # called by network when running simulation
         if self.block_messages:
             msg = await self.network.drop_next_out_msg(self)
             if msg:
@@ -620,39 +742,29 @@ class PausingServer(PilotAPI):
         return await self.network.do_next_out_msg(self)
 
     async def do_next_msg(self):
+        # called by network when running simulation
         msg = await self.do_next_out_msg()
         if not msg:
             msg = await self.do_next_in_msg()
         return msg
 
     def clear_out_msgs(self):
+        # called by network when simulating network breaks and reconnects
         for msg in self.out_messages:
             self.logger.debug('%s clearing pending outbound %s', self.uri, msg)
         self.out_messages = []
         
     def clear_in_msgs(self):
+        # called by network when simulating network breaks and reconnects
         for msg in self.in_messages:
             self.logger.debug('%s clearing pending inbound %s', self.uri, msg)
         self.in_messages = []
         
     def clear_all_msgs(self):
+        # called by network when simulating network breaks and reconnects
         self.clear_out_msgs()
         self.clear_in_msgs()
         
-    async def flush_one_out_message(self, message):
-        if len(self.out_messages) == 0:
-            return None
-        if self.block_messages:
-            return None
-        new_list = []
-        for msg in self.out_messages:
-            if msg == message:
-                self.logger.debug("FLUSH forwarding message %s", msg)
-                await self.cluster.send_message(msg)
-            else:
-                new_list.append(msg)
-        self.out_messages = new_list
-
     async def cleanup(self):
         hull = self.hull
         if hull.state:
@@ -779,37 +891,29 @@ class PausingCluster:
         for uri, node in self.nodes.items():
             await node.start()
 
-    async def send_message(self, message):
-        node  = self.nodes[message.receiver]
-        await node.accept_in_msg(message)
+
+    async def run_sequence(self, sequence):
+        await sequence.do_setup()
+        # may raise timeout
+        await sequence.wait_till_done()
+        await sequence.do_teardown()
         
-    async def deliver_all_pending(self,  out_only=False):
-        in_ledger = []
-        out_ledger = []
-        any = True
-        # want to bounce around, not deliver each ts completely
-        while any:
-            any = False
-            for uri, node in self.nodes.items():
-                if node.block_messages:
-                    continue
-                if len(node.in_messages) > 0 and not out_only:
-                    msg = await node.do_next_in_msg()
-                    in_ledger.append(msg)
-                    any = True
-                if len(node.out_messages) > 0:
-                    msg = await node.do_next_out_msg()
-                    out_ledger.append(msg)
-                    any = True
-        return in_ledger, out_ledger
+    async def post_in_message(self, message):
+        # special situation, called when trigger trapped on out message,
+        # but wants it to be delivered before pause
+        await self.net_mgr.post_in_message(message)
+        
+    async def deliver_all_pending(self,  quorum_only=False, out_only=False):
+        return await self.net_mgr.deliver_all_pending(quorum_only=quorum_only, out_only=out_only)
 
     async def auto_comms_runner(self):
         while self.auto_comms_flag:
             try:
                 await self.deliver_all_pending()
-            except:
-                self.logger.error("error trying to deliver messages %s", traceback.print_exc())
+            except Exception as exc:
+                self.logger.error("error trying to deliver messages %s", traceback.format_exc())
             await asyncio.sleep(0.0001)
+            
     async def start_auto_comms(self):
         self.auto_comms_flag = True
         loop = asyncio.get_event_loop()
