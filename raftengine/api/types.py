@@ -89,6 +89,13 @@ class SubstateCode(str, Enum):
 
     """ enough votes in, election lost """
     lost = "LOST"
+
+    """ enough votes in, election lost """
+    election_timeout = "ELECTION_TIMEOUT"
+
+    """ Candidate starting new election """
+    start_new_election = "START_NEW_ELECTION"
+    
     # --- end expect from Candidate states
 
     # --- Expect from Leader states
