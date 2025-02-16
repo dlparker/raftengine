@@ -143,7 +143,11 @@ class Leader(BaseState):
                 return False, None
         if tracker.rejected:
             if tracker.reject_msg is None:
-                return False, None 
+                return False, None
+            if tracker.reject_msg.get_code() != AppendResponseMessage:
+                self.logger.info("%s no longer leader, returning retry (leader unknown)",
+                                 self.hull.get_my_uri())
+                return False, tracker.reject_msg.leaderId 
             if tracker.reject_msg.leaderId != self.hull.get_my_uri():
                 self.logger.info("%s no longer leader, returning redirect to %s",
                                  self.hull.get_my_uri(), tracker.reject_msg.leaderId)
@@ -290,10 +294,10 @@ class Leader(BaseState):
         
     async def term_expired(self, message):
         if self.pending_command:
-            if message.get_code() == AppendResponseMessage.get_code():
-                self.logger.warning('%s term expired in command response', self.hull.get_my_uri())
-                await self.process_command_response(message)
-                return None
+            self.logger.warning('%s term expired when expeecting command response, %s',
+                                self.hull.get_my_uri(), message)
+            await self.process_command_response(message)
+            return None
         await self.log.set_term(message.term)
         await self.hull.demote_and_handle(message)
         # don't reprocess message

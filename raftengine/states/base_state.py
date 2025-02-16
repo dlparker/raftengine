@@ -128,7 +128,7 @@ class BaseState:
 
     async def on_append_entries_response(self, message):
         problem = 'append_entries_response not implemented in the class '
-        problem += f'"{self.__class__.__name__}", sending rejection'
+        problem += f'"{self.__class__.__name__}", ignoring'
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
 
