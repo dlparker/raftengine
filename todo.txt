@@ -42,7 +42,9 @@ Immediatly:
 31. Update hull api, __init__ should not be in it, so some sort of set_config
     thing. Think about updating config while running. Maybe have some sort
     of feature in hull that holds any messages while reconfig runs?
-    
+
+33. Move log_api to api module
+
 41. rough out ideas for cluster class
     1. Knows about "static config" provided at startup. Can be programatically changed?
     2. Knows about "dynamic config" resulting from cluster changes while running.
