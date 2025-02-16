@@ -57,6 +57,11 @@ class Records:
             "(rec_index INTEGER primary key, code TEXT," \
             "term INTEGER, user_data TEXT) " 
         cursor.execute(schema)
+        schema = f"CREATE TABLE if not exists pending_record " \
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, "\
+            "rec_index INTEGER, code TEXT, " \
+            "term INTEGER, user_data TEXT) " 
+        cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
             " term INTEGER)"
@@ -140,6 +145,65 @@ class Records:
 
     def insert_entry(self, rec: LogRec) -> LogRec:
         rec = self.save_entry(rec)
+        return rec
+
+    def save_pending(self, rec: LogRec) -> LogRec:
+        if self.db is None:
+            self.open()
+        if rec.index != self.max_index + 1:
+            raise Exception('new record index must match pending record index for commit')
+        cursor = self.db.cursor()
+        cursor.execute("select * from pending_record")
+        if cursor.fetchone() != None:
+            cursor.close()
+            raise Exception('can only have one pending record open')
+        sql = f"insert into pending_record ("
+        sql += "rec_index, code, term, user_data) values "
+        values = "(?,?,?,?)"
+        sql += values
+        params = []
+        params.append(rec.index)
+        params.append(str(rec.code.value))
+        params.append(rec.term)
+        user_data = rec.user_data
+        params.append(user_data)
+        cursor.execute(sql, params)
+        self.db.commit()
+        cursor.close()
+        return rec
+    
+    def get_pending(self) -> LogRec:
+        if self.db is None:
+            self.open()
+        cursor = self.db.cursor()
+        cursor.execute("select * from pending_record")
+        rec_data = cursor.fetchone()
+        if rec_data is None:
+            cursor.close()
+            return None
+        user_data = rec_data['user_data']
+        log_rec = LogRec(code=RecordCode(rec_data['code']),
+                         index=rec_data['rec_index'],
+                         term=rec_data['term'],
+                         user_data=user_data)
+        cursor.close()
+        return log_rec
+
+    def commit_pending(self, rec: LogRec) -> LogRec:
+        pending = self.get_pending()
+        if not pending:
+            raise Exception('no pending record exists')
+        if pending.index != self.max_index + 1: 
+            raise Exception('Pending record is no longer the next one for the record list, would be inconsistent if saved')
+        if pending.index != rec.index:
+            raise Exception('new record index must match pending record index for commit')
+        # the index is correct, but our save method wants null index when inserting new record
+        rec.index = None
+        rec = self.save_entry(rec)
+        cursor = self.db.cursor()
+        cursor.execute("delete from pending_record")
+        cursor.close()
+        self.db.commit()
         return rec
     
 class SqliteLog(LogAPI):
@@ -230,9 +294,15 @@ class SqliteLog(LogAPI):
         if rec is None:
             return 0
         return rec.term
-    
 
+    async def save_pending(self, record: LogRec) -> None:
+        self.records.save_pending(record)
 
+    async def get_pending(self) -> LogRec:
+        return self.records.get_pending()
+
+    async def commit_pending(self, record: LogRec) -> LogRec:
+        return self.records.commit_pending(record)
 
         
     

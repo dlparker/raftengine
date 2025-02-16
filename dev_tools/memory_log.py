@@ -11,6 +11,7 @@ class Records:
         # log record indexes start at 1, per raftengine spec
         self.index = 0
         self.entries = []
+        self.pending = None
 
     def get_entry_at(self, index):
         if index < 1 or self.index == 0:
@@ -24,6 +25,28 @@ class Records:
         self.index += 1
         rec.index = self.index
         self.entries.append(rec)
+        return rec
+
+    def save_pending(self, rec: LogRec) -> LogRec:
+        if self.pending:
+            raise Exception('Only one pending record allowed')
+        if rec.index != self.index + 1:
+            raise Exception('Pending record must have an index one greater than last record index')
+        self.pending = rec
+        return rec
+    
+    def get_pending(self) -> LogRec:
+        if not self.pending:
+            return None
+        return self.pending
+
+    def commit_pending(self, rec: LogRec) -> LogRec:
+        if not self.pending:
+            raise Exception('no pending record exists')
+        if self.pending.index != rec.index:
+            raise Exception('new record index must match pending record index for commit')
+        self.add_entry(rec)
+        self.pending = None
         return rec
 
     def insert_entry(self, rec: LogRec) -> LogRec:
@@ -70,6 +93,16 @@ class MemoryLog(LogAPI):
                               user_data=entry.user_data)
             self.records.add_entry(save_rec)
         self.logger.debug("new log record %s", save_rec.index)
+
+    async def save_pending(self, record: LogRec) -> None:
+        self.records.save_pending(record)
+        self.logger.debug("new pending log record %s", record.index)
+
+    async def get_pending(self) -> LogRec:
+        return self.records.get_pending()
+
+    async def commit_pending(self, record: LogRec) -> LogRec:
+        return self.records.commit_pending(record)
 
     async def replace_or_append(self, entry:LogRec) -> LogRec:
         if entry.index is None:

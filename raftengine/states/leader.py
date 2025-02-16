@@ -12,6 +12,26 @@ from raftengine.messages.append_entries import AppendEntriesMessage,AppendRespon
 from raftengine.messages.base_message import BaseMessage
 from raftengine.states.base_state import BaseState
 
+@dataclass
+class CommandData:
+    command: str
+    user_context: str
+
+class Commander:
+
+    def __init__(self, leader, command, user_context, done_callback, log_record=None):
+        self.leader = leader
+        self.command = command
+        self.user_context = user_context
+        self.done_callback = done_callback
+        self.log_record = log_record
+
+    async def setup(self):
+        term = await self.log.get_term()
+        if self.log_record is None:
+            udata = json.dumps(CommandData(command=self.command, user_context=self.user_context))
+            new_rec = LogRec(term=term, user_data=udata)
+            self.log.save(new_rec)
     
 @dataclass
 class DialogTracker:

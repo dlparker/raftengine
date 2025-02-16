@@ -3,6 +3,7 @@ import asyncio
 import logging
 import pytest
 import time
+from pathlib import Path
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from servers import SNormalElection
@@ -61,3 +62,38 @@ async def test_normal_election_sequence_2(cluster_maker):
 
 
 
+async def test_pending_record_changes():
+    from dev_tools.sqlite_log import SqliteLog
+    from dev_tools.memory_log import MemoryLog
+    from raftengine.log.log_api import LogRec
+    m_log = MemoryLog()
+
+    path = Path('/tmp', "test_log.sqlite")
+    if path.exists():
+        path.unlink()
+    s_log = SqliteLog(path)
+    s_log.start()
+
+    for log in [m_log, s_log]:
+        no_rec = await log.get_pending()
+        assert no_rec is None
+        p_rec = LogRec(term=1, user_data="foo")
+        with pytest.raises(Exception):
+            await log.save_pending(p_rec)
+        p_rec.index = 1
+        await log.save_pending(p_rec)
+        x_rec = await log.get_pending()
+        assert x_rec is not None
+        assert x_rec.index == 1
+        assert x_rec.term == 1
+        assert x_rec.user_data == "foo"
+        next_rec = LogRec(term=1, user_data="bar")
+        next_rec.index = 1
+        # correct index, but we already got one
+        with pytest.raises(Exception):
+            await log.save_pending(next_rec)
+        await log.commit_pending(p_rec)
+        assert await log.read() is not None
+        # should work now
+        next_rec.index = 2
+        await log.save_pending(next_rec)
