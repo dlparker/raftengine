@@ -49,7 +49,7 @@ class Hull:
         await self.state.start()
 
     async def demote_and_handle(self, message=None):
-        self.logger.warning("%s demoting to follower from %s", self.get_my_uri(), self.state)
+        self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.state)
         await self.stop_state()
         # special case where candidate or leader got an append_entries message,
         # which means we need to switch to follower and retry

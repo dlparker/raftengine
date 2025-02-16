@@ -152,8 +152,6 @@ async def test_command_1(cluster_maker):
     await ts_1.run_till_triggers(free_others=True)
     assert ts_1.operations.total == 4
 
-
-
 async def test_command_sqlite_1(cluster_maker):
     from dev_tools.sqlite_log import SqliteLog
     cluster = cluster_maker(3, use_log=SqliteLog)
@@ -264,3 +262,100 @@ async def test_command_2_leaders_1(cluster_maker):
 async def test_command_2_leaders_2(cluster_maker):
     cluster = cluster_maker(3)
     await double_leader_inner(cluster, False)    
+    
+async def test_command_after_heal_1(cluster_maker):
+    # The goal is for one a candidate to receive an
+    # append entries message from a lower of a lower term.
+    # This can happen when a network partition resolves
+    # before the pre-partition leader has resigned, where
+    # the partition leaves the old leader connected to
+    # less than half the cluster, and the other side of the
+    # partition completes a new election before the
+    # partition heals. 
+    #
+    # Likely? I doubt it. Possible? Certainly, so code needs
+    # to exist to handle it (in the candidate state) and that
+    # path needs to be tested.
+    # 
+
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+    logger = logging.getLogger(__name__)
+    logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
+    await cluster.start_auto_comms()
+
+    command_result = await ts_1.hull.apply_command("add 1")
+    assert command_result.result is not None
+    assert command_result.error is None
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+
+    # now simulate a split newtork with the leader
+    # getting isolated, then trigger one of the followers
+    # to start and election
+    await cluster.stop_auto_comms()
+    part1 = {uri_1: ts_1}
+    part2 = {uri_2: ts_2,
+             uri_3: ts_3}
+    cluster.split_network([part1, part2])
+
+    logger.info('-------------- Split network done, expecting election of %s', uri_2)
+    # now ts_2 and ts_3 are alone, have ts_2
+    # get elected
+    await ts_2.hull.state.leader_lost()
+    ts_2.set_trigger(WhenElectionDone(voters=[uri_2, uri_3]))
+    ts_3.set_trigger(WhenElectionDone(voters=[uri_2, uri_3]))
+    
+    await asyncio.gather(ts_2.run_till_triggers(),
+                         ts_3.run_till_triggers())
+    
+    ts_2.clear_triggers()
+    ts_3.clear_triggers()
+
+    assert ts_2.hull.get_state_code() == "LEADER"
+    assert ts_3.hull.state.leader_uri == uri_2
+    last_term = await ts_2.hull.log.get_term()
+    logger.info('-------------- %s elected, unspliting the network', uri_2)
+    cluster.unsplit()
+    assert ts_1.hull.get_state_code() == "LEADER"
+    logger.info('-------------- %s reconneted, thinks it is still leader', uri_1)
+    
+    logger.info('-------------- Forcing %s to candidate, but not allowing any messages out', uri_2)
+    ts_2.block_network()
+    await ts_2.hull.demote_and_handle(None)
+    assert ts_2.hull.get_state_code() == "FOLLOWER"
+    await ts_2.hull.start_campaign()
+    assert ts_2.hull.get_state_code() == "CANDIDATE"
+    
+    logger.info('-------------- telling old leader %s to send heartbeats, %s should reject in candidate',
+                uri_1, uri_2)
+
+    assert ts_1.hull.get_state_code() == "LEADER"
+    ts_1.hull.state.last_broadcast_time = 0
+    # don't deliver vote requests, it will complicate things
+    ts_2.unblock_network()
+    await ts_1.hull.state.send_heartbeats()
+    logger.info('-------------- old leader %s sent heartbeats, %s unblocked',
+                uri_1, uri_2)
+    await cluster.deliver_all_pending()
+
+    # don't know how the election will turn out for sure, probably ts_2 will win
+    # important thing is that ts_1 responded properly to higher term in response,
+    # meannig that candidate reply did its thing
+    assert await ts_1.hull.log.get_term() > last_term
+    
+    
+    

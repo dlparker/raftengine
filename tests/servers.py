@@ -858,6 +858,11 @@ class PausingCluster:
         for uri, node in self.nodes.items():
             await node.start()
 
+    def split_network(self, segments):
+        self.net_mgr.split_network(segments)
+
+    def unsplit(self):
+        self.net_mgr.unsplit()
 
     async def run_sequence(self, sequence):
         await sequence.do_setup()

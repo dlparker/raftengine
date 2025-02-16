@@ -68,11 +68,15 @@ class Candidate(BaseState):
     async def on_append_entries(self, message):
         self.logger.info("candidate %s got append entries from %s", self.hull.get_my_uri(),
                          message.sender)
+        # never get here if term is higher, we get called self.term_expired first
         if message.term == await self.log.get_term():
             self.logger.info("candidate %s at term %d yielding to %s term %d", self.hull.get_my_uri(),
                              await self.log.get_term(), message.sender, message.term)
             await self.hull.demote_and_handle(message)
             return
+        self.logger.warning("candidate %s at term %d got append_entries from  %s term %d",
+                            self.hull.get_my_uri(),  await self.log.get_term(),
+                            message.sender, message.term)
         await self.send_reject_append_response(message)
         
     async def election_timed_out(self):
