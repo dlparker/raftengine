@@ -19,14 +19,13 @@ class Hull:
             raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
         self.pilot = pilot
         self.log = pilot.get_log()
-        self.state = BaseState(self, StateCode.paused)
+        self.state = Follower(self)
         self.logger = logging.getLogger("Hull")
         self.state_async_handle = None
         self.state_run_after_target = None
         self.message_problem_history = []
 
     async def start(self):
-        self.state = Follower(self)
         await self.state.start()
 
     async def stop_state(self):
@@ -88,7 +87,6 @@ class Hull:
             return CommandResult(command, redirect=self.state.leader_uri)
         elif self.state.state_code == StateCode.candidate:
             return CommandResult(command, retry=1)
-        return None
     
     async def state_after_runner(self, target):
         if self.state.stopped:
