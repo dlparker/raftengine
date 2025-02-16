@@ -19,22 +19,131 @@ class CommandData:
 
 class Commander:
 
-    def __init__(self, leader, command, user_context, done_callback, log_record=None):
+    # Can be created one of two ways, but a newly submitted command, or during replay
+    # of a stored but uncommitted command. In the former case a done_callback will
+    # be suplied, but not in the later case. In the later case, a log_record will
+    # be supplied, pulled from the log's pending record storage.
+    def __init__(self, leader, command, user_context, done_callback=None, log_record=None):
         self.leader = leader
         self.command = command
         self.user_context = user_context
         self.done_callback = done_callback
         self.log_record = log_record
-
-    async def setup(self):
+        self.logger = leader.logger
+        self.terminated = False
+        self.timeout = False
+        self.committed = False
+        self.redirect_uri = None
+        self.sent_messages = dict()
+        self.reply_messages = dict()
+        self.concurrences = 0
+        
+    async def start(self):
         term = await self.log.get_term()
         if self.log_record is None:
             udata = json.dumps(CommandData(command=self.command, user_context=self.user_context))
             new_rec = LogRec(term=term, user_data=udata)
-            self.log.save(new_rec)
+            self.log_record = await self.log.save_pending(new_rec)
+            # in case term changed, update it in record
+            self.log_record.term = await self.log.get_term()
+
+        proto_message = AppendEntriesMessage(sender=self.my_uri(),
+                                                   receiver='',
+                                                   term=await self.log.get_term(),
+                                                   entries=[command,],
+                                                   prevLogTerm=await self.log.get_last_term(),
+                                                   prevLogIndex=await self.log.get_last_index())
+        for uri in self.leader.hull.get_cluster_node_ids():
+            if uri == self.leader.my_uri():
+                continue
+            message = AppendEntriesMessage(sender=proto_message.sender,
+                                           receiver=uri,
+                                           term=proto_message.term,
+                                           entries=proto_message.entries,
+                                           prevLogTerm=proto_message.prevLogTerm,
+                                           prevLogIndex=proto_message.prevLogIndex)
+            self.logger.info("sending %s", message)
+            await self.leader.hull.send_message(message)
+            await self.leader.record_sent_message(message)
+            self.sent_messages[uri] = message
+
+    async def apply_superceeded(self, message):
+        # we are no longer leader
+        if hasattr(message, "leaderId"):
+            self.redirect_uri = message.leaderId
+        self.terminated = True
+
+    async def record_replica_command_error(self, message):
+        # This spot will have to have some code in it to figure out what to
+        # do with the fact that it had an error. A hooman prolly needs to
+        # fix something.
+        pass
+
+    async def apply_committed_command(self):
+        self.committed = True
+        self.terminated = True
+
+    async def apply_consensus_failed(self):
+        self.terminated = True
+        
+    async def is_process_command_response(self, message):
+        if  (message.term == term
+             and message.lastLogIndex == await self.leader.log.get_last_index()
+             and message.lastLogTerm == await self.leader.log.get_last_term()):
+            return True
+        return False
     
+    async def process_command_response(self, message):
+        term = await self.log.get_term()
+        if message.term > term:
+            await self.apply_superceeded()
+            return
+        self.reply_messages[uri] = message
+        if not (message.term == term
+                and message.myLastLogIndex == await self.leader.log.get_last_index()
+                and message.myLastLogTerm == await self.leader.log.get_last_term()):
+            # Recipient found something amis, term or details of previous
+            # record in their log. They did not apply the command, so
+            # don't count this one in committed calc
+            return
+        results = json.loads(message.results)
+        error = results[0].error
+        if (error):
+            await self.record_replica_command_error(message)
+            return
+        else:
+            self.concurrences += 1
+        # Include self in test for majority concensus
+        if self.concurrences + 1 >= len(self.sent_messages) / 2:
+            #concensus reached for commit
+            return await self.apply_committed_command()
+        remaining = len(self.sent_messages) - len(self.reply_messages)
+        needed = len(self.sent_messages) - self.concurrences + 1
+        if needed > remaining:
+            # concensus not possible
+            return await self.apply_consensus_failed()
+        
 @dataclass
 class DialogTracker:
+    sent_message: AppendEntriesMessage
+    sent_time: int = None
+    reply_message: AppendResponseMessage = None
+    replied_time: int = None
+    
+    nack: BaseMessage | None = None
+
+@dataclass
+class FollowerTracker:
+    uri: str 
+    pending: List[DialogTracker]
+    history: List[DialogTracker]
+    msg_count: int = 0
+    reply_count: int = 0
+
+
+        
+@dataclass
+class PairTracker:
     sent_msg: BaseMessage
     sent_time: int = None
     replied_time: int = None
@@ -47,15 +156,9 @@ class CommandTracker:
     finished: bool
     rejected: bool
     proto_msg: AppendEntriesMessage
-    dialogs: Dict[str, DialogTracker]  | None
+    dialogs: Dict[str, PairTracker]  | None
     reject_msg: AppendResponseMessage | None = None
 
-@dataclass
-class FollowerTracker:
-    uri: str 
-    msgs: int = 0
-    replies: int = 0
-    last_dialog = DialogTracker
 
 class CommandResult:
 
@@ -76,8 +179,10 @@ class Leader(BaseState):
         self.pending_command = None
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()
+        self.follower_pending = dict()
+        self.follower_history = dict()
         for uri in self.hull.get_cluster_node_ids():
-            self.follower_trackers[uri] = FollowerTracker(uri=uri)
+            self.follower_trackers[uri] = FollowerTracker(uri=uri, pending=[], history=[])
                 
     async def start(self):
         await super().start()
@@ -86,7 +191,7 @@ class Leader(BaseState):
 
     async def apply_command(self, command, timeout=1.0):
         if self.pending_command:
-            self.logger.info("%s waiting for completion of pending command", self.hull.get_my_uri())
+            self.logger.info("%s waiting for completion of pending command", self.my_uri())
             start_time = time.time()
             while self.pending_command and time.time() - start_time < timeout:
                 await asyncio.sleep(0.001)
@@ -96,7 +201,7 @@ class Leader(BaseState):
                 result = CommandResult(command=command, error=msg)
                 return result
 
-        self.logger.info("%s starting command sequence for index %d", self.hull.get_my_uri(),
+        self.logger.info("%s starting command sequence for index %d", self.my_uri(),
                          await self.log.get_last_index())
 
         await self.prepare_command(command)
@@ -120,7 +225,7 @@ class Leader(BaseState):
             return result
 
         try:
-            self.logger.info("%s applying command committed at index %d", self.hull.get_my_uri(),
+            self.logger.info("%s applying command committed at index %d", self.my_uri(),
                              await self.log.get_last_index())
             processor = self.hull.get_processor()
             result,error = await processor.process_command(command)
@@ -142,7 +247,7 @@ class Leader(BaseState):
         
 
     async def prepare_command(self, command):
-        message = AppendEntriesMessage(sender=self.hull.get_my_uri(),
+        message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver='',
                                        term=await self.log.get_term(),
                                        entries=[command,],
@@ -167,11 +272,11 @@ class Leader(BaseState):
                 return False, None
             if tracker.reject_msg.get_code() != AppendResponseMessage:
                 self.logger.info("%s no longer leader, returning retry (leader unknown)",
-                                 self.hull.get_my_uri())
+                                 self.my_uri())
                 return False, tracker.reject_msg.leaderId 
-            if tracker.reject_msg.leaderId != self.hull.get_my_uri():
+            if tracker.reject_msg.leaderId != self.my_uri():
                 self.logger.info("%s no longer leader, returning redirect to %s",
-                                 self.hull.get_my_uri(), tracker.reject_msg.leaderId)
+                                 self.my_uri(), tracker.reject_msg.leaderId)
                 return False, tracker.reject_msg.leaderId 
         return True, None
         
@@ -184,11 +289,11 @@ class Leader(BaseState):
             msg = f'Requested command sequence not completed in {timeout} seconds'
             raise Exception(msg)
         return done, redirect
-    
+
     async def broadcast_command(self):
         tracker = self.pending_command
         for uri in self.hull.get_cluster_node_ids():
-            if uri == self.hull.get_my_uri():
+            if uri == self.my_uri():
                 continue
             message = AppendEntriesMessage(sender=tracker.proto_msg.sender,
                                            receiver=uri,
@@ -196,22 +301,15 @@ class Leader(BaseState):
                                            entries=tracker.proto_msg.entries,
                                            prevLogTerm=tracker.proto_msg.prevLogTerm,
                                            prevLogIndex=tracker.proto_msg.prevLogIndex)
-            dialog = DialogTracker(message,
+            dialog = PairTracker(message,
                                    time.time())
             tracker.dialogs[uri] = dialog
             self.logger.info("sending %s", message)
             await self.hull.send_message(message)
-            # update the per follower general records
-            follower_tracker = self.follower_trackers[uri]
-            gen_dialog = DialogTracker(message,
-                                   time.time())
-            follower_tracker.last_dialog = gen_dialog
+            await self.record_sent_message(message)
         self.last_broadcast_time = time.time()
 
     async def process_command_response(self, message):
-        follower_tracker = self.follower_trackers[message.sender]
-        gen_dialog = follower_tracker.last_dialog
-        gen_dialog.replied_time = time.time()
         cmd_dialog = self.pending_command.dialogs[message.sender]
         cmd_dialog.replied_time = time.time()
         if message.term > await self.log.get_term():
@@ -226,29 +324,26 @@ class Leader(BaseState):
         acked = 0
         # count the concurrences
         for uri in self.hull.get_cluster_node_ids():
-            if uri == self.hull.get_my_uri():
+            if uri == self.my_uri():
                 continue
             if tracker.dialogs[uri].ack != None:
                 acked += 1
         if acked  + 1 > len(tracker.dialogs) / 2: # this server counts too
-            self.logger.info('%s got consensus on index %d, applying command', self.hull.get_my_uri(),
+            self.logger.info('%s got consensus on index %d, applying command', self.my_uri(),
                              message.prevLogIndex + 1)
             # current state is "committed" as defined in raft paper, command can
             # be applied
             self.pending_command.finished = True
         
     async def process_heartbeat_response(self, message):
-        follower_tracker = self.follower_trackers[message.sender]
-        dialog = follower_tracker.last_dialog
-        dialog.replied_time = time.time()
         if message.prevLogIndex > message.myPrevLogIndex:
-            dialog.nack = message
             await self.catch_follower_up(message)
             return
-        dialog.ack = message
         return
     
     async def on_append_entries_response(self, message):
+        await self.record_received_message(message)
+        
         if (self.pending_command
             and self.pending_command.proto_msg.prevLogIndex == message.prevLogIndex):
             # this is a reply to the pending command, process it accordingly
@@ -269,19 +364,19 @@ class Leader(BaseState):
         silent_time = time.time() - self.last_broadcast_time
         remaining_time = self.hull.get_heartbeat_period() - silent_time
         if  remaining_time > 0:
-            self.logger.debug("%s resched heartbeats time left %f", self.hull.get_my_uri, remaining_time)
+            self.logger.debug("%s resched heartbeats time left %f", self.my_uri, remaining_time)
             await self.run_after(remaining_time, self.send_heartbeats)
             return
         if self.pending_command:
             wait_time = self.hull.get_heartbeat_period() / 50.0
             self.logger.debug("%s pending command, resched heartbeats time left %f",
-                              self.hull.get_my_uri, wait_time)
+                              self.my_uri, wait_time)
             await self.run_after(wait_time, self.send_heartbeats)
             return
         for uri in self.hull.get_cluster_node_ids():
-            if uri == self.hull.get_my_uri():
+            if uri == self.my_uri():
                 continue
-            message = AppendEntriesMessage(sender=self.hull.get_my_uri(),
+            message = AppendEntriesMessage(sender=self.my_uri(),
                                            receiver=uri,
                                            term=await self.log.get_term(),
                                            entries=[],
@@ -289,10 +384,8 @@ class Leader(BaseState):
                                            prevLogIndex=await self.log.get_last_index())
             self.logger.debug("%s sending heartbeat to %s", message.sender, message.receiver)
             await self.hull.send_message(message)
-            follower_tracker = self.follower_trackers[uri]
-            follower_tracker.last_dialog = DialogTracker(message,
-                                                         time.time())
-        self.last_broadcast_time = time.time()
+            await self.record_sent_message(message)
+            self.last_broadcast_time = time.time()
         
     async def catch_follower_up(self, message):
         if message.prevLogIndex == message.myPrevLogIndex:
@@ -301,22 +394,21 @@ class Leader(BaseState):
         rec = await self.log.read(message.myPrevLogIndex + 1)
         command = json.loads(rec.user_data)['command']
         entries = [command,]
-        message = AppendEntriesMessage(sender=self.hull.get_my_uri(),
+        message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=message.sender,
                                        term=await self.log.get_term(),
                                        entries=entries,
                                        prevLogTerm=await self.log.get_term(),
                                        prevLogIndex=await self.log.get_last_index())
         self.logger.info("sending catchup %s", message)
+        await self.record_sent_message(message)
         await self.hull.send_message(message)
-        follower_tracker = self.follower_trackers[message.sender]
-        follower_tracker.last_dialog = DialogTracker(message,
-                                                     time.time())
+
         
     async def term_expired(self, message):
         if self.pending_command:
-            self.logger.warning('%s term expired when expeecting command response, %s',
-                                self.hull.get_my_uri(), message)
+            self.logger.warning('%s term expired when expecting command response, %s',
+                                self.my_uri(), message)
             await self.process_command_response(message)
             return None
         await self.log.set_term(message.term)
@@ -324,7 +416,34 @@ class Leader(BaseState):
         # don't reprocess message
         return None
 
+    async def record_sent_message(self, message):
+        tracker = self.follower_trackers.get(message.receiver, None)
+        if tracker:
+            dialog = DialogTracker(sent_message=message, sent_time=time.time())
+            tracker.pending.append(dialog)
 
+    async def record_received_message(self, message):
+        tracker = self.follower_trackers.get(message.sender, None)
+        if tracker:
+            # To keep pending clean, we just discard messages that don't
+            # match. In all normal sequences there will not be a mismatch.
+            # The cases where that doesn't happend are rare, just when
+            # a single message or two get dropped and then things get better.
+            # There is no value in tracking these cases that warrants the
+            # cost in code complexity and especially testing effort.
+            pending = tracker.pending
+            tracker.pending = []
+            for rec in tracker.pending:
+                if (rec.sent_message.lastLogIndex == message.lastLogIndex
+                    and rec.sent_message.lastLogTerm == message.lastLogTerm):
+                    rec.reply_message = message
+                    rec.reply_time = time.time()
+                    if len(tracker.history) >= 100:
+                        tracker.history.pop(0)
+                    tracker.history.append(rec)
+                                
+    def my_uri(self):
+        return self.hull.get_my_uri()
 
 
 
