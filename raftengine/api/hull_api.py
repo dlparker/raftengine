@@ -1,22 +1,18 @@
 import abc
-from dataclasses import dataclass
 from typing import List, Any
 from raftengine.log.log_api import LogAPI
 
-class PilotAPI(metaclass=abc.ABCMeta):
+
+class HullAPI(metaclass=abc.ABCMeta):
     """
-    Abstract base class that functions as an interface definition for 
-    implmentations the interface between the raft library and the containing 
-    process. You build a pilot implementation, it runs the raft.
     """
     @abc.abstractmethod
+    async def start(self):
+        await self.state.start()
+        raise NotImplementedError
+    
+    @abc.abstractmethod
     def get_log(self) -> LogAPI: # pragma: no cover abstract
-        """ Provides an implementation of the LogAPI. Can be one of the provided 
-        implementations, or something that the library user provides. Providing
-        your own gives the opportunity to provide transactional constraints to 
-        your own data operations and include the raft log records in those 
-        transactions. 
-        """
         raise NotImplementedError
     
     @abc.abstractmethod
@@ -47,4 +43,3 @@ class PilotAPI(metaclass=abc.ABCMeta):
     async def send_response(self, target_uri: str, orig_message:str, reply:str):# pragma: no cover abstract
         raise NotImplementedError
 
-    

@@ -16,7 +16,7 @@ from raftengine.messages.base_message import BaseMessage
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 
-from raftengine.hull.api import PilotAPI
+from raftengine.api.pilot_api import PilotAPI
 
 def setup_logging(additions=None):
     #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -64,12 +64,13 @@ def set_levels(handler_names, additions=None):
     log_loggers[''] = root_log
     log_loggers['PausingServer'] = debug_log
     default_log =  info_log
-    default_log =  debug_log
+    #default_log =  debug_log
     log_loggers['Leader'] = default_log
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
+    log_loggers['Substates'] = debug_log
     log_loggers['SimulatedNetwork'] = debug_log
     if additions:
         for add in additions:

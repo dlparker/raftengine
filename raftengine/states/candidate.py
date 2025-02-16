@@ -1,7 +1,8 @@
 import asyncio
 import random
 import logging
-from raftengine.states.base_state import StateCode, Substate, BaseState
+from raftengine.states.base_state import BaseState
+from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.request_vote import RequestVoteMessage
 
 class Candidate(BaseState):
