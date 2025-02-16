@@ -53,7 +53,7 @@ async def test_partition_1(cluster_maker):
              uri_3: ts_3}
     part2 = {uri_4: ts_4,
              uri_5: ts_5}
-    cluster.net_mgr.split_network([part1, part2])
+    cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
     command_result = await ts_1.hull.apply_command("add 1")
