@@ -384,7 +384,6 @@ class TestHull(Hull):
         
     async def on_message(self, message):
         if self.break_on_message_code == message.get_code():
-            breakpoint()
             print('here to catch break')
         if self.explode_on_message_code == message.get_code():
             result = await super().on_message('foo')
@@ -446,67 +445,47 @@ class Network:
         while any:
             any = False
             for uri, node in self.nodes.items():
-                if node.block_messages:
-                    continue
                 if len(node.in_messages) > 0 and not out_only:
                     msg = await node.do_next_in_msg()
-                    in_ledger.append(msg)
-                    any = True
+                    if msg:
+                        in_ledger.append(msg)
+                        any = True
                 if len(node.out_messages) > 0:
                     msg = await node.do_next_out_msg()
-                    out_ledger.append(msg)
-                    any = True
+                    if msg:
+                        out_ledger.append(msg)
+                        any = True
         return dict(in_ledger=in_ledger, out_ledger=out_ledger)
 
     async def do_next_in_msg(self, node):
-        if node.uri not in self.nodes:
-            raise Exception(f'botched network setup, {node.uri} not in {self.nodes}')
-        if node.network != self:
-            raise Exception(f'botched network setup, {node.uri} does not belong to this network')
         if len(node.in_messages) == 0:
             return None
         msg = node.in_messages.pop(0)
+        if node.block_messages:
+            self.logger.info("------------ Network Simulation DROPPING (caching) incoming message %s", msg)
+            node.blocked_in_messages.append(msg)
+            return None
         self.logger.debug("%s handling message %s", node.uri, msg)
         await node.hull.on_message(msg)
         return msg
-
-    async def drop_next_in_msg(self, node):
-        if len(node.in_messages) == 0:
-            return None
-        msg = node.in_messages.pop(0)
-        if msg:
-            self.logger.debug("%s DROPPING message %s", node.uri, msg)
-        return msg
     
     async def do_next_out_msg(self, node):
-        if node.uri not in self.nodes:
-            raise Exception(f'botched network setup, {node.uri} not in {self.nodes}')
-        if node.network != self:
-            raise Exception(f'botched network setup, {node.uri} does not belong to this network')
         if len(node.out_messages) == 0:
             return None
         msg = node.out_messages.pop(0)
+        if node.block_messages:
+            self.logger.info("------------ Network Simulation DROPPING (caching) outgoing message %s", msg)
+            target.blocked_out_messages.append(msg)
+            return None
         target = self.get_node_by_uri(msg.receiver)
         if not target:
-            self.logger.debug("%s !!!!!!!!!  message %s", node.uri, msg)
+            self.logger.info("%s target is not on this network, loosing message %s", node.uri, msg)
             node.lost_out_messages.append(msg)
-            return msg
-        else:
-            self.logger.debug("%s forwarding message %s", node.uri, msg)
-            if target.block_messages or node.block_messages:
-                self.logger.debug("DROPPING message %s", msg)
-                return None
-            target.in_messages.append(msg)
-            return msg
-        
-    async def drop_next_out_msg(self, node):
-        if len(node.out_messages) == 0:
-            return None
-        msg = node.out_messages.pop(0)
-        if msg:
-            self.logger.debug("%s DROPPING message %s", node.uri, msg)
+            return
+        self.logger.debug("%s forwarding message %s", node.uri, msg)
+        target.in_messages.append(msg)
         return msg
-    
+        
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
         
@@ -722,23 +701,11 @@ class PausingServer(PilotAPI):
         self.in_messages.append(message)
         
     async def do_next_in_msg(self):
-        # called by network when running simulation
-        if self.block_messages:
-            msg = await self.network.drop_next_in_msg(self)
-            if msg:
-                self.logger.debug("%s blocking in message %s", self.uri, msg)
-                self.blocked_in_messages.append(msg)
-            return None
+        # sometimes test code wants to cycle individual servers specifically
         return await self.network.do_next_in_msg(self)
         
     async def do_next_out_msg(self):
-        # called by network when running simulation
-        if self.block_messages:
-            msg = await self.network.drop_next_out_msg(self)
-            if msg:
-                self.logger.debug("%s blocking out message %s", self.uri, msg)
-                self.blocked_out_messages.append(msg)
-            return None
+        # sometimes test code wants to cycle individual servers specifically
         return await self.network.do_next_out_msg(self)
 
     async def do_next_msg(self):
@@ -824,9 +791,9 @@ class PausingServer(PilotAPI):
                     done = True
                     break
             if not done:
-                msg = await self.do_next_out_msg()
+                msg = await self.network.do_next_out_msg(self)
                 if not msg:
-                    msg = await self.do_next_in_msg()
+                    msg = await self.network.do_next_in_msg(self)
                 omsg = False
                 if free_others:
                     for uri, node in self.cluster.nodes.items():
@@ -907,30 +874,35 @@ class PausingCluster:
         return await self.net_mgr.deliver_all_pending(quorum_only=quorum_only, out_only=out_only)
 
     async def auto_comms_runner(self):
-        while self.auto_comms_flag:
-            try:
+        try:
+            self.logger.error("-----------------------------auto_comms_runner starting")
+            while self.auto_comms_flag:
                 await self.deliver_all_pending()
-            except Exception as exc:
-                self.logger.error("error trying to deliver messages %s", traceback.format_exc())
-            await asyncio.sleep(0.0001)
+                await asyncio.sleep(0.00001)
+            self.async_handle = None
+            self.logger.error("-----------------------------auto_comms_runner exiting")
+        except Exception as exc:
+            self.logger.error("error trying to deliver messages %s", traceback.format_exc())
             
     async def start_auto_comms(self):
-        self.auto_comms_flag = True
-        loop = asyncio.get_event_loop()
-        self.async_handle = loop.call_soon(lambda: loop.create_task(self.auto_comms_runner()))
+        if self.auto_comms_flag:
+            return
+        try:
+            self.auto_comms_flag = True
+            loop = asyncio.get_event_loop()
+            self.async_handle = loop.call_soon(lambda: loop.create_task(self.auto_comms_runner()))
+        except Exception as exc:
+            self.logger.error("error trying to setup auto_comms runner %s", traceback.format_exc())
         
     async def stop_auto_comms(self):
-        if self.auto_comms_flag:
-            self.auto_comms_flag = False
-            self.async_handle.cancel()
-            self.async_handle = None
+        self.auto_comms_flag = False
         
     async def cleanup(self):
+        self.logger.info("cleaning up cluster")
+        if self.auto_comms_flag:
+            await self.stop_auto_comms()
         for uri, node in self.nodes.items():
             await node.cleanup()
         # lose references to everything
         self.nodes = {}
         self.node_uris = []
-        if self.async_handle:
-            self.async_handle.cancel()
-            self.async_handle = None

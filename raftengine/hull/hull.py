@@ -56,6 +56,7 @@ class Hull:
         self.state = Follower(self)
         await self.state.start()
         if message:
+            self.logger.warning('%s reprocessing message as follower %s', self.get_my_uri(), message)
             return await self.on_message(message)
 
     async def send_message(self, message):
@@ -71,7 +72,7 @@ class Hull:
         try:
             if not isinstance(message, BaseMessage):
                 raise Exception('Message is not a raft type, did you use provided deserializer?')
-            self.logger.debug("Handling message type %s", message.get_code())
+            self.logger.debug("%s Handling message type %s", self.get_my_uri(), message.get_code())
             res = await self.state.on_message(message)
         except Exception as e:
             error = traceback.format_exc()
@@ -80,9 +81,9 @@ class Hull:
             return None
         return res
 
-    async def apply_command(self, command):
+    async def apply_command(self, command, timeout=1):
         if self.state.state_code == StateCode.leader:
-            return await self.state.apply_command(command)
+            return await self.state.apply_command(command, timeout=timeout)
         elif self.state.state_code == StateCode.follower:
             return CommandResult(command, redirect=self.state.leader_uri)
         elif self.state.state_code == StateCode.candidate:

@@ -55,7 +55,7 @@ async def test_partition_1(cluster_maker):
              uri_5: ts_5}
     cluster.net_mgr.split_network([part1, part2])
     
-    logger.info('--------- Everbody has first record, partition done, repleating command')
+    logger.info('--------- Everbody has first record, partition done, repeating command')
     command_result = await ts_1.hull.apply_command("add 1")
     assert command_result is not None
     assert command_result.result is not None

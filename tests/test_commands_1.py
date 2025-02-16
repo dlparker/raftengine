@@ -192,12 +192,11 @@ async def test_command_sqlite_1(cluster_maker):
     rec_3 = await ts_3.hull.log.read(index)
     assert rec_1.user_data == rec_2.user_data 
     assert rec_1.user_data == rec_3.user_data
-    breakpoint
     new_rec = LogRec.from_dict(rec_1.__dict__)
     assert new_rec.user_data == rec_1.user_data
+    await cluster.stop_auto_comms()
     
-async def test_command_2_leaders_1(cluster_maker):
-    cluster = cluster_maker(3)
+async def double_leader_inner(cluster, discard):
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -212,6 +211,7 @@ async def test_command_2_leaders_1(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
+    logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
     command_result = await ts_1.hull.apply_command("add 1")
@@ -228,29 +228,39 @@ async def test_command_2_leaders_1(cluster_maker):
     # command. The leader should figure out it doesn't lead
     # anymore and give back a redirect
 
+    logger.error('---------!!!!!!! stopping comms')
+    await cluster.stop_auto_comms()
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.hull.start_campaign()
-    ts_1.set_trigger(WhenElectionDone([uri_2, uri_3]))
-    ts_2.set_trigger(WhenElectionDone([uri_2, uri_3]))
-    ts_3.set_trigger(WhenElectionDone([uri_2, uri_3]))
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
-    
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
 
-    await cluster.start_auto_comms()
-    # will discard the messages that were blocked
-    ts_1.unblock_network()
+    if discard:
+        # will discard the messages that were blocked so
+        # leader gets missed messages
+        ts_1.unblock_network()
+        logger.error('---------!!!!!!! starting comms')
+        await cluster.start_auto_comms()
+    else:
+        # will deliver blocked message
+        ts_1.unblock_network(deliver=True)
+        await cluster.start_auto_comms()
+        
     logger.debug('------------------ Command AppendEntries should get rejected -')
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.apply_command("add 1", timeout=1)
     assert command_result.redirect == uri_2
+    logger.error('---------!!!!!!! stopping comms')
+    await cluster.stop_auto_comms()
     logger.info('------------------------ Correct redirect (follower) done')
     
+async def test_command_2_leaders_1(cluster_maker):
+    cluster = cluster_maker(3)
+    await double_leader_inner(cluster, True)    
+
+async def test_command_2_leaders_2(cluster_maker):
+    cluster = cluster_maker(3)
+    await double_leader_inner(cluster, False)    
