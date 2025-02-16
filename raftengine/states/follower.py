@@ -3,9 +3,10 @@ import traceback
 import logging
 import json
 from raftengine.log.log_api import LogRec
-from raftengine.states.base_state import StateCode, Substate, BaseState
+from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
+from raftengine.states.base_state import BaseState
 
 class Follower(BaseState):
 
@@ -24,17 +25,19 @@ class Follower(BaseState):
     async def start(self):
         await super().start()
         self.last_leader_contact = time.time()
+        await self.hull.record_substate(SubstateCode.leader_unknown)
         await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
         self.logger.debug("%s append term = %d prev_index = %d local_term = %d local_index = %d",
-                          self.hull.get_my_uri(),  message.term,
+                          self.my_uri(),  message.term,
                           message.prevLogIndex, await self.log.get_term(), await self.log.get_last_index())
 
         # Very rare case, sender thinks it is leader but has old term, probably
         # a network partition, or some kind of latency problem with the claimant's
         # operations that made us have an election. Te1ll the sender it is not leader any more.
         if message.term < await self.log.get_term():
+            await self.hull.record_substate(SubstateCode.older_term)
             await self.send_reject_append_response(message)
             return
         self.last_leader_contact = time.time()
@@ -44,17 +47,19 @@ class Follower(BaseState):
             if self.leader_uri != message.sender:
                 self.leader_uri = message.sender
                 self.last_vote = message
-                self.logger.info("%s accepting new leader %s", self.hull.get_my_uri(),
+                self.logger.info("%s accepting new leader %s", self.my_uri(),
                                  self.leader_uri)
+                await self.hull.record_substate(SubstateCode.joined_leader)
             else:
-                self.logger.debug("%s heartbeat from leader %s", self.hull.get_my_uri(),
+                self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                                   message.sender)
             await self.send_append_entries_response(message, None)
+            await self.hull.record_substate(SubstateCode.synced)
             return
         if (message.prevLogIndex > await self.log.get_last_index() and message.entries == []):
             # we are behind, request a catch up
             self.logger.debug("%s log at leader %s is ahead, asking for catchup",
-                              self.hull.get_my_uri(), message.sender)
+                              self.my_uri(), message.sender)
             await self.ask_for_catchup(message)
             return
         
@@ -64,23 +69,28 @@ class Follower(BaseState):
         # be, and the term would be wrong and we would reject this message above.
         # We know index is not equal cause of two checks above in first and
         # third if statement clauses
+        await self.hull.record_substate(SubstateCode.appending)
         self.logger.debug("new records")
         processor = self.hull.get_processor()
         recs = []
         for command in message.entries:
             result = None
             error = None
+            await self.hull.record_substate(SubstateCode.running_command)
             try:
                 result, error = await processor.process_command(command)
                 if error is None:
                     self.logger.debug("processor ran no error")
+                    await self.hull.record_substate(SubstateCode.command_done)
                 else:
-                    self.logger.warning("processor ran but had an error")
+                    self.logger.warning("processor ran but had an error %s", error)
+                    await self.hull.record_substate(SubstateCode.command_error)
             except Exception as e:
                 trace = traceback.format_exc()
-                msg = f"processor caused exception {trace}"
+                msg = f"supplied process_command caused exception {trace}"
                 error = trace
                 self.logger.error(trace)
+                await self.hull.record_substate(SubstateCode.command_error)
             recs.append(dict(result=result, error=error))
             run_result = dict(command=command,
                               result=result,
@@ -89,6 +99,7 @@ class Follower(BaseState):
                 new_rec = LogRec(term=await self.log.get_term(),
                                  user_data=json.dumps(run_result))
                 await self.log.append([new_rec,])
+        await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message, recs)
         return
 
@@ -96,9 +107,9 @@ class Follower(BaseState):
         if self.last_vote is not None:
             if self.last_vote.term >= message.term:
                 # we only vote once per term, unlike some dead people I know
-                self.logger.info("%s voting false on %s, already voted for %s", self.hull.get_my_uri(),
+                self.logger.info("%s voting false on %s, already voted for %s", self.my_uri(),
                                  message.sender, self.last_vote.sender)
-                await self.send_vote_response_message(message, votedYes=False)
+                await self.send_vote_response_message(message, vote_yes=False)
                 return
             # we have a new vote with a higher term, so forget about the last term's vote
             self.last_vote = None
@@ -109,27 +120,29 @@ class Follower(BaseState):
         # If the messages claim for log index or term are not at least as high
         # as our local values, then vote no.
         if message.prevLogIndex < last_index or message.term < await self.log.get_term():
-            self.logger.info("%s voting false on %s", self.hull.get_my_uri(),
+            self.logger.info("%s voting false on %s", self.my_uri(),
                              message.sender)
             vote = False
         else: # both term and index proposals are acceptable, so vote yes
             self.last_vote = message
-            self.logger.info("%s voting true for candidate %s", self.hull.get_my_uri(), message.sender)
+            self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
-        await self.send_vote_response_message(message, votedYes=vote)
+        await self.send_vote_response_message(message, vote_yes=vote)
             
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term
         # value that they receive in a message. Always means an election has
         # happened and we are in the new term.
         # Followers never decide that a higher term is not valid
+        await self.hull.record_substate(SubstateCode.newer_term)
         await self.log.set_term(message.term)
         # Tell the base class method to route the message back to us as normal
         return message
 
 
     async def ask_for_catchup(self, message):
-        append_response = AppendResponseMessage(sender=self.hull.get_my_uri(),
+        await self.hull.record_substate(SubstateCode.need_catchup)
+        append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
                                                 term=await self.log.get_term(),
                                                 entries=[],
@@ -142,21 +155,26 @@ class Follower(BaseState):
         await self.hull.send_response(message, append_response)
         
     async def leader_lost(self):
+        await self.hull.record_substate(SubstateCode.leader_lost)
         await self.hull.start_campaign()
         
-    async def send_vote_response_message(self, message, votedYes=True):
-        vote_response = RequestVoteResponseMessage(sender=self.hull.get_my_uri(),
+    async def send_vote_response_message(self, message, vote_yes=True):
+        vote_response = RequestVoteResponseMessage(sender=self.my_uri(),
                                                    receiver=message.sender,
                                                    term=message.term,
                                                    prevLogIndex=await self.log.get_last_index(),
                                                    prevLogTerm=await self.log.get_last_term(),
-                                                   vote=votedYes)
+                                                   vote=vote_yes)
         await self.hull.send_response(message, vote_response)
+        if vote_yes:
+            await self.hull.record_substate(SubstateCode.voting_yes)
+        else:
+            await self.hull.record_substate(SubstateCode.voting_no)
         
     async def send_append_entries_response(self, message, new_records):
         if new_records is None:
             new_records = []
-        append_response = AppendResponseMessage(sender=self.hull.get_my_uri(),
+        append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
                                                 term=await self.log.get_term(),
                                                 entries=message.entries,
@@ -172,9 +190,11 @@ class Follower(BaseState):
         max_time = self.hull.get_leader_lost_timeout()
         e_time = time.time() - self.last_leader_contact
         if e_time > max_time:
-            self.logger.debug("%s lost leader after %f", self.hull.get_my_uri(), e_time)
+            self.logger.debug("%s lost leader after %f", self.my_uri(), e_time)
             await self.leader_lost()
             return
         # reschedule
         await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
     
+    def my_uri(self):
+        return self.hull.get_my_uri()
