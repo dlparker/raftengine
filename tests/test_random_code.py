@@ -60,8 +60,33 @@ async def test_normal_election_sequence_2(cluster_maker):
     assert ts_4.hull.state.leader_uri == uri_1
     assert ts_5.hull.state.leader_uri == uri_1
 
+async def test_log_stuff():
+    from raftengine.log.log_api import LogRec,RecordCode
+    import json
+    from raftengine.messages.append_entries import AppendEntriesMessage
+    
+    rec1 = LogRec(index=1, term=1)
+    rec2 = LogRec(index=2, term=1)
+    msg = AppendEntriesMessage('1', '2', '1', 0, 0, [rec1, rec2], 2)
+    jdata = json.dumps(msg, default=lambda o:o.__dict__, indent=4)
+    print(jdata)
+    msg2_data = json.loads(jdata)
+    from pprint import pprint
+    pprint(msg2_data)
+    msg2 = AppendEntriesMessage.from_dict(msg2_data)
+    if False:
+        objs = msg2.entries
+        msg2.entries = []
+        for entry in objss:
+            msg2.entries.append(LogRec.from_dict(entry))
 
-
+    print('-------------------')
+    pprint(msg2)
+    print('-------------------')
+    pprint(msg2.__dict__)
+    
+                         
+    
 async def test_pending_record_changes():
     from dev_tools.sqlite_log import SqliteLog
     from dev_tools.memory_log import MemoryLog

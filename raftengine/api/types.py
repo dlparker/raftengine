@@ -49,8 +49,14 @@ class SubstateCode(str, Enum):
     """ As of current call from leader, log is in sync """
     synced = "SYNCED"                 
 
-    """ Leader log is newer than ours, requesting catchup """
+    """ As of current call from leader, log is in sync """
+    got_heartbeat = "GOT_HEARTBEAT"
+    
+    """ Behind leader, need to catch up """
     need_catchup = "NEED_CATCHUP"
+
+    """ Applied catchup entries from Leader log """
+    applied_catchup = "APPLIED_CATCHUP"
 
     """ Leader log is newer than ours, processing append message"""
     appending = "APPENDING"
@@ -61,6 +67,15 @@ class SubstateCode(str, Enum):
     """ Running command sent from leader succeeded """
     command_done = "COMMAND_DONE"
 
+    """ At least one follower has reported command results """
+    command_follower_reports = "COMMAND_FOLLOWER_REPORTS"
+
+    """ At least one follower has reported an error executing command """
+    command_follower_error = "COMMAND_FOLLOWER_ERROR"
+
+    """ Sufficient followers have reported results to form consensus """
+    command_follower_consensus = "COMMAND_FOLLOWER_CONSENSUS"
+    
     """ Running command sent from leader caused an error """
     command_error = "COMMAND_ERROR"
 
@@ -111,11 +126,29 @@ class SubstateCode(str, Enum):
     """ All expected hearbeat responses in """
     all_heartbeats_in = "ALL_HEARTBEATS_IN"
     
+    """ Sending catchup log records to follower """
+    sending_catchup = "SENDING_CATCHUP"
+
     """ Just sent new log entries append (as leader) """
     sent_new_entries = "SENT_NEW_ENTRIES"
 
-    """ Running and saving command after committed by peers """
+    """ Saving command request and preparing to monitor """
+    preparing_command = "PREPARIING_COMMAND"
+
+    """ Sending append_entries to cluster """
+    broadcasting_command = "BROADCASTING_COMMAND"
+
+    """ Monitoring message waiting for followers to report """
+    awaiting_command = "AWAITING_COMMAND"
+
+    """ Running command locally after committed by followers """
+    local_command = "LOCAL_COMMAND"
+
+    """ Running and saving command after committed by followers """
     committing_command = "COMMITTING_COMMAND"
+
+    """ Some error prevented the command sequence from completing """
+    failed_command = "FAILED_COMMAND"
 
     # --- end expect from Leader states
 
