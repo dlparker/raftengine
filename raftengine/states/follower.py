@@ -43,7 +43,8 @@ class Follower(BaseState):
         self.last_leader_contact = time.time()
         # We know message.term == term cause we can never get here with
         # a higher term, we'd have updated ours first.
-        if (message.prevLogIndex == await self.log.get_last_index() and message.entries == []):
+        entries = json.loads(message.entries)
+        if (message.prevLogIndex == await self.log.get_last_index() and entries == []):
             if self.leader_uri != message.sender:
                 self.leader_uri = message.sender
                 self.last_vote = message
@@ -54,9 +55,9 @@ class Follower(BaseState):
                 self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                                   message.sender)
             await self.send_append_entries_response(message, None)
-            await self.hull.record_substate(SubstateCode.synced)
+            await self.hull.record_substate(SubstateCode.got_heartbeat)
             return
-        if (message.prevLogIndex > await self.log.get_last_index() and message.entries == []):
+        if (message.prevLogIndex > await self.log.get_last_index() and entries == []):
             # we are behind, request a catch up
             self.logger.debug("%s log at leader %s is ahead, asking for catchup",
                               self.my_uri(), message.sender)
@@ -73,11 +74,13 @@ class Follower(BaseState):
         self.logger.debug("new records")
         processor = self.hull.get_processor()
         recs = []
-        for command in message.entries:
+        for log_rec_data in json.loads(message.entries):
+            rec = LogRec.from_dict(log_rec_data)
             result = None
             error = None
             await self.hull.record_substate(SubstateCode.running_command)
             try:
+                command = json.loads(rec.user_data)['command']
                 result, error = await processor.process_command(command)
                 if error is None:
                     self.logger.debug("processor ran no error")
@@ -91,14 +94,13 @@ class Follower(BaseState):
                 error = trace
                 self.logger.error(trace)
                 await self.hull.record_substate(SubstateCode.command_error)
-            recs.append(dict(result=result, error=error))
             run_result = dict(command=command,
                               result=result,
                               error=error)
+            recs.append(run_result)
             if error is None:
-                new_rec = LogRec(term=await self.log.get_term(),
-                                 user_data=json.dumps(run_result))
-                await self.log.append([new_rec,])
+                rec.user_data = json.dumps(run_result)
+                await self.log.append([rec,])
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message, recs)
         return
@@ -145,8 +147,8 @@ class Follower(BaseState):
         append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
                                                 term=await self.log.get_term(),
-                                                entries=[],
-                                                results=[],
+                                                entries=json.dumps([]),
+                                                results=json.dumps([]),
                                                 prevLogIndex=message.prevLogIndex,
                                                 prevLogTerm=message.prevLogTerm,
                                                 myPrevLogIndex=await self.log.get_last_index(),
@@ -174,15 +176,17 @@ class Follower(BaseState):
     async def send_append_entries_response(self, message, new_records):
         if new_records is None:
             new_records = []
+        my_index = await self.log.get_last_index()
+        my_term = await self.log.get_last_term()
         append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
                                                 term=await self.log.get_term(),
                                                 entries=message.entries,
-                                                results=new_records,
+                                                results=json.dumps(new_records),
                                                 prevLogIndex=message.prevLogIndex,
                                                 prevLogTerm=message.prevLogTerm,
-                                                myPrevLogIndex=await self.log.get_last_index(),
-                                                myPrevLogTerm=await self.log.get_last_term(),
+                                                myPrevLogIndex=my_index,
+                                                myPrevLogTerm=my_term,
                                                 leaderId=self.leader_uri)
         await self.hull.send_response(message, append_response)
 

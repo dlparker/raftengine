@@ -15,25 +15,31 @@ class RecordCode(str, Enum):
     no_op = "NO_OP"
 
     """ Results of client command operation """
-    client = "CLIENT"
+    client_command = "CLIENT_COMMAND"
     
     """ Cluster Configuration Data """
-    cluster_confit = "CLUSTER_CONFIG" 
+    cluster_config = "CLUSTER_CONFIG" 
 
     
 @dataclass
 class LogRec:
-    code: RecordCode = field(default=RecordCode.client)
     index: int = field(default = 0)
     term: int = field(default = 0)
-    user_data: list =  field(default=None, repr=False)
+    command: str  = field(default = None, repr=False)
+    result: str  = field(default = None, repr=False)
+    code: RecordCode = field(default=RecordCode.client_command)
+    leader_committed: bool = field(default = False, repr=False)
+    local_committed: bool = field(default = False, repr=False)
 
     @classmethod
     def from_dict(cls, data):
-        rec = cls(RecordCode(data['code']),
-                  index=data['index'],
+        rec = cls(index=data['index'],
                   term=data['term'],
-                  user_data=data['user_data'])
+                  command=data['command'],
+                  result=data['result'],
+                  code=RecordCode(data['code']),
+                  leader_committed=data['leader_committed'],
+                  local_committed=data['local_committed'])
         return rec
     
 # abstract class for all states
@@ -60,22 +66,6 @@ class LogAPI(metaclass=abc.ABCMeta):
     async def incr_term(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
     
-    @abc.abstractmethod
-    async def save_pending(self, record: LogRec):  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def get_pending(self) -> LogRec | None:  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def commit_pending(self, record: LogRec) -> None:  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def clear_pending(self) -> None:  # pragma: no cover abstract
-        raise NotImplementedError
-
     @abc.abstractmethod
     async def append(self, entries: List[LogRec]):  # pragma: no cover abstract
         raise NotImplementedError

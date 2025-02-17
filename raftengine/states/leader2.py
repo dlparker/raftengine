@@ -34,6 +34,7 @@ class Commander:
         self.log_record = log_record
         self.logger = leader.logger
         self.log = leader.log
+        self.hull = leader.hull
         self.done_condition = asyncio.Condition()
         self.timeout = timeout
         self.terminated = False
@@ -44,9 +45,11 @@ class Commander:
         self.local_error = None
         self.sent_messages = dict()
         self.reply_messages = dict()
+        self.proto_message = None
         self.concurrences = 0
         
     async def start(self):
+        await self.hull.record_substate(SubstateCode.preparing_command)
         term = await self.log.get_term()
         if self.log_record is None:
             cmd_data = CommandData(command=self.command, user_context=self.user_context)
@@ -56,12 +59,15 @@ class Commander:
             # in case term changed, update it in record
             self.log_record.term = await self.log.get_term()
 
+        entries = json.dumps([self.log_record.__dict__,])
         proto_message = AppendEntriesMessage(sender=self.leader.my_uri(),
                                                    receiver='',
                                                    term=await self.log.get_term(),
-                                                   entries=[self.command,],
+                                                   entries=entries,
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    prevLogIndex=await self.log.get_last_index())
+        self.proto_message = proto_message
+        await self.hull.record_substate(SubstateCode.broadcasting_command)
         for uri in self.leader.hull.get_cluster_node_ids():
             if uri == self.leader.my_uri():
                 continue
@@ -83,12 +89,15 @@ class Commander:
                 await asyncio.sleep(0.001)
             if time.time() - start_time >= timeout:
                 self.time_expired = True
-                raise TimeoutTaskGroup()
+                with self.done_condition:
+                    self.done_condition.notify()
+                return
         async def check_done():
             async with self.done_condition:
                 await self.done_condition.wait()
-                if self.terminated:
+                if self.terminated or self.time_expired:
                     return
+        await self.hull.record_substate(SubstateCode.broadcasting_command)
         try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(check_done())
@@ -102,11 +111,13 @@ class Commander:
 
     async def process_locally(self):
         result = None
+        error = None
+        await self.hull.record_substate(SubstateCode.local_command)
         try:
-            self.logger.info("%s applying command committed at index %d", self.my_uri(),
+            self.logger.info("%s applying command committed at index %d", self.leader.my_uri(),
                              await self.log.get_last_index())
             processor = self.hull.get_processor()
-            result,error = await processor.process_command(command)
+            result,error = await processor.process_command(self.command)
         except Exception as e:
             self.local_error = traceback.format_exc()
         self.local_result = result
@@ -117,19 +128,21 @@ class Commander:
         
     async def compile_results(self):
         
-        result = Command(command=command,
-                         committed=self.committed,
-                         timeout=self.time_expired,
-                         result=self.local_result,
-                         error=self.local_error,
-                         redirect_url=self.redirect_url)
+        result = CommandResult(command=self.command,
+                               committed=self.committed,
+                               timeout=self.time_expired,
+                               result=self.local_result,
+                               error=self.local_error,
+                               redirect=self.redirect_uri)
         if not self.committed and self.redirect is None:
             result.retry = True
-        if committed:
+        if self.local_error:
+            await self.hull.record_substate(SubstateCode.failed_command)
+        if self.committed:
+            await self.hull.record_substate(SubstateCode.committing_command)
             new_rec = LogRec(term=await self.log.get_term(),
                              user_data=json.dumps(result.__dict__))
             await self.log.commit_pending(self.log_record)
-
         return result
     
     async def apply_superceeded(self, message):
@@ -137,6 +150,7 @@ class Commander:
         if hasattr(message, "leaderId"):
             self.redirect_uri = message.leaderId
         self.terminated = True
+        await self.hull.record_substate(SubstateCode.newer_term)
         async with self.done_condition:
             self.done_condition.notify()
 
@@ -149,7 +163,7 @@ class Commander:
     async def apply_committed_command(self):
         self.committed = True
         self.terminated = True
-        with self.done_condition:
+        async with self.done_condition:
             self.done_condition.notify()
 
     async def apply_consensus_failed(self):
@@ -157,30 +171,43 @@ class Commander:
         with self.done_condition:
             self.done_condition.notify()
         
-    async def is_process_command_response(self, message):
+    async def is_command_response(self, message):
+        entries = json.loads(message.entries)
+        if entries == []:
+            return False
         term = await self.log.get_term()
+        last_item = LogRec.from_dict(entries[-1])
+        last_sent_item = LogRec.from_dict(json.loads(self.proto_message.entries)[-1])
         if  (message.term == term
-             and message.prevLogIndex == await self.leader.log.get_last_index()
-             and message.prevLogTerm == await self.leader.log.get_last_term()):
+             and last_item.index == last_sent_item.index
+             and last_item.term == last_sent_item.term):
             return True
         return False
     
     async def process_command_response(self, message):
+        await self.hull.record_substate(SubstateCode.command_follower_reports)
         term = await self.log.get_term()
         if message.term > term:
             await self.apply_superceeded()
             return
         self.reply_messages[message.sender] = message
+        entries = json.loads(message.entries)
+        if entries == []:
+            return False
+        term = await self.log.get_term()
+        last_item = LogRec.from_dict(entries[-1])
+        last_sent_item = LogRec.from_dict(json.loads(self.proto_message.entries)[-1])
         if not (message.term == term
-                and message.myPrevLogIndex == await self.leader.log.get_last_index()
-                and message.myPrevLogTerm == await self.leader.log.get_last_term()):
+             and last_item.index == last_sent_item.index
+             and last_item.term == last_sent_item.term):
             # Recipient found something amis, term or details of previous
-            # record in their log. They did not apply the command, so
+            # record in their log. They did not save the log record, so
             # don't count this one in committed calc
             return
         results = json.loads(message.results)
-        error = results[0].error
+        error = results[0].get('error', None)
         if (error):
+            await self.hull.record_substate(SubstateCode.command_follower_error)
             await self.record_replica_command_error(message)
             return
         else:
@@ -188,12 +215,15 @@ class Commander:
         # Include self in test for majority concensus
         if self.concurrences + 1 >= len(self.sent_messages) / 2:
             #concensus reached for commit
-            return await self.apply_committed_command()
+            await self.hull.record_substate(SubstateCode.command_follower_consensus)
+            await self.apply_committed_command()
+            return
         remaining = len(self.sent_messages) - len(self.reply_messages)
         needed = len(self.sent_messages) - self.concurrences + 1
         if needed > remaining:
             # concensus not possible
-            return await self.apply_consensus_failed()
+            await self.apply_consensus_failed()
+        return
         
 @dataclass
 class DialogTracker:
@@ -293,7 +323,7 @@ class Leader(BaseState):
     async def on_append_entries_response(self, message):
         await self.record_received_message(message)
         if (self.pending_command and
-            await self.pending_command.is_process_command_response(message)):
+            await self.pending_command.is_command_response(message)):
             # this is a reply to the pending command, process it accordingly
             await self.pending_command.process_command_response(message)
             return
@@ -305,8 +335,11 @@ class Leader(BaseState):
             await self.hull.demote_and_handle(None)
             return
         # this was a heartbeat
-        await self.process_heartbeat_response(message)
-        return
+        entries = json.loads(message.entries)
+        if  entries == []:
+            await self.process_heartbeat_response(message)
+            return
+        self.logger.error('no code yet for applying commit response to inflight command')
     
     async def send_heartbeats(self):
         silent_time = time.time() - self.last_broadcast_time
@@ -327,7 +360,7 @@ class Leader(BaseState):
             message = AppendEntriesMessage(sender=self.my_uri(),
                                            receiver=uri,
                                            term=await self.log.get_term(),
-                                           entries=[],
+                                           entries=json.dumps([]),
                                            prevLogTerm=await self.log.get_term(),
                                            prevLogIndex=await self.log.get_last_index())
             self.logger.debug("%s sending heartbeat to %s", message.sender, message.receiver)
@@ -341,7 +374,7 @@ class Leader(BaseState):
         # get the first log record they are missing, send that one
         rec = await self.log.read(message.myPrevLogIndex + 1)
         command = json.loads(rec.user_data)['command']
-        entries = [command,]
+        entries = json.dumps([rec.__dict__,])
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=message.sender,
                                        term=await self.log.get_term(),
@@ -349,6 +382,7 @@ class Leader(BaseState):
                                        prevLogTerm=await self.log.get_term(),
                                        prevLogIndex=await self.log.get_last_index())
         self.logger.info("sending catchup %s", message)
+        await self.hull.record_substate(SubstateCode.sending_catchup)
         await self.record_sent_message(message)
         await self.hull.send_message(message)
         

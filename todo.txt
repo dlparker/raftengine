@@ -16,6 +16,19 @@ Immediatly:
     command in a separate table and delete/insert on completion? Make logAPI
     support completion operation regardless, as different than a re-write operation.
 
+    !!!! Paper has implications about multiple uncommitted recors in flight at the
+    same time. See figure 7. I don't see how that makes sense unless the followers
+    maintain a queue of unprocessed updates. If I don't support this, how bad is it?
+    The complexity of uncommitted records at leader and at follower and of 
+
+    !!! Clean up LogRec, chaning "user_data" to command and result and add custom json serializer so
+        that serialising the entries array just works
+
+    !!! Change all the references to myPrevLogTerm etc, should be looking at
+        the log data in the message to see what was sent. this is a reply problem at
+	leader, needs to understant what the reply means. Should be either hearbeat (no entries)
+	or it should be determinable from the log records orignally sent. 
+	
     When the responses
     come back (read paper carefully, do we need num_server/2 and count ourselves,
     or num_server/2 +1 because paper says majority?) then process it locally
@@ -23,6 +36,7 @@ Immediatly:
     needs to change to be based on the logLastIndex getting updated, maybe. Anyway
     another refactor for sure. Maybe self.append_command_record call? Then it
     can trigger any waiting pilot call?
+
 25. Add "caller_context" to command ops, pass it on process_command and return it
     in result. Maybe try one more time to make apply_command cleaner (and rename it
     while we are at it).

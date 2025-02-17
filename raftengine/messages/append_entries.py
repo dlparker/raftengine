@@ -1,21 +1,36 @@
 from typing import Any, List
 from .base_message import BaseMessage
+from raftengine.log.log_api import LogRec
 
 
 class AppendEntriesMessage(BaseMessage):
 
-    code = "append_entries"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
                  entries:List[Any], commitIndex: int=0):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        self.code = "append_entries"
         self.entries = entries
         self.commitIndex = commitIndex
 
     @property
     def dialog_id(self):
         return f"{self.term}-{self.prevLogIndex}-{self.prevLogTerm}"
-        
+
+    @classmethod
+    def from_dict(cls, data):
+        entries = []
+        for dic in data['entries']:
+            entries.append(LogRec.from_dict(dic))
+        msg = cls(sender=data['sender'],
+                  receiver=data['receiver'],
+                  term=int(data['term']),
+                  prevLogIndex=int(data['prevLogIndex']),
+                  prevLogTerm=int(data['prevLogTerm']),
+                  entries=entries,
+                  commitIndex=int(data['commitIndex']),)
+        return msg
+                  
     def __repr__(self):
         msg = super().__repr__()
         msg += f" e={len(self.entries)}"

@@ -148,8 +148,21 @@ async def test_command_1(cluster_maker):
     logger.debug('---------Sending heartbeat and starting run_till_triggers with others ---')
     await ts_3.hull.state.send_heartbeats()
     cur_index = await ts_3.hull.get_log().get_last_index()
-    ts_1.set_trigger(WhenHasLogIndex(cur_index))
+    ts_1.set_trigger(WhenHasLogIndex(2))
     await ts_1.run_till_triggers(free_others=True)
+    
+    try:
+        ts_1.set_trigger(WhenHasLogIndex(3))
+        await ts_1.run_till_triggers(free_others=True)
+        ts_1.set_trigger(WhenHasLogIndex(4))
+        await ts_1.run_till_triggers(free_others=True)
+    except:
+        print(await ts_1.log.get_last_index())
+        print(await ts_1.log.get_last_index())
+        breakpoint()
+        print(await ts_1.log.get_last_index())
+        print(await ts_1.log.get_last_index())
+    
     assert ts_1.operations.total == 4
 
 async def test_command_sqlite_1(cluster_maker):
