@@ -40,6 +40,9 @@ class Records:
             return None
         return self.pending
 
+    def clear_pending(self):
+        self.pending = None
+
     def commit_pending(self, rec: LogRec) -> LogRec:
         if not self.pending:
             raise Exception('no pending record exists')
@@ -95,14 +98,18 @@ class MemoryLog(LogAPI):
         self.logger.debug("new log record %s", save_rec.index)
 
     async def save_pending(self, record: LogRec) -> None:
-        self.records.save_pending(record)
+        res = self.records.save_pending(record)
         self.logger.debug("new pending log record %s", record.index)
-
+        return res
+    
     async def get_pending(self) -> LogRec:
         return self.records.get_pending()
 
     async def commit_pending(self, record: LogRec) -> LogRec:
         return self.records.commit_pending(record)
+
+    async def clear_pending(self) -> LogRec:
+        return self.records.clear_pending()
 
     async def replace_or_append(self, entry:LogRec) -> LogRec:
         if entry.index is None:

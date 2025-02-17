@@ -9,6 +9,7 @@ from raftengine.messages.base_message import BaseMessage
 from raftengine.states.follower import Follower
 from raftengine.states.candidate import Candidate
 from raftengine.states.leader import Leader
+#from raftengine.states.leader2 import Leader
 from raftengine.states.leader import CommandResult
 from raftengine.api.pilot_api import PilotAPI
 

@@ -26,15 +26,16 @@ class Commander:
     # of a stored but uncommitted command. In the former case a done_callback will
     # be suplied, but not in the later case. In the later case, a log_record will
     # be supplied, pulled from the log's pending record storage.
-    def __init__(self, leader, command, user_context, done_callback=None, log_record=None):
+    def __init__(self, leader, command, user_context, done_callback=None, log_record=None, timeout=1.0):
         self.leader = leader
         self.command = command
         self.user_context = user_context
         self.done_callback = done_callback
         self.log_record = log_record
         self.logger = leader.logger
+        self.log = leader.log
         self.done_condition = asyncio.Condition()
-        self.timeout = 1
+        self.timeout = timeout
         self.terminated = False
         self.time_expired = False
         self.committed = False
@@ -48,16 +49,17 @@ class Commander:
     async def start(self):
         term = await self.log.get_term()
         if self.log_record is None:
-            udata = json.dumps(CommandData(command=self.command, user_context=self.user_context))
-            new_rec = LogRec(term=term, user_data=udata)
+            cmd_data = CommandData(command=self.command, user_context=self.user_context)
+            udata = json.dumps(cmd_data.__dict__)
+            new_rec = LogRec(term=term, user_data=udata, index=await self.log.get_last_index() + 1)
             self.log_record = await self.log.save_pending(new_rec)
             # in case term changed, update it in record
             self.log_record.term = await self.log.get_term()
 
-        proto_message = AppendEntriesMessage(sender=self.my_uri(),
+        proto_message = AppendEntriesMessage(sender=self.leader.my_uri(),
                                                    receiver='',
                                                    term=await self.log.get_term(),
-                                                   entries=[command,],
+                                                   entries=[self.command,],
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    prevLogIndex=await self.log.get_last_index())
         for uri in self.leader.hull.get_cluster_node_ids():
@@ -74,16 +76,16 @@ class Commander:
             await self.leader.record_sent_message(message)
             self.sent_messages[uri] = message
 
-    async def wait_for_result(self, timeout):
+    async def wait_for_result(self):
         async def do_timeout(timeout):
             start_time = time.time()
-            while self.done_count < self.expected_count:
+            while not self.terminated:
                 await asyncio.sleep(0.001)
             if time.time() - start_time >= timeout:
                 self.time_expired = True
                 raise TimeoutTaskGroup()
         async def check_done():
-            with self.done_condition:
+            async with self.done_condition:
                 await self.done_condition.wait()
                 if self.terminated:
                     return
@@ -135,7 +137,7 @@ class Commander:
         if hasattr(message, "leaderId"):
             self.redirect_uri = message.leaderId
         self.terminated = True
-        with self.done_condition:
+        async with self.done_condition:
             self.done_condition.notify()
 
     async def record_replica_command_error(self, message):
@@ -156,9 +158,10 @@ class Commander:
             self.done_condition.notify()
         
     async def is_process_command_response(self, message):
+        term = await self.log.get_term()
         if  (message.term == term
-             and message.lastLogIndex == await self.leader.log.get_last_index()
-             and message.lastLogTerm == await self.leader.log.get_last_term()):
+             and message.prevLogIndex == await self.leader.log.get_last_index()
+             and message.prevLogTerm == await self.leader.log.get_last_term()):
             return True
         return False
     
@@ -167,10 +170,10 @@ class Commander:
         if message.term > term:
             await self.apply_superceeded()
             return
-        self.reply_messages[uri] = message
+        self.reply_messages[message.sender] = message
         if not (message.term == term
-                and message.myLastLogIndex == await self.leader.log.get_last_index()
-                and message.myLastLogTerm == await self.leader.log.get_last_term()):
+                and message.myPrevLogIndex == await self.leader.log.get_last_index()
+                and message.myPrevLogTerm == await self.leader.log.get_last_term()):
             # Recipient found something amis, term or details of previous
             # record in their log. They did not apply the command, so
             # don't count this one in committed calc
@@ -275,136 +278,11 @@ class Leader(BaseState):
         self.logger.info("%s starting command sequence for index %d", self.my_uri(),
                          await self.log.get_last_index())
 
-        await self.prepare_command(command)
-        await self.broadcast_command()
-
-        try:
-            done, redirect = await self.collect_command_result(timeout) # raises on Timeout
-        except:
-            error = traceback.format_exc()
-            result = CommandResult(command=command, error = error)
-            self.pending_command = None
-            return result
-            
-        if redirect is not None or not done:
-            if redirect is None:
-                retry = 1
-            else:
-                retry = None
-            result = CommandResult(command=command, redirect=redirect, retry=retry)
-            self.pending_command = None
-            return result
-
-        try:
-            self.logger.info("%s applying command committed at index %d", self.my_uri(),
-                             await self.log.get_last_index())
-            processor = self.hull.get_processor()
-            result,error = await processor.process_command(command)
-        except Exception as e:
-            error = traceback.format_exc()
-            result = CommandResult(command=command, error = error)
-            self.pending_command = None
-            return result
-            
-        run_result = dict(command=command,
-                          result=result,
-                          error=error)
-        new_rec = LogRec(term=await self.log.get_term(),
-                         user_data=json.dumps(run_result))
-        await self.log.append([new_rec,])
+        self.pending_command = Commander(self, command, user_context=None, timeout=1.0)
+        await self.pending_command.start()
+        result = await self.pending_command.wait_for_result()
         self.pending_command = None
-        result = CommandResult(command=command, result=result, committed=error is not None, error = error)
         return result
-        
-
-    async def prepare_command(self, command):
-        message = AppendEntriesMessage(sender=self.my_uri(),
-                                       receiver='',
-                                       term=await self.log.get_term(),
-                                       entries=[command,],
-                                       prevLogTerm=await self.log.get_last_term(),
-                                       prevLogIndex=await self.log.get_last_index())
-        
-        self.pending_command = CommandTracker(command=command,
-                                              finished=False,
-                                              rejected=False,
-                                              proto_msg=message,
-                                              dialogs=dict())
-
-    async def command_done_checker(self):
-        tracker = self.pending_command
-        while not tracker.finished and not tracker.rejected:
-            try:
-                await asyncio.sleep(0.0001)
-            except asyncio.CancelledError:
-                return False, None
-        if tracker.rejected:
-            if tracker.reject_msg is None:
-                return False, None
-            if tracker.reject_msg.get_code() != AppendResponseMessage:
-                self.logger.info("%s no longer leader, returning retry (leader unknown)",
-                                 self.my_uri())
-                return False, tracker.reject_msg.leaderId 
-            if tracker.reject_msg.leaderId != self.my_uri():
-                self.logger.info("%s no longer leader, returning redirect to %s",
-                                 self.my_uri(), tracker.reject_msg.leaderId)
-                return False, tracker.reject_msg.leaderId 
-        return True, None
-        
-    async def collect_command_result(self, timeout):
-        try:
-            done, redirect = await asyncio.wait_for(asyncio.create_task(
-                self.command_done_checker()), timeout=timeout)
-        except asyncio.TimeoutError:
-            self.pending_command = None
-            msg = f'Requested command sequence not completed in {timeout} seconds'
-            raise Exception(msg)
-        return done, redirect
-
-    async def broadcast_command(self):
-        tracker = self.pending_command
-        for uri in self.hull.get_cluster_node_ids():
-            if uri == self.my_uri():
-                continue
-            message = AppendEntriesMessage(sender=tracker.proto_msg.sender,
-                                           receiver=uri,
-                                           term=tracker.proto_msg.term,
-                                           entries=tracker.proto_msg.entries,
-                                           prevLogTerm=tracker.proto_msg.prevLogTerm,
-                                           prevLogIndex=tracker.proto_msg.prevLogIndex)
-            dialog = PairTracker(message,
-                                   time.time())
-            tracker.dialogs[uri] = dialog
-            self.logger.info("sending %s", message)
-            await self.hull.send_message(message)
-            await self.record_sent_message(message)
-        self.last_broadcast_time = time.time()
-
-    async def process_command_response(self, message):
-        cmd_dialog = self.pending_command.dialogs[message.sender]
-        cmd_dialog.replied_time = time.time()
-        if message.term > await self.log.get_term():
-            # we are no longer leader
-            self.pending_command.rejected = True
-            self.pending_command.reject_msg = message
-            cmd_dialog.nack = message
-            return
-        
-        cmd_dialog.ack = message
-        tracker = self.pending_command
-        acked = 0
-        # count the concurrences
-        for uri in self.hull.get_cluster_node_ids():
-            if uri == self.my_uri():
-                continue
-            if tracker.dialogs[uri].ack != None:
-                acked += 1
-        if acked  + 1 > len(tracker.dialogs) / 2: # this server counts too
-            self.logger.info('%s got consensus on index %d, applying command', self.my_uri(),
-                             message.prevLogIndex + 1)
-            # current state is "committed" as defined in raft paper, command can
-            # be applied
-            self.pending_command.finished = True
         
     async def process_heartbeat_response(self, message):
         if message.prevLogIndex > message.myPrevLogIndex:
@@ -414,11 +292,10 @@ class Leader(BaseState):
     
     async def on_append_entries_response(self, message):
         await self.record_received_message(message)
-        
-        if (self.pending_command
-            and self.pending_command.proto_msg.prevLogIndex == message.prevLogIndex):
+        if (self.pending_command and
+            await self.pending_command.is_process_command_response(message)):
             # this is a reply to the pending command, process it accordingly
-            await self.process_command_response(message)
+            await self.pending_command.process_command_response(message)
             return
 
         # We don't do this check first because if we got it as a command
@@ -474,16 +351,14 @@ class Leader(BaseState):
         self.logger.info("sending catchup %s", message)
         await self.record_sent_message(message)
         await self.hull.send_message(message)
-
         
     async def term_expired(self, message):
         if self.pending_command:
+            await self.pending_command.apply_superceeded(message)
             self.logger.warning('%s term expired when expecting command response, %s',
                                 self.my_uri(), message)
-            await self.process_command_response(message)
-            return None
         await self.log.set_term(message.term)
-        await self.hull.demote_and_handle(message)
+        await self.hull.demote_and_handle(None)
         # don't reprocess message
         return None
 
@@ -505,8 +380,8 @@ class Leader(BaseState):
             pending = tracker.pending
             tracker.pending = []
             for rec in tracker.pending:
-                if (rec.sent_message.lastLogIndex == message.lastLogIndex
-                    and rec.sent_message.lastLogTerm == message.lastLogTerm):
+                if (rec.sent_message.prevLogIndex == message.prevLogIndex
+                    and rec.sent_message.prevLogTerm == message.prevLogTerm):
                     rec.reply_message = message
                     rec.reply_time = time.time()
                     if len(tracker.history) >= 100:
