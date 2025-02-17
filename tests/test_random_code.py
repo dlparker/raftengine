@@ -97,3 +97,6 @@ async def test_pending_record_changes():
         # should work now
         next_rec.index = 2
         await log.save_pending(next_rec)
+        await log.clear_pending()
+        z_rec = await log.get_pending()
+        assert z_rec is None

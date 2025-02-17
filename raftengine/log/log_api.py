@@ -69,7 +69,11 @@ class LogAPI(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def commit_pending(self) -> None:  # pragma: no cover abstract
+    async def commit_pending(self, record: LogRec) -> None:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def clear_pending(self) -> None:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

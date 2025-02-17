@@ -200,11 +200,14 @@ class Records:
         # the index is correct, but our save method wants null index when inserting new record
         rec.index = None
         rec = self.save_entry(rec)
+        self.clear_pending()
+        return rec
+        
+    def clear_pending(self):
         cursor = self.db.cursor()
         cursor.execute("delete from pending_record")
         cursor.close()
         self.db.commit()
-        return rec
     
 class SqliteLog(LogAPI):
 
@@ -304,5 +307,7 @@ class SqliteLog(LogAPI):
     async def commit_pending(self, record: LogRec) -> LogRec:
         return self.records.commit_pending(record)
 
+    async def clear_pending(self) -> LogRec:
+        return self.records.clear_pending()
         
     
