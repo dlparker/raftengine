@@ -11,9 +11,6 @@ from enum import Enum
 class RecordCode(str, Enum):
     """ String enum representing purpose of record. """
 
-    """ When leader starts up, marks start of term with this """
-    no_op = "NO_OP"
-
     """ Results of client command operation """
     client_command = "CLIENT_COMMAND"
     
@@ -27,6 +24,7 @@ class LogRec:
     term: int = field(default = 0)
     command: str  = field(default = None, repr=False)
     result: str  = field(default = None, repr=False)
+    error: bool  = field(default = False)
     code: RecordCode = field(default=RecordCode.client_command)
     leader_committed: bool = field(default = False, repr=False)
     local_committed: bool = field(default = False, repr=False)
@@ -37,11 +35,20 @@ class LogRec:
                   term=data['term'],
                   command=data['command'],
                   result=data['result'],
+                  error=data['error'],
                   code=RecordCode(data['code']),
                   leader_committed=data['leader_committed'],
                   local_committed=data['local_committed'])
         return rec
+
+class CommandLogRec(LogRec):
+    pass
+
+class ConfigLogRec(LogRec):
+    code=RecordCode.cluster_config
     
+
+
 # abstract class for all states
 class LogAPI(metaclass=abc.ABCMeta):
     """
@@ -67,24 +74,37 @@ class LogAPI(metaclass=abc.ABCMeta):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def append(self, entries: List[LogRec]):  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def replace_or_append(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
     async def get_last_index(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod
     async def get_last_term(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def get_leader_commit_index(self) -> int:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_local_commit_index(self) -> int:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def append(self, entries: List[LogRec]):  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def replace(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def update_and_commit(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:  # pragma: no cover abstract
+        raise NotImplementedError
+
 
     
         

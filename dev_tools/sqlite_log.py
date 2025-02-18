@@ -4,9 +4,11 @@ import sqlite3
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
-from copy import deepcopy
 import logging
 from raftengine.log.log_api import LogRec, LogAPI, RecordCode
+
+def bool_converter(value):
+    return bool(int(value))
 
 class Records:
 
@@ -26,6 +28,7 @@ class Records:
         return self.db is not None
     
     def open(self) -> None:
+        sqlite3.register_converter('BOOLEAN', bool_converter)
         self.db = sqlite3.connect(self.filepath,
                                   detect_types=sqlite3.PARSE_DECLTYPES |
                                   sqlite3.PARSE_COLNAMES)
@@ -53,14 +56,15 @@ class Records:
 
     def ensure_tables(self):
         cursor = self.db.cursor()
-        schema = f"CREATE TABLE if not exists records " \
-            "(rec_index INTEGER primary key, code TEXT," \
-            "term INTEGER, user_data TEXT) " 
-        cursor.execute(schema)
-        schema = f"CREATE TABLE if not exists pending_record " \
-            "(id INTEGER PRIMARY KEY AUTOINCREMENT, "\
-            "rec_index INTEGER, code TEXT, " \
-            "term INTEGER, user_data TEXT) " 
+        schema =  "CREATE TABLE if not exists records " 
+        schema += "(rec_index INTEGER primary key, " 
+        schema += "code TEXT, " 
+        schema += "command TEXT, " 
+        schema += "result TEXT, " 
+        schema += "error BOOLEAN, " 
+        schema += "term INTEGER, "
+        schema += "local_committed BOOLEAN, " 
+        schema += "leader_committed BOOLEAN)"
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
@@ -82,23 +86,25 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, term, user_data) values "
-        values += "?, ?,?)"
+        sql += "code, command, result, error, term, local_committed, leader_committed) values "
+        values += "?,?,?,?,?,?,?)"
         sql += values
         params.append(str(entry.code.value))
+        params.append(entry.command)
+        params.append(entry.result)
+        params.append(entry.error)
         params.append(entry.term)
-        user_data = entry.user_data
-        params.append(user_data)
+        params.append(entry.local_committed)
+        params.append(entry.leader_committed)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
             self.max_index = cursor.lastrowid
-        sql = "replace into stats (dummy, max_index, term)" \
-            " values (?,?,?)"
+        sql = "replace into stats (dummy, max_index, term) values (?,?,?)"
         cursor.execute(sql, [1, self.max_index, self.term])
         self.db.commit()
         cursor.close()
-        return entry
+        return self.read_entry(entry.index)
 
     def read_entry(self, index=None):
         if self.db is None:
@@ -114,11 +120,10 @@ class Records:
         if rec_data is None:
             cursor.close()
             return None
-        user_data = rec_data['user_data']
-        log_rec = LogRec(code=RecordCode(rec_data['code']),
-                         index=rec_data['rec_index'],
-                         term=rec_data['term'],
-                         user_data=user_data)
+        conv = dict(rec_data)
+        conv['index'] = rec_data['rec_index']
+        del conv['rec_index']
+        log_rec = LogRec.from_dict(conv)
         cursor.close()
         return log_rec
     
@@ -147,67 +152,31 @@ class Records:
         rec = self.save_entry(rec)
         return rec
 
-    def save_pending(self, rec: LogRec) -> LogRec:
-        if self.db is None:
-            self.open()
-        if rec.index != self.max_index + 1:
-            raise Exception('new record index must match pending record index for commit')
-        cursor = self.db.cursor()
-        cursor.execute("select * from pending_record")
-        if cursor.fetchone() != None:
-            cursor.close()
-            raise Exception('can only have one pending record open')
-        sql = f"insert into pending_record ("
-        sql += "rec_index, code, term, user_data) values "
-        values = "(?,?,?,?)"
-        sql += values
-        params = []
-        params.append(rec.index)
-        params.append(str(rec.code.value))
-        params.append(rec.term)
-        user_data = rec.user_data
-        params.append(user_data)
-        cursor.execute(sql, params)
-        self.db.commit()
-        cursor.close()
-        return rec
-    
-    def get_pending(self) -> LogRec:
+    def get_leader_commit_index(self):
         if self.db is None:
             self.open()
         cursor = self.db.cursor()
-        cursor.execute("select * from pending_record")
+        sql = "select rec_index from records where leader_committed = 1 order by rec_index desc"
+        cursor.execute(sql)
         rec_data = cursor.fetchone()
         if rec_data is None:
             cursor.close()
             return None
-        user_data = rec_data['user_data']
-        log_rec = LogRec(code=RecordCode(rec_data['code']),
-                         index=rec_data['rec_index'],
-                         term=rec_data['term'],
-                         user_data=user_data)
         cursor.close()
-        return log_rec
+        return rec_data['rec_index']
 
-    def commit_pending(self, rec: LogRec) -> LogRec:
-        pending = self.get_pending()
-        if not pending:
-            raise Exception('no pending record exists')
-        if pending.index != self.max_index + 1: 
-            raise Exception('Pending record is no longer the next one for the record list, would be inconsistent if saved')
-        if pending.index != rec.index:
-            raise Exception('new record index must match pending record index for commit')
-        # the index is correct, but our save method wants null index when inserting new record
-        rec.index = None
-        rec = self.save_entry(rec)
-        self.clear_pending()
-        return rec
-        
-    def clear_pending(self):
+    def get_local_commit_index(self):
+        if self.db is None:
+            self.open()
         cursor = self.db.cursor()
-        cursor.execute("delete from pending_record")
+        sql = "select rec_index from records where local_committed = 1 order by rec_index desc"
+        cursor.execute(sql)
+        rec_data = cursor.fetchone()
+        if rec_data is None:
+            cursor.close()
+            return None
         cursor.close()
-        self.db.commit()
+        return rec_data['rec_index']
     
 class SqliteLog(LogAPI):
 
@@ -244,31 +213,24 @@ class SqliteLog(LogAPI):
         if not self.records.is_open():
             self.records.open()
         # make copies
+        return_recs = []
         for entry in entries:
-            save_rec = LogRec(code=entry.code,
-                              index=None,
-                              term=entry.term,
-                              user_data=entry.user_data)
-            self.records.add_entry(save_rec)
+            save_rec = LogRec.from_dict(entry.__dict__)
+            return_recs.append(self.records.add_entry(save_rec))
         self.logger.debug("new log record %s", save_rec.index)
+        return return_recs
 
-    async def replace_or_append(self, entry:LogRec) -> LogRec:
+    async def replace(self, entry:LogRec) -> LogRec:
         if not self.records.is_open():
             self.records.open()
         if entry.index is None:
             raise Exception("api usage error, call append for new record")
         if entry.index == 0:
             raise Exception("api usage error, cannot insert at index 0")
-        save_rec = LogRec(code=entry.code,
-                          index=entry.index,
-                          term=entry.term,
-                          user_data=entry.user_data)
+        save_rec = LogRec.from_dict(entry.__dict__)
         next_index = self.records.max_index + 1
-        if save_rec.index == next_index:
-            self.records.add_entry(save_rec)
-        else:
-            self.records.insert_entry(save_rec)
-        return deepcopy(save_rec)
+        self.records.insert_entry(save_rec)
+        return LogRec.from_dict(save_rec.__dict__)
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if not self.records.is_open():
@@ -283,7 +245,7 @@ class SqliteLog(LogAPI):
         rec = self.records.get_entry_at(index)
         if rec is None:
             return None
-        return deepcopy(rec)
+        return LogRec.from_dict(rec.__dict__)
 
     async def get_last_index(self):
         if not self.records.is_open():
@@ -298,16 +260,19 @@ class SqliteLog(LogAPI):
             return 0
         return rec.term
 
-    async def save_pending(self, record: LogRec) -> None:
-        self.records.save_pending(record)
+    async def update_and_commit(self, entry:LogRec) -> LogRec:
+        entry.local_committed = True
+        save_rec = self.records.insert_entry(entry)
+        return save_rec
+    
+    async def get_leader_commit_index(self):
+        if not self.records.is_open():
+            self.records.open()
+        return self.records.get_leader_commit_index()
 
-    async def get_pending(self) -> LogRec:
-        return self.records.get_pending()
+    async def get_local_commit_index(self):
+        if not self.records.is_open():
+            self.records.open()
+        return self.records.get_local_commit_index()
 
-    async def commit_pending(self, record: LogRec) -> LogRec:
-        return self.records.commit_pending(record)
-
-    async def clear_pending(self) -> LogRec:
-        return self.records.clear_pending()
-        
     

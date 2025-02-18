@@ -9,56 +9,43 @@ class Records:
 
     def __init__(self):
         # log record indexes start at 1, per raftengine spec
-        self.index = 0
         self.entries = []
-        self.pending = None
 
+    @property
+    def index(self):
+        return len(self.entries)
+    
     def get_entry_at(self, index):
-        if index < 1 or self.index == 0:
+        if index < 1 or len(self.entries) == 0:
             return None
         return self.entries[index - 1]
 
     def get_last_entry(self):
         return self.get_entry_at(self.index)
 
-    def add_entry(self, rec: LogRec) -> LogRec:
-        self.index += 1
-        rec.index = self.index
-        self.entries.append(rec)
-        return rec
-
-    def save_pending(self, rec: LogRec) -> LogRec:
-        if self.pending:
-            raise Exception('Only one pending record allowed')
-        if rec.index != self.index + 1:
-            raise Exception('Pending record must have an index one greater than last record index')
-        self.pending = rec
-        return rec
-    
-    def get_pending(self) -> LogRec:
-        if not self.pending:
-            return None
-        return self.pending
-
-    def clear_pending(self):
-        self.pending = None
-
-    def commit_pending(self, rec: LogRec) -> LogRec:
-        if not self.pending:
-            raise Exception('no pending record exists')
-        if self.pending.index != rec.index:
-            raise Exception('new record index must match pending record index for commit')
-        self.add_entry(rec)
-        self.pending = None
-        return rec
-
     def insert_entry(self, rec: LogRec) -> LogRec:
-        index = rec.index
-        self.entries[index-1] = rec
+        if rec.index == 0:
+            self.entries.append(rec)
+            rec.index = len(self.entries)
+            return rec
+        if rec.index > len(self.entries):
+            raise Exception('cannont insert past last index')
+        self.entries[rec.index-1] = rec
     
     def save_entry(self, rec: LogRec) -> LogRec:
         return self.insert_entry(rec)
 
+    def get_leader_commit_index(self):
+        for entry in self.entries[::-1]:
+            if entry.leader_committed:
+                return entry.index
+        return None
+
+    def get_local_commit_index(self):
+        for entry in self.entries[::-1]:
+            if entry.local_committed:
+                return entry.index
+        return None
     
 class MemoryLog(LogAPI):
 
@@ -88,50 +75,31 @@ class MemoryLog(LogAPI):
         return self.term
 
     async def append(self, entries: List[LogRec]) -> None:
-        # make copies
+        # make copies for in memory list, and copy
+        # the inserted ones to return to the caller
+        # so they can see the index and can't break
+        # our saved copy
+        return_recs = []
         for entry in entries:
-            save_rec = LogRec(code=entry.code,
-                              index=None,
-                              term=entry.term,
-                              user_data=entry.user_data)
-            self.records.add_entry(save_rec)
+            save_rec = LogRec.from_dict(entry.__dict__)
+            self.records.insert_entry(save_rec)
+            return_rec = LogRec.from_dict(save_rec.__dict__)
+            return_recs.append(return_rec)
         self.logger.debug("new log record %s", save_rec.index)
+        return return_recs
 
-    async def save_pending(self, record: LogRec) -> None:
-        res = self.records.save_pending(record)
-        self.logger.debug("new pending log record %s", record.index)
-        return res
-    
-    async def get_pending(self) -> LogRec:
-        return self.records.get_pending()
-
-    async def commit_pending(self, record: LogRec) -> LogRec:
-        return self.records.commit_pending(record)
-
-    async def clear_pending(self) -> LogRec:
-        return self.records.clear_pending()
-
-    async def replace_or_append(self, entry:LogRec) -> LogRec:
+    async def replace(self, entry:LogRec) -> LogRec:
         if entry.index is None:
             raise Exception("api usage error, call append for new record")
         if entry.index == 0:
             raise Exception("api usage error, cannot insert at index 0")
-        save_rec = LogRec(code=entry.code,
-                          index=entry.index,
-                          term=entry.term,
-                          user_data=entry.user_data)
-        # Normal case is that the leader will end one new record when
-        # it gets consensus, and the new record index will be
-        # exactly what the next sequential record number would be.
-        # If that is the case, then we just append. If not, then
-        # probably we are in a new term and the old records don't
-        # match those stored at the new leader, so it is telling
-        # us to replace them. Leader is the authority, so just do it.
-        if save_rec.index == self.records.index + 1:
-            self.records.add_entry(save_rec)
-        else:
-            self.records.insert_entry(save_rec)
-        return deepcopy(save_rec)
+        save_rec = LogRec.from_dict(entry.__dict__)
+        self.records.insert_entry(save_rec)
+        return LogRec.from_dict(save_rec.__dict__)
+
+    async def update_and_commit(self, entry:LogRec) -> LogRec:
+        entry.local_committed = True
+        return await self.replace(entry)
     
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
@@ -155,6 +123,12 @@ class MemoryLog(LogAPI):
         rec = self.records.get_last_entry()
         return rec.term
     
+    async def get_leader_commit_index(self):
+        return self.records.get_leader_commit_index()
+
+    async def get_local_commit_index(self):
+        return self.records.get_local_commit_index()
+
     def close(self):
         pass
 

@@ -37,6 +37,8 @@ Immediatly:
     another refactor for sure. Maybe self.append_command_record call? Then it
     can trigger any waiting pilot call?
 
+23. See if message base_class has any value. Also study change to dataclasses
+
 25. Add "caller_context" to command ops, pass it on process_command and return it
     in result. Maybe try one more time to make apply_command cleaner (and rename it
     while we are at it).
