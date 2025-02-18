@@ -2,14 +2,14 @@
 How to add a new message type:
 
 Extend the BaseMessage class, giving your new class a unique string value 
-for the class variable "_code". 
+for the class variable "code". 
 
 """
 from typing import Type
 
 class BaseMessage:
 
-    _code = "invalid"
+    code = "invalid"
     
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int):
         self.sender = sender

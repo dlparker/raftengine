@@ -61,35 +61,11 @@ async def test_normal_election_sequence_2(cluster_maker):
     assert ts_5.hull.state.leader_uri == uri_1
 
 async def test_log_stuff():
-    from raftengine.log.log_api import LogRec,RecordCode
+    from raftengine.log.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
     import json
     from raftengine.messages.append_entries import AppendEntriesMessage
-    
-    rec1 = LogRec(index=1, term=1)
-    rec2 = LogRec(index=2, term=1)
-    msg = AppendEntriesMessage('1', '2', '1', 0, 0, [rec1, rec2], 2)
-    jdata = json.dumps(msg, default=lambda o:o.__dict__, indent=4)
-    print(jdata)
-    msg2_data = json.loads(jdata)
-    from pprint import pprint
-    pprint(msg2_data)
-    msg2 = AppendEntriesMessage.from_dict(msg2_data)
-    if False:
-        objs = msg2.entries
-        msg2.entries = []
-        for entry in objss:
-            msg2.entries.append(LogRec.from_dict(entry))
-
-    print('-------------------')
-    pprint(msg2)
-    print('-------------------')
-    pprint(msg2.__dict__)
-    
-                         
-    
-async def test_pending_record_changes():
-    from dev_tools.sqlite_log import SqliteLog
     from dev_tools.memory_log import MemoryLog
+    from dev_tools.sqlite_log import SqliteLog
     from raftengine.log.log_api import LogRec
     m_log = MemoryLog()
 
@@ -99,29 +75,44 @@ async def test_pending_record_changes():
     s_log = SqliteLog(path)
     s_log.start()
 
+    rec1 = LogRec(term=1, command="add 1")
+    rec2 = LogRec(term=1, command="add 2")
+    msg = AppendEntriesMessage('1', '2', '1', 0, 0, [rec1, rec2], 2)
+
+    # 
+    msg.encode_entries()
+    assert isinstance(msg.entries, str)
+    msg.decode_entries()
+    for rec in msg.entries:
+        assert isinstance(rec, LogRec)
+
     for log in [m_log, s_log]:
-        no_rec = await log.get_pending()
-        assert no_rec is None
-        p_rec = LogRec(term=1, user_data="foo")
-        with pytest.raises(Exception):
-            await log.save_pending(p_rec)
-        p_rec.index = 1
-        await log.save_pending(p_rec)
-        x_rec = await log.get_pending()
-        assert x_rec is not None
-        assert x_rec.index == 1
-        assert x_rec.term == 1
-        assert x_rec.user_data == "foo"
-        next_rec = LogRec(term=1, user_data="bar")
-        next_rec.index = 1
-        # correct index, but we already got one
-        with pytest.raises(Exception):
-            await log.save_pending(next_rec)
-        await log.commit_pending(p_rec)
-        assert await log.read() is not None
-        # should work now
-        next_rec.index = 2
-        await log.save_pending(next_rec)
-        await log.clear_pending()
-        z_rec = await log.get_pending()
-        assert z_rec is None
+
+        [rec_1, rec_2] = await log.append([rec1, rec2])
+        assert await log.get_last_index() == 2
+        assert await log.get_last_term() == 1
+        assert rec_1.index == 1
+        assert rec_1.command == 'add 1'
+        assert not rec_1.local_committed
+        assert not rec_1.leader_committed
+        assert rec_2.index == 2
+        assert rec_2.command == 'add 2'
+        
+        rec_2b = await log.read(await log.get_last_index())
+        assert rec_2b.index == 2
+        assert rec_2b.command == 'add 2'
+        
+        rec_1.local_committed = True
+        rec_1.leader_committed = True
+        await log.replace(rec_1)
+        loc_c = await log.get_local_commit_index()
+        lea_c = await log.get_leader_commit_index()
+        assert loc_c == lea_c
+        assert loc_c == 1
+        await log.update_and_commit(rec_2)
+        loc_c = await log.get_local_commit_index()
+        lea_c = await log.get_leader_commit_index()
+        assert loc_c != lea_c
+        assert loc_c == 2
+    
+        
