@@ -38,12 +38,6 @@ class Records:
     def save_entry(self, rec: LogRec) -> LogRec:
         return self.insert_entry(rec)
 
-    def get_leader_commit_index(self):
-        for entry in self.entries[::-1]:
-            if entry.leader_committed:
-                return entry.index
-        return 0
-
     def get_local_commit_index(self):
         for entry in self.entries[::-1]:
             if entry.local_committed:
@@ -129,9 +123,6 @@ class MemoryLog(LogAPI):
         rec = self.records.get_last_entry()
         return rec.term
     
-    async def get_leader_commit_index(self):
-        return self.records.get_leader_commit_index()
-
     async def get_local_commit_index(self):
         return self.records.get_local_commit_index()
 

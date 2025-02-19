@@ -56,7 +56,7 @@ class Hull:
             self.logger.error(error)
             await self.record_message_problem(in_message, error)
             return None
-        await self.inner_on_message(message)
+        return await self.inner_on_message(message)
         
     async def inner_on_message(self, message):
         res = None

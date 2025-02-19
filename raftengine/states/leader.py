@@ -114,7 +114,6 @@ class CommandWaiter:
         else:
             await self.leader.hull.record_substate(SubstateCode.committing_command)
             self.orig_log_record.local_committed = True
-            self.orig_log_record.leader_committed = True
             self.orig_log_record.result = command_result
             new_rec = await self.log.replace(self.orig_log_record)
         self.result = result
@@ -257,9 +256,6 @@ class Leader(BaseState):
         # make a last check to ensure it is not already done
         log_rec = await self.log.read(log_record.index)
         if log_rec.local_committed:
-            if not log_rec.leader_committed:
-                log_rec.leader_committed = True
-                await self.log.replace(log_rec.index)
             return
         result = None
         error_data = None
@@ -276,7 +272,6 @@ class Leader(BaseState):
         else:
             log_rec.result = result
             log_rec.local_committed = True
-            log_rec.leader_committed = True
             await self.log.replace(log_rec)
         waiter = self.command_waiters[log_rec.index]
         if waiter:
