@@ -14,7 +14,7 @@ from servers import WhenHasCommitIndex
 from servers import WhenInMessageCount, WhenElectionDone
 from servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from servers import PausingCluster, cluster_maker
-from servers import SNormalElection
+from servers import SNormalElection, SNormalCommand
 from servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
@@ -111,7 +111,6 @@ async def test_command_1(cluster_maker):
         logger.debug('running command in background done')
     logger.debug('------------------------ Running command ---')
     loop = asyncio.get_running_loop()
-    ts_3.hull.state.breaking = True
     loop.create_task(command_runner(ts_3))
     await cluster.start_auto_comms()
     start_time = time.time()
@@ -163,20 +162,10 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    command_result = await ts_3.hull.run_command("add 1")
-    assert command_result.result is not None
-    assert command_result.error is None
-    # followers need to know that command is committed at leader
-    # so send heartbeats to inform them
-    ts_3.hull.state.last_broadcast_time = 0
-    await ts_3.hull.state.send_heartbeats()
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and ts_1.operations.total != 1:
-        await asyncio.sleep(0.0001)
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence2)
+    
     assert ts_1.operations.total == 1
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and ts_2.operations.total != 1:
-        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     term = await ts_3.hull.log.get_term()
@@ -214,16 +203,8 @@ async def double_leader_inner(cluster, discard):
     logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
-    command_result = await ts_1.hull.run_command("add 1")
-    assert command_result.result is not None
-    assert command_result.error is None
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and ts_1.operations.total != 1:
-        await asyncio.sleep(0.0001)
-    assert ts_1.operations.total == 1
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and ts_2.operations.total != 1:
-        await asyncio.sleep(0.0001)
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence2)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
@@ -257,7 +238,25 @@ async def double_leader_inner(cluster, discard):
         await cluster.start_auto_comms()
         
     logger.debug('------------------ Command AppendEntries should get rejected -')
-    command_result = await ts_1.hull.run_command("add 1", timeout=1)
+
+    command_result = None
+    async def command_runner(ts):
+        nonlocal command_result
+        logger.debug('running command in background')
+        try:
+            command_result = await ts.hull.run_command("add 1", timeout=0.01)
+        except Exception as e:
+            logger.debug('running command in background error %s', traceback.format_exc())
+            command_result = e
+        logger.debug('running command in background done')
+    logger.debug('------------------------ Running command ---')
+    loop = asyncio.get_running_loop()
+    asyncio.create_task(command_runner(ts_1))
+    await cluster.start_auto_comms()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and command_result is None:
+        await asyncio.sleep(0.0001)
+    assert command_result is not None
     assert command_result.redirect == uri_2
     logger.error('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
@@ -303,13 +302,12 @@ async def test_command_after_heal_1(cluster_maker):
     logger = logging.getLogger(__name__)
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
     await cluster.start_auto_comms()
-
-    command_result = await ts_1.hull.run_command("add 1")
-    assert command_result.result is not None
-    assert command_result.error is None
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence2)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
+    logger.debug('------------------------ Correct command done')
 
     # now simulate a split newtork with the leader
     # getting isolated, then trigger one of the followers

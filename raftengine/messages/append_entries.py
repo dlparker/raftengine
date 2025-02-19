@@ -6,10 +6,11 @@ from raftengine.log.log_api import LogRec
 
 class AppendEntriesMessage(BaseMessage):
 
+    code = "append_entries"
+    
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
                  entries:List[Any], commitIndex: int=0):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
-        self.code = "append_entries"
         self.entries = entries
         self.commitIndex = commitIndex
         self.entry_count = 0
@@ -82,7 +83,6 @@ class AppendResponseMessage(BaseMessage):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
         self.leaderId = leaderId
         self.recordIds = recordIds
-
 
     def __repr__(self):
         msg = super().__repr__()
