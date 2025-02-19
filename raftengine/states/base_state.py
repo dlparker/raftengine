@@ -15,6 +15,7 @@ class BaseState:
         self.stopped = False
         self.routes = None
         self.build_routes()
+        self.leader_uri = None
 
     def build_routes(self):
         self.routes = dict()
@@ -35,6 +36,8 @@ class BaseState:
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().start())
         self.stopped = False
+        if self.state_code == "LEADER":
+            self.leader_uri = self.my_uri()
 
     async def stop(self):
         # child classes not required to have this method, but if they do,
@@ -69,8 +72,19 @@ class BaseState:
         await self.hull.record_message_problem(message, problem)
 
     async def on_append_entries_response(self, message):
-        problem = 'append_entries_response not implemented in the class '
-        problem += f'"{self.__class__.__name__}", ignoring'
+        if self.state_code == "FOLLOWER":
+            problem = 'append_entries_response not implemented in the class '
+            problem += f'"{self.__class__.__name__}", '
+            if not hasattr(message, 'leaderId'):
+                problem += " ignoring"
+            else:
+                if message.term == await self.log.get_term() and self.leader_uri is None:
+                    self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
+                    self.leader_uri = message.leaderId
+                    problem += f" adopting leader {self.leader_uri} but otherwise ignoring"
+        else:
+            problem = 'append_entries_response not implemented in the class '
+            problem += f'"{self.__class__.__name__}", ingoring'
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
 
@@ -91,22 +105,16 @@ class BaseState:
         await self.hull.record_message_problem(message, problem)
         
     async def send_reject_append_response(self, message):
-        data = dict(success=False,
-                    last_index=await self.log.get_last_index(),
-                    last_term=await self.log.get_last_term())
-        if self.state_code == "FOLLOWER":
-            leaderId = self.leader_uri
+        if self.state_code == "LEADER":
+            leaderId = self.my_uri()
         else:
-            leaderId = ''
+            leaderId = self.leader_uri
         reply = AppendResponseMessage(message.receiver,
                                       message.sender,
                                       term=await self.log.get_term(),
-                                      entries=message.entries,
-                                      results=[],
+                                      recordIds=[],
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
-                                      myPrevLogTerm=await self.log.get_last_term(),
-                                      myPrevLogIndex=await self.log.get_last_index(),
                                       leaderId=leaderId)
         await self.hull.send_response(message, reply)
 

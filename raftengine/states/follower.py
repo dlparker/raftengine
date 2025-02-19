@@ -12,9 +12,7 @@ class Follower(BaseState):
 
     def __init__(self, hull):
         super().__init__(hull, StateCode.follower)
-        # log is set in BaseState
-        # only known after first accepted append_entries call
-        self.leader_uri = None
+        # log is set in BaseState as is leader_uri
         # only used during voting for leadership
         self.last_vote = None
         # Needs to be as recent as configured maximum silence period, or we raise hell.

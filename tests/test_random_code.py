@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from servers import SNormalElection
+from servers import SNormalElection, SNormalCommand
 from servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]
@@ -59,6 +59,40 @@ async def test_normal_election_sequence_2(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     assert ts_4.hull.state.leader_uri == uri_1
     assert ts_5.hull.state.leader_uri == uri_1
+
+async def test_normal_command_sequence_1(cluster_maker):
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    await cluster.start()
+    
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.hull.start_campaign()
+    
+    sequence1 = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence1)
+
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    result = await cluster.run_sequence(sequence2)
+
+    assert result.result == 1
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+
+    sequence3 = SNormalCommand(cluster, "add 1", 1)
+    result = await cluster.run_sequence(sequence3)
+
+    assert result.result == 2
+    assert ts_1.operations.total == 2
+    assert ts_2.operations.total == 2
+    assert ts_3.operations.total == 2
+
 
 async def test_log_stuff():
     from raftengine.log.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec

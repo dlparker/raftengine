@@ -65,7 +65,7 @@ def set_levels(handler_names, additions=None):
     log_loggers['PausingServer'] = debug_log
     default_log =  info_log
     #default_log =  debug_log
-    log_loggers['Leader'] = default_log
+    log_loggers['Leader'] = debug_log
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
@@ -142,6 +142,7 @@ class WhenMessageOut(PauseTrigger):
         self.message_code = message_code
         self.message_target = message_target
         self.flush_when_done = flush_when_done
+        self.trigger_message = None
 
     def __repr__(self):
         msg = f"{self.__class__.__name__} {self.message_code} {self.message_target}"
@@ -155,8 +156,10 @@ class WhenMessageOut(PauseTrigger):
                     done = True
                 elif self.message_target == message.receiver:
                     done = True
-        if done and self.flush_when_done:
-            await self.flush_one_out_message(server, message)  
+        if done:
+            self.trigger_message = message
+            if self.flush_when_done:
+                await self.flush_one_out_message(server, message)  
         return done
 
     async def flush_one_out_message(self, server, message):
@@ -173,6 +176,24 @@ class WhenMessageOut(PauseTrigger):
                 new_list.append(msg)
         server.out_messages = new_list
         
+class WhenCommitIndexSent(WhenMessageOut):
+
+    def __init__(self, target_index, message_target=None):
+        super().__init__(AppendEntriesMessage.get_code(), message_target, flush_when_done=True)
+        self.target_index = target_index
+        
+    def __repr__(self):
+        msg = super().__repr__()
+        msg += f" index={self.target_index}"
+        return msg
+
+    async def is_tripped(self, server):
+        done = await super().is_tripped(server)
+        if done:
+            if self.trigger_message.commitIndex == self.target_index:
+                return done
+        return False
+    
 class WhenMessageIn(PauseTrigger):
     # Whenn a particular message have been transported
     # from a different server and placed in the input
@@ -501,57 +522,6 @@ class Network:
         target.in_messages.append(msg)
         return msg
         
-class TimeoutTaskGroup(Exception):
-    """Exception raised to terminate a task group due to timeout."""
-        
-class TestServerTimeout(Exception):
-    """Exception raised because of unexpected timeout in running test server support code."""
-        
-class StdSequence:
-
-    def __init__(self, cluster, name):
-        self.name = name
-        self.cluster = cluster
-
-class SNormalElection(StdSequence):
-
-    def __init__(self, cluster, timeout=1):
-        super().__init__(cluster=cluster, name="NormalElection")
-        self.timeout = timeout
-        self.logger = logging.getLogger('PausingServer')
-        self.done_count = 0
-        self.expected_count = 0
-
-    async def do_setup(self):
-        for uri,node in self.cluster.nodes.items():
-            node.clear_triggers()
-            node.set_trigger(WhenElectionDone())
-            self.expected_count += 1
-
-    async def runner_wrapper(self, node):
-        await node.run_till_triggers()
-        self.done_count += 1
-        
-    async def wait_till_done(self):
-        async def do_timeout(timeout):
-            start_time = time.time()
-            while self.done_count < self.expected_count:
-                await asyncio.sleep(timeout/100.0)
-            if time.time() - start_time >= timeout:
-                raise TimeoutTaskGroup()
-        try:
-            async with asyncio.TaskGroup() as tg:
-                for uri,node in self.cluster.nodes.items():
-                    tg.create_task(self.runner_wrapper(node))
-                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
-                tg.create_task(do_timeout(self.timeout))
-        except* TimeoutTaskGroup:
-            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
-        
-    async def do_teardown(self):
-        for uri,node in self.cluster.nodes.items():
-            node.clear_triggers()
-            
 
 class NetManager:
 
@@ -567,6 +537,11 @@ class NetManager:
         self.full_cluster = Network(self.start_nodes, self)
         return self.full_cluster
 
+    def get_majority_network(self):
+        if self.quorum_segment:
+            return self.quorum_segment
+        return self.full_cluster
+    
     def split_network(self, segments):
         # don't mess with original
         # validate first
@@ -603,9 +578,9 @@ class NetManager:
             await self.full_cluster.post_in_message(message)
             return
         if message.receiver in self.quorum_segment.nodes:
-            await self.quorum.post_in_message(message)
+            await self.quorum_segment.post_in_message(message)
             return
-        for seg in other_segments:
+        for seg in self.other_segments:
             if message.receiver in seg.nodes:
                 await seg.post_in_message(message)
                 return
@@ -779,13 +754,6 @@ class PausingServer(PilotAPI):
             self.trigger_set = TriggerSet(mode="and")
         self.trigger_set.add_trigger(trigger)
         
-    def add_trigger_set(self, trigger_set):
-        if self.trigger is not None:
-            raise Exception('only one trigger mode allowed, already have single')
-        if self.trigger_set is None:
-            raise Exception('only one trigger mode allowed, already have single set')
-        self.trigger_set_set.add_set(trigger_set)
-
     async def run_till_triggers(self, timeout=1, free_others=False):
         start_time = time.time()
         done = False
@@ -798,11 +766,6 @@ class PausingServer(PilotAPI):
             elif self.trigger_set is not None:
                 if await self.trigger_set.is_tripped(self):
                     self.logger.debug(f"%s TriggerSet {self.trigger_set} tripped, run done", self.uri)
-                    done = True
-                    break
-            elif self.trigger_set_set is not None:
-                if await self.trigger_set_set.is_tripped(self):
-                    self.logger.debug(f"%s TriggerSetSet {self.trigger_set_set} tripped, run done", self.uri)
                     done = True
                     break
             if not done:
@@ -819,6 +782,7 @@ class PausingServer(PilotAPI):
                     await asyncio.sleep(0.00001)
         if not done:
             raise Exception(f'{self.uri} timeout waiting for triggers')
+        self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
         return # all triggers tripped as required by mode flags, so pause ops
     
 class PausingCluster:
@@ -882,8 +846,9 @@ class PausingCluster:
     async def run_sequence(self, sequence):
         await sequence.do_setup()
         # may raise timeout
-        await sequence.wait_till_done()
+        result = await sequence.wait_till_done()
         await sequence.do_teardown()
+        return result
         
     async def post_in_message(self, message):
         # special situation, called when trigger trapped on out message,
@@ -926,3 +891,131 @@ class PausingCluster:
         # lose references to everything
         self.nodes = {}
         self.node_uris = []
+
+class TimeoutTaskGroup(Exception):
+    """Exception raised to terminate a task group due to timeout."""
+        
+class TestServerTimeout(Exception):
+    """Exception raised because of unexpected timeout in running test server support code."""
+        
+class StdSequence:
+
+    def __init__(self, cluster, name):
+        self.name = name
+        self.cluster = cluster
+
+class SNormalElection(StdSequence):
+
+    def __init__(self, cluster, timeout=1):
+        super().__init__(cluster=cluster, name="NormalElection")
+        self.timeout = timeout
+        self.logger = logging.getLogger('PausingServer')
+        self.done_count = 0
+        self.expected_count = 0
+
+    async def do_setup(self):
+        for uri,node in self.cluster.nodes.items():
+            node.clear_triggers()
+            node.set_trigger(WhenElectionDone())
+            self.expected_count += 1
+
+    async def runner_wrapper(self, node):
+        await node.run_till_triggers()
+        self.done_count += 1
+        
+    async def wait_till_done(self):
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while self.done_count < self.expected_count:
+                await asyncio.sleep(timeout/100.0)
+            if time.time() - start_time >= timeout:
+                raise TimeoutTaskGroup()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for uri,node in self.cluster.nodes.items():
+                    tg.create_task(self.runner_wrapper(node))
+                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
+                tg.create_task(do_timeout(self.timeout))
+        except* TimeoutTaskGroup:
+            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        
+    async def do_teardown(self):
+        for uri,node in self.cluster.nodes.items():
+            node.clear_triggers()
+            
+class SNormalCommand(StdSequence):
+
+    def __init__(self, cluster, command, timeout=1):
+        super().__init__(cluster=cluster, name="NormalCommand")
+        self.timeout = timeout
+        self.command = command
+        self.timeout = timeout
+        self.logger = logging.getLogger('PausingServer')
+        self.done_count = 0
+        self.expected_count = 0
+        self.restore_auto = False
+        self.leader = None
+        self.command_result = None
+        self.target_index = None
+        self.network = None
+
+    async def do_setup(self):
+        self.restore_auto = self.cluster.auto_comms_flag
+        if self.cluster.auto_comms_flag:
+            await self.cluster.stop_auto_comms()
+        self.network = self.cluster.net_mgr.get_majority_network()
+        for uri,node in self.network.nodes.items():
+            node.clear_triggers()
+            if node.hull.state.state_code == "LEADER":
+                self.leader = node
+                orig_index = await node.log.get_local_commit_index()
+                self.target_index = orig_index + 1
+                break
+        for uri,node in self.network.nodes.items():
+            trigger = WhenHasCommitIndex(self.target_index)
+            self.logger.debug("set %s trigger for node %s", trigger, node)
+            node.set_trigger(trigger)
+            self.expected_count += 1
+        self.logger.debug("Setup normal command sequence, will run command at %s", node.uri)
+        
+    async def runner_wrapper(self, node):
+        await node.run_till_triggers()
+        if node == self.leader:
+            self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
+            node.clear_triggers()
+            node.hull.state.last_broadcast_time = 0
+            await node.hull.state.send_heartbeats()
+            self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
+            node.set_trigger(WhenCommitIndexSent(self.target_index))
+            for i in  range(0, len(self.cluster.nodes) -1):
+                await node.run_till_triggers()
+        self.done_count += 1
+        
+    async def command_wrapper(self, node, command):
+        self.logger.debug("Running command %s at  %s", command, node.uri)
+        self.command_result = await node.hull.run_command(command, timeout=0.1)
+        
+    async def wait_till_done(self):
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while self.done_count < self.expected_count:
+                await asyncio.sleep(timeout/100.0)
+            if time.time() - start_time >= timeout:
+                raise TimeoutTaskGroup()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(self.command_wrapper(self.leader, self.command))
+                for uri,node in self.network.nodes.items():
+                    tg.create_task(self.runner_wrapper(node))
+                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
+                tg.create_task(do_timeout(self.timeout))
+        except* TimeoutTaskGroup:
+            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        return self.command_result
+    
+    async def do_teardown(self):
+        for uri,node in self.network.nodes.items():
+            node.clear_triggers()
+            
+        if self.restore_auto:
+            await self.cluster.start_auto_comms()

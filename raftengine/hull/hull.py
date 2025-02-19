@@ -8,8 +8,7 @@ from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.base_message import BaseMessage
 from raftengine.states.follower import Follower
 from raftengine.states.candidate import Candidate
-#from raftengine.states.leader import Leader
-from raftengine.states.leader2 import Leader, CommandResult
+from raftengine.states.leader import Leader, CommandResult
 from raftengine.states.leader import CommandResult
 from raftengine.api.pilot_api import PilotAPI
 
@@ -121,10 +120,11 @@ class Hull:
     async def demote_and_handle(self, message=None):
         self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.state)
         await self.stop_state()
-        # special case where candidate or leader got an append_entries message,
-        # which means we need to switch to follower and retry
         self.state = Follower(self)
         await self.state.start()
+        if message and hasattr(message, 'leaderId'):
+            self.logger.debug('%s message says leader is %s, adopting', self.get_my_uri(), message.leaderId)
+            self.state.leader_uri = message.leaderId
         if message:
             self.logger.warning('%s reprocessing message as follower %s', self.get_my_uri(), message)
             return await self.on_message(message)

@@ -8,7 +8,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 
 from servers import WhenElectionDone
 from servers import PausingCluster, cluster_maker
-from servers import SNormalElection
+from servers import SNormalElection, SNormalCommand
 from servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]
@@ -37,7 +37,8 @@ async def test_partition_1(cluster_maker):
 
     logger.info('-------- Election done, saving a command record')
     await cluster.start_auto_comms()
-    command_result = await ts_1.hull.run_command("add 1")
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence2)
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 1
@@ -45,6 +46,15 @@ async def test_partition_1(cluster_maker):
     assert ts_3.operations.total == 1
     assert ts_4.operations.total == 1
     assert ts_5.operations.total == 1
+    any = True
+    while any:
+        await asyncio.sleep(0.0001)
+        any = False
+        for uri,node in cluster.nodes.items():
+            if len(node.in_messages) > 0 or len(node.out_messages) > 0:
+                any = True
+                break
+
 
     logger.info('--------- Everbody has first record, partitioning network')
 
@@ -56,7 +66,8 @@ async def test_partition_1(cluster_maker):
     cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
-    command_result = await ts_1.hull.run_command("add 1")
+    sequence3 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence3)
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 2
@@ -65,7 +76,8 @@ async def test_partition_1(cluster_maker):
     assert ts_4.operations.total == 1
     assert ts_5.operations.total == 1
     logger.info('--------- Main partition has update, doing it again')
-    command_result = await ts_1.hull.run_command"add 1")
+    sequence4 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence4)
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 3
@@ -74,49 +86,68 @@ async def test_partition_1(cluster_maker):
     assert ts_4.operations.total == 1
     assert ts_5.operations.total == 1
 
+    any = True
+    while any:
+        await asyncio.sleep(0.0001)
+        any = False
+        for uri,node in cluster.nodes.items():
+            if len(node.in_messages) > 0 or len(node.out_messages) > 0:
+                any = True
+                break
+
     logger.info('--------- Now healing partition and looking for sync ----')
     await cluster.stop_auto_comms()
     cluster.net_mgr.unsplit()
     ts_1.hull.state.last_broadcast_time = 0
+    logger.info('--------- Sending heartbeats ----')
     await ts_1.hull.state.send_heartbeats()
     # gonna send four
-    assert await ts_1.do_next_out_msg()  is not None
-    assert await ts_1.do_next_out_msg()  is not None
-    assert await ts_1.do_next_out_msg()  is not None
-    last_out = await ts_1.do_next_out_msg()
-    assert last_out is not None
-
-    # let the up to date node do their sequence
+    sends = []
+    for i in range(4):
+        msg = await ts_1.do_next_out_msg()
+        assert msg  is not None
+        if msg.receiver == uri_4:
+            ts_4_msg = msg
+        if msg.receiver == uri_5:
+            ts_5_msg = msg
+    # let the up to date node do their heartbeat sequence
     assert await ts_2.do_next_in_msg() is not None
     assert await ts_2.do_next_out_msg() is not None
     assert await ts_3.do_next_in_msg() is not None
     assert await ts_3.do_next_out_msg() is not None
     # get two back, now those guys are out of the way
-    assert await ts_1.do_next_in_msg() is not None
-    assert await ts_1.do_next_in_msg() is not None
-
+    replys = []
+    for i in range(2):
+        msg = await ts_1.do_next_in_msg()
+        assert msg is not None
+        assert msg.sender in [uri_2, uri_3]
     # so know we can let are behind the times ones respond
 
-    logger.debug('--------- 4 and 5 should be pending, doing full sequence on one then other ')
+    logger.debug('--------- 4 and 5 should be pending, doing message sequence on one then other ')
     for node in [ts_4, ts_5]:
+        msg = await node.do_next_in_msg() 
+        assert msg is not None
+        msg = await node.do_next_out_msg() 
+        assert msg is not None
+        # leader gets the news that the node needs catchup, sends them
+        catchup_request = await ts_1.do_next_in_msg()
+        assert catchup_request.sender == node.uri
+        assert catchup_request is not None
+        assert catchup_request.prevLogIndex == 1
+        # this should have the entries and the commitIndex
+        catchup = await ts_1.do_next_out_msg()
+        assert catchup is not None
+        assert catchup.commitIndex == 3
+        # now have the node accept it
         assert await node.do_next_in_msg() is not None
-        assert await node.do_next_out_msg() is not None
+        # and send a response
+        catchup_result =  await node.do_next_out_msg()
+        catchup_result is not None
+        assert catchup_result.prevLogIndex == 3
+        # let the leader collect t
+        assert await ts_1.do_next_in_msg() is not None
 
-        # now we should ping pong till good
-        # leader gets the news
-        assert await ts_1.do_next_in_msg() is not None
-        # respond with log record
-        assert await ts_1.do_next_out_msg() is not None
-        # processing it
-        assert await node.do_next_in_msg() is not None
-        assert node.operations.total == 2
-        # THANK YOU SIR, MAY I HAVE ANOTHER!!!!???
-        assert await node.do_next_out_msg() is not None
-        # leader considers
-        assert await ts_1.do_next_in_msg() is not None
-        # leader response
-        assert await ts_1.do_next_out_msg() is not None
-        # processing it
-        assert await node.do_next_in_msg() is not None
-        assert node.operations.total == 3
-        # Life is good
+
+    assert ts_4.operations.total == 3
+    assert ts_5.operations.total == 3
+
