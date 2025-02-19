@@ -2,7 +2,7 @@ import time
 import traceback
 import logging
 import json
-from raftengine.log.log_api import LogRec
+from raftengine.api.log_api import LogRec
 from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage

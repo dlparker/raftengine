@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from logging.config import dictConfig
 from collections import defaultdict
-from raftengine.log.log_api import LogRec
+from raftengine.api.log_api import LogRec
 from raftengine.hull.hull_config import ClusterConfig, LocalConfig
 from raftengine.hull.hull import Hull
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage

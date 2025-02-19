@@ -1,7 +1,7 @@
 from typing import Any, List
 import json
 from .base_message import BaseMessage
-from raftengine.log.log_api import LogRec
+from raftengine.api.log_api import LogRec
 
 
 class AppendEntriesMessage(BaseMessage):

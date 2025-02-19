@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 from copy import deepcopy
 import logging
-from raftengine.log.log_api import LogRec, LogAPI
+from raftengine.api.log_api import LogRec, LogAPI
 
 class Records:
 

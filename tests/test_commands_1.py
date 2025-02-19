@@ -6,7 +6,7 @@ import time
 import traceback
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.log.log_api import LogRec
+from raftengine.api.log_api import LogRec
 
 from servers import WhenMessageOut, WhenMessageIn
 from servers import WhenHasLogIndex

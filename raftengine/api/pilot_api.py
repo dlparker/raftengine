@@ -1,6 +1,6 @@
 import abc
 from typing import List, Any
-from raftengine.log.log_api import LogAPI
+from raftengine.api.log_api import LogAPI
 
 
 class PilotAPI(metaclass=abc.ABCMeta):
