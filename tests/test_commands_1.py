@@ -166,7 +166,17 @@ async def test_command_sqlite_1(cluster_maker):
     command_result = await ts_3.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
+    # followers need to know that command is committed at leader
+    # so send heartbeats to inform them
+    ts_3.hull.state.last_broadcast_time = 0
+    await ts_3.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_1.operations.total != 1:
+        await asyncio.sleep(0.0001)
     assert ts_1.operations.total == 1
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_2.operations.total != 1:
+        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     term = await ts_3.hull.log.get_term()
@@ -180,10 +190,10 @@ async def test_command_sqlite_1(cluster_maker):
     rec_1 = await ts_1.hull.log.read(index)
     rec_2 = await ts_2.hull.log.read(index)
     rec_3 = await ts_3.hull.log.read(index)
-    assert rec_1.user_data == rec_2.user_data 
-    assert rec_1.user_data == rec_3.user_data
+    assert rec_1.result == rec_2.result 
+    assert rec_1.result == rec_3.result
     new_rec = LogRec.from_dict(rec_1.__dict__)
-    assert new_rec.user_data == rec_1.user_data
+    assert new_rec.result == rec_1.result
     await cluster.stop_auto_comms()
     
 async def double_leader_inner(cluster, discard):
@@ -207,7 +217,13 @@ async def double_leader_inner(cluster, discard):
     command_result = await ts_1.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_1.operations.total != 1:
+        await asyncio.sleep(0.0001)
     assert ts_1.operations.total == 1
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_2.operations.total != 1:
+        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')

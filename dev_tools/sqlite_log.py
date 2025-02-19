@@ -161,7 +161,7 @@ class Records:
         rec_data = cursor.fetchone()
         if rec_data is None:
             cursor.close()
-            return None
+            return 0
         cursor.close()
         return rec_data['rec_index']
 
@@ -174,7 +174,7 @@ class Records:
         rec_data = cursor.fetchone()
         if rec_data is None:
             cursor.close()
-            return None
+            return 0
         cursor.close()
         return rec_data['rec_index']
     
