@@ -95,12 +95,12 @@ async def test_normal_command_sequence_1(cluster_maker):
 
 
 async def test_log_stuff():
-    from raftengine.log.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
+    from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
     import json
     from raftengine.messages.append_entries import AppendEntriesMessage
     from dev_tools.memory_log import MemoryLog
     from dev_tools.sqlite_log import SqliteLog
-    from raftengine.log.log_api import LogRec
+    from raftengine.api.log_api import LogRec
     m_log = MemoryLog()
 
     path = Path('/tmp', "test_log.sqlite")

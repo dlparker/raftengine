@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Any
 from enum import Enum
 from raftengine.api.types import StateCode, SubstateCode
-from raftengine.log.log_api import LogRec
+from raftengine.api.log_api import LogRec
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.base_message import BaseMessage
 from raftengine.states.base_state import BaseState

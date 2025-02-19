@@ -5,7 +5,7 @@ from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
-from raftengine.log.log_api import LogRec, LogAPI, RecordCode
+from raftengine.api.log_api import LogRec, LogAPI, RecordCode
 
 def bool_converter(value):
     return bool(int(value))
