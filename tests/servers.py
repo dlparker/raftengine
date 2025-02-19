@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from logging.config import dictConfig
 from collections import defaultdict
+from raftengine.log.log_api import LogRec
 from raftengine.hull.hull_config import ClusterConfig, LocalConfig
 from raftengine.hull.hull import Hull
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
@@ -415,16 +416,24 @@ class TestHull(Hull):
         super().__init__(*args, **kwargs)
         self.break_on_message_code = None
         self.explode_on_message_code = None
+        self.corrupt_message_with_code = None
         self.state_run_later_def = None
         self.timers_paused = False
         self.condition = asyncio.Condition()
         
     async def on_message(self, message):
-        
-        if self.break_on_message_code == self.decode_message(message).get_code():
+
+        dmsg = self.decode_message(message)
+        if self.break_on_message_code == dmsg.get_code():
             print('here to catch break')
-        if self.explode_on_message_code == self.decode_message(message).get_code():
+        if self.explode_on_message_code == dmsg.get_code():
             result = await super().on_message('{"code":"foo"}')
+        if self.corrupt_message_with_code == dmsg.get_code():
+            mdict = json.loads(message)
+            mdict['prevLogIndex'] +=  1
+            mdict['entries'] = [LogRec(index=-1),]
+            message = json.dumps(mdict, default=lambda o:o.__dict__)
+            result = await super().on_message(message)
         else:
             result = await super().on_message(message)
         return result

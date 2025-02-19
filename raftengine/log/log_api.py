@@ -26,7 +26,6 @@ class LogRec:
     result: str  = field(default = None, repr=False)
     error: bool  = field(default = False)
     code: RecordCode = field(default=RecordCode.client_command)
-    leader_committed: bool = field(default = False, repr=False)
     local_committed: bool = field(default = False, repr=False)
 
     @classmethod
@@ -37,7 +36,6 @@ class LogRec:
                   result=data['result'],
                   error=data['error'],
                   code=RecordCode(data['code']),
-                  leader_committed=data['leader_committed'],
                   local_committed=data['local_committed'])
         return rec
 
@@ -79,10 +77,6 @@ class LogAPI(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     async def get_last_term(self) -> int:  # pragma: no cover abstract
-        raise NotImplementedError
-    
-    @abc.abstractmethod
-    async def get_leader_commit_index(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

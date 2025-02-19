@@ -74,17 +74,12 @@ class BaseState:
     async def on_append_entries_response(self, message):
         if self.state_code == "FOLLOWER":
             problem = 'append_entries_response not implemented in the class '
-            problem += f'"{self.__class__.__name__}", '
-            if not hasattr(message, 'leaderId'):
-                problem += " ignoring"
-            else:
+            problem += f'"{self.__class__.__name__}", ignoring '
+            if hasattr(message, 'leaderId'):
                 if message.term == await self.log.get_term() and self.leader_uri is None:
                     self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
                     self.leader_uri = message.leaderId
-                    problem += f" adopting leader {self.leader_uri} but otherwise ignoring"
-        else:
-            problem = 'append_entries_response not implemented in the class '
-            problem += f'"{self.__class__.__name__}", ingoring'
+                    problem += f" except adopting leader {self.leader_uri}"
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
 

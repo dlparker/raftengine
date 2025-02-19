@@ -28,7 +28,3 @@ class RequestVoteResponseMessage(BaseMessage):
         msg += f" v={self.vote}"
         return msg
 
-    def __eq__(self, other):
-        if self.__dict__ == other.__dict__:
-            return True
-        return False

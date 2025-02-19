@@ -63,8 +63,7 @@ class Records:
         schema += "result TEXT, " 
         schema += "error BOOLEAN, " 
         schema += "term INTEGER, "
-        schema += "local_committed BOOLEAN, " 
-        schema += "leader_committed BOOLEAN)"
+        schema += "local_committed BOOLEAN)" 
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
@@ -86,8 +85,8 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, result, error, term, local_committed, leader_committed) values "
-        values += "?,?,?,?,?,?,?)"
+        sql += "code, command, result, error, term, local_committed) values "
+        values += "?,?,?,?,?,?)"
         sql += values
         params.append(str(entry.code.value))
         params.append(entry.command)
@@ -95,7 +94,6 @@ class Records:
         params.append(entry.error)
         params.append(entry.term)
         params.append(entry.local_committed)
-        params.append(entry.leader_committed)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
@@ -151,19 +149,6 @@ class Records:
     def insert_entry(self, rec: LogRec) -> LogRec:
         rec = self.save_entry(rec)
         return rec
-
-    def get_leader_commit_index(self):
-        if self.db is None:
-            self.open()
-        cursor = self.db.cursor()
-        sql = "select rec_index from records where leader_committed = 1 order by rec_index desc"
-        cursor.execute(sql)
-        rec_data = cursor.fetchone()
-        if rec_data is None:
-            cursor.close()
-            return 0
-        cursor.close()
-        return rec_data['rec_index']
 
     def get_local_commit_index(self):
         if self.db is None:
@@ -271,11 +256,6 @@ class SqliteLog(LogAPI):
         save_rec = self.records.insert_entry(entry)
         return save_rec
     
-    async def get_leader_commit_index(self):
-        if not self.records.is_open():
-            self.records.open()
-        return self.records.get_leader_commit_index()
-
     async def get_local_commit_index(self):
         if not self.records.is_open():
             self.records.open()
