@@ -5,6 +5,7 @@ import pytest
 import functools
 import dataclasses
 import traceback
+import json
 from pathlib import Path
 from logging.config import dictConfig
 from collections import defaultdict
@@ -419,10 +420,11 @@ class TestHull(Hull):
         self.condition = asyncio.Condition()
         
     async def on_message(self, message):
-        if self.break_on_message_code == message.get_code():
+        
+        if self.break_on_message_code == self.decode_message(message).get_code():
             print('here to catch break')
-        if self.explode_on_message_code == message.get_code():
-            result = await super().on_message('foo')
+        if self.explode_on_message_code == self.decode_message(message).get_code():
+            result = await super().on_message('{"code":"foo"}')
         else:
             result = await super().on_message(message)
         return result
@@ -502,7 +504,7 @@ class Network:
             node.blocked_in_messages.append(msg)
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
-        await node.hull.on_message(msg)
+        await node.hull.on_message(json.dumps(msg, default=lambda o:o.__dict__))
         return msg
     
     async def do_next_out_msg(self, node):
@@ -647,13 +649,14 @@ class PausingServer(PilotAPI):
     async def process_command(self, command):
         return await self.operations.process_command(command)
         
-    # Part of PilotAPI
-    async def send_message(self, target, msg):
+    async def send_message(self, target, in_msg):
+        msg = self.hull.decode_message(in_msg)
         self.logger.debug("queueing out msg %s", msg)
         self.out_messages.append(msg) 
 
     # Part of PilotAPI
-    async def send_response(self, target, in_msg, reply):
+    async def send_response(self, target, in_msg, in_reply):
+        reply = self.hull.decode_message(in_reply)
         self.logger.debug("queueing out reply %s", reply)
         self.out_messages.append(reply) 
         

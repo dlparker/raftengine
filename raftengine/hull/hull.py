@@ -3,9 +3,12 @@ import traceback
 import logging
 import random
 import time
+import json
 
 from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.base_message import BaseMessage
+from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.states.follower import Follower
 from raftengine.states.candidate import Candidate
 from raftengine.states.leader import Leader, CommandResult
@@ -32,12 +35,32 @@ class Hull:
     async def start(self):
         await self.state.start()
 
+    def decode_message(self, in_message):
+        mdict = json.loads(in_message)
+        mtypes = [AppendEntriesMessage,AppendResponseMessage,
+                  RequestVoteMessage,RequestVoteResponseMessage]
+        message = None
+        for mtype in mtypes:
+            if mdict['code'] == mtype.get_code():
+                message = mtype.from_dict(mdict)
+        if message is None:
+            raise Exception('Message is not decodeable as a raft type')
+        return message
+    
     # Part of API
-    async def on_message(self, message):
+    async def on_message(self, in_message):
+        try:
+            message = self.decode_message(in_message)
+        except:
+            error = traceback.format_exc()
+            self.logger.error(error)
+            await self.record_message_problem(in_message, error)
+            return None
+        await self.inner_on_message(message)
+        
+    async def inner_on_message(self, message):
         res = None
         try:
-            if not isinstance(message, BaseMessage):
-                raise Exception('Message is not a raft type, did you use provided deserializer?')
             self.logger.debug("%s Handling message type %s", self.get_my_uri(), message.get_code())
             res = await self.state.on_message(message)
         except Exception as e:
@@ -127,17 +150,20 @@ class Hull:
             self.state.leader_uri = message.leaderId
         if message:
             self.logger.warning('%s reprocessing message as follower %s', self.get_my_uri(), message)
-            return await self.on_message(message)
+            return await self.inner_on_message(message)
 
     # Called by State
     async def send_message(self, message):
         self.logger.debug("Sending message type %s to %s", message.get_code(), message.receiver)
-        await self.pilot.send_message(message.receiver, message)
+        encoded = json.dumps(message, default=lambda o:o.__dict__)
+        await self.pilot.send_message(message.receiver, encoded)
 
     # Called by State
     async def send_response(self, message, response):
         self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
-        await self.pilot.send_response(response.receiver, message, response)
+        encoded = json.dumps(message, default=lambda o:o.__dict__)
+        encoded_reply = json.dumps(response, default=lambda o:o.__dict__)
+        await self.pilot.send_response(response.receiver, encoded, encoded_reply)
 
     async def state_after_runner(self, target):
         if self.state.stopped:

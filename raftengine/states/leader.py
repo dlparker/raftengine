@@ -171,7 +171,6 @@ class Leader(BaseState):
                 continue
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
             message.receiver = uri
-            message.encode_entries()
             self.logger.info("sending %s", message)
             await self.hull.send_message(message)
             await self.record_sent_message(message)
@@ -183,7 +182,7 @@ class Leader(BaseState):
             self.logger.debug("%s resched heartbeats time left %f", self.my_uri, remaining_time)
             await self.run_after(remaining_time, self.send_heartbeats)
             return
-        entries = json.dumps([])
+        entries = []
         term = await self.log.get_term()
         my_uri = self.my_uri()
         last_term = await self.log.get_last_term()
@@ -240,7 +239,6 @@ class Leader(BaseState):
                                        prevLogTerm=await self.log.get_term(),
                                        prevLogIndex=await self.log.get_last_index(),
                                        commitIndex=await self.log.get_local_commit_index())
-        message.encode_entries()
         self.logger.info("sending catchup %s", message)
         await self.hull.record_substate(SubstateCode.sending_catchup)
         await self.record_sent_message(message)

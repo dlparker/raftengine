@@ -17,7 +17,17 @@ class BaseMessage:
         self.term = term
         self.prevLogIndex = prevLogIndex
         self.prevLogTerm = prevLogTerm
+        self.code = self.__class__.code
 
+    @classmethod
+    def from_dict(cls, data):
+        msg = cls(sender=data['sender'],
+                  receiver=data['receiver'],
+                  term=int(data['term']),
+                  prevLogIndex=int(data['prevLogIndex']),
+                  prevLogTerm=int(data['prevLogTerm']))
+        return msg
+    
     def __str__(self):
         return self.__repr__()
 

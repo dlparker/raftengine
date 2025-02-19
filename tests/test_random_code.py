@@ -114,11 +114,6 @@ async def test_log_stuff():
     msg = AppendEntriesMessage('1', '2', '1', 0, 0, [rec1, rec2], 2)
 
     # 
-    msg.encode_entries()
-    assert isinstance(msg.entries, str)
-    msg.decode_entries()
-    for rec in msg.entries:
-        assert isinstance(rec, LogRec)
 
     for log in [m_log, s_log]:
 

@@ -39,7 +39,6 @@ class Follower(BaseState):
             await self.send_reject_append_response(message)
             return
         self.last_leader_contact = time.time()
-        message.decode_entries()
         if (message.prevLogIndex == await self.log.get_last_index()
             and message.prevLogTerm == await self.log.get_last_term()
             and message.entries == []):
@@ -72,7 +71,6 @@ class Follower(BaseState):
         # third if statement clauses
         await self.hull.record_substate(SubstateCode.appending)
         processor = self.hull.get_processor()
-        message.decode_entries()
         recs = []
         local_commit = await self.log.get_local_commit_index()
         for log_rec in message.entries:
