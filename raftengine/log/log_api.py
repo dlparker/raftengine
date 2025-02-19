@@ -90,7 +90,11 @@ class LogAPI(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def append(self, entries: List[LogRec]):  # pragma: no cover abstract
+    async def append_multi(self, entries: List[LogRec]):  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def append(self, record: LogRec):  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

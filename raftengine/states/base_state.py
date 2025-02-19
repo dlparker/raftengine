@@ -50,11 +50,11 @@ class BaseState:
     async def on_message(self, message):
         if message.term > await self.log.get_term():
             self.logger.debug('%s received message from higher term, calling self.term_expired',
-                              self.hull.get_my_uri())
+                              self.my_uri())
             res = await self.term_expired(message)
             if not res:
                 self.logger.debug('%s self.term_expired said no further processing required',
-                                  self.hull.get_my_uri())
+                                  self.my_uri())
                 # no additional handling of message needed
                 return None
         route = self.routes.get(message.get_code(), None)
@@ -119,6 +119,9 @@ class BaseState:
                                            prevLogTerm=await self.log.get_last_term(),
                                            vote=False)
         await self.hull.send_response(message, reply)
+
+    def my_uri(self):
+        return self.hull.get_my_uri()
 
     def __repr__(self):
         return self.state_code

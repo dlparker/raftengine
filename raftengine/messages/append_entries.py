@@ -12,14 +12,20 @@ class AppendEntriesMessage(BaseMessage):
         self.code = "append_entries"
         self.entries = entries
         self.commitIndex = commitIndex
+        self.entry_count = 0
 
     # Convenience method for programmers, normal operationss
     # encode by calling to_json
     def encode_entries(self):
+        self.orig_entries = self.entries
         if len(self.entries) == 0:
             self.entries = "[]"
+            self.entry_count = 0
+            return
         if not isinstance(self.entries[0], LogRec):
             return
+        self.entry_count = len(self.entries)
+        self.orig_entries = self.entries
         self.entries = json.dumps(self.entries, default=lambda o:o.__dict__)
         
     # Convenience method for programmers, normal operationss
@@ -32,6 +38,7 @@ class AppendEntriesMessage(BaseMessage):
         result = []
         for dic in json.loads(self.entries):
             result.append(LogRec.from_dict(dic))
+        self.orig_entries = self.entries
         self.entries = result
 
     def to_json(self):
@@ -42,8 +49,13 @@ class AppendEntriesMessage(BaseMessage):
     @classmethod
     def from_dict(cls, data):
         entries = []
-        for dic in data['entries']:
-            entries.append(LogRec.from_dict(dic))
+        if isinstance(data['entries'], str):
+            data['entries'] = json.loads(data['entries'])
+        for obj in data['entries']:
+            if isinstance(obj, LogRec):
+                entries.append(obj)
+            else:
+                entries.append(LogRec.from_dict(obj))
         msg = cls(sender=data['sender'],
                   receiver=data['receiver'],
                   term=int(data['term']),
@@ -55,7 +67,10 @@ class AppendEntriesMessage(BaseMessage):
     
     def __repr__(self):
         msg = super().__repr__()
-        msg += f" e={len(self.entries)}"
+        if hasattr(self,'orig_entries'):
+            msg += f" e={len(self.orig_entries)} ci={self.commitIndex}"
+        else:
+            msg += f" e={len(self.entries)} ci={self.commitIndex}"
         return msg
 
 class AppendResponseMessage(BaseMessage):
@@ -63,22 +78,13 @@ class AppendResponseMessage(BaseMessage):
     code = "append_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
-                 entries:List[Any], results:List[Any],
-                 myPrevLogIndex:int, myPrevLogTerm:int, leaderId: str):
+                 recordIds: List[int], leaderId: str):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
-        self.myPrevLogIndex = myPrevLogIndex 
-        self.myPrevLogTerm = myPrevLogTerm
-        self.entries = entries
-        self.results = results
         self.leaderId = leaderId
+        self.recordIds = recordIds
 
-    def replies_to(self, append_msg):
-        if self.dialog_id == append_msg.dialog_id:
-            return True
-        return False
-        
+
     def __repr__(self):
         msg = super().__repr__()
-        msg += f" e={len(self.entries)} r={len(self.results)}"
+        msg += f" r={len(self.recordIds)} le={self.leaderId}"
         return msg
-

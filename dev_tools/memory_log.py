@@ -28,9 +28,12 @@ class Records:
             self.entries.append(rec)
             rec.index = len(self.entries)
             return rec
-        if rec.index > len(self.entries):
+        if rec.index == len(self.entries) + 1:
+            self.entries.append(rec)
+        if rec.index >= len(self.entries) + 1:
             raise Exception('cannont insert past last index')
-        self.entries[rec.index-1] = rec
+        else:
+            self.entries[rec.index-1] = rec
     
     def save_entry(self, rec: LogRec) -> LogRec:
         return self.insert_entry(rec)
@@ -39,13 +42,13 @@ class Records:
         for entry in self.entries[::-1]:
             if entry.leader_committed:
                 return entry.index
-        return None
+        return 0
 
     def get_local_commit_index(self):
         for entry in self.entries[::-1]:
             if entry.local_committed:
                 return entry.index
-        return None
+        return 0
     
 class MemoryLog(LogAPI):
 
@@ -74,18 +77,21 @@ class MemoryLog(LogAPI):
         self.term += 1
         return self.term
 
-    async def append(self, entries: List[LogRec]) -> None:
+    async def append(self, record: LogRec) -> None:
+        save_rec = LogRec.from_dict(record.__dict__)
+        self.records.insert_entry(save_rec)
+        return_rec = LogRec.from_dict(save_rec.__dict__)
+        self.logger.debug("new log record %s", return_rec.index)
+        return return_rec
+    
+    async def append_multi(self, entries: List[LogRec]) -> None:
         # make copies for in memory list, and copy
         # the inserted ones to return to the caller
         # so they can see the index and can't break
         # our saved copy
         return_recs = []
         for entry in entries:
-            save_rec = LogRec.from_dict(entry.__dict__)
-            self.records.insert_entry(save_rec)
-            return_rec = LogRec.from_dict(save_rec.__dict__)
-            return_recs.append(return_rec)
-        self.logger.debug("new log record %s", save_rec.index)
+            return_recs.append(await self.append(entry))
         return return_recs
 
     async def replace(self, entry:LogRec) -> LogRec:

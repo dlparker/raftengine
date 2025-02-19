@@ -209,15 +209,21 @@ class SqliteLog(LogAPI):
         self.records.set_term(self.records.term + 1)
         return self.records.term
 
-    async def append(self, entries: List[LogRec]) -> None:
+    async def append(self, entry: LogRec) -> None:
+        if not self.records.is_open():
+            self.records.open()
+        save_rec = LogRec.from_dict(entry.__dict__)
+        return_rec = self.records.add_entry(save_rec)
+        self.logger.debug("new log record %s", return_rec.index)
+        return return_rec
+
+    async def append_multi(self, entries: List[LogRec]) -> None:
         if not self.records.is_open():
             self.records.open()
         # make copies
         return_recs = []
         for entry in entries:
-            save_rec = LogRec.from_dict(entry.__dict__)
-            return_recs.append(self.records.add_entry(save_rec))
-        self.logger.debug("new log record %s", save_rec.index)
+            return_recs.append(await self.append(entry))
         return return_recs
 
     async def replace(self, entry:LogRec) -> LogRec:

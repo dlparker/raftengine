@@ -37,7 +37,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('-------- Election done, saving a command record')
     await cluster.start_auto_comms()
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 1
@@ -56,7 +56,7 @@ async def test_partition_1(cluster_maker):
     cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 2
@@ -65,7 +65,7 @@ async def test_partition_1(cluster_maker):
     assert ts_4.operations.total == 1
     assert ts_5.operations.total == 1
     logger.info('--------- Main partition has update, doing it again')
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command"add 1")
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 3
