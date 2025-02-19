@@ -16,7 +16,7 @@ class HullAPI(metaclass=abc.ABCMeta):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def process_command(self, command: str) -> List[Any]: # pragma: no cover abstract
+    async def run_command(self, command: str, timeout: float = 1.0) -> List[Any]: # pragma: no cover abstract
         """ Causes raft operations to trigger user defined commands once the raft 
         algorithm has determined that the command is safe to commit. This
         is explained in the raft paper. The basic theory is that the commands

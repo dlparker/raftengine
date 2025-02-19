@@ -10,6 +10,7 @@ from raftengine.log.log_api import LogRec
 
 from servers import WhenMessageOut, WhenMessageIn
 from servers import WhenHasLogIndex
+from servers import WhenHasCommitIndex
 from servers import WhenInMessageCount, WhenElectionDone
 from servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from servers import PausingCluster, cluster_maker
@@ -38,30 +39,46 @@ async def test_command_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    command_result = await ts_3.hull.apply_command("add 1")
+    command_result = await ts_3.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
-    assert ts_1.operations.total == 1
-    assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
+    # now we need to trigger a heartbeat so that
+    # followers will see the commitIndex is higher
+    # and apply and locally commit
+    ts_3.hull.state.last_broadcast_time = 0
+    await ts_3.hull.state.send_heartbeats()
+    logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.hull.log.get_term()
     index = await ts_3.hull.log.get_last_index()
     assert index == 1
+    await cluster.stop_auto_comms()
+    ts_1.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    ts_2.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    ts_3.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_2.run_till_triggers(),
+                         ts_3.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    ts_3.clear_triggers()
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
     assert await ts_1.hull.log.get_term() == term
     assert await ts_1.hull.log.get_last_index() == index
     assert await ts_2.hull.log.get_term() == term
     assert await ts_2.hull.log.get_last_index() == index
     logger.debug('------------------------ Correct command done')
-    
+
     await cluster.stop_auto_comms()
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result.redirect == uri_3
     logger.debug('------------------------ Correct redirect (follower) done')
     
     orig_term =  await ts_1.hull.get_term() 
     await ts_1.hull.state.leader_lost()
     assert ts_1.hull.get_state_code() == "CANDIDATE"
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
     # cleanup attempt to start election
@@ -70,100 +87,62 @@ async def test_command_1(cluster_maker):
     await ts_1.hull.get_log().set_term(orig_term)
 
     await ts_1.hull.demote_and_handle()
+    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.hull.get_state_code() == "FOLLOWER"
+    assert ts_1.hull.state.leader_uri == uri_3
 
-    # Have a follower blow up, control the messages so that
-    # leader only sends two append_entries, then check
-    # for bad state on exploded follower. Then defuse
-    # the exploder and trigger hearbeat. This should
-    # result in replay of command to follower, which should
-    # then catch up and the the correct state
+    # Now block a follower's messages, like it crashed,
+    # and then do a couple of commands. Once the
+    # commands are committed, let heartbeats go out
+    # so the tardy follower will catch up
 
+    ts_1.block_network()
     command_result = None
     async def command_runner(ts):
         nonlocal command_result
         logger.debug('running command in background')
         try:
-            command_result = await ts.hull.apply_command("add 1")
+            command_result = await ts.hull.run_command("add 1")
         except Exception as e:
             logger.debug('running command in background error %s', traceback.format_exc())
             
         logger.debug('running command in background done')
-    
-    ts_1.operations.explode = True
-    orig_index = await ts_3.hull.get_log().get_last_index()
-    ts_3.set_trigger(WhenHasLogIndex(orig_index + 1))
-    # also have to fiddle the heartbeat timer or the messages won't be sent
-    loop = asyncio.get_event_loop()
-    logger.debug('------------------------ Starting command runner ---')
+    logger.debug('------------------------ Running command ---')
+    loop = asyncio.get_running_loop()
+    ts_3.hull.state.breaking = True
     loop.create_task(command_runner(ts_3))
-    logger.debug('------------------------ Starting run_till_triggers with others ---')
-    await ts_3.run_till_triggers(free_others=True)
-    ts_3.clear_triggers()
+    await cluster.start_auto_comms()
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and command_result is None:
+        await asyncio.sleep(0.0001)
     assert command_result is not None
-    assert command_result.result is not None
-    assert command_result.error is None
-    assert ts_1.operations.exploded == True
-
-    assert ts_2.operations.total == 2
-    assert ts_3.operations.total == 2
-    assert ts_1.operations.total == 1
-
-    # do it a couple more times so we can test that catch up function works
-    # when follower is behind more than one record
-    
-    orig_index = await ts_3.hull.get_log().get_last_index()
-    ts_3.set_trigger(WhenHasLogIndex(orig_index + 1))
-    # also have to fiddle the heartbeat timer or the messages won't be sent
-    loop = asyncio.get_event_loop()
-    logger.debug('------------------------ Starting command runner ---')
+    logger.debug('------------------------ Running command ---')
+    command_result = None
     loop.create_task(command_runner(ts_3))
-    logger.debug('------------------------ Starting run_till_triggers with others ---')
-    await ts_3.run_till_triggers(free_others=True)
-    ts_3.clear_triggers()
-
-    assert ts_2.operations.total == 3
+    await cluster.deliver_all_pending()
+    while time.time() - start_time < 0.1 and command_result is None:
+        await asyncio.sleep(0.0001)
+    assert command_result is not None
     assert ts_3.operations.total == 3
-    assert ts_1.operations.total == 1
-
-    orig_index = await ts_3.hull.get_log().get_last_index()
-    ts_3.set_trigger(WhenHasLogIndex(orig_index + 1))
-    # also have to fiddle the heartbeat timer or the messages won't be sent
-    loop = asyncio.get_event_loop()
-    logger.debug('------------------------ Starting command runner ---')
-    loop.create_task(command_runner(ts_3))
-    logger.debug('------------------------ Starting run_till_triggers with others ---')
-    await ts_3.run_till_triggers(free_others=True)
-    ts_3.clear_triggers()
-
-    assert ts_2.operations.total == 4
-    assert ts_3.operations.total == 4
-    assert ts_1.operations.total == 1
-
-    # now send heartbeats and ensure that exploded follower catches up
-    ts_1.operations.explode = False
+    logger.debug('------------------------ Doing hearbeats ---')
     ts_3.hull.state.last_broadcast_time = 0
-    logger.debug('---------Sending heartbeat and starting run_till_triggers with others ---')
     await ts_3.hull.state.send_heartbeats()
-    cur_index = await ts_3.hull.get_log().get_last_index()
-    ts_1.set_trigger(WhenHasLogIndex(2))
-    await ts_1.run_till_triggers(free_others=True)
-    
-    try:
-        ts_1.set_trigger(WhenHasLogIndex(3))
-        await ts_1.run_till_triggers(free_others=True)
-        ts_1.set_trigger(WhenHasLogIndex(4))
-        await ts_1.run_till_triggers(free_others=True)
-    except:
-        print(await ts_1.log.get_last_index())
-        print(await ts_1.log.get_last_index())
-        breakpoint()
-        print(await ts_1.log.get_last_index())
-        print(await ts_1.log.get_last_index())
-    
-    assert ts_1.operations.total == 4
+    await cluster.deliver_all_pending()
+    while time.time() - start_time < 0.1 and ts_2.operations.total != 3:
+        await asyncio.sleep(0.0001)
+    assert ts_2.operations.total == 3
+
+    logger.debug('------------------------ Unblocking tardy, doing hearbeats ---')
+    ts_1.unblock_network() # default is discard messages, lets do that
+    ts_3.hull.state.last_broadcast_time = 0
+    await ts_3.hull.state.send_heartbeats()
+    while time.time() - start_time < 0.1 and ts_1.operations.total != 3:
+        await asyncio.sleep(0.0001)
+    assert ts_1.operations.total == 3
+    await cluster.stop_auto_comms()
+    logger.debug('------------------------ Tardy follower caught up ---')
 
 async def test_command_sqlite_1(cluster_maker):
     from dev_tools.sqlite_log import SqliteLog
@@ -184,7 +163,7 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    command_result = await ts_3.hull.apply_command("add 1")
+    command_result = await ts_3.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
     assert ts_1.operations.total == 1
@@ -225,7 +204,7 @@ async def double_leader_inner(cluster, discard):
     logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
     assert ts_1.operations.total == 1
@@ -262,7 +241,7 @@ async def double_leader_inner(cluster, discard):
         await cluster.start_auto_comms()
         
     logger.debug('------------------ Command AppendEntries should get rejected -')
-    command_result = await ts_1.hull.apply_command("add 1", timeout=1)
+    command_result = await ts_1.hull.run_command("add 1", timeout=1)
     assert command_result.redirect == uri_2
     logger.error('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
@@ -309,7 +288,7 @@ async def test_command_after_heal_1(cluster_maker):
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
     await cluster.start_auto_comms()
 
-    command_result = await ts_1.hull.apply_command("add 1")
+    command_result = await ts_1.hull.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
     assert ts_1.operations.total == 1

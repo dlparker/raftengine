@@ -88,7 +88,7 @@ async def test_log_stuff():
 
     for log in [m_log, s_log]:
 
-        [rec_1, rec_2] = await log.append([rec1, rec2])
+        [rec_1, rec_2] = await log.append_multi([rec1, rec2])
         assert await log.get_last_index() == 2
         assert await log.get_last_term() == 1
         assert rec_1.index == 1

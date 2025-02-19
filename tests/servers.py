@@ -303,6 +303,20 @@ class WhenHasLogIndex(PauseTrigger):
             return True
         return False
     
+class WhenHasCommitIndex(PauseTrigger):
+    # When the server has committed record with provided index
+    def __init__(self, index):
+        self.index = index
+
+    def __repr__(self):
+        msg = f"{self.__class__.__name__} index={self.index}"
+        return msg
+        
+    async def is_tripped(self, server):
+        if await server.hull.log.get_local_commit_index() >= self.index:
+            return True
+        return False
+    
 class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the
     # post election quiet period

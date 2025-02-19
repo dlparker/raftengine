@@ -49,9 +49,9 @@ class Hull:
         return res
 
     # Part of API
-    async def apply_command(self, command, timeout=1):
+    async def run_command(self, command, timeout=1):
         if self.state.state_code == StateCode.leader:
-            return await self.state.apply_command(command, timeout=timeout)
+            return await self.state.run_command(command, timeout=timeout)
         elif self.state.state_code == StateCode.follower:
             return CommandResult(command, redirect=self.state.leader_uri)
         elif self.state.state_code == StateCode.candidate:
