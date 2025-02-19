@@ -1,18 +1,7 @@
 Immediatly:
 
 
-WRONG, LEADER JUST TRUSTS THAT RECORDS WILL EVENTUALLY BE APPLIED
-20. Leader needs to treat command response as ok only if no error is present.
-
-22. Leader is supposed to save record before sending. That enables retry, I guess.
-    so I need to code for that. So leader's lastLogIndex will be greater than
-    everyone else's if no messages went out. That means when a leader is elected
-    it needs to check its last log entry, and if it was not committed (no response
-    data saved) then it does the broadcast command process.
-
-    LOG RE_WRITE, MAJOR REFACTOR OF LEADER, MAJOR CHANGES TO FOLLOWER REPLY LOGIC
-
-    !!!! Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
+    10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
 
 DONE    !!! Clean up LogRec, chaning "user_data" to command and result and add custom json serializer so
         that serialising the entries array just works
@@ -41,18 +30,6 @@ DONE    !!!! Follower should look at log records when behind, and find not just 
     in result. Maybe try one more time to make apply_command cleaner (and rename it
     while we are at it).
     
-WRONG OVERWRITES ARE ONLY FOR UNCOMMITTED RECORDS
-30. Need to add follower overwrite superceeded code, if leader says write this at
-   this location, follower needs to delete old record. Prolly want a callack to
-   pilot to tell them about it. Non-idempotent code needs to figure out how to
-   undo deleted ops, or else throw an error. So prolly we want an error callback
-   in pilot for when we can't provide sync, and also have an "undo" function in
-   pilot. So we call "undo" then if it fails or doesn't exist we send out a new
-   message type FOLLOWER_CANNOT_SYNC. Also need to have a callback in pilot for
-   receipt of this. If we build a cluster class it should probably be able
-   to save to records in conflict and disable the server. Maybe the server should
-   disable itself?
-
 31. Update hull api, __init__ should not be in it, so some sort of set_config
     thing. Think about updating config while running. Maybe have some sort
     of feature in hull that holds any messages while reconfig runs?
@@ -66,6 +43,7 @@ WRONG OVERWRITES ARE ONLY FOR UNCOMMITTED RECORDS
     4. build quorum feature such that (if configed) there is a minimum dynamic cluster
        size for starting election, with default of 1/2 + 1 of static config. Prove this
        prevents the inconsistent values at same log index problem after partition heal
+    9. Think about providing an optional uri map implementation for users.
 
 50. Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
 
@@ -74,15 +52,11 @@ OOOOOOOPNEN
    such as rejected append entries and fiddle. Maybe can use substate stuff to alert to error
    and give pilot an api entry on hull to call to get errors?
 
-
-9. Think about providing an optional uri map implementation for users.
-
 11. Figure out how to log config changes, and in the process make general mechanism for
     non-command records.
-
-
-30. Add config read and write and config-to-and-from-json to hull. Think about defining
+    b. Add config read and write and config-to-and-from-json to hull. Think about defining
     and API for the hull (probably not since it needs stuff at init)
+
 
 DONE!!!!!!7. !!!!! IMPORTANT !!!! change log api to be async
 
