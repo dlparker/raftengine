@@ -43,6 +43,11 @@ class Records:
             if entry.local_committed:
                 return entry.index
         return 0
+
+    def delete_all_from(self, index: int):
+        self.entries = self.entries[:index-1]
+        
+        
     
 class MemoryLog(LogAPI):
 
@@ -126,6 +131,9 @@ class MemoryLog(LogAPI):
     async def get_local_commit_index(self):
         return self.records.get_local_commit_index()
 
+    async def delete_all_from(self, index: int):
+        return self.records.delete_all_from(index)
+        
     def close(self):
         pass
 

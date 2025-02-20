@@ -104,6 +104,8 @@ class simpleOps():
     total = 0
     explode = False
     exploded = False
+    return_error = False
+    reported_error = False
     async def process_command(self, command):
         logger = logging.getLogger("simpleOps")
         error = None
@@ -113,6 +115,9 @@ class simpleOps():
         if self.explode:
             self.exploded = True
             raise Exception('boom!')
+        if self.return_error:
+            self.reported_error = True
+            return None, "inserted error"
         if op not in ['add', 'sub']:
             error = "invalid command"
             logger.error("invalid command %s provided", op)

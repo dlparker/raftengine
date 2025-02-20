@@ -103,6 +103,9 @@ class LogAPI(metaclass=abc.ABCMeta):
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:  # pragma: no cover abstract
         raise NotImplementedError
 
+    @abc.abstractmethod
+    async def delete_all_from(self, index: int) -> LogRec:  # pragma: no cover abstract
+        raise NotImplementedError
 
     
         
