@@ -172,6 +172,10 @@ class Leader(BaseState):
         for uri in self.hull.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
+            tracker = self.follower_trackers[uri]
+            if tracker.nextIndex != log_record.index:
+                await self.send_catchup(uri)
+                continue
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
             message.receiver = uri
             self.logger.info("broadcast command sending %s", message)
@@ -196,6 +200,10 @@ class Leader(BaseState):
         for uri in self.hull.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
+            tracker = self.follower_trackers[uri]
+            if tracker.nextIndex != await self.log.get_last_index() + 1:
+                await self.send_catchup(uri)
+                continue
             message = AppendEntriesMessage(sender=my_uri,
                                            receiver=uri,
                                            term=term,
@@ -211,39 +219,25 @@ class Leader(BaseState):
     async def on_append_entries_response(self, message):
         self.logger.debug('handling response %s', message)
         await self.record_received_message(message)
-        if len(message.recordIds) > 0:
-            # follower saved new records, so maybe we need to commit something
-            for rec_id in message.recordIds:
-                log_rec = await self.log.read(rec_id)
+        if message.success:
+            if message.prevLogIndex < await self.log.get_last_index():
+                log_rec = await self.log.read(message.prevLogIndex)
                 if log_rec.local_committed:
                     continue
                 await self.command_commit_checker(log_rec)
-            return
-        tracker = self.follower_trackers[message.sender]
-        if (tracker.nextIndex >= await self.log.get_last_index()):
-            await self.catch_follower_up(message.sender, tracker.nextIndex)
-            return
-        if (message.prevLogIndex != await self.log.get_last_index()
-            or message.prevLogTerm != await self.log.get_last_term()):
-            follower_next = await self.pick_follower_next(message)
-            if follower_next is None:
-                await self.backdown_follower(message)
+            tracker = self.follower_trackers[message.sender]
+            tracker.matchIndex = message.prevLogIndex
+            tracker.nextIndex = message.prevLogIndex + 1
+            if tracker.nextIndex < await self.get_last_index():
+                await self.send_catchup(message.sender)
                 return
+            # all in sync, done
+            return
+        await self.backdown_follower(message.sender)
 
-    async def pick_follower_next(self, message):
-        follower_last_index = message.prevLogIndex
-        follower_last_term = message.prevLogTerm
-        if follower_last_index == 0:
-            return 1
-        if follower_last_index > await self.log.get_last_term():
-            return None
-        rec = await self.log.read(follower_last_index)
-        if follower_last_term == rec.term:
-            return follower_last_index + 1
-        return None
-
-    async def catch_follower_up(self, uri, next_index):
-        
+    async def send_catchup(self, uri):
+        tracker = self.follower_trackers[uri]
+        next_index = tracker.nextIndex
         MAX_RECS_PER_MESSAGE = 10
         max_index = min(next_index + MAX_RECS_PER_MESSAGE, await self.log.get_last_index())
         entries = []
@@ -252,8 +246,6 @@ class Leader(BaseState):
             # make sure the follower doesn't get confused about their local commit status
             rec.local_commit = False
             entries.append(rec)
-        tracker = self.follower_trackers[uri]
-        tracker.nextIndex = max_index
         if next_index == 1:
             prevLogIndex = 0
             prevLogTerm = 0
@@ -275,10 +267,8 @@ class Leader(BaseState):
         
     async def backdown_follower(self, message):
         tracker = self.follower_trackers[message.sender]
-        tracker.nextIndex = message.prevLogIndex
+        tracker.nextIndex -= 1
         next_index = tracker.nextIndex
-        if next_index == 0:
-            breakpoint()
         if next_index == 1:
             prevLogIndex = 0
             prevLogTerm = 0
@@ -365,3 +355,82 @@ class Leader(BaseState):
         
 
 
+
+    async def oldbroadcast_log_record(self, log_record):
+        if log_record.index == 1:
+            prevLogIndex = 0
+            prevLogTerm = 0
+        else:
+            prev_rec = await self.log.read(log_record.index - 1)
+            prevLogIndex = prev_rec.index
+            prevLogTerm = prev_rec.term
+        term = await self.log.get_term()
+        commit_index = await self.log.get_local_commit_index()
+        proto_message = AppendEntriesMessage(sender=self.my_uri(),
+                                             receiver='',
+                                             term=term,
+                                             entries=[log_record,],
+                                             prevLogTerm=prevLogTerm,
+                                             prevLogIndex=prevLogIndex,
+                                             commitIndex=commit_index)
+        await self.hull.record_substate(SubstateCode.broadcasting_command)
+        for uri in self.hull.get_cluster_node_ids():
+            if uri == self.my_uri():
+                continue
+            message = AppendEntriesMessage.from_dict(proto_message.__dict__)
+            message.receiver = uri
+            self.logger.info("broadcast command sending %s", message)
+            await self.hull.send_message(message)
+            await self.record_sent_message(message)
+            tracker = self.follower_trackers[uri]
+            tracker.nextIndex = log_record.index + 1
+    
+    async def oldsend_heartbeats(self):
+        silent_time = time.time() - self.last_broadcast_time
+        remaining_time = self.hull.get_heartbeat_period() - silent_time
+        if  remaining_time > 0:
+            self.logger.debug("%s resched heartbeats time left %f", self.my_uri, remaining_time)
+            await self.run_after(remaining_time, self.send_heartbeats)
+            return
+        entries = []
+        term = await self.log.get_term()
+        my_uri = self.my_uri()
+        last_term = await self.log.get_last_term()
+        last_index = await self.log.get_last_index()
+        commit_index = await self.log.get_local_commit_index()
+        for uri in self.hull.get_cluster_node_ids():
+            if uri == self.my_uri():
+                continue
+            message = AppendEntriesMessage(sender=my_uri,
+                                           receiver=uri,
+                                           term=term,
+                                           entries=entries,
+                                           prevLogTerm=last_term,
+                                           prevLogIndex=last_index,
+                                           commitIndex=commit_index)
+            self.logger.debug("%s sending heartbeat to %s", message.sender, message.receiver)
+            await self.hull.send_message(message)
+            await self.record_sent_message(message)
+            self.last_broadcast_time = time.time()
+        
+    async def olon_append_entries_response(self, message):
+        self.logger.debug('handling response %s', message)
+        await self.record_received_message(message)
+        if len(message.recordIds) > 0:
+            # follower saved new records, so maybe we need to commit something
+            for rec_id in message.recordIds:
+                log_rec = await self.log.read(rec_id)
+                if log_rec.local_committed:
+                    continue
+                await self.command_commit_checker(log_rec)
+            return
+        tracker = self.follower_trackers[message.sender]
+        if (tracker.nextIndex >= await self.log.get_last_index()):
+            await self.catch_follower_up(message.sender, tracker.nextIndex)
+            return
+        if (message.prevLogIndex != await self.log.get_last_index()
+            or message.prevLogTerm != await self.log.get_last_term()):
+            follower_next = await self.pick_follower_next(message)
+            if follower_next is None:
+                await self.backdown_follower(message)
+                return

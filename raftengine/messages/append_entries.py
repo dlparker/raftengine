@@ -43,10 +43,10 @@ class AppendResponseMessage(BaseMessage):
     code = "append_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
-                 recordIds: List[int], leaderId: str):
+                 success: bool = False, leaderId: str):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
         self.leaderId = leaderId
-        self.recordIds = recordIds
+        self.success = success
 
     @classmethod
     def from_dict(cls, data):
@@ -55,7 +55,7 @@ class AppendResponseMessage(BaseMessage):
                   term=int(data['term']),
                   prevLogIndex=int(data['prevLogIndex']),
                   prevLogTerm=int(data['prevLogTerm']),
-                  recordIds=data['recordIds'],
+                  success=data['success'],
                   leaderId=data['leaderId'])
         return msg
         
