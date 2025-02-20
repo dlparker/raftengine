@@ -26,7 +26,7 @@ class LogRec:
     result: str  = field(default = None, repr=False)
     error: bool  = field(default = False)
     code: RecordCode = field(default=RecordCode.client_command)
-    local_committed: bool = field(default = False, repr=False)
+    local_committed: bool = field(default = False)
 
     @classmethod
     def from_dict(cls, data):

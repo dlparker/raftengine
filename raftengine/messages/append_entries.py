@@ -42,11 +42,12 @@ class AppendResponseMessage(BaseMessage):
 
     code = "append_response"
 
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
-                 success: bool = False, leaderId: str):
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,  maxIndex: int,
+                 success: bool, leaderId: str):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
         self.leaderId = leaderId
         self.success = success
+        self.maxIndex = maxIndex
 
     @classmethod
     def from_dict(cls, data):
@@ -56,10 +57,11 @@ class AppendResponseMessage(BaseMessage):
                   prevLogIndex=int(data['prevLogIndex']),
                   prevLogTerm=int(data['prevLogTerm']),
                   success=data['success'],
+                  maxIndex=data['maxIndex'],
                   leaderId=data['leaderId'])
         return msg
         
     def __repr__(self):
         msg = super().__repr__()
-        msg += f" r={len(self.recordIds)} le={self.leaderId}"
+        msg += f" s={self.success} mi={self.maxIndex} le={self.leaderId}"
         return msg

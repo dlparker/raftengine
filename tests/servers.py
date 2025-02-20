@@ -425,6 +425,7 @@ class TestHull(Hull):
         self.state_run_later_def = None
         self.timers_paused = False
         self.condition = asyncio.Condition()
+        self.logger = logging.getLogger("SimulatedNetwork")
         
     async def on_message(self, message):
 
@@ -434,11 +435,9 @@ class TestHull(Hull):
         if self.explode_on_message_code == dmsg.get_code():
             result = await super().on_message('{"code":"foo"}')
         if self.corrupt_message_with_code == dmsg.get_code():
-            mdict = json.loads(message)
-            mdict['prevLogIndex'] +=  1
-            mdict['entries'] = [LogRec(index=-1),]
-            message = json.dumps(mdict, default=lambda o:o.__dict__)
-            result = await super().on_message(message)
+            dmsg.entries = [dict(a=1),]
+            self.logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)
+            result = await self.inner_on_message(dmsg)
         else:
             result = await super().on_message(message)
         return result
@@ -464,13 +463,17 @@ class TestHull(Hull):
 
 class Network:
 
-    def __init__(self, nodes, net_mgr):
+    def __init__(self, name, nodes, net_mgr):
+        self.name = name
         self.nodes = {}
         self.net_mgr = net_mgr
         self.logger = logging.getLogger("SimulatedNetwork")
         for uri,node in nodes.items():
             self.add_node(node)
 
+    def __str__(self):
+        return f"Net: {self.name} {len(self.nodes)} nodes"
+    
     def add_node(self, node):
         if node.uri not in self.nodes:
             self.nodes[node.uri] = node
@@ -550,7 +553,7 @@ class NetManager:
         self.logger = logging.getLogger("SimulatedNetwork")
 
     def setup_network(self):
-        self.full_cluster = Network(self.start_nodes, self)
+        self.full_cluster = Network("main", self.start_nodes, self)
         return self.full_cluster
 
     def get_majority_network(self):
@@ -572,12 +575,14 @@ class NetManager:
         self.other_segments = []
         for part in segments:
             seg_len = len(part)
-            disp.append(f"{seg_len}")
-            net = Network(part, self)
             if seg_len > len(self.full_cluster.nodes) / 2:
+                net = Network("quorum", part, self)
                 self.quorum_segment = net
             else:
+                net_name = f"seg-{len(self.other_segments)}"
+                net = Network(net_name, part, self)
                 self.other_segments.append(net)
+            disp.append(f"{net.name}:{len(net.nodes)}")
         self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into seg lengths {','.join(disp)}")
 
     def unsplit(self):
@@ -677,9 +682,8 @@ class PausingServer(PilotAPI):
         await self.hull.campaign()
 
     def change_networks(self, network):
-        if self.network != network:
-            self.logger.info("%s changing networks, must be partition or heal", self.uri)
-            self.logger.info("%s new network has %d nodes", self.uri, len(network.nodes))
+        if self.network and self.network != network:
+            self.logger.info("%s changing networks, must be partition or heal, new net %s", self.uri, str(network))
         self.network = network
 
     def block_network(self):
@@ -798,6 +802,20 @@ class PausingServer(PilotAPI):
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
         return # all triggers tripped as required by mode flags, so pause ops
     
+    async def dump_stats(self):
+        if self.hull.state.state_code == "FOLLOWER":
+            leaderId=self.hull.state.leader_uri
+        else:
+            leaderId=None
+        stats = dict(uri=self.uri,
+                     state_code=self.hull.state.state_code,
+                     term=await self.log.get_term(),
+                     prevLogIndex=await self.log.get_last_index(),
+                     prevLogTerm=await self.log.get_last_term(),
+                     leaderId=leaderId)
+        return stats
+                     
+
 class PausingCluster:
 
     def __init__(self, node_count, use_log=MemoryLog):
