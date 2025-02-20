@@ -27,12 +27,13 @@ class Follower(BaseState):
         await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
+        self.last_leader_contact = time.time()
         self.logger.debug("%s append term = %d prev_index = %d local_term = %d local_index = %d",
                           self.my_uri(),  message.term,
                           message.prevLogIndex, await self.log.get_term(), await self.log.get_last_index())
 
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
-        if message.prevLogIndex == 0 and message.prevLogTerm == 0:
+        if message.prevLogIndex == 0 and message.prevLogTerm == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
             await self.log.delete_all_from(1)
         if await self.log.get_last_index() > message.prevLogIndex:
@@ -102,8 +103,6 @@ class Follower(BaseState):
                 await self.process_command_record(log_rec)
                 
     async def process_command_record(self, log_record):
-        if log_record.local_committed:
-            return
         result = None
         error_data = None
         await self.hull.record_substate(SubstateCode.running_command)
