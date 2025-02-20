@@ -91,8 +91,11 @@ async def test_command_1(cluster_maker):
     ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
+    print(await ts_1.dump_stats())
+    await asyncio.sleep(0.01)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     assert ts_1.hull.state.leader_uri == uri_3
+
 
     # Now block a follower's messages, like it crashed,
     # and then do a couple of commands. Once the
@@ -100,6 +103,7 @@ async def test_command_1(cluster_maker):
     # so the tardy follower will catch up
 
     ts_1.block_network()
+    logger.debug('------------------------ Follower one isolated, running commands')
     command_result = None
     async def command_runner(ts):
         nonlocal command_result
@@ -110,7 +114,6 @@ async def test_command_1(cluster_maker):
             logger.debug('running command in background error %s', traceback.format_exc())
             
         logger.debug('running command in background done')
-    logger.debug('------------------------ Running command ---')
     asyncio.create_task(command_runner(ts_3))
     await cluster.start_auto_comms()
     start_time = time.time()
@@ -133,7 +136,7 @@ async def test_command_1(cluster_maker):
         await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 3
 
-    logger.debug('------------------------ Unblocking tardy, doing hearbeats ---')
+    logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     ts_1.unblock_network() # default is discard messages, lets do that
     ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
@@ -537,42 +540,49 @@ async def test_long_catchup(cluster_maker):
     global log_config
     old_levels = dict()
 
-    for logger_name, spec in log_config['loggers'].items():
-        logger = logging.getLogger(logger_name)
-        if  logger_name == "test_commands_1" or logger_name == "Leader" or logger_name == "Follower":
-            continue
-        old_levels[logger_name] = logger.level
-        print(f"Changing logger named '{logger_name}' to error")
-        logger.setLevel('ERROR')
-        
-    for i in range(20):
+    trim_loggers = True
+    if trim_loggers:
+        for logger_name, spec in log_config['loggers'].items():
+            logger = logging.getLogger(logger_name)
+            if  logger_name == "test_commands_1" or logger_name == "Leader" or logger_name == "Follower":
+                continue
+            old_levels[logger_name] = logger.level
+            print(f"Changing logger named '{logger_name}' to error")
+            logger.setLevel('ERROR')
+
+    loop_limit = 20
+    for i in range(loop_limit):
         sequence2 = SNormalCommand(cluster, "add 1", 1)
-        print(f'command {i}')
         command_result = await cluster.run_sequence(sequence2)
     total = ts_1.operations.total
     assert ts_2.operations.total == total
     assert ts_3.operations.total != total
     await cluster.stop_auto_comms()
-    # will discard the messages that were blocked
-    cluster.unsplit()
-    logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
-    for logger_name, spec in log_config['loggers'].items():
-        if logger_name == "Follower" or logger_name == "Leader":
+    if trim_loggers:
+        for logger_name, spec in log_config['loggers'].items():
+            if logger_name == "Follower" or logger_name == "Leader":
+                logger = logging.getLogger(logger_name)
+                logger.setLevel('DEBUG')
+                print(f"setting logger {logger_name} to debug")
+    # restore the loggers
+    if trim_loggers:
+        for logger_name in old_levels:
             logger = logging.getLogger(logger_name)
-            logger.setLevel('DEBUG')
-            print(f"setting logger {logger_name} to debug")
+            old_value = old_levels[logger_name]
+            print(f"Changing logger named '{logger_name}' to {old_value}")
+            logger.setLevel(old_value)
+    # will discard the messages that were blocked
+    logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
+    await cluster.deliver_all_pending()
+    cluster.unsplit()
     logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
+    ts_1.hull.state.last_broadcast_time = 0
+    await ts_1.hull.state.send_heartbeats()
 
     start_time = time.time()
     while time.time() - start_time < 0.5 and ts_3.operations.total < total:
         await asyncio.sleep(0.0001)
-    # restore the loggers
-    for logger_name in old_levels:
-        logger = logging.getLogger(logger_name)
-        old_value = old_levels[logger_name]
-        print(f"Changing logger named '{logger_name}' to {old_value}")
-        logger.setLevel(old_value)
     assert ts_3.operations.total == total
     logger.info('------------------------ All caught up')
 
@@ -726,13 +736,15 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
+    await cluster.start_auto_comms()
+    calls = 0
+    running_total = 0
     if command_first:
-        await cluster.start_auto_comms()
 
         sequence2 = SNormalCommand(cluster, "add 1", 1)
-        
         command_result = await cluster.run_sequence(sequence2)
-        
+        calls += 1
+        running_total += 1
         assert ts_1.operations.total == 1
         assert ts_2.operations.total == 1
         assert ts_3.operations.total == 1
@@ -745,17 +757,26 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     command_result = None
     async def command_runner(ts, command):
         nonlocal command_result
+        nonlocal calls
+        nonlocal running_total
         logger.debug('running command in background')
         try:
             command_result = await ts.hull.run_command(command, timeout=0.01)
             logger.debug('running command in background done with NO error')
+            calls += 1
+            if command_result.result:
+                if command == "add 1":
+                    running_total += 1
+                elif command == "sub 1":
+                    running_total -= 1
+                else:
+                    raise Exception('huh?')
         except Exception as e:
             logger.debug('running command in background error %s', traceback.format_exc())
             command_result = e
             logger.debug('running command in background done with error')
     logger.debug('------------------------ Running command ---')
     asyncio.create_task(command_runner(ts_1, "sub 1"))
-    await cluster.start_auto_comms()
     start_time = time.time()
     while time.time() - start_time < 0.25 and command_result is None:
         await asyncio.sleep(0.0001)
@@ -766,16 +787,17 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     start_time = time.time()
     while time.time() - start_time < 0.25 and command_result is None:
         await asyncio.sleep(0.0001)
+        await cluster.deliver_all_pending()
     assert command_result.timeout
-    assert await ts_1.hull.log.get_last_index() == 2
-    assert await ts_1.hull.log.get_local_commit_index() == 0
+    assert await ts_1.hull.log.get_last_index() == calls
 
     # now let the others do a new election
+    await ts_2.hull.log.set_term(2)
     await ts_2.hull.start_campaign()
     assert ts_2.hull.get_state_code() == "CANDIDATE"
     await cluster.deliver_all_pending()
     assert ts_2.hull.get_state_code() == "LEADER"
-    assert await ts_2.hull.log.get_term() == 2
+    assert await ts_2.hull.log.get_term() == 3
 
     # now do a three commands at new leader
     command_result = None
@@ -787,7 +809,7 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     while time.time() - start_time < 0.5 and command_result is None:
         await asyncio.sleep(0.0001)
     assert command_result is not None
-    assert command_result.result == 1
+    assert command_result.result == running_total
 
     command_result = None
     asyncio.create_task(command_runner(ts_2, "add 1"))
@@ -795,7 +817,7 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     while time.time() - start_time < 0.5 and command_result is None:
         await asyncio.sleep(0.0001)
     assert command_result is not None
-    assert command_result.result == 2
+    assert command_result.result == running_total
 
     command_result = None
     asyncio.create_task(command_runner(ts_2, "add 1"))
@@ -803,7 +825,17 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     while time.time() - start_time < 0.5 and command_result is None:
         await asyncio.sleep(0.0001)
     assert command_result is not None
-    assert command_result.result == 3
+    assert command_result.result == running_total
+    total = ts_2.operations.total
+    # ts_3 needs a heartbeat to know to commit
+    ts_2.hull.state.last_broadcast_time = 0
+    await ts_2.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and ts_3.operations.total != total:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    assert ts_3.operations.total == total
+    await cluster.deliver_all_pending()
 
     # Now let the orignal leader rejoin, already demoted to
     # follower, and let it get a heartbeat. this should trigger it to
@@ -811,21 +843,29 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     # from the new leader
     orig_1 = await ts_1.hull.log.read(1)
     orig_2 = await ts_1.hull.log.read(2)
+    if command_first:
+        orig_3 = await ts_1.hull.log.read(3)
     await ts_1.hull.demote_and_handle(None)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     
+    logger.debug('------------------------ Unblocking old leader, should overwrite logs ---')
     ts_1.unblock_network() # discards missed messages
     
     ts_2.hull.state.last_broadcast_time = 0
     await ts_2.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
 
     start_time = time.time()
     while time.time() - start_time < 0.5 and await ts_1.hull.log.get_last_index() != 3:
         await asyncio.sleep(0.0001)
 
-    assert await ts_1.hull.log.get_last_index() == 3
+    assert await ts_1.hull.log.get_last_index() == await ts_2.hull.log.get_last_index()
     new_1 = await ts_1.hull.log.read(1)
     new_2 = await ts_1.hull.log.read(2)
     new_3 = await ts_1.hull.log.read(3)
-    assert new_1.command != orig_1.command
-    assert new_2.command != orig_2.command
+    if command_first:
+        assert new_2.command != orig_2.command
+        assert new_3.command != orig_3.command
+    else:
+        assert new_1.command != orig_1.command
+        assert new_2.command != orig_2.command

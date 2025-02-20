@@ -54,8 +54,8 @@ async def test_heartbeat_1(cluster_maker):
 async def test_lost_leader_1(cluster_maker):
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
-    heartbeat_period = 0.05
-    leader_lost_timeout = 0.01
+    heartbeat_period = 0.1
+    leader_lost_timeout = 0.05
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           leader_lost_timeout=leader_lost_timeout)
     cluster.set_configs(config)

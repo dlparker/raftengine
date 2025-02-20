@@ -1,7 +1,10 @@
 Immediatly:
 
 
-    10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
+
+10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
+
+20. using **data in from_dict for messages instead of spelling it out
 
 DONE    !!! Clean up LogRec, chaning "user_data" to command and result and add custom json serializer so
         that serialising the entries array just works

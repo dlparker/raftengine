@@ -31,17 +31,20 @@ class Follower(BaseState):
                           self.my_uri(),  message.term,
                           message.prevLogIndex, await self.log.get_term(), await self.log.get_last_index())
 
-        # Very rare case, sender thinks it is leader but has old term, probably
-        # a network partition, or some kind of latency problem with the claimant's
-        # operations that made us have an election. Te1ll the sender it is not leader any more.
-        if message.term < await self.log.get_term():
-            await self.hull.record_substate(SubstateCode.older_term)
-            await self.send_reject_append_response(message)
+        # special case, unfortunately. If leader says 0/0, then we have to empty the log
+        if message.prevLogIndex == 0 and message.prevLogTerm == 0:
+            self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
+            await self.log.delete_all_from(1)
+        if await self.log.get_last_index() > message.prevLogIndex:
+                self.logger.warning("%s Leader indicates invalid record after index %s, deleting",
+                                    self.my_uri(), message.prevLogIndex)
+                await self.log.delete_all_from(message.prevLogIndex + 1)
+        if (message.term != await self.log.get_term()
+            or await self.log.get_last_index() != message.prevLogIndex
+            or await self.log.get_last_term() != message.prevLogTerm):
+            await self.send_no_sync_append_response(message)
             return
-        self.last_leader_contact = time.time()
-        if (message.prevLogIndex == await self.log.get_last_index()
-            and message.prevLogTerm == await self.log.get_last_term()
-            and message.entries == []):
+        if len(message.entries) == 0:
             if self.leader_uri != message.sender:
                 self.leader_uri = message.sender
                 self.last_vote = message
@@ -51,37 +54,41 @@ class Follower(BaseState):
             else:
                 self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                                   message.sender)
-            await self.send_append_entries_response(message, None)
+            await self.send_append_entries_response(message)
             await self.hull.record_substate(SubstateCode.got_heartbeat)
             if message.commitIndex > await self.log.get_local_commit_index():
                 await self.new_leader_commit_index(message.commitIndex)
             return
-        if (message.prevLogIndex != await self.log.get_last_index()
-            or message.prevLogTerm != await self.log.get_last_term()):
-            # we are not in sync at current log rec, ask leader to
-            # send us something else that matches what we need.
-            await self.ask_for_catchup(message)
-            return
-        
         await self.hull.record_substate(SubstateCode.appending)
         recs = []
         for log_rec in message.entries:
             # make sure we don't copy commit flag
             log_rec.local_committed = False
             if await self.log.get_last_index() >= log_rec.index:
-                self.logger.warning("%s Leader record replacing our local record at index %s",
+                self.logger.warning("%s Leader instructed delete of records starrting at index %s",
                                     self.my_uri(), log_rec.index)
-                recs.append(await self.log.replace(log_rec))
-            else:
-                self.logger.warning("%s Leader record added at index %s",
-                                    self.my_uri(), log_rec.index)
-                recs.append(await self.log.append(log_rec))
+                await self.log.delete_all_from(log_rec.index)
+            self.logger.warning("%s Added record from leader at index %s",
+                                self.my_uri(), log_rec.index)
+            recs.append(await self.log.append(log_rec))
         await self.hull.record_substate(SubstateCode.replied_to_command)
-        await self.send_append_entries_response(message, recs)
-        if message.commitIndex <= await self.log.get_last_index():
+        await self.send_append_entries_response(message)
+        if message.commitIndex >= await self.log.get_last_index():
             if message.commitIndex > await self.log.get_local_commit_index():
                 await self.new_leader_commit_index(message.commitIndex)
         return
+
+    async def send_no_sync_append_response(self, message):
+        reply = AppendResponseMessage(message.receiver,
+                                      message.sender,
+                                      term=await self.log.get_term(),
+                                      success=False,
+                                      maxIndex=await self.log.get_last_index(),
+                                      prevLogTerm=message.prevLogTerm,
+                                      prevLogIndex=message.prevLogIndex,
+                                      leaderId=self.leader_uri)
+        await self.hull.send_response(message, reply)
+        self.logger.info("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
         local_commit = await self.log.get_local_commit_index()
@@ -99,6 +106,8 @@ class Follower(BaseState):
                 await self.process_command_record(log_rec)
                 
     async def process_command_record(self, log_record):
+        if log_record.local_committed:
+            return
         result = None
         error_data = None
         await self.hull.record_substate(SubstateCode.running_command)
@@ -165,64 +174,6 @@ class Follower(BaseState):
         await self.log.set_term(message.term)
         # Tell the base class method to route the message back to us as normal
         return message
-
-    async def ask_for_catchup(self, message):
-        # figure out what to ask for based on what
-        # leader sent
-        target_index = None
-        target_term = None
-        my_last_index = await self.log.get_last_index()
-        my_last_term = await self.log.get_last_term()
-        if message.prevLogIndex == 0:
-            if my_last_index > 0:
-                await self.log.delete_all_from(1)
-                assert message.prevLogIndex == await self.log.get_last_index()
-                assert message.prevLogTerm == await self.log.get_last_term()
-            target_index = 0
-            target_term = 0
-        elif message.prevLogIndex > my_last_index:
-            # tell leader to back down
-            target_index = my_last_index
-            target_term = my_last_term
-        elif message.prevLogIndex < my_last_index:
-            # can happen if used to be leader and saved uncommitted
-            # logs that did not get preserved across election
-            rec = await self.log.read(message.prevLogIndex)
-            if rec.term == message.prevLogTerm:
-                # We are in sync on this record, prolly got
-                # here through backdown method. Delete everything
-                # with a higher index
-                index = message.prevLogIndex + 1
-                await self.log.delete_all_from(index)
-                target_index = message.prevLogIndex
-                target_term = message.prevLogTerm
-                assert message.prevLogIndex == await self.log.get_last_index()
-                assert message.prevLogTerm == await self.log.get_last_term()
-                # we are in sync with current message, so reprocess it to
-                # allow any logs in it to be save and continued with normal
-                # catchup
-                await self.on_message(message)
-                return
-        if target_index is None:
-            # we are backing down, but no match yet
-            target_index = message.prevLogIndex - 1
-            if target_index == 0:
-                target_term = 0
-            else:
-                rec = await self.log.read(target_index)
-                target_term = rec.term
-                
-        self.logger.info("%s requesting catchup starting at index %d term %d", self.my_uri(),
-                         target_index, target_term)
-        await self.hull.record_substate(SubstateCode.need_catchup)
-        append_response = AppendResponseMessage(sender=self.my_uri(),
-                                                receiver=message.sender,
-                                                recordIds=[],
-                                                term=await self.log.get_term(),
-                                                prevLogIndex=target_index,
-                                                prevLogTerm=target_term,
-                                                leaderId=self.leader_uri)
-        await self.hull.send_response(message, append_response)
         
     async def leader_lost(self):
         await self.hull.record_substate(SubstateCode.leader_lost)
@@ -241,21 +192,16 @@ class Follower(BaseState):
         else:
             await self.hull.record_substate(SubstateCode.voting_no)
         
-    async def send_append_entries_response(self, message, new_records):
-        record_ids = []
-        if new_records is not None:
-            record_ids = [ rec.index for rec in new_records ]
-        my_index = await self.log.get_last_index()
-        my_term = await self.log.get_last_term()
+    async def send_append_entries_response(self, message):
         append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
                                                 term=await self.log.get_term(),
-                                                prevLogIndex=my_index,
-                                                prevLogTerm=my_term,
-                                                recordIds=record_ids,
+                                                success=True,
+                                                maxIndex=await self.log.get_last_index(),
+                                                prevLogIndex=message.prevLogIndex,
+                                                prevLogTerm=message.prevLogTerm,
                                                 leaderId=self.leader_uri)
-        if new_records is not None:
-            self.logger.info("%s sending response %s", self.my_uri(), append_response)
+        self.logger.debug("%s sending response %s", self.my_uri(), append_response)
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):
@@ -268,3 +214,4 @@ class Follower(BaseState):
         # reschedule
         await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
     
+
