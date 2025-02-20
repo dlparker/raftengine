@@ -70,7 +70,6 @@ class Follower(BaseState):
         # We know index is not equal cause of two checks above in first and
         # third if statement clauses
         await self.hull.record_substate(SubstateCode.appending)
-        processor = self.hull.get_processor()
         recs = []
         local_commit = await self.log.get_local_commit_index()
         for log_rec in message.entries:
@@ -83,6 +82,8 @@ class Follower(BaseState):
                                     self.my_uri(), log_rec.index)
                 recs.append(await self.log.replace(log_rec))
             else:
+                self.logger.warning("%s Leader record added at index %s",
+                                    self.my_uri(), log_rec.index)
                 recs.append(await self.log.append(log_rec))
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message, recs)
@@ -92,15 +93,14 @@ class Follower(BaseState):
 
     async def new_leader_commit_index(self, leader_commit_index):
         local_commit = await self.log.get_local_commit_index()
-        if local_commit == leader_commit_index:
-            return
         self.logger.info("%s Leader commit index %d higher than ours %d ",
-                            self.my_uri(), local_commit, leader_commit_index)
+                            self.my_uri(), leader_commit_index, local_commit)
         if local_commit == 0:
             min_index = 1
         else:
             min_index = local_commit
-        max_index = leader_commit_index + 1
+        last_index = await self.log.get_last_index()
+        max_index = min(leader_commit_index + 1, last_index + 1)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if log_rec is None:
@@ -205,6 +205,7 @@ class Follower(BaseState):
             last_valid_index = my_last_index
             last_valid_term = my_last_term
 
+        self.logger.info("%s requesting catchup starting at %d", self.my_uri(), last_valid_index + 1)
         await self.hull.record_substate(SubstateCode.need_catchup)
         append_response = AppendResponseMessage(sender=self.my_uri(),
                                                 receiver=message.sender,
@@ -245,6 +246,8 @@ class Follower(BaseState):
                                                 prevLogTerm=my_term,
                                                 recordIds=record_ids,
                                                 leaderId=self.leader_uri)
+        if new_records is not None:
+            self.logger.info("%s sending response %s", self.my_uri(), append_response)
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):

@@ -522,7 +522,7 @@ class Network:
         msg = node.out_messages.pop(0)
         if node.block_messages:
             self.logger.info("------------ Network Simulation DROPPING (caching) outgoing message %s", msg)
-            target.blocked_out_messages.append(msg)
+            node.blocked_out_messages.append(msg)
             return None
         target = self.get_node_by_uri(msg.receiver)
         if not target:
@@ -573,7 +573,7 @@ class NetManager:
                 self.quorum_segment = net
             else:
                 self.other_segments.append(net)
-        self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into {','.join(disp)}")
+        self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into seg lengths {','.join(disp)}")
 
     def unsplit(self):
         if self.other_segments is None:
@@ -591,10 +591,6 @@ class NetManager:
         if message.receiver in self.quorum_segment.nodes:
             await self.quorum_segment.post_in_message(message)
             return
-        for seg in self.other_segments:
-            if message.receiver in seg.nodes:
-                await seg.post_in_message(message)
-                return
 
     async def deliver_all_pending(self,  quorum_only=False, out_only=False):
         if self.quorum_segment is None:
@@ -898,6 +894,7 @@ class PausingCluster:
         self.logger.info("cleaning up cluster")
         if self.auto_comms_flag:
             await self.stop_auto_comms()
+            await asyncio.sleep(0)
         for uri, node in self.nodes.items():
             await node.cleanup()
         # lose references to everything

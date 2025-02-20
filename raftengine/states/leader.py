@@ -132,11 +132,8 @@ class Leader(BaseState):
                 
     async def start(self):
         await super().start()
-        last_index = await self.log.get_last_index()
         for uri in self.hull.get_cluster_node_ids():
-            self.follower_trackers[uri] = FollowerTracker(uri=uri,
-                                                          nextIndex=last_index,
-                                                          matchIndex=0)
+            tracker = await self.tracker_for_follower(uri)
         await self.run_after(self.hull.get_heartbeat_period(), self.send_heartbeats)
         await self.send_heartbeats()
 
@@ -145,7 +142,7 @@ class Leader(BaseState):
         raw_rec = LogRec(command=command, term=await self.log.get_term())
         log_rec = await self.log.append(raw_rec)
         # now send it to everybody
-        await self.hull.record_substate(SubstateCode.broadcasting_command)
+        await self.hull.record_substate(SubstateCode.preparing_command)
         await self.broadcast_log_record(log_rec)
         waiter = CommandWaiter(self, log=self.log, orig_log_record=log_rec, timeout=timeout)
         self.command_waiters[log_rec.index] = waiter
@@ -154,7 +151,6 @@ class Leader(BaseState):
         return result
 
     async def broadcast_log_record(self, log_record):
-        await self.hull.record_substate(SubstateCode.preparing_command)
         term = await self.log.get_term()
         commit_index = await self.log.get_local_commit_index()
         proto_message = AppendEntriesMessage(sender=self.my_uri(),
@@ -227,6 +223,13 @@ class Leader(BaseState):
             max_index = start_index + 10
         for index in range(start_index, max_index + 1):
             entries.append(await self.log.read(index))
+        if start_index == 1:
+            prevIndex = 0
+            prevTerm = 0
+        else:
+            prevRec = await self.log.read(start_index - 1)
+            prevIndex = prevRec.index
+            prevTerm = prevRec.term
         # not sure why the doc says I need this, follower always tells us.
         tracker = self.follower_trackers[message.sender]
         tracker.matchIndex = message.prevLogIndex
@@ -235,8 +238,8 @@ class Leader(BaseState):
                                        receiver=message.sender,
                                        term=await self.log.get_term(),
                                        entries=entries,
-                                       prevLogTerm=await self.log.get_term(),
-                                       prevLogIndex=await self.log.get_last_index(),
+                                       prevLogTerm=prevIndex,
+                                       prevLogIndex=prevTerm,
                                        commitIndex=await self.log.get_local_commit_index())
         self.logger.info("sending catchup %s", message)
         await self.hull.record_substate(SubstateCode.sending_catchup)
@@ -283,23 +286,27 @@ class Leader(BaseState):
         return None
 
     async def record_sent_message(self, message):
-        tracker = self.follower_trackers[message.receiver]
+        tracker = await self.tracker_for_follower(message.sender)
         tracker.msg_count += 1
         tracker.last_msg_time = time.time()
 
     async def record_received_message(self, message):
-        tracker = self.follower_trackers.get(message.sender, None)
-        if not tracker:
-            # not sure how this could happen, config should update before hearing from
-            # new follower, but let's code defensively
-            tracker = FollowerTracker(uri=message.sender,
-                                      nextIndex=0,
-                                      matchIndex=0)
-            self.follower_trackers[message.sender] = tracker
+        tracker = await self.tracker_for_follower(message.sender)
         tracker.reply_count += 1
         tracker.last_reply_time = time.time()
         tracker.matchIndex = message.prevLogIndex
                                 
-
+    async def tracker_for_follower(self, uri):
+        tracker = self.follower_trackers.get(uri, None)
+        last_index = await self.log.get_last_index()
+        if not tracker:
+            # not sure how this could happen, config should update before hearing from
+            # new follower, but let's code defensively
+            tracker = FollowerTracker(uri=uri,
+                                      nextIndex=last_index + 1,
+                                      matchIndex=0)
+            self.follower_trackers[uri] = tracker
+        return tracker
+        
 
 
