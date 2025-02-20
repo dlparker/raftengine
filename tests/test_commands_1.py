@@ -7,6 +7,7 @@ import traceback
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.api.log_api import LogRec
+from dev_tools.memory_log import MemoryLog
 
 from servers import WhenMessageOut, WhenMessageIn
 from servers import WhenHasLogIndex
@@ -523,7 +524,8 @@ async def test_long_catchup(cluster_maker):
     # Now we want to block all messages from the leader to
     # one follower, as though it has crashed, then
     # run a bunch of commands and make sure that
-    # the catchup process gets them all
+    # the catchup process gets them all. 
+    
 
     logger.error('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
@@ -533,7 +535,6 @@ async def test_long_catchup(cluster_maker):
     logger.error('---------!!!!!!! spliting network ')
     cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
-
     # quiet the logging down
     global log_config
     old_levels = dict()
@@ -574,4 +575,71 @@ async def test_long_catchup(cluster_maker):
         print(f"Changing logger named '{logger_name}' to {old_value}")
         logger.setLevel(old_value)
     assert ts_3.operations.total == total
+    logger.info('------------------------ All caught up')
+
+async def test_full_catchup(cluster_maker):
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+    logger = logging.getLogger(__name__)
+    logger.info('------------------------ Election done')
+    logger.error('---------!!!!!!! starting comms')
+    await cluster.start_auto_comms()
+
+
+    # Now we want to block all messages from the leader to
+    # one follower, as though it has crashed, then
+    # run a bunch of commands and make sure that
+    # the catchup process gets them all. 
+    
+
+    logger.error('---------!!!!!!! stopping comms')
+    await cluster.stop_auto_comms()
+    part1 = {uri_3: ts_3}
+    part2 = {uri_1: ts_1,
+             uri_2: ts_2}
+    logger.error('---------!!!!!!! spliting network ')
+    cluster.split_network([part1, part2])
+    logger.info('------------------ follower %s isolated, starting command loop', uri_3)
+    sequence2 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence2)
+    assert ts_1.operations.total == 1
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and ts_2.operations.total < ts_1.operations.total:
+        await asyncio.sleep(0.0001)
+    assert ts_2.operations.total == ts_1.operations.total
+    logger.debug('------------------------ Correct command 1 done')
+    sequence3 = SNormalCommand(cluster, "add 1", 1)
+    command_result = await cluster.run_sequence(sequence3)
+    assert ts_1.operations.total == 2
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and ts_2.operations.total < ts_1.operations.total:
+        await asyncio.sleep(0.0001)
+    assert ts_2.operations.total == ts_1.operations.total
+    logger.debug('------------------------ Correct command 2 done')
+
+    assert ts_3.operations.total != ts_1.operations.total
+    await cluster.stop_auto_comms()
+    # will discard the messages that were blocked
+    cluster.unsplit()
+    logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, ts_1.operations.total)
+    logger.error('---------!!!!!!! starting comms')
+    await cluster.start_auto_comms()
+    ts_1.hull.state.last_broadcast_time = 0
+    await ts_1.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and ts_3.operations.total < ts_1.operations.total:
+        await asyncio.sleep(0.0001)
+    assert ts_3.operations.total == ts_1.operations.total
+    await cluster.stop_auto_comms()
     logger.info('------------------------ All caught up')
