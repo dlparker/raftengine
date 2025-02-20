@@ -162,6 +162,14 @@ class Records:
             return 0
         cursor.close()
         return rec_data['rec_index']
+
+    async def delete_all_from(self, index: int):
+        if self.db is None:
+            self.open()
+        cursor = self.db.cursor()
+        cursor.execute("delete from records where rec_index ?", [index,])
+        self.db.commit()
+        cursor.close()
     
 class SqliteLog(LogAPI):
 
@@ -261,4 +269,8 @@ class SqliteLog(LogAPI):
             self.records.open()
         return self.records.get_local_commit_index()
 
+    async def delete_all_from(self, index: int):
+        if not self.records.is_open():
+            self.records.open()
+        return self.records.delete_all_from(index)
     

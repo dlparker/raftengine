@@ -129,6 +129,9 @@ class SubstateCode(str, Enum):
     """ Sending catchup log records to follower """
     sending_catchup = "SENDING_CATCHUP"
 
+    """ Sending catchup log records to follower using backdown method """
+    sending_backdown = "SENDING_BACKDOWN"
+
     """ Just sent new log entries append (as leader) """
     sent_new_entries = "SENT_NEW_ENTRIES"
 
