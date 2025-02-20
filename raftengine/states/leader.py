@@ -216,6 +216,7 @@ class Leader(BaseState):
             await self.hull.send_message(message)
             await self.record_sent_message(message)
             self.last_broadcast_time = time.time()
+            await self.run_after(self.hull.get_heartbeat_period(), self.send_heartbeats)
         
     async def on_append_entries_response(self, message):
         tracker = self.follower_trackers[message.sender]

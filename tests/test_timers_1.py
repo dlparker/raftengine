@@ -46,11 +46,46 @@ async def test_heartbeat_1(cluster_maker):
         if len(full_in_ledger) > 1 and len(full_out_ledger) > 1:
             break
         await asyncio.sleep(fraction)
+        
     assert full_out_ledger[0].get_code() == AppendEntriesMessage.get_code()
     assert full_in_ledger[0].get_code() == AppendEntriesMessage.get_code()
     assert full_out_ledger[1].get_code() == AppendResponseMessage.get_code()
     assert full_in_ledger[1].get_code() == AppendResponseMessage.get_code()
+
+        
+async def test_heartbeat_2(cluster_maker):
+    cluster = cluster_maker(3)
+    heartbeat_period = 0.02
+    leader_lost_timeout = 0.1
+    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
+                                          leader_lost_timeout=leader_lost_timeout)
+    cluster.set_configs(config)
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    logger = logging.getLogger(__name__)
+    await cluster.start()
+    await ts_3.hull.start_campaign()
+
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    await cluster.start_auto_comms()
+    assert ts_3.hull.get_state_code() == "LEADER"
+    assert ts_1.hull.state.leader_uri == uri_3
+    assert ts_2.hull.state.leader_uri == uri_3
+
+    # make sure running for a time exceeding the timeout does not
+    # cause a leader lost situation
+    fraction = leader_lost_timeout/10.0
+    start_time = time.time()
+    while time.time() - start_time < leader_lost_timeout  * 2:
+        await asyncio.sleep(0.001)
     
+    assert ts_3.hull.get_state_code() == "LEADER"
+    assert ts_1.hull.state.leader_uri == uri_3
+    assert ts_2.hull.state.leader_uri == uri_3
+    await cluster.stop_auto_comms()
+        
 async def test_lost_leader_1(cluster_maker):
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
@@ -86,4 +121,10 @@ async def test_lost_leader_1(cluster_maker):
     assert (ts_1.hull.state.state_code == "LEADER"
             or ts_2.hull.state.state_code == "LEADER"
             or ts_3.hull.state.state_code == "LEADER")
+
+    for ts in ts_1, ts_2, ts_3:
+        if ts.hull.state.state_code == "LEADER":
+            leader = ts
+            leader_uri = ts.uri
+            break
     

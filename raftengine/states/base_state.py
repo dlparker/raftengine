@@ -107,7 +107,8 @@ class BaseState:
         reply = AppendResponseMessage(message.receiver,
                                       message.sender,
                                       term=await self.log.get_term(),
-                                      recordIds=[],
+                                      success=False,
+                                      maxIndex=await self.log.get_last_index(),
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
                                       leaderId=leaderId)

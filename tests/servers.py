@@ -21,8 +21,8 @@ from dev_tools.sqlite_log import SqliteLog
 from raftengine.api.pilot_api import PilotAPI
 
 def setup_logging(additions=None):
-    #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-    lfstring = '[%(levelname)s] %(name)s: %(message)s'
+    lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    #lfstring = '[%(levelname)s] %(name)s: %(message)s'
     log_formaters = dict(standard=dict(format=lfstring))
     logfile_path = Path('.', "test.log")
     if False:
