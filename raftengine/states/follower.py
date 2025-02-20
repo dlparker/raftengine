@@ -64,10 +64,6 @@ class Follower(BaseState):
         for log_rec in message.entries:
             # make sure we don't copy commit flag
             log_rec.local_committed = False
-            if await self.log.get_last_index() >= log_rec.index:
-                self.logger.warning("%s Leader instructed delete of records starrting at index %s",
-                                    self.my_uri(), log_rec.index)
-                await self.log.delete_all_from(log_rec.index)
             self.logger.warning("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
             recs.append(await self.log.append(log_rec))
