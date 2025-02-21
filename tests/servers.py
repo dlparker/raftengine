@@ -21,8 +21,8 @@ from dev_tools.sqlite_log import SqliteLog
 from raftengine.api.pilot_api import PilotAPI
 
 def setup_logging(additions=None):
-    lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-    #lfstring = '[%(levelname)s] %(name)s: %(message)s'
+    #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    lfstring = '[%(levelname)s] %(name)s: %(message)s'
     log_formaters = dict(standard=dict(format=lfstring))
     logfile_path = Path('.', "test.log")
     if False:
@@ -1011,14 +1011,18 @@ class SNormalCommand(StdSequence):
         self.logger.debug("Setup normal command sequence, will run command at %s", node.uri)
         
     async def runner_wrapper(self, node):
+        # wait until has commit index
         await node.run_till_triggers()
         if node == self.leader:
+            # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
             node.hull.state.last_broadcast_time = 0
             await node.hull.state.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
+            # leader needs to send commit index to all other nodes, even
+            # if they are blocked or partitioned away
             for i in  range(0, len(self.cluster.nodes) -1):
                 await node.run_till_triggers()
         self.done_count += 1

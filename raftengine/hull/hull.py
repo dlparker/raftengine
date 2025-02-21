@@ -14,8 +14,9 @@ from raftengine.states.candidate import Candidate
 from raftengine.states.leader import Leader, CommandResult
 from raftengine.states.leader import CommandResult
 from raftengine.api.pilot_api import PilotAPI
+from raftengine.api.hull_api import HullAPI
 
-class Hull:
+class Hull(HullAPI):
 
     def __init__(self, cluster_config, local_config, pilot: PilotAPI):
         self.cluster_config = cluster_config
@@ -79,15 +80,15 @@ class Hull:
         elif self.state.state_code == StateCode.candidate:
             return CommandResult(command, retry=1)
     
-    # Called by State and in API
+    # Called by State
     def get_log(self):
         return self.log
 
-    # Called by State and in API
+    # Called by State
     def get_state_code(self):
         return self.state.state_code
 
-    # Called by State and in API
+    # Called by State
     def get_my_uri(self):
         return self.local_config.uri
         

@@ -173,9 +173,6 @@ class Leader(BaseState):
             if uri == self.my_uri():
                 continue
             tracker = self.follower_trackers[uri]
-            if tracker.nextIndex != log_record.index:
-                await self.send_catchup(uri)
-                continue
             tracker.nextIndex += 1
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
             message.receiver = uri
@@ -202,9 +199,20 @@ class Leader(BaseState):
             if uri == self.my_uri():
                 continue
             tracker = self.follower_trackers[uri]
-            if tracker.nextIndex != last_index + 1:
-                await self.send_catchup(uri, tracker.nextIndex)
-                continue
+            #
+            # The following code used to be here, but
+            # I couldn't manage to make any test code
+            # trigger it. It would only happen if
+            # a heartbeat was sent when the follower
+            # was in the processes of being backed down
+            # or caught up. Since that process happens
+            # only when a heartbeat or command is sent
+            # out and the follower rejects it, that
+            # means that this test will never match due
+            # to the time check above. 
+            # if tracker.nextIndex != last_index + 1:
+            #     await self.send_catchup(uri, tracker.nextIndex)
+            #     continue
             message = AppendEntriesMessage(sender=my_uri,
                                            receiver=uri,
                                            term=term,
@@ -234,8 +242,6 @@ class Leader(BaseState):
                 # can arrive out of order if comms is not RPC based
                 if tracker.matchIndex < message.prevLogIndex:
                     tracker.matchIndex = message.prevLogIndex
-                if tracker.nextIndex < message.prevLogIndex + 1:
-                    tracker.nextIndex = message.prevLogIndex + 1
             if (tracker.matchIndex > await self.log.get_local_commit_index()):
                 log_rec = await self.log.read(tracker.matchIndex)
                 await self.command_commit_checker(log_rec)
@@ -247,7 +253,8 @@ class Leader(BaseState):
                           message.sender, tracker.nextIndex, tracker.matchIndex)
             # all in sync, done
             return
-        await self.backdown_follower(message.sender)
+        if tracker.nextIndex > 0:
+            await self.backdown_follower(message.sender)
         self.logger.debug('After response processing %s tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
 
@@ -258,15 +265,24 @@ class Leader(BaseState):
         for index in range(next_index, max_index + 1):
             rec = await self.log.read(index)
             # make sure the follower doesn't get confused about their local commit status
-            rec.local_commit = False
+            rec.local_committed = False
             entries.append(rec)
-        if next_index == 1:
-            prevLogIndex = 0
-            prevLogTerm = 0
-        else:
-            pre_rec = await self.log.read(next_index - 1)
-            prevLogIndex = pre_rec.index
-            prevLogTerm = pre_rec.term
+        # The following code is vulnerable if next_index == 1,
+        # because it will blow up trying to read the record
+        # However, it should not happen because the only.
+        # way the first record will sent to a client that is behind,
+        # meaning that it did not get it when it was initially sent out
+        # is if the leader does a backdown operation.
+        # If somebody ever tries to optimize the backdown operation, that
+        # could break this, and you'd need:
+        # if next_index == 1:
+        #    prevLogIndex = 0
+        #    prevLogTerm = 0
+        # else:
+        pre_rec = await self.log.read(next_index - 1)
+        prevLogIndex = pre_rec.index
+        prevLogTerm = pre_rec.term
+
         tracker = self.follower_trackers[uri]
         tracker.nextIndex = next_index + 1
         message = AppendEntriesMessage(sender=self.my_uri(),
@@ -285,8 +301,6 @@ class Leader(BaseState):
         tracker = self.follower_trackers[uri]
         next_index = tracker.nextIndex - 1
         tracker.nextIndex = next_index 
-        if next_index == 0:
-            return
         if next_index == 1:
             prevLogIndex = 0
             prevLogTerm = 0
@@ -295,7 +309,7 @@ class Leader(BaseState):
             prevLogIndex = pre_rec.index
             prevLogTerm = pre_rec.term
         rec = await self.log.read(next_index)
-        rec.local_commit = False
+        rec.local_committed = False
         entries = [rec,]
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,

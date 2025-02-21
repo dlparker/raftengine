@@ -37,9 +37,13 @@ class Follower(BaseState):
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
             await self.log.delete_all_from(1)
         if await self.log.get_last_index() > message.prevLogIndex:
+            our_rec = await self.log.read(message.prevLogIndex)
+            if our_rec.term != message.prevLogTerm:
                 self.logger.warning("%s Leader indicates invalid record after index %s, deleting",
                                     self.my_uri(), message.prevLogIndex)
                 await self.log.delete_all_from(message.prevLogIndex + 1)
+                await self.send_no_sync_append_response(message)
+                return
         if (message.term != await self.log.get_term()
             or await self.log.get_last_index() != message.prevLogIndex
             or await self.log.get_last_term() != message.prevLogTerm):
@@ -63,9 +67,7 @@ class Follower(BaseState):
         await self.hull.record_substate(SubstateCode.appending)
         recs = []
         for log_rec in message.entries:
-            # make sure we don't copy commit flag
-            log_rec.local_committed = False
-            self.logger.warning("%s Added record from leader at index %s",
+            self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
             recs.append(await self.log.append(log_rec))
         await self.hull.record_substate(SubstateCode.replied_to_command)
