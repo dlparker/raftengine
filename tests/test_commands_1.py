@@ -715,12 +715,12 @@ async def test_follower_run_error(cluster_maker):
 
 
 async def test_follower_rewrite_1(cluster_maker):
-    await follower_rewrite_inner(cluster_maker, True)
+    await follower_rewrite12_inner(cluster_maker, True)
 
 async def test_follower_rewrite_2(cluster_maker):
-    await follower_rewrite_inner(cluster_maker, False)
+    await follower_rewrite12_inner(cluster_maker, False)
     
-async def follower_rewrite_inner(cluster_maker, command_first):
+async def follower_rewrite12_inner(cluster_maker, command_first):
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -869,3 +869,89 @@ async def follower_rewrite_inner(cluster_maker, command_first):
     else:
         assert new_1.command != orig_1.command
         assert new_2.command != orig_2.command
+
+async def test_follower_rewrite_3(cluster_maker):
+    await follower_rewrite34_inner(cluster_maker, True)
+    
+async def test_follower_rewrite_4(cluster_maker):
+    await follower_rewrite34_inner(cluster_maker, False)
+    
+async def follower_rewrite34_inner(cluster_maker, command_first):
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+    logger = logging.getLogger(__name__)
+    logger.info('------------------------ Election done')
+    await cluster.start_auto_comms()
+
+    if command_first:
+        sequence2 = SNormalCommand(cluster, "add 1", 1)
+        command_result = await cluster.run_sequence(sequence2)
+        assert ts_1.operations.total == 1
+        assert ts_2.operations.total == 1
+        assert ts_3.operations.total == 1
+        
+    logger.error("---------!!!!!!! Blocking one followers network ")
+    ts_3.block_network()
+    logger.debug('------------------------ Running a couple of commands ---')
+    command_result = None
+    async def command_runner(ts, command):
+        nonlocal command_result
+        logger.debug('running command in background')
+        try:
+            command_result = await ts.hull.run_command(command, timeout=0.01)
+            logger.debug('running command in background done with NO error')
+        except Exception as e:
+            logger.debug('running command in background error %s', traceback.format_exc())
+            command_result = e
+            logger.debug('running command in background done with error')
+    command_result = None
+    asyncio.create_task(command_runner(ts_1, "add 1"))
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and command_result is None:
+        await asyncio.sleep(0.0001)
+    assert command_result is not None
+    command_result = None
+    asyncio.create_task(command_runner(ts_1, "add 1"))
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and command_result is None:
+        await asyncio.sleep(0.0001)
+    assert command_result is not None
+    total = ts_1.operations.total
+    # ts_2 needs a heartbeat to know to commit
+    ts_1.hull.state.last_broadcast_time = 0
+    await ts_1.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and ts_2.operations.total != total:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    assert ts_2.operations.total == total
+    if command_first:
+        assert ts_3.operations.total == 1
+    else:
+        assert ts_3.operations.total == 0
+    logger.info("\n\n\n---------!!!!!!! Unblocking followers network and sending hearbeats\n\n\n")
+    ts_3.unblock_network()
+    # ts_3 needs a heartbeat to pick up the missing records,
+    # and should run commands and commit records too
+    ts_1.hull.state.last_broadcast_time = 0
+    await ts_1.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and ts_3.operations.total != total:
+        await asyncio.sleep(0.0001)
+    assert ts_3.operations.total == total
+
+    start_time = time.time()
+    while time.time() - start_time < 2.0 and ts_3.operations.total != total:
+        await asyncio.sleep(0.0001)
+    
