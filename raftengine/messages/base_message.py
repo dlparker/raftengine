@@ -21,11 +21,9 @@ class BaseMessage:
 
     @classmethod
     def from_dict(cls, data):
-        msg = cls(sender=data['sender'],
-                  receiver=data['receiver'],
-                  term=int(data['term']),
-                  prevLogIndex=int(data['prevLogIndex']),
-                  prevLogTerm=int(data['prevLogTerm']))
+        copy_of = dict(data)
+        del copy_of['code']
+        msg = cls(**copy_of)
         return msg
     
     def __str__(self):

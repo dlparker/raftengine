@@ -2,7 +2,7 @@ Immediatly:
 
 
 
-10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
+DONE 10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
 
 20. using **data in from_dict for messages instead of spelling it out
 
