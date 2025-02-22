@@ -38,20 +38,19 @@ class ClusterConfig:
         heartbeat_period:
             Leader sends a heartbeat message if it hasn't sent other messages 
             in this amount of time (float seconds)
-        leader_lost_timeout:
-            if no leader messages in longer than this time, start an election
         election_timeout_min:
             start another election if no leader elected in a random
             amount of time bounded by election_timeout_min and election_timeout_max,
             raft paper suggests range of 150 to 350 milliseconds
+            if no leader messages in longer than this time, start an election
         election_timeout_max:
             start another election if no leader elected in a random
             amount of time bounded by election_timeout_min and election_timeout_max,
             raft paper suggests range of 150 to 350 milliseconds
+            if no leader messages in longer than this time, start an election
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
-    leader_lost_timeout: float
     election_timeout_min: float
     election_timeout_max: float
 

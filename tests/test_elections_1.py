@@ -157,24 +157,26 @@ async def test_reelection_3(cluster_maker):
     # things to happend that way
 
     # ensure that ts_3 wins first election
-    ts_1.hull.cluster_config.leader_lost_timeout = 1
-    ts_2.hull.cluster_config.leader_lost_timeout = 1
-    ts_3.hull.cluster_config.leader_lost_timeout = 0.001
+    ts_1.hull.cluster_config.election_timeout_min = 0.90
+    ts_1.hull.cluster_config.election_timeout_max = 1.0
+    ts_2.hull.cluster_config.election_timeout_min = 0.90
+    ts_2.hull.cluster_config.election_timeout_max = 1.0
+    ts_3.hull.cluster_config.election_timeout_min = 0.01
+    ts_3.hull.cluster_config.election_timeout_max = 0.011
 
-    # ensure that ts_2 wins re-election
-    ts_1.hull.cluster_config.election_timeout_min = 1
-    ts_1.hull.cluster_config.election_timeout_max = 1.2
-    ts_2.hull.cluster_config.election_timeout_min = 0.001
-    ts_2.hull.cluster_config.election_timeout_max = 0.0011
-    ts_3.hull.cluster_config.election_timeout_min = 1
-    ts_3.hull.cluster_config.election_timeout_max = 1.2
-    
     await cluster.start()
     # give ts_3 time to timeout and start campaign
-    await asyncio.sleep(0.001)
+    start_time = time.time()
+    leader = None
+    while time.time() - start_time < 1 and leader is None:
+        await asyncio.sleep(0.01)
+        await cluster.deliver_all_pending()
+        for ts in [ts_1, ts_2, ts_3]:
+            if ts.hull.get_state_code() == "LEADER":
+                leader = ts
+                break
     # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_3.hull.get_state_code() == "LEADER"
+    assert leader == ts_3
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
 
@@ -182,10 +184,18 @@ async def test_reelection_3(cluster_maker):
     logger.warning('setting up re-election')
     # tell leader to resign and manually trigger elections on all the
     # servers, ts_2 should win because of timeout
+    # ensure that ts_2 wins re-election
+    ts_1.hull.cluster_config.election_timeout_min = 1
+    ts_1.hull.cluster_config.election_timeout_max = 1.2
+    ts_2.hull.cluster_config.election_timeout_min = 0.001
+    ts_2.hull.cluster_config.election_timeout_max = 0.0011
+    ts_3.hull.cluster_config.election_timeout_min = 1
+    ts_3.hull.cluster_config.election_timeout_max = 1.2
     await ts_3.hull.demote_and_handle(None)
     await ts_3.hull.start_campaign()
     logger.warning('leader ts_3 demoted and campaign started')
     # ts_2 started last, but should win and raise term to 3 because of timeout
+    
     await ts_1.hull.start_campaign()
     logger.warning('ts_1 starting campaign')
     await ts_2.hull.start_campaign()

@@ -24,7 +24,7 @@ class Follower(BaseState):
         await super().start()
         self.last_leader_contact = time.time()
         await self.hull.record_substate(SubstateCode.leader_unknown)
-        await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
+        await self.run_after(self.hull.get_election_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
         self.last_leader_contact = time.time()
@@ -202,13 +202,13 @@ class Follower(BaseState):
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):
-        max_time = self.hull.get_leader_lost_timeout()
+        max_time = self.hull.get_election_timeout()
         e_time = time.time() - self.last_leader_contact
         if e_time > max_time:
             self.logger.debug("%s lost leader after %f", self.my_uri(), e_time)
             await self.leader_lost()
             return
         # reschedule
-        await self.run_after(self.hull.get_leader_lost_timeout(), self.contact_checker)
+        await self.run_after(self.hull.get_election_timeout(), self.contact_checker)
     
 

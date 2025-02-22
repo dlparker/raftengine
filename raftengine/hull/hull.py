@@ -105,10 +105,6 @@ class Hull(HullAPI):
         return self.cluster_config.node_uris
 
     # Called by State and in API
-    def get_leader_lost_timeout(self):
-        return self.cluster_config.leader_lost_timeout
-
-    # Called by State and in API
     def get_heartbeat_period(self):
         return self.cluster_config.heartbeat_period
 
@@ -131,7 +127,7 @@ class Hull(HullAPI):
         await self.stop_state()
         self.state = Candidate(self)
         await self.state.start()
-        self.logger.warning("%s started campaign %s", self.get_my_uri(), await self.log.get_term())
+        self.logger.warning("%s started campaign term = %s", self.get_my_uri(), await self.log.get_term())
 
     # Called by State
     async def win_vote(self, new_term):

@@ -22,8 +22,8 @@ class Candidate(BaseState):
     async def start_campaign(self):
         await self.hull.record_substate(SubstateCode.start_election)
         self.term += 1
-        self.reply_count = 0
         await self.log.set_term(self.term)
+        self.reply_count = 0
         for node_id in self.hull.get_cluster_node_ids():
             if node_id == self.hull.get_my_uri():
                 self.votes[node_id] = True

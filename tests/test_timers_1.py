@@ -56,11 +56,9 @@ async def test_heartbeat_1(cluster_maker):
 async def test_heartbeat_2(cluster_maker):
     cluster = cluster_maker(3)
     heartbeat_period = 0.02
-    leader_lost_timeout = 0.2
-    election_timeout_min = 0.1
+    election_timeout_min = 0.2
     election_timeout_max = 0.5
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
-                                          leader_lost_timeout=leader_lost_timeout,
                                           election_timeout_min=election_timeout_min, 
                                           election_timeout_max=election_timeout_max)
                                           
@@ -80,9 +78,9 @@ async def test_heartbeat_2(cluster_maker):
     assert ts_2.hull.state.leader_uri == uri_3
     # make sure running for a time exceeding the timeout does not
     # cause a leader lost situation
-    fraction = leader_lost_timeout/5.0
+    fraction = election_timeout_max/5.0
     start_time = time.time()
-    while time.time() - start_time < leader_lost_timeout * 2:
+    while time.time() - start_time < election_timeout_max * 2:
         await asyncio.sleep(fraction)
 
     assert ts_3.hull.get_state_code() == "LEADER"
@@ -94,9 +92,11 @@ async def test_lost_leader_1(cluster_maker):
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
     heartbeat_period = 0.1
-    leader_lost_timeout = 0.05
+    election_timeout_min = 0.02
+    election_timeout_max = 0.05
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
-                                          leader_lost_timeout=leader_lost_timeout)
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -113,8 +113,8 @@ async def test_lost_leader_1(cluster_maker):
 
     # Test that election happens in appoximately the leader_lost timeout
     start_time = time.time()
-    fraction = leader_lost_timeout/10.0
-    while time.time() - start_time < leader_lost_timeout  + (fraction * 2):
+    fraction = election_timeout_max/10.0
+    while time.time() - start_time < election_timeout_max  + (fraction * 2):
         await cluster.deliver_all_pending()
         if (ts_1.hull.state.state_code == "LEADER"
             or ts_2.hull.state.state_code == "LEADER"
