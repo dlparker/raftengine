@@ -24,13 +24,10 @@ class AppendEntriesMessage(BaseMessage):
                 entries.append(obj)
             else:
                 entries.append(LogRec.from_dict(obj))
-        msg = cls(sender=data['sender'],
-                  receiver=data['receiver'],
-                  term=int(data['term']),
-                  prevLogIndex=int(data['prevLogIndex']),
-                  prevLogTerm=int(data['prevLogTerm']),
-                  entries=entries,
-                  commitIndex=int(data['commitIndex']),)
+        copy_of = dict(data)
+        del copy_of['code']
+        copy_of['entries'] = entries
+        msg = cls(**copy_of)
         return msg
     
     def __repr__(self):
@@ -51,14 +48,9 @@ class AppendResponseMessage(BaseMessage):
 
     @classmethod
     def from_dict(cls, data):
-        msg = cls(sender=data['sender'],
-                  receiver=data['receiver'],
-                  term=int(data['term']),
-                  prevLogIndex=int(data['prevLogIndex']),
-                  prevLogTerm=int(data['prevLogTerm']),
-                  success=data['success'],
-                  maxIndex=data['maxIndex'],
-                  leaderId=data['leaderId'])
+        copy_of = dict(data)
+        del copy_of['code']
+        msg = cls(**copy_of)
         return msg
         
     def __repr__(self):
