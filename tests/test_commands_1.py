@@ -18,7 +18,8 @@ from servers import PausingCluster, cluster_maker
 from servers import SNormalElection, SNormalCommand
 from servers import setup_logging
 
-extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
+#extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
+extra_logging = [dict(name=__name__, level="debug"),]
 log_config = setup_logging(extra_logging)
 
 async def test_command_1(cluster_maker):
@@ -47,7 +48,6 @@ async def test_command_1(cluster_maker):
     # now we need to trigger a heartbeat so that
     # followers will see the commitIndex is higher
     # and apply and locally commit
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.hull.log.get_term()
@@ -88,7 +88,6 @@ async def test_command_1(cluster_maker):
     await ts_1.hull.get_log().set_term(orig_term)
 
     await ts_1.hull.demote_and_handle()
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     print(await ts_1.dump_stats())
@@ -129,7 +128,6 @@ async def test_command_1(cluster_maker):
     assert command_result is not None
     assert ts_3.operations.total == 3
     logger.debug('------------------------ Doing hearbeats ---')
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     while time.time() - start_time < 0.1 and ts_2.operations.total != 3:
@@ -138,7 +136,6 @@ async def test_command_1(cluster_maker):
 
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     ts_1.unblock_network() # default is discard messages, lets do that
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     while time.time() - start_time < 0.1 and ts_1.operations.total != 3:
         await asyncio.sleep(0.0001)
@@ -352,7 +349,6 @@ async def test_command_after_heal_1(cluster_maker):
                 uri_1, uri_2)
 
     assert ts_1.hull.get_state_code() == "LEADER"
-    ts_1.hull.state.last_broadcast_time = 0
     # don't deliver vote requests, it will complicate things
     ts_2.unblock_network()
     await ts_1.hull.state.send_heartbeats()
@@ -419,7 +415,6 @@ async def test_follower_explodes_in_command(cluster_maker):
     # now we need to trigger a heartbeat so that
     # followers will see the commitIndex is higher
     # and apply and locally commit
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
     
     # followers need time to run commands
@@ -485,7 +480,6 @@ async def test_leader_explodes_in_command(cluster_maker):
         # now we need to trigger a heartbeat so that
         # followers will see the commitIndex is higher
         # and apply and locally commit
-        ts_1.hull.state.last_broadcast_time = 0
         await ts_1.hull.state.send_heartbeats()
         
         # followers need time to run commands
@@ -558,12 +552,6 @@ async def test_long_catchup(cluster_maker):
     assert ts_2.operations.total == total
     assert ts_3.operations.total != total
     await cluster.stop_auto_comms()
-    if trim_loggers:
-        for logger_name, spec in log_config['loggers'].items():
-            if logger_name == "Follower" or logger_name == "Leader":
-                logger = logging.getLogger(logger_name)
-                logger.setLevel('DEBUG')
-                print(f"setting logger {logger_name} to debug")
     # restore the loggers
     if trim_loggers:
         for logger_name in old_levels:
@@ -577,7 +565,6 @@ async def test_long_catchup(cluster_maker):
     cluster.unsplit()
     logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
 
     start_time = time.time()
@@ -644,7 +631,6 @@ async def test_full_catchup(cluster_maker):
     logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     logger.error('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and ts_3.operations.total < ts_1.operations.total:
@@ -705,7 +691,6 @@ async def test_follower_run_error(cluster_maker):
     ts_3.operations.return_error = True
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and not ts_3.operations.reported_error:
@@ -828,7 +813,6 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     assert command_result.result == running_total
     total = ts_2.operations.total
     # ts_3 needs a heartbeat to know to commit
-    ts_2.hull.state.last_broadcast_time = 0
     await ts_2.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.25 and ts_3.operations.total != total:
@@ -851,7 +835,6 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     logger.debug('------------------------ Unblocking old leader, should overwrite logs ---')
     ts_1.unblock_network() # discards missed messages
     
-    ts_2.hull.state.last_broadcast_time = 0
     await ts_2.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
 
@@ -929,7 +912,6 @@ async def follower_rewrite34_inner(cluster_maker, command_first):
     assert command_result is not None
     total = ts_1.operations.total
     # ts_2 needs a heartbeat to know to commit
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.25 and ts_2.operations.total != total:
@@ -940,11 +922,10 @@ async def follower_rewrite34_inner(cluster_maker, command_first):
         assert ts_3.operations.total == 1
     else:
         assert ts_3.operations.total == 0
-    logger.info("\n\n\n---------!!!!!!! Unblocking followers network and sending hearbeats\n\n\n")
+    logger.info("---------!!!!!!! Unblocking followers network and sending hearbeats")
     ts_3.unblock_network()
     # ts_3 needs a heartbeat to pick up the missing records,
     # and should run commands and commit records too
-    ts_1.hull.state.last_broadcast_time = 0
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.25 and ts_3.operations.total != total:

@@ -56,9 +56,14 @@ async def test_heartbeat_1(cluster_maker):
 async def test_heartbeat_2(cluster_maker):
     cluster = cluster_maker(3)
     heartbeat_period = 0.02
-    leader_lost_timeout = 0.1
+    leader_lost_timeout = 0.2
+    election_timeout_min = 0.1
+    election_timeout_max = 0.5
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
-                                          leader_lost_timeout=leader_lost_timeout)
+                                          leader_lost_timeout=leader_lost_timeout,
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max)
+                                          
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -73,14 +78,13 @@ async def test_heartbeat_2(cluster_maker):
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
-
     # make sure running for a time exceeding the timeout does not
     # cause a leader lost situation
-    fraction = leader_lost_timeout/10.0
+    fraction = leader_lost_timeout/5.0
     start_time = time.time()
-    while time.time() - start_time < leader_lost_timeout  * 2:
-        await asyncio.sleep(0.001)
-    
+    while time.time() - start_time < leader_lost_timeout * 2:
+        await asyncio.sleep(fraction)
+
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3

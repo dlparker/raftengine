@@ -64,16 +64,16 @@ def set_levels(handler_names, additions=None):
     info_log = dict(handlers=handler_names, level="INFO", propagate=False)
     debug_log = dict(handlers=handler_names, level="DEBUG", propagate=False)
     log_loggers[''] = root_log
-    log_loggers['PausingServer'] = debug_log
+    log_loggers['PausingServer'] = info_log
     default_log =  info_log
     #default_log =  debug_log
-    log_loggers['Leader'] = debug_log
+    log_loggers['Leader'] = default_log
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
-    log_loggers['Substates'] = debug_log
-    log_loggers['SimulatedNetwork'] = debug_log
+    log_loggers['Substates'] = default_log
+    log_loggers['SimulatedNetwork'] = default_log
     if additions:
         for add in additions:
             if add['level'] == "debug":
@@ -496,6 +496,7 @@ class Network:
         in_ledger = []
         out_ledger = []
         any = True
+        count = 0
         # want to bounce around, not deliver each ts completely
         while any:
             any = False
@@ -503,14 +504,16 @@ class Network:
                 if len(node.in_messages) > 0 and not out_only:
                     msg = await node.do_next_in_msg()
                     if msg:
+                        count += 1
                         in_ledger.append(msg)
                         any = True
                 if len(node.out_messages) > 0:
                     msg = await node.do_next_out_msg()
                     if msg:
+                        count += 1
                         out_ledger.append(msg)
                         any = True
-        return dict(in_ledger=in_ledger, out_ledger=out_ledger)
+        return dict(in_ledger=in_ledger, out_ledger=out_ledger, count=count)
 
     async def do_next_in_msg(self, node):
         if len(node.in_messages) == 0:
@@ -893,8 +896,15 @@ class PausingCluster:
         try:
             self.logger.error("-----------------------------auto_comms_runner starting")
             while self.auto_comms_flag:
-                await self.deliver_all_pending()
-                await asyncio.sleep(0.00001)
+                res = await self.deliver_all_pending()
+                count = 0
+                if res['multiple_networks']:
+                    for subres in res['result_list']:
+                        count += subres['count']
+                else:
+                    count = res['count']
+                if count == 0:
+                    await asyncio.sleep(0.00001)
             self.async_handle = None
             self.logger.error("-----------------------------auto_comms_runner exiting")
         except Exception as exc:
@@ -1017,7 +1027,6 @@ class SNormalCommand(StdSequence):
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
-            node.hull.state.last_broadcast_time = 0
             await node.hull.state.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
