@@ -139,7 +139,13 @@ class SubstateCode(str, Enum):
     preparing_command = "PREPARIING_COMMAND"
 
     """ Sending append_entries to cluster """
+    broadcasting_term_start = "BROADCASTING_TERM_START"
+
+    """ Sending append_entries to cluster """
     broadcasting_command = "BROADCASTING_COMMAND"
+
+    """ Sending append_entries to cluster """
+    broadcasting_config_change = "BROADCASTING_CONFIG_CHANGE"
 
     """ Monitoring message waiting for followers to report """
     awaiting_command = "AWAITING_COMMAND"

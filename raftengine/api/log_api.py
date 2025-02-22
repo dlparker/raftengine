@@ -11,6 +11,10 @@ from enum import Enum
 class RecordCode(str, Enum):
     """ String enum representing purpose of record. """
 
+    """ Record leader saves to start a term, effectively committing all 
+         previous recurds because of the usual commit logic """
+    term_start = "TERM_START"
+    
     """ Results of client command operation """
     client_command = "CLIENT_COMMAND"
     

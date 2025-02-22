@@ -133,47 +133,47 @@ async def test_partition_1(cluster_maker):
         assert catchup_request.sender == node.uri
         assert catchup_request is not None
         assert catchup_request.success == False
-        assert catchup_request.maxIndex == 1
+        assert catchup_request.maxIndex == 2 # first is start term
         # this will be a backdown
         backdown1 = await ts_1.do_next_out_msg()
         assert backdown1 is not None
-        assert backdown1.commitIndex == 3
-        assert backdown1.prevLogIndex == 2
+        assert backdown1.commitIndex == 4
+        assert backdown1.prevLogIndex == 3
         # now have the node accept it
         assert await node.do_next_in_msg() is not None
         # and send a response, should so no match
         catchup_request2 =  await node.do_next_out_msg()
         catchup_request2 is not None
         assert catchup_request2.success == False
-        assert catchup_request2.maxIndex == 1
+        assert catchup_request2.maxIndex == 2
         # let the leader collect t
         assert await ts_1.do_next_in_msg() is not None
 
         # this will be another backdown, this one should match
         backdown2 = await ts_1.do_next_out_msg()
         assert backdown2 is not None
-        assert backdown2.commitIndex == 3
-        assert backdown2.prevLogIndex == 1
+        assert backdown2.commitIndex == 4
+        assert backdown2.prevLogIndex == 2
         # now have the node accept it
         assert await node.do_next_in_msg() is not None
         # and send a response, should say we're good to this point
         catchup_request3 =  await node.do_next_out_msg()
         assert catchup_request3.success == True
-        assert catchup_request3.maxIndex == 2
+        assert catchup_request3.maxIndex == 3
         # let the leader collect t
         assert await ts_1.do_next_in_msg() is not None
 
         # this will be a catchup, one record
         catchup = await ts_1.do_next_out_msg()
         assert catchup is not None
-        assert catchup.commitIndex == 3
-        assert catchup.prevLogIndex == 2
+        assert catchup.commitIndex == 4
+        assert catchup.prevLogIndex == 3
         # now have the node accept it
         assert await node.do_next_in_msg() is not None
         # and send a response, should say we're good to end
         catchup_result =  await node.do_next_out_msg()
         assert catchup_result.success == True
-        assert catchup_result.maxIndex == 3
+        assert catchup_result.maxIndex == 4
         # let the leader collect t
         assert await ts_1.do_next_in_msg() is not None
 

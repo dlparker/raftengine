@@ -2,7 +2,7 @@ import time
 import traceback
 import logging
 import json
-from raftengine.api.log_api import LogRec
+from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
@@ -49,20 +49,20 @@ class Follower(BaseState):
             or await self.log.get_last_term() != message.prevLogTerm):
             await self.send_no_sync_append_response(message)
             return
+        if self.leader_uri != message.sender:
+            self.leader_uri = message.sender
+            self.last_vote = message
+            self.logger.info("%s accepting new leader %s", self.my_uri(),
+                             self.leader_uri)
+            await self.hull.record_substate(SubstateCode.joined_leader)
         if len(message.entries) == 0:
-            if self.leader_uri != message.sender:
-                self.leader_uri = message.sender
-                self.last_vote = message
-                self.logger.info("%s accepting new leader %s", self.my_uri(),
-                                 self.leader_uri)
-                await self.hull.record_substate(SubstateCode.joined_leader)
-            else:
-                self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
-                                  message.sender)
+            self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
+                              message.sender)
             await self.send_append_entries_response(message)
             await self.hull.record_substate(SubstateCode.got_heartbeat)
-            if message.commitIndex > await self.log.get_local_commit_index():
-                await self.new_leader_commit_index(message.commitIndex)
+            if message.commitIndex >= await self.log.get_last_index():
+                if message.commitIndex > await self.log.get_local_commit_index():
+                    await self.new_leader_commit_index(message.commitIndex)
             return
         await self.hull.record_substate(SubstateCode.appending)
         recs = []
@@ -102,7 +102,11 @@ class Follower(BaseState):
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if not log_rec.local_committed:
-                await self.process_command_record(log_rec)
+                if log_rec.code == RecordCode.client_command:
+                    await self.process_command_record(log_rec)
+                else:
+                    log_rec.local_committed = True
+                    await self.log.replace(log_rec)
                 
     async def process_command_record(self, log_record):
         result = None

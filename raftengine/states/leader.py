@@ -7,17 +7,11 @@ from dataclasses import dataclass
 from typing import Dict, List, Any
 from enum import Enum
 from raftengine.api.types import StateCode, SubstateCode
-from raftengine.api.log_api import LogRec
+from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.base_message import BaseMessage
 from raftengine.states.base_state import BaseState
 
-@dataclass
-class CommandData:
-    command: str
-    user_context: str
-
-        
 @dataclass
 class FollowerTracker:
     uri: str 
@@ -135,7 +129,10 @@ class Leader(BaseState):
         for uri in self.hull.get_cluster_node_ids():
             tracker = await self.tracker_for_follower(uri)
         await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
-        await self.send_heartbeats()
+        start_record = LogRec(code=RecordCode.term_start,
+                              term=await self.log.get_term())
+        the_record = await self.log.append(start_record)
+        await self.broadcast_log_record(the_record)
 
     async def run_command(self, command, timeout=1.0):
         # first save it in the log
@@ -168,7 +165,10 @@ class Leader(BaseState):
                                              prevLogTerm=prevLogTerm,
                                              prevLogIndex=prevLogIndex,
                                              commitIndex=commit_index)
-        await self.hull.record_substate(SubstateCode.broadcasting_command)
+        if log_record.code == RecordCode.client_command:
+            await self.hull.record_substate(SubstateCode.broadcasting_command)
+        if log_record.code == RecordCode.term_start:
+            await self.hull.record_substate(SubstateCode.broadcasting_term_start)
         for uri in self.hull.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
@@ -241,7 +241,7 @@ class Leader(BaseState):
                     tracker.matchIndex = message.prevLogIndex
             if (tracker.matchIndex > await self.log.get_local_commit_index()):
                 log_rec = await self.log.read(tracker.matchIndex)
-                await self.command_commit_checker(log_rec)
+                await self.record_commit_checker(log_rec)
             if tracker.nextIndex <= await self.log.get_last_index():
                 if message.maxIndex < tracker.nextIndex:
                     tracker.nextIndex = message.maxIndex + 1
@@ -323,14 +323,18 @@ class Leader(BaseState):
         await self.record_sent_message(message)
         await self.hull.send_message(message)
     
-    async def command_commit_checker(self, log_record):
+    async def record_commit_checker(self, log_record):
         # count the followers that have committed this far
         ayes = 1  # for me
         for tracker in self.follower_trackers.values():
             if tracker.matchIndex >= log_record.index:
                 ayes += 1
         if ayes > len(self.hull.get_cluster_node_ids()) / 2:
-            asyncio.create_task(self.run_command_locally(log_record))
+            if log_record.code == RecordCode.client_command:
+                asyncio.create_task(self.run_command_locally(log_record))
+            else:
+                log_record.local_committed = True
+                await self.log.replace(log_record)
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
