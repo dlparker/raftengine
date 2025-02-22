@@ -142,6 +142,13 @@ async def test_election_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    ts_1.hull.cluster_config.election_timeout_min = 0.90
+    ts_1.hull.cluster_config.election_timeout_max = 1.0
+    ts_2.hull.cluster_config.election_timeout_min = 0.90
+    ts_2.hull.cluster_config.election_timeout_max = 1.0
+    ts_3.hull.cluster_config.election_timeout_min = 0.01
+    ts_3.hull.cluster_config.election_timeout_max = 0.011
+
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
@@ -157,10 +164,16 @@ async def test_election_timeout_1(cluster_maker):
     await ts_3.hull.demote_and_handle(None)
     assert ts_3.hull.get_state_code() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
+    old_term = await ts_2.hull.log.get_term()
     await ts_2.hull.state.leader_lost()
+    ts_1.hull.cluster_config.election_timeout_min = 0.01
+    ts_1.hull.cluster_config.election_timeout_max = 0.011
+    ts_2.hull.cluster_config.election_timeout_min = 0.01
+    ts_2.hull.cluster_config.election_timeout_max = 0.011
+    ts_3.hull.cluster_config.election_timeout_min = 0.01
+    ts_3.hull.cluster_config.election_timeout_max = 0.011
 
     # now delay for more than the timeout, should start new election with new term
-    old_term = await ts_2.hull.log.get_term()
     await asyncio.sleep(0.015)
     new_term = await ts_2.hull.log.get_term()
     assert new_term == old_term + 1
@@ -201,7 +214,6 @@ async def test_election_timeout_1(cluster_maker):
     assert ts_1.hull.get_state_code() == "CANDIDATE"
     new_term = await ts_1.hull.get_term()
     assert new_term == old_term
-
     
     logger.info("-------- Election restart on timeout prevention test passed")
 

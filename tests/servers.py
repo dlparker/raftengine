@@ -425,7 +425,7 @@ class TestHull(Hull):
         self.state_run_later_def = None
         self.timers_paused = False
         self.condition = asyncio.Condition()
-        self.logger = logging.getLogger("SimulatedNetwork")
+        self.wrapper_logger = logging.getLogger("SimulatedNetwork")
         
     async def on_message(self, message):
 
@@ -436,7 +436,7 @@ class TestHull(Hull):
             result = await super().on_message('{"code":"foo"}')
         if self.corrupt_message_with_code == dmsg.get_code():
             dmsg.entries = [dict(a=1),]
-            self.logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)
+            self.wrapper_logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)
             result = await self.inner_on_message(dmsg)
         else:
             result = await super().on_message(message)
@@ -840,13 +840,11 @@ class PausingCluster:
         assert len(self.node_uris) == node_count
 
     def build_cluster_config(self, heartbeat_period=1000,
-                             leader_lost_timeout=1000,
                              election_timeout_min=10000,
                              election_timeout_max=20000):
         
             cc = ClusterConfig(node_uris=self.node_uris,
                                heartbeat_period=heartbeat_period,
-                               leader_lost_timeout=leader_lost_timeout,
                                election_timeout_min=election_timeout_min,
                                election_timeout_max=election_timeout_max,)
             return cc
