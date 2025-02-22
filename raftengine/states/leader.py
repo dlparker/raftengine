@@ -134,7 +134,7 @@ class Leader(BaseState):
         await super().start()
         for uri in self.hull.get_cluster_node_ids():
             tracker = await self.tracker_for_follower(uri)
-        await self.run_after(self.hull.get_heartbeat_period(), self.send_heartbeats)
+        await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
         await self.send_heartbeats()
 
     async def run_command(self, command, timeout=1.0):
@@ -182,13 +182,11 @@ class Leader(BaseState):
             tracker = self.follower_trackers[uri]
             tracker.nextIndex = log_record.index + 1
 
+    async def scheduled_send_heartbeats(self):
+        await self.send_heartbeats()
+        await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
+        
     async def send_heartbeats(self):
-        silent_time = time.time() - self.last_broadcast_time
-        remaining_time = self.hull.get_heartbeat_period() - silent_time
-        if  remaining_time > 0:
-            self.logger.debug("%s resched heartbeats time left %f", self.my_uri, remaining_time)
-            await self.run_after(remaining_time, self.send_heartbeats)
-            return
         entries = []
         term = await self.log.get_term()
         my_uri = self.my_uri()
@@ -224,7 +222,6 @@ class Leader(BaseState):
             await self.hull.send_message(message)
             await self.record_sent_message(message)
             self.last_broadcast_time = time.time()
-            await self.run_after(self.hull.get_heartbeat_period(), self.send_heartbeats)
         
     async def on_append_entries_response(self, message):
         tracker = self.follower_trackers[message.sender]
@@ -254,7 +251,10 @@ class Leader(BaseState):
             # all in sync, done
             return
         if tracker.nextIndex > 0:
-            await self.backdown_follower(message.sender)
+            if tracker.nextIndex == 1:
+                await self.send_catchup(message.sender, 1)
+            else:
+                await self.backdown_follower(message.sender)
         self.logger.debug('After response processing %s tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
 

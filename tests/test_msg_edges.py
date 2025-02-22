@@ -50,7 +50,6 @@ async def test_restart_during_heartbeat(cluster_maker):
     # The leader, now a follower should get a couple
     # of reply messages that it doesn't expect, and
     # should show up in hull log
-    ts_3.hull.state.last_broadcast_time = 0
     ts_3.hull.message_problem_history = []
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending(out_only=True)
@@ -214,7 +213,6 @@ async def test_message_errors(cluster_maker):
     ts_1.hull.explode_on_message_code = AppendEntriesMessage.get_code()
     
     ts_1.hull.message_problem_history = []
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
@@ -225,7 +223,6 @@ async def test_message_errors(cluster_maker):
 
     ts_1.hull.corrupt_message_with_code = AppendEntriesMessage.get_code()
     ts_1.hull.message_problem_history = []
-    ts_3.hull.state.last_broadcast_time = 0
     await ts_3.hull.state.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
