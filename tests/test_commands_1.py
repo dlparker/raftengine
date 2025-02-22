@@ -52,7 +52,7 @@ async def test_command_1(cluster_maker):
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.hull.log.get_term()
     index = await ts_3.hull.log.get_last_index()
-    assert index == 1
+    assert index == 2 # one for start term, one for command
     await cluster.stop_auto_comms()
     ts_1.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
     ts_2.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
@@ -170,7 +170,7 @@ async def test_command_sqlite_1(cluster_maker):
     assert ts_3.operations.total == 1
     term = await ts_3.hull.log.get_term()
     index = await ts_3.hull.log.get_last_index()
-    assert index == 1
+    assert index == 2 # first index will be the start term record
     assert await ts_1.hull.log.get_term() == term
     assert await ts_1.hull.log.get_last_index() == index
     assert await ts_2.hull.log.get_term() == term
@@ -774,7 +774,7 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
         await asyncio.sleep(0.0001)
         await cluster.deliver_all_pending()
     assert command_result.timeout
-    assert await ts_1.hull.log.get_last_index() == calls
+    assert await ts_1.hull.log.get_last_index() == calls + 1 # first record is start_term
 
     # now let the others do a new election
     await ts_2.hull.log.set_term(2)
@@ -825,10 +825,10 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     # follower, and let it get a heartbeat. this should trigger it to
     # overwrite the existing records in its log with the new ones
     # from the new leader
-    orig_1 = await ts_1.hull.log.read(1)
-    orig_2 = await ts_1.hull.log.read(2)
+    orig_1 = await ts_1.hull.log.read(2) # the first record is start term record
+    orig_2 = await ts_1.hull.log.read(3)
     if command_first:
-        orig_3 = await ts_1.hull.log.read(3)
+        orig_3 = await ts_1.hull.log.read(4)
     await ts_1.hull.demote_and_handle(None)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     
@@ -839,13 +839,14 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     await cluster.deliver_all_pending()
 
     start_time = time.time()
-    while time.time() - start_time < 0.5 and await ts_1.hull.log.get_last_index() != 3:
+    # log should be 1 for start_term, and one for each command, so 4
+    while time.time() - start_time < 0.5 and await ts_1.hull.log.get_last_index() != 4:
         await asyncio.sleep(0.0001)
 
     assert await ts_1.hull.log.get_last_index() == await ts_2.hull.log.get_last_index()
-    new_1 = await ts_1.hull.log.read(1)
-    new_2 = await ts_1.hull.log.read(2)
-    new_3 = await ts_1.hull.log.read(3)
+    new_1 = await ts_1.hull.log.read(2) # the first record is start term record
+    new_2 = await ts_1.hull.log.read(3)
+    new_3 = await ts_1.hull.log.read(4)
     if command_first:
         assert new_2.command != orig_2.command
         assert new_3.command != orig_3.command
