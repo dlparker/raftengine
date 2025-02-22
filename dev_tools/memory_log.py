@@ -1,7 +1,6 @@
 import abc
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
-from copy import deepcopy
 import logging
 from raftengine.api.log_api import LogRec, LogAPI
 
@@ -38,9 +37,9 @@ class Records:
     def save_entry(self, rec: LogRec) -> LogRec:
         return self.insert_entry(rec)
 
-    def get_local_commit_index(self):
+    def get_commit_index(self):
         for entry in self.entries[::-1]:
-            if entry.local_committed:
+            if entry.committed:
                 return entry.index
         return 0
 
@@ -103,7 +102,7 @@ class MemoryLog(LogAPI):
         return LogRec.from_dict(save_rec.__dict__)
 
     async def update_and_commit(self, entry:LogRec) -> LogRec:
-        entry.local_committed = True
+        entry.committed = True
         return await self.replace(entry)
     
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
@@ -117,7 +116,7 @@ class MemoryLog(LogAPI):
             rec = self.records.get_entry_at(index)
         if rec is None:
             return None
-        return deepcopy(rec)
+        return LogRec(**rec.__dict__)
 
     async def get_last_index(self):
         return self.records.index
@@ -128,8 +127,8 @@ class MemoryLog(LogAPI):
         rec = self.records.get_last_entry()
         return rec.term
     
-    async def get_local_commit_index(self):
-        return self.records.get_local_commit_index()
+    async def get_commit_index(self):
+        return self.records.get_commit_index()
 
     async def delete_all_from(self, index: int):
         return self.records.delete_all_from(index)

@@ -122,7 +122,7 @@ async def test_log_stuff():
         assert await log.get_last_term() == 1
         assert rec_1.index == 1
         assert rec_1.command == 'add 1'
-        assert not rec_1.local_committed
+        assert not rec_1.committed
         assert rec_2.index == 2
         assert rec_2.command == 'add 2'
         
@@ -130,12 +130,12 @@ async def test_log_stuff():
         assert rec_2b.index == 2
         assert rec_2b.command == 'add 2'
         
-        rec_1.local_committed = True
+        rec_1.committed = True
         await log.replace(rec_1)
-        loc_c = await log.get_local_commit_index()
+        loc_c = await log.get_commit_index()
         assert loc_c == 1
         await log.update_and_commit(rec_2)
-        loc_c = await log.get_local_commit_index()
+        loc_c = await log.get_commit_index()
         assert loc_c == 2
     
         

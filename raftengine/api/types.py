@@ -164,3 +164,18 @@ class SubstateCode(str, Enum):
     
     def __str__(self):
         return self.value
+
+
+class CommandSerialRange:
+    """ Command serial number generated for client 
+    (when requested) will be in this range. This 
+    is the range of an unsigned integer of 64 bits.
+    Python can handle larger numbers, but this 
+    is a convenient restriction that aids other
+    languages, should they use this library,
+    and that's a pretty high limit!
+    """
+    min_value = 1
+    max_value = 18_446_744_073_709_551_615
+
+    

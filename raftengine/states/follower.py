@@ -61,7 +61,7 @@ class Follower(BaseState):
             await self.send_append_entries_response(message)
             await self.hull.record_substate(SubstateCode.got_heartbeat)
             if message.commitIndex >= await self.log.get_last_index():
-                if message.commitIndex > await self.log.get_local_commit_index():
+                if message.commitIndex > await self.log.get_commit_index():
                     await self.new_leader_commit_index(message.commitIndex)
             return
         await self.hull.record_substate(SubstateCode.appending)
@@ -73,7 +73,7 @@ class Follower(BaseState):
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)
         if message.commitIndex >= await self.log.get_last_index():
-            if message.commitIndex > await self.log.get_local_commit_index():
+            if message.commitIndex > await self.log.get_commit_index():
                 await self.new_leader_commit_index(message.commitIndex)
         return
 
@@ -90,22 +90,22 @@ class Follower(BaseState):
         self.logger.info("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
-        local_commit = await self.log.get_local_commit_index()
+        commit = await self.log.get_commit_index()
         self.logger.info("%s Leader commit index %d higher than ours %d ",
-                            self.my_uri(), leader_commit_index, local_commit)
-        if local_commit == 0:
+                            self.my_uri(), leader_commit_index, commit)
+        if commit == 0:
             min_index = 1
         else:
-            min_index = local_commit
+            min_index = commit
         last_index = await self.log.get_last_index()
         max_index = min(leader_commit_index + 1, last_index + 1)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
-            if not log_rec.local_committed:
+            if not log_rec.committed:
                 if log_rec.code == RecordCode.client_command:
                     await self.process_command_record(log_rec)
                 else:
-                    log_rec.local_committed = True
+                    log_rec.committed = True
                     await self.log.replace(log_rec)
                 
     async def process_command_record(self, log_record):
