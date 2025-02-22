@@ -106,7 +106,7 @@ class simpleOps():
     exploded = False
     return_error = False
     reported_error = False
-    async def process_command(self, command):
+    async def process_command(self, command, serial):
         logger = logging.getLogger("simpleOps")
         error = None
         result = None
@@ -664,8 +664,8 @@ class PausingServer(PilotAPI):
         return self.log
 
     # Part of PilotAPI
-    async def process_command(self, command):
-        return await self.operations.process_command(command)
+    async def process_command(self, command, serial):
+        return await self.operations.process_command(command, serial)
         
     async def send_message(self, target, in_msg):
         msg = self.hull.decode_message(in_msg)

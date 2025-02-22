@@ -115,7 +115,7 @@ class Follower(BaseState):
         try:
             command = log_record.command
             processor = self.hull.get_processor()
-            result, error_data = await processor.process_command(command)
+            result, error_data = await processor.process_command(command, log_record.serial)
             if error_data is None:
                 self.logger.debug("processor ran no error")
                 await self.hull.record_substate(SubstateCode.command_done)
