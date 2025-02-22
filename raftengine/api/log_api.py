@@ -26,21 +26,20 @@ class RecordCode(str, Enum):
 class LogRec:
     index: int = field(default = 0)
     term: int = field(default = 0)
-    command: str  = field(default = None, repr=False)
-    result: str  = field(default = None, repr=False)
-    error: bool  = field(default = False)
+    command: str = field(default = None, repr=False)
+    result: str = field(default = None, repr=False)
+    error: bool = field(default = False)
     code: RecordCode = field(default=RecordCode.client_command)
-    local_committed: bool = field(default = False)
+    serial: int = field(default = None, repr=False)
+    leader_id: str = field(default = None, repr=False)
+    committed: bool = field(default = False)
 
     @classmethod
     def from_dict(cls, data):
-        rec = cls(index=data['index'],
-                  term=data['term'],
-                  command=data['command'],
-                  result=data['result'],
-                  error=data['error'],
-                  code=RecordCode(data['code']),
-                  local_committed=data['local_committed'])
+        copy_of = dict(data)
+        if not isinstance(data['code'], RecordCode):
+            copy_of['code'] = RecordCode(data['code'])
+        rec = cls(**copy_of)
         return rec
 
 class CommandLogRec(LogRec):
@@ -84,7 +83,7 @@ class LogAPI(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def get_local_commit_index(self) -> int:  # pragma: no cover abstract
+    async def get_commit_index(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

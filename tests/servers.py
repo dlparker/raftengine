@@ -341,7 +341,7 @@ class WhenHasCommitIndex(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if await server.hull.log.get_local_commit_index() >= self.index:
+        if await server.hull.log.get_commit_index() >= self.index:
             return True
         return False
     
@@ -1008,7 +1008,7 @@ class SNormalCommand(StdSequence):
             node.clear_triggers()
             if node.hull.state.state_code == "LEADER":
                 self.leader = node
-                orig_index = await node.log.get_local_commit_index()
+                orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
                 break
         for uri,node in self.network.nodes.items():

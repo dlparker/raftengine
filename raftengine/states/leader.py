@@ -1,4 +1,4 @@
-import logging
+import logging 
 import asyncio
 import time
 import json
@@ -107,7 +107,7 @@ class CommandWaiter:
             await self.leader.hull.record_substate(SubstateCode.failed_command)
         else:
             await self.leader.hull.record_substate(SubstateCode.committing_command)
-            self.orig_log_record.local_committed = True
+            self.orig_log_record.committed = True
             self.orig_log_record.result = command_result
             new_rec = await self.log.replace(self.orig_log_record)
         self.result = result
@@ -130,13 +130,17 @@ class Leader(BaseState):
             tracker = await self.tracker_for_follower(uri)
         await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
         start_record = LogRec(code=RecordCode.term_start,
-                              term=await self.log.get_term())
+                              term=await self.log.get_term(),
+                              leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
         await self.broadcast_log_record(the_record)
 
-    async def run_command(self, command, timeout=1.0):
+    async def run_command(self, command, timeout=1.0, serial=None):
         # first save it in the log
-        raw_rec = LogRec(command=command, term=await self.log.get_term())
+        if serial is None:
+            serial = await self.log.get_last_index() + 1
+        raw_rec = LogRec(command=command, term=await self.log.get_term(),
+                         leader_id=self.my_uri(), serial=serial)
         log_rec = await self.log.append(raw_rec)
         self.logger.debug("%s saved log record at index %d", self.my_uri(), log_rec.index)
         # now send it to everybody
@@ -157,7 +161,7 @@ class Leader(BaseState):
             prevLogIndex = prev_rec.index
             prevLogTerm = prev_rec.term
         term = await self.log.get_term()
-        commit_index = await self.log.get_local_commit_index()
+        commit_index = await self.log.get_commit_index()
         proto_message = AppendEntriesMessage(sender=self.my_uri(),
                                              receiver='',
                                              term=term,
@@ -192,7 +196,7 @@ class Leader(BaseState):
         my_uri = self.my_uri()
         last_term = await self.log.get_last_term()
         last_index = await self.log.get_last_index()
-        commit_index = await self.log.get_local_commit_index()
+        commit_index = await self.log.get_commit_index()
         for uri in self.hull.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
@@ -239,7 +243,7 @@ class Leader(BaseState):
                 # can arrive out of order if comms is not RPC based
                 if tracker.matchIndex < message.prevLogIndex:
                     tracker.matchIndex = message.prevLogIndex
-            if (tracker.matchIndex > await self.log.get_local_commit_index()):
+            if (tracker.matchIndex > await self.log.get_commit_index()):
                 log_rec = await self.log.read(tracker.matchIndex)
                 await self.record_commit_checker(log_rec)
             if tracker.nextIndex <= await self.log.get_last_index():
@@ -265,7 +269,7 @@ class Leader(BaseState):
         for index in range(next_index, max_index + 1):
             rec = await self.log.read(index)
             # make sure the follower doesn't get confused about their local commit status
-            rec.local_committed = False
+            rec.committed = False
             entries.append(rec)
         # The following code is vulnerable if next_index == 1,
         # because it will blow up trying to read the record
@@ -291,7 +295,7 @@ class Leader(BaseState):
                                        entries=entries,
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex,
-                                       commitIndex=await self.log.get_local_commit_index())
+                                       commitIndex=await self.log.get_commit_index())
         self.logger.info("sending catchup %s", message)
         await self.hull.record_substate(SubstateCode.sending_catchup)
         await self.record_sent_message(message)
@@ -309,7 +313,7 @@ class Leader(BaseState):
             prevLogIndex = pre_rec.index
             prevLogTerm = pre_rec.term
         rec = await self.log.read(next_index)
-        rec.local_committed = False
+        rec.committed = False
         entries = [rec,]
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,
@@ -317,7 +321,7 @@ class Leader(BaseState):
                                        entries=entries,
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex,
-                                       commitIndex=await self.log.get_local_commit_index())
+                                       commitIndex=await self.log.get_commit_index())
         self.logger.info("sending backdown %s", message)
         await self.hull.record_substate(SubstateCode.sending_backdown)
         await self.record_sent_message(message)
@@ -333,13 +337,13 @@ class Leader(BaseState):
             if log_record.code == RecordCode.client_command:
                 asyncio.create_task(self.run_command_locally(log_record))
             else:
-                log_record.local_committed = True
+                log_record.committed = True
                 await self.log.replace(log_record)
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
         log_rec = await self.log.read(log_record.index)
-        if log_rec.local_committed:
+        if log_rec.committed:
             return
         result = None
         error_data = None
@@ -355,7 +359,7 @@ class Leader(BaseState):
             self.logger.debug("%s running command produced error %s", self.my_uri(), error_data)
         else:
             log_rec.result = result
-            log_rec.local_committed = True
+            log_rec.committed = True
             await self.log.replace(log_rec)
         waiter = self.command_waiters[log_rec.index]
         if waiter:

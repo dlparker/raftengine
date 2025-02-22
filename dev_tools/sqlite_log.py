@@ -60,10 +60,12 @@ class Records:
         schema += "(rec_index INTEGER primary key, " 
         schema += "code TEXT, " 
         schema += "command TEXT, " 
-        schema += "result TEXT, " 
+        schema += "result TEXT, "
+        schema += "term int, "
         schema += "error BOOLEAN, " 
-        schema += "term INTEGER, "
-        schema += "local_committed BOOLEAN)" 
+        schema += "leader_id TEXT, "
+        schema += "serial TEXT, "
+        schema += "committed BOOLEAN)" 
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
@@ -85,15 +87,23 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, result, error, term, local_committed) values "
-        values += "?,?,?,?,?,?)"
+        sql += "code, command, result, error, term, serial, leader_id, committed) values "
+        values += "?,?,?,?,?,?,?,?)"
         sql += values
-        params.append(str(entry.code.value))
+        if isinstance(entry, RecordCode):
+            params.append(entry.code.value)
+        else:
+            params.append(entry.code)
         params.append(entry.command)
         params.append(entry.result)
         params.append(entry.error)
         params.append(entry.term)
-        params.append(entry.local_committed)
+        if entry.serial:
+            params.append(f'{entry.serial:,}')
+        else:
+            params.append(entry.serial)
+        params.append(entry.leader_id)
+        params.append(entry.committed)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
@@ -121,6 +131,8 @@ class Records:
         conv = dict(rec_data)
         conv['index'] = rec_data['rec_index']
         del conv['rec_index']
+        if rec_data['serial']:
+            conv['serial'] = int(rec_data['serial'])
         log_rec = LogRec.from_dict(conv)
         cursor.close()
         return log_rec
@@ -150,11 +162,11 @@ class Records:
         rec = self.save_entry(rec)
         return rec
 
-    def get_local_commit_index(self):
+    def get_commit_index(self):
         if self.db is None:
             self.open()
         cursor = self.db.cursor()
-        sql = "select rec_index from records where local_committed = 1 order by rec_index desc"
+        sql = "select rec_index from records where committed = 1 order by rec_index desc"
         cursor.execute(sql)
         rec_data = cursor.fetchone()
         if rec_data is None:
@@ -260,14 +272,14 @@ class SqliteLog(LogAPI):
         return rec.term
 
     async def update_and_commit(self, entry:LogRec) -> LogRec:
-        entry.local_committed = True
+        entry.committed = True
         save_rec = self.records.insert_entry(entry)
         return save_rec
     
-    async def get_local_commit_index(self):
+    async def get_commit_index(self):
         if not self.records.is_open():
             self.records.open()
-        return self.records.get_local_commit_index()
+        return self.records.get_commit_index()
 
     async def delete_all_from(self, index: int):
         if not self.records.is_open():
