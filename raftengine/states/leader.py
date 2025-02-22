@@ -239,10 +239,10 @@ class Leader(BaseState):
                 # follower added a record (some records?) we sent
                 tracker.matchIndex = message.maxIndex
                 tracker.nextIndex = message.maxIndex + 1
-            else:
-                # can arrive out of order if comms is not RPC based
-                if tracker.matchIndex < message.prevLogIndex:
-                    tracker.matchIndex = message.prevLogIndex
+            #else:
+                # can it arrive out of order if comms is not RPC based?
+                #if tracker.matchIndex < message.prevLogIndex:
+                    #tracker.matchIndex = message.prevLogIndex
             if (tracker.matchIndex > await self.log.get_commit_index()):
                 log_rec = await self.log.read(tracker.matchIndex)
                 await self.record_commit_checker(log_rec)
@@ -352,7 +352,7 @@ class Leader(BaseState):
             self.logger.info("%s applying command committed at index %d", self.my_uri(),
                              await self.log.get_last_index())
             processor = self.hull.get_processor()
-            result,error_data = await processor.process_command(log_record.command)
+            result,error_data = await processor.process_command(log_record.command, log_record.serial)
         except Exception as e:
             error_data = traceback.format_exc()
         if error_data:

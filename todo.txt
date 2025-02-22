@@ -1,10 +1,9 @@
 Immediatly:
 
 
-
 DONE 10. Leader should be tracking followers more formally, supposed to keep nextIndex and matchIndex
 
-20. using **data in from_dict for messages instead of spelling it out
+DONE 20. using **data in from_dict for messages instead of spelling it out
 
 DONE    !!! Clean up LogRec, chaning "user_data" to command and result and add custom json serializer so
         that serialising the entries array just works
@@ -27,11 +26,12 @@ DONE    !!!! Follower should look at log records when behind, and find not just 
 
 	 then the follower needs to send index 2 term 4. This will allow overwrite as speced.
 
-23. See if message base_class has any value. Also study change to dataclasses
+DONE 23. See if message base_class has any value. Also study change to dataclasses
 
-25. Add "caller_context" to command ops, pass it on process_command and return it
+REPLACED 25. Add "caller_context" to command ops, pass it on process_command and return it
     in result. Maybe try one more time to make apply_command cleaner (and rename it
     while we are at it).
+
     
 31. Update hull api, __init__ should not be in it, so some sort of set_config
     thing. Think about updating config while running. Maybe have some sort
