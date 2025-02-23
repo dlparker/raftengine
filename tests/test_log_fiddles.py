@@ -61,7 +61,8 @@ async def test_empty_log(cluster_maker):
     ts_1.operations.total = 0
     ts_1.block_network()
 
-    await ts_2.hull.start_campaign()
+    await ts_2.enable_timers()
+    await ts_3.enable_timers()
     logger.info('------------------------ Running Partial Election')
     sequence = SPartialElection(cluster, voters=[uri_2, uri_3])
     await cluster.run_sequence(sequence)
@@ -75,8 +76,6 @@ async def test_empty_log(cluster_maker):
     logger.info('------------------------ Restoring timers and waiting for ts_1 to catch up')
     ts_1.unblock_network()
     await ts_1.enable_timers()
-    await ts_2.enable_timers()
-    await ts_3.enable_timers()
     start_time = time.time()
     while (time.time() - start_time < election_timeout_max * 2
            and ts_1.operations.total != 50):
