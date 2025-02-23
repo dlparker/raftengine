@@ -255,10 +255,17 @@ class Leader(BaseState):
             # all in sync, done
             return
         if tracker.nextIndex > 0:
-            if tracker.nextIndex == 1:
-                await self.send_catchup(message.sender, 1)
-            else:
-                await self.backdown_follower(message.sender)
+            # I used to do the following, but I think it is impossible
+            # because backdown_follower will send the first record. However,
+            # there are comments in the thesis about the possibility of
+            # reducing bandwidth by not sending any records in the backdown
+            # message. If anyone ever makes that change, this code will be 
+            # needed
+            # if tracker.nextIndex == 1:
+            #    await self.send_catchup(message.sender, 1)
+            # else:
+            #    await self.backdown_follower(message.sender)
+            await self.backdown_follower(message.sender)
         self.logger.debug('After response processing %s tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
 
