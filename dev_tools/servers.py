@@ -67,8 +67,8 @@ def set_levels(handler_names, additions=None): # pragma: no cover
     log_loggers['PausingServer'] = info_log
     default_log =  info_log
     #default_log =  debug_log
-    log_loggers['Leader'] = debug_log
-    log_loggers['Follower'] = debug_log
+    log_loggers['Leader'] = default_log
+    log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
@@ -672,6 +672,7 @@ class PausingServer(PilotAPI):
         self.out_messages = []
         self.lost_out_messages = []
         self.logger = logging.getLogger("PausingServer")
+        self.use_log = use_log
         if use_log == MemoryLog:
             self.log = MemoryLog()
         elif use_log == SqliteLog:
@@ -721,7 +722,21 @@ class PausingServer(PilotAPI):
     
     async def enable_timers(self):
         return await self.hull.enable_timers()
-        
+
+    def replace_log(self, new_log=None):
+        if self.use_log == SqliteLog:
+            self.log.close()
+        if new_log is None:
+            if self.use_log == MemoryLog:
+                self.log = MemoryLog()
+            elif self.use_log == SqliteLog:
+                self.log = setup_sqlite_log(self.uri)
+        else:
+            self.log = new_log
+        self.hull.log = self.log
+        self.hull.state.log = self.log
+        return self.log
+    
     def change_networks(self, network):
         if self.network and self.network != network:
             self.logger.info("%s changing networks, must be partition or heal, new net %s", self.uri, str(network))
