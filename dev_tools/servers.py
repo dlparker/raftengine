@@ -20,7 +20,7 @@ from dev_tools.sqlite_log import SqliteLog
 
 from raftengine.api.pilot_api import PilotAPI
 
-def setup_logging(additions=None):
+def setup_logging(additions=None): # pragma: no cover
     #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
     lfstring = '[%(levelname)s] %(name)s: %(message)s'
     log_formaters = dict(standard=dict(format=lfstring))
@@ -56,7 +56,7 @@ def setup_logging(additions=None):
         raise
     return log_config
 
-def set_levels(handler_names, additions=None):
+def set_levels(handler_names, additions=None): # pragma: no cover
     log_loggers = dict()
     err_log = dict(handlers=handler_names, level="ERROR", propagate=False)
     warn_log = dict(handlers=handler_names, level="WARNING", propagate=False)
@@ -67,8 +67,8 @@ def set_levels(handler_names, additions=None):
     log_loggers['PausingServer'] = info_log
     default_log =  info_log
     #default_log =  debug_log
-    log_loggers['Leader'] = default_log
-    log_loggers['Follower'] = default_log
+    log_loggers['Leader'] = debug_log
+    log_loggers['Follower'] = debug_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
@@ -100,7 +100,7 @@ async def cluster_maker():
     if the_cluster is not None:
         await the_cluster.cleanup()
     
-class simpleOps():
+class simpleOps(): # pragma: no cover
     total = 0
     explode = False
     exploded = False
@@ -131,7 +131,7 @@ class simpleOps():
         return result, None
 
 
-class PauseTrigger:
+class PauseTrigger: # pragma: no cover
 
     async def is_tripped(self, server):
         return False
@@ -170,18 +170,19 @@ class WhenMessageOut(PauseTrigger):
         return done
 
     async def flush_one_out_message(self, server, message):
-        if len(server.out_messages) == 0:
-            return None
-        if server.block_messages:
-            return None
-        new_list = []
-        for msg in server.out_messages:
-            if msg == message:
-                server.logger.debug("FLUSH forwarding message %s", msg)
-                await server.cluster.post_in_message(msg)
-            else:
-                new_list.append(msg)
-        server.out_messages = new_list
+        new_list = None
+        if not server.block_messages:
+            for msg in server.out_messages:
+                if new_list is None:
+                    new_list = []
+                if msg == message:
+                    server.logger.debug("FLUSH forwarding message %s", msg)
+                    await server.cluster.post_in_message(msg)
+                else:
+                    new_list.append(msg)
+        if new_list is not None:
+            server.out_messages = new_list
+        return new_list
         
 class WhenCommitIndexSent(WhenMessageOut):
 
@@ -195,11 +196,11 @@ class WhenCommitIndexSent(WhenMessageOut):
         return msg
 
     async def is_tripped(self, server):
-        done = await super().is_tripped(server)
-        if done:
+        done = False
+        if await super().is_tripped(server):
             if self.trigger_message.commitIndex == self.target_index:
-                return done
-        return False
+                done = True
+        return done
     
 class WhenMessageIn(PauseTrigger):
     # Whenn a particular message have been transported
@@ -423,8 +424,7 @@ class TestHull(Hull):
         self.explode_on_message_code = None
         self.corrupt_message_with_code = None
         self.state_run_later_def = None
-        self.timers_paused = False
-        self.condition = asyncio.Condition()
+        self.timers_disabled = False
         self.wrapper_logger = logging.getLogger("SimulatedNetwork")
         
     async def on_message(self, message):
@@ -442,25 +442,29 @@ class TestHull(Hull):
             result = await super().on_message(message)
         return result
 
-    async def pause_timers(self):
-        self.timers.paused = True
-            
-    async def release_timers(self):
-        async with self.condition:
-            self.timers.paused = True
-            await self.condition.notify()
-            
-    async def state_after_runner(self, target):
-        while self.timers_paused:
-            async with self.condition:
-                await self.condition.wait()
-        return await super().state_after_runner(target)
-
     async def state_run_after(self, delay, target):
         self.state_run_later_def = dict(state_code=self.state.state_code,
                                         delay=delay, target=target)
-        await super().state_run_after(delay, target)
+        if not self.timers_disabled:
+            await super().state_run_after(delay, target)
 
+    async def disable_timers(self):
+        self.timers_disabled = True
+        self.state_async_handle.cancel()
+        self.state_async_handle = None
+    
+    async def enable_timers(self, reset=True):
+        if reset:
+            if self.state.state_code == "FOLLOWER":
+                self.last_leader_contact = time.time()
+            elif self.state.state_code == "LEADER":
+                self.last_broadcast_time = time.time()
+        if self.state_run_later_def:
+            await super().state_run_after(self.state_run_later_def['delay'],
+                                          self.state_run_later_def['target'])
+        self.timers_disabled = False
+            
+    
 class Network:
 
     def __init__(self, name, nodes, net_mgr):
@@ -493,6 +497,17 @@ class Network:
         node.in_messages.append(message)
         
     async def deliver_all_pending(self, out_only=False):
+        """ This does the final part of the work for the Cluster "mamual" 
+        message delivery control mechanism by finding and moving
+        pending messages from one server's output list to another 
+        servers input list and triggering the target server to process
+        the message. It continues this process until there are no more
+        messages pending delivery.
+        If the caller specifies out_only == True, then the process 
+        will only move messages from out to in buffers, not trigger the
+        input processing. This can be useful if a test wants to have
+        granular control of the processing of the input messages.
+        """
         in_ledger = []
         out_ledger = []
         any = True
@@ -592,6 +607,8 @@ class NetManager:
         if self.other_segments is None:
             return
         for uri,node in self.full_cluster.nodes.items():
+            cur_net = node.network
+            cur_net.remove_node(node)
             self.full_cluster.add_node(node)
             node.hull.cluster_config.node_uris =  list(self.full_cluster.nodes.keys())
         self.quorum_segment = None
@@ -606,6 +623,20 @@ class NetManager:
             return
 
     async def deliver_all_pending(self,  quorum_only=False, out_only=False):
+        """ This does the first part of the work for the Cluster "mamual" 
+        message delivery control mechanism, by deciding which part of the 
+        current network simulation should participate. If the network has
+        been split, the test code may want only the partition containing 
+        the majority of the nodes, the quorom segment, to participate in 
+        the message flow. This layer chooses one or more network segments 
+        and then lets the netwok simulation itself decide the 
+        deliver details.
+        If the caller specifies out_only == True, then the process 
+        will only move messages from out to in buffers, not trigger the
+        input processing. This can be useful if a test wants to have
+        granular control of the processing of the input messages.
+        """
+
         if self.quorum_segment is None:
             net1 = self.full_cluster
         else:
@@ -667,6 +698,7 @@ class PausingServer(PilotAPI):
     async def process_command(self, command, serial):
         return await self.operations.process_command(command, serial)
         
+    # Part of PilotAPI
     async def send_message(self, target, in_msg):
         msg = self.hull.decode_message(in_msg)
         self.logger.debug("queueing out msg %s", msg)
@@ -684,6 +716,12 @@ class PausingServer(PilotAPI):
     async def start_election(self):
         await self.hull.campaign()
 
+    async def disable_timers(self):
+        return await self.hull.disable_timers()
+    
+    async def enable_timers(self):
+        return await self.hull.enable_timers()
+        
     def change_networks(self, network):
         if self.network and self.network != network:
             self.logger.info("%s changing networks, must be partition or heal, new net %s", self.uri, str(network))
@@ -705,11 +743,6 @@ class PausingServer(PilotAPI):
         for msg in self.blocked_out_messages:
             self.out_messages.append(msg)
 
-    async def accept_in_msg(self, message):
-        # called by network on behalf of sender
-        self.logger.debug("queueing sent %s", message)
-        self.in_messages.append(message)
-        
     async def do_next_in_msg(self):
         # sometimes test code wants to cycle individual servers specifically
         return await self.network.do_next_in_msg(self)
@@ -717,13 +750,6 @@ class PausingServer(PilotAPI):
     async def do_next_out_msg(self):
         # sometimes test code wants to cycle individual servers specifically
         return await self.network.do_next_out_msg(self)
-
-    async def do_next_msg(self):
-        # called by network when running simulation
-        msg = await self.do_next_out_msg()
-        if not msg:
-            msg = await self.do_next_in_msg()
-        return msg
 
     def clear_out_msgs(self):
         # called by network when simulating network breaks and reconnects
@@ -865,9 +891,11 @@ class PausingCluster:
                                        )
             node.set_configs(local_config, cc)
 
-    async def start(self, only_these=None):
+    async def start(self, only_these=None, timers_disabled=True):
         for uri, node in self.nodes.items():
             await node.start()
+            if timers_disabled:
+                await node.disable_timers()
 
     def split_network(self, segments):
         self.net_mgr.split_network(segments)
@@ -875,6 +903,12 @@ class PausingCluster:
     def unsplit(self):
         self.net_mgr.unsplit()
 
+    def get_leader(self):
+        for uri, node in self.nodes.items():
+            if node.hull.state.state_code == "LEADER":
+                return node
+        return None
+    
     async def run_sequence(self, sequence):
         await sequence.do_setup()
         # may raise timeout
@@ -886,15 +920,34 @@ class PausingCluster:
         # special situation, called when trigger trapped on out message,
         # but wants it to be delivered before pause
         await self.net_mgr.post_in_message(message)
-        
+
     async def deliver_all_pending(self,  quorum_only=False, out_only=False):
+        """ Cluster "mamual" message delivery control, meaning this methond delivers
+        messages from node to now one at a time untill no more messages are pending. 
+        Delivery includes triggering the code under test to process the messages,
+        and collecting the replies. It is intended to be used when the test code
+        has set up conditions that will result in a number of message interchanges
+        but they are a finite and deterministic sequence. This mechanism is not
+        suitabe for use when the timers for election_timeout et. al. are running.
+        A typical use of this is to setup the conditions for an election to happen
+        and then to let all the messages fly, then check that the election completed.
+        If the caller specifies quorum_only == True, and the netork has been split
+        into segments, then only the containing a majority of the servers will
+        participate in the message delivery. See NetManager.deliver_all_pending
+        for more details.
+        If the caller specifies out_only == True, then the process 
+        will only move messages from out to in buffers, not trigger the
+        input processing. This can be useful if a test wants to have
+        granular control of the processing of the input messages. 
+        See Network.deliver_all_pending for more details.
+        """
         return await self.net_mgr.deliver_all_pending(quorum_only=quorum_only, out_only=out_only)
 
-    async def auto_comms_runner(self):
+    async def auto_comms_runner(self, quorum_only=False):
         try:
             self.logger.error("-----------------------------auto_comms_runner starting")
             while self.auto_comms_flag:
-                res = await self.deliver_all_pending()
+                res = await self.deliver_all_pending(quorum_only)
                 count = 0
                 if res['multiple_networks']:
                     for subres in res['result_list']:
@@ -907,14 +960,21 @@ class PausingCluster:
             self.logger.error("-----------------------------auto_comms_runner exiting")
         except Exception as exc:
             self.logger.error("error trying to deliver messages %s", traceback.format_exc())
-            
-    async def start_auto_comms(self):
+
+    async def start_auto_comms(self, quorum_only=False):
+        """ This method creates a task that runs the normal deliver_all_pending method
+        continuously until told to stop. This is useful for simplifying test code that
+        deals with long sequences of more or less normal operations, so you don't have
+        to clutter up the code with constant calls to deliver_all_pending.
+        The quorum_only flag is passed to the deliver_all_pending on each call.
+        """
         if self.auto_comms_flag:
             return
         try:
             self.auto_comms_flag = True
             loop = asyncio.get_event_loop()
-            self.async_handle = loop.call_soon(lambda: loop.create_task(self.auto_comms_runner()))
+            self.async_handle = loop.call_soon(lambda:
+                                               loop.create_task(self.auto_comms_runner(quorum_only)))
         except Exception as exc:
             self.logger.error("error trying to setup auto_comms runner %s", traceback.format_exc())
         
@@ -1062,3 +1122,47 @@ class SNormalCommand(StdSequence):
             
         if self.restore_auto:
             await self.cluster.start_auto_comms()
+
+class SPartialElection(StdSequence):
+
+    def __init__(self, cluster, voters, timeout=1):
+        super().__init__(cluster=cluster, name="PartialElection")
+        self.timeout = timeout
+        self.voters = voters
+        self.logger = logging.getLogger('PausingServer')
+        self.done_count = 0
+        self.expected_count = 0
+
+    async def do_setup(self):
+        for uri in self.voters:
+            node = self.cluster.nodes[uri]
+            node.clear_triggers()
+            node.set_trigger(WhenElectionDone(self.voters))
+            self.expected_count += 1
+
+    async def runner_wrapper(self, node):
+        await node.run_till_triggers()
+        self.done_count += 1
+
+    async def wait_till_done(self):
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while self.done_count < self.expected_count:
+                await asyncio.sleep(timeout/100.0)
+            if time.time() - start_time >= timeout:
+                raise TimeoutTaskGroup()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for uri in self.voters:
+                    node = self.cluster.nodes[uri]
+                    tg.create_task(self.runner_wrapper(node))
+                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
+                tg.create_task(do_timeout(self.timeout))
+        except* TimeoutTaskGroup:
+            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        
+    async def do_teardown(self):
+        for uri in self.voters:
+            node = self.cluster.nodes[uri]
+            node.clear_triggers()
+            

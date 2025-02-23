@@ -6,14 +6,14 @@ import time
 from pathlib import Path
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from servers import SNormalElection, SNormalCommand
-from servers import setup_logging
+from dev_tools.servers import SNormalElection, SNormalCommand
+from dev_tools.servers import setup_logging
+from dev_tools.servers import WhenElectionDone
+from dev_tools.servers import PausingCluster, cluster_maker
 
 extra_logging = [dict(name=__name__, level="debug"),]
 setup_logging(extra_logging)
 
-from servers import WhenElectionDone
-from servers import PausingCluster, cluster_maker
 
 # Stuff in here is just things that help me develop tests by writing
 # explority code that runs in the test context, just to figure out
@@ -94,48 +94,4 @@ async def test_normal_command_sequence_1(cluster_maker):
     assert ts_3.operations.total == 2
 
 
-async def test_log_stuff():
-    from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
-    import json
-    from raftengine.messages.append_entries import AppendEntriesMessage
-    from dev_tools.memory_log import MemoryLog
-    from dev_tools.sqlite_log import SqliteLog
-    from raftengine.api.log_api import LogRec
-    m_log = MemoryLog()
-
-    path = Path('/tmp', "test_log.sqlite")
-    if path.exists():
-        path.unlink()
-    s_log = SqliteLog(path)
-    s_log.start()
-
-    rec1 = LogRec(term=1, command="add 1")
-    rec2 = LogRec(term=1, command="add 2")
-    msg = AppendEntriesMessage('1', '2', '1', 0, 0, [rec1, rec2], 2)
-
-    # 
-
-    for log in [m_log, s_log]:
-
-        [rec_1, rec_2] = await log.append_multi([rec1, rec2])
-        assert await log.get_last_index() == 2
-        assert await log.get_last_term() == 1
-        assert rec_1.index == 1
-        assert rec_1.command == 'add 1'
-        assert not rec_1.committed
-        assert rec_2.index == 2
-        assert rec_2.command == 'add 2'
-        
-        rec_2b = await log.read(await log.get_last_index())
-        assert rec_2b.index == 2
-        assert rec_2b.command == 'add 2'
-        
-        rec_1.committed = True
-        await log.replace(rec_1)
-        loc_c = await log.get_commit_index()
-        assert loc_c == 1
-        await log.update_and_commit(rec_2)
-        loc_c = await log.get_commit_index()
-        assert loc_c == 2
-    
         
