@@ -51,7 +51,7 @@ async def test_empty_log(cluster_maker):
         sequence2 = SNormalCommand(cluster, "add 1", 1)
         command_result = await cluster.run_sequence(sequence2)
 
-    await cluster.deliver_all_pending()
+        #await cluster.deliver_all_pending()
     await cluster.start_auto_comms()
     assert ts_1.operations.total == 50
     # Now "crash" the leader, run an election, then have
