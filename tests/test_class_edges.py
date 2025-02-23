@@ -8,8 +8,8 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.api.types import StateCode, SubstateCode
 
-from tests.servers import PausingCluster, cluster_maker
-from tests.servers import setup_logging
+from dev_tools.servers import PausingCluster, cluster_maker
+from dev_tools.servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]
 setup_logging(extra_logging)

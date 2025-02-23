@@ -6,8 +6,8 @@ import time
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
-from servers import PausingCluster, cluster_maker
-from servers import setup_logging
+from dev_tools.servers import PausingCluster, cluster_maker
+from dev_tools.servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]
 setup_logging(extra_logging)
@@ -15,11 +15,10 @@ setup_logging(extra_logging)
 
 async def test_election_1(cluster_maker):
     """This is the happy path, everybody has same state, only one server
-        runs for leader, everybody response correctly. It is written
-        using the most granular control provided by the PausingServer
-        class, controlling the message movement steps directly (for
-        the most part).
-
+    runs for leader, everybody response correctly. It is written
+    using the most granular control provided by the PausingServer
+    class, controlling the message movement steps directly (for
+    the most part). Timers off
     """
 
     cluster = cluster_maker(3)
@@ -75,6 +74,7 @@ async def test_election_2(cluster_maker):
     """Just a simple test of first election with 5 servers, to ensure it
     works as well as 3 servers. Mostly pointless, but might catch an
     assumption in test support code that only three servers are used.
+    Uses cluster manual message delivery control, timers off.
     """
     
     cluster = cluster_maker(5)
@@ -96,6 +96,11 @@ async def test_election_2(cluster_maker):
 
     
 async def test_reelection_1(cluster_maker):
+    """ Test of a hard triggered re-election, caused by directly
+    demoting the leader and directly triggering a promotion to candidate
+    on a different server. 
+    Uses cluster manual message delivery control, timers off.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
     await cluster.start()
@@ -121,12 +126,20 @@ async def test_reelection_1(cluster_maker):
     assert ts_3.hull.get_state_code() == "FOLLOWER"
     
 async def test_reelection_2(cluster_maker):
-    cluster = cluster_maker(3)
+    """ Test of a hard triggered re-election, caused by directly
+    demoting the leader and directly triggering a promotion to candidate
+    on a different server. Identical to test_reelection_1 except it 
+    uses 5 servers instead of three.
+    Just a guard against threshold or timing bugs that might trigger 
+    on cluster size
+    Uses cluster manual message delivery control, timers off
+    """
+    cluster = cluster_maker(5)
     cluster.set_configs()
     await cluster.start()
     
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
+    ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
     await ts_1.hull.start_campaign()
     # vote requests, then vote responses
@@ -136,6 +149,8 @@ async def test_reelection_2(cluster_maker):
     await cluster.deliver_all_pending()
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_4.hull.state.leader_uri == uri_1
+    assert ts_5.hull.state.leader_uri == uri_1
 
     # now have leader resign, by telling it to become follower
     await ts_1.hull.demote_and_handle(None)
@@ -146,6 +161,10 @@ async def test_reelection_2(cluster_maker):
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     assert ts_3.hull.get_state_code() == "FOLLOWER"
+    assert ts_1.hull.state.leader_uri == uri_2
+    assert ts_3.hull.state.leader_uri == uri_2
+    assert ts_4.hull.state.leader_uri == uri_2
+    assert ts_5.hull.state.leader_uri == uri_2
     
 async def test_reelection_3(cluster_maker):
     cluster = cluster_maker(3)
@@ -164,7 +183,7 @@ async def test_reelection_3(cluster_maker):
     ts_3.hull.cluster_config.election_timeout_min = 0.01
     ts_3.hull.cluster_config.election_timeout_max = 0.011
 
-    await cluster.start()
+    await cluster.start(timers_disabled=False)
     # give ts_3 time to timeout and start campaign
     start_time = time.time()
     leader = None

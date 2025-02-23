@@ -4,12 +4,20 @@ from typing import Union, List, Optional
 import logging
 from raftengine.api.log_api import LogRec, LogAPI
 
+logger = logging.getLogger(__name__)
 class Records:
 
     def __init__(self):
         # log record indexes start at 1, per raftengine spec
         self.entries = []
 
+    @classmethod
+    def from_json_dict(cls, jdict):
+        res = cls()
+        for entry_dict in jdict['entries']:
+            res.entries.append(LogRec.from_dict(entry_dict))
+        return res
+    
     @property
     def index(self):
         return len(self.entries)
@@ -23,19 +31,14 @@ class Records:
         return self.get_entry_at(self.index)
 
     def insert_entry(self, rec: LogRec) -> LogRec:
-        if rec.index == 0:
+        if rec.index > len(self.entries) + 1:
+            raise Exception('cannont insert past last index')
+        if rec.index == 0 or rec.index is None or rec.index == len(self.entries) + 1:
             self.entries.append(rec)
             rec.index = len(self.entries)
             return rec
-        if rec.index == len(self.entries) + 1:
-            self.entries.append(rec)
-        if rec.index >= len(self.entries) + 1:
-            raise Exception('cannont insert past last index')
         else:
             self.entries[rec.index-1] = rec
-    
-    def save_entry(self, rec: LogRec) -> LogRec:
-        return self.insert_entry(rec)
 
     def get_commit_index(self):
         for entry in self.entries[::-1]:
@@ -53,22 +56,21 @@ class MemoryLog(LogAPI):
     def __init__(self):
         self.records = Records()
         self.term = 0
-        self.server = None
-        self.working_directory = None
-        self.logger = logging.getLogger(__name__)
-        
-    async def start(self, server, working_directory):
-        self.server = server
-        self.working_directory = working_directory
+
+    @classmethod
+    def from_json_dict(cls, jdict):
+        res = cls()
+        res.term =  jdict['term']
+        res.records = Records.from_json_dict(jdict['records'])
+        return res
+    
+    def start(self):
+        pass
     
     async def get_term(self) -> Union[int, None]:
-        if not isinstance(self.term, int):
-            breakpoint()
         return self.term
     
     async def set_term(self, value: int):
-        if not isinstance(value, int):
-            breakpoint()
         self.term = value
 
     async def incr_term(self):
@@ -79,7 +81,7 @@ class MemoryLog(LogAPI):
         save_rec = LogRec.from_dict(record.__dict__)
         self.records.insert_entry(save_rec)
         return_rec = LogRec.from_dict(save_rec.__dict__)
-        self.logger.debug("new log record %s", return_rec.index)
+        logger.debug("new log record %s", return_rec.index)
         return return_rec
     
     async def append_multi(self, entries: List[LogRec]) -> None:
@@ -95,8 +97,8 @@ class MemoryLog(LogAPI):
     async def replace(self, entry:LogRec) -> LogRec:
         if entry.index is None:
             raise Exception("api usage error, call append for new record")
-        if entry.index == 0:
-            raise Exception("api usage error, cannot insert at index 0")
+        if entry.index < 1:
+            raise Exception("api usage error, cannot insert at index less than 1")
         save_rec = LogRec.from_dict(entry.__dict__)
         self.records.insert_entry(save_rec)
         return LogRec.from_dict(save_rec.__dict__)
@@ -110,9 +112,9 @@ class MemoryLog(LogAPI):
             rec = self.records.get_last_entry()
         else:
             if index < 1:
-                raise Exception(f"cannot get index {index}, not in records")
+                raise Exception(f"cannot get index {index}, 1 is the first index")
             if index > self.records.index:
-                raise Exception(f"cannot get index {index}, not in records")
+                return None
             rec = self.records.get_entry_at(index)
         if rec is None:
             return None
