@@ -11,8 +11,10 @@ from dev_tools.servers import setup_logging
 from dev_tools.servers import WhenElectionDone
 from dev_tools.servers import PausingCluster, cluster_maker
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+#extra_logging = [dict(name=__name__, level="debug"),]
+#setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 
 # Stuff in here is just things that help me develop tests by writing
@@ -100,7 +102,6 @@ async def test_partial_sequences_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -109,7 +110,6 @@ async def test_partial_sequences_1(cluster_maker):
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
 
     for i in range(5):

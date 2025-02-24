@@ -11,8 +11,10 @@ from dev_tools.servers import WhenElectionDone
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+#extra_logging = [dict(name=__name__, level="debug"),]
+#setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 async def test_restart_during_heartbeat(cluster_maker):
     cluster = cluster_maker(3)
@@ -26,7 +28,6 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
@@ -102,7 +103,6 @@ async def test_slow_voter(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
@@ -192,7 +192,6 @@ async def test_message_errors(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_3.hull.start_campaign()
     ts_1.set_trigger(WhenElectionDone())

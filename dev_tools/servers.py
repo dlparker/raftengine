@@ -19,8 +19,9 @@ from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 
 from raftengine.api.pilot_api import PilotAPI
+log_config = None
 
-def setup_logging(additions=None): # pragma: no cover
+def setup_logging(additions=None, default_level="error"): # pragma: no cover
     #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
     lfstring = '[%(levelname)s] %(name)s: %(message)s'
     log_formaters = dict(standard=dict(format=lfstring))
@@ -42,7 +43,8 @@ def setup_logging(additions=None): # pragma: no cover
     if False:
         log_handlers = dict(file=file_handler, stdout=stdout_handler)
         handler_names = ['file', 'stdout']
-    log_loggers = set_levels(handler_names, additions=additions)
+    log_loggers = set_levels(handler_names, additions=additions, default_level=default_level)
+    global log_config
     log_config = dict(version=1, disable_existing_loggers=False,
                       formatters=log_formaters,
                       handlers=log_handlers,
@@ -56,7 +58,7 @@ def setup_logging(additions=None): # pragma: no cover
         raise
     return log_config
 
-def set_levels(handler_names, additions=None): # pragma: no cover
+def set_levels(handler_names, additions=None, default_level='error'): # pragma: no cover
     log_loggers = dict()
     err_log = dict(handlers=handler_names, level="ERROR", propagate=False)
     warn_log = dict(handlers=handler_names, level="WARNING", propagate=False)
@@ -64,16 +66,22 @@ def set_levels(handler_names, additions=None): # pragma: no cover
     info_log = dict(handlers=handler_names, level="INFO", propagate=False)
     debug_log = dict(handlers=handler_names, level="DEBUG", propagate=False)
     log_loggers[''] = root_log
-    log_loggers['PausingServer'] = info_log
-    default_log =  info_log
-    #default_log =  debug_log
-    log_loggers['Leader'] = debug_log
-    log_loggers['Follower'] = debug_log
+    default_log = err_log
+    if default_level == "warn":
+        default_log =  warn_log
+    elif default_level == "info":
+        default_log =  info_log
+    elif default_level == "debug":
+        default_log =  debug_log
+    log_loggers['Leader'] = default_log
+    log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
     log_loggers['Substates'] = default_log
+    log_loggers['PausingServer'] = default_log
     log_loggers['SimulatedNetwork'] = default_log
+    log_loggers['test_code'] = default_log
     if additions:
         for add in additions:
             if add['level'] == "debug":
@@ -98,6 +106,7 @@ async def cluster_maker():
         return the_cluster
     yield make_cluster
     if the_cluster is not None:
+        await the_cluster.stop_auto_comms()
         await the_cluster.cleanup()
     
 class simpleOps(): # pragma: no cover
@@ -968,7 +977,7 @@ class PausingCluster:
 
     async def auto_comms_runner(self, quorum_only=False):
         try:
-            self.logger.error("-----------------------------auto_comms_runner starting")
+            self.logger.info("-----------------------------auto_comms_runner starting")
             while self.auto_comms_flag:
                 res = await self.deliver_all_pending(quorum_only)
                 count = 0
@@ -980,9 +989,9 @@ class PausingCluster:
                 if count == 0:
                     await asyncio.sleep(0.00001)
             self.async_handle = None
-            self.logger.error("-----------------------------auto_comms_runner exiting")
+            self.logger.info("-----------------------------auto_comms_runner exiting")
         except Exception as exc:
-            self.logger.error("error trying to deliver messages %s", traceback.format_exc())
+            self.logger.info("error trying to deliver messages %s", traceback.format_exc())
 
     async def start_auto_comms(self, quorum_only=False):
         """ This method creates a task that runs the normal deliver_all_pending method
@@ -998,10 +1007,17 @@ class PausingCluster:
             loop = asyncio.get_event_loop()
             self.async_handle = loop.call_soon(lambda:
                                                loop.create_task(self.auto_comms_runner(quorum_only)))
+            self.logger.debug("scheduled auto_comms_runner")
         except Exception as exc:
             self.logger.error("error trying to setup auto_comms runner %s", traceback.format_exc())
         
     async def stop_auto_comms(self):
+        if self.auto_comms_flag:
+            if self.async_handle:
+                self.async_handle.cancel()
+                await asyncio.sleep(0)
+                self.async_handle = None
+                self.logger.debug("canceled auto_comms_runner")
         self.auto_comms_flag = False
         
     async def cleanup(self):

@@ -16,11 +16,13 @@ from dev_tools.servers import WhenInMessageCount, WhenElectionDone
 from dev_tools.servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.servers import setup_logging
+from dev_tools.servers import setup_logging, log_config
 
 #extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
-extra_logging = [dict(name=__name__, level="debug"),]
-log_config = setup_logging(extra_logging)
+#extra_logging = [dict(name=__name__, level="debug"),]
+#log_config = setup_logging(extra_logging)
+log_config = setup_logging()
+logger = logging.getLogger("test_code")
 
 async def test_command_1(cluster_maker):
     """ This runs commands using highly granular control of test servers 
@@ -52,12 +54,12 @@ async def test_command_1(cluster_maker):
     # now we need to trigger a heartbeat so that
     # followers will see the commitIndex is higher
     # and apply and locally commit
+    await cluster.stop_auto_comms()
     await ts_3.hull.state.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.hull.log.get_term()
     index = await ts_3.hull.log.get_last_index()
     assert index == 2 # one for start term, one for command
-    await cluster.stop_auto_comms()
     ts_1.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
     ts_2.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
     ts_3.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -186,7 +188,7 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -201,7 +203,7 @@ async def double_leader_inner(cluster, discard):
     # command. The leader should figure out it doesn't lead
     # anymore and give back a redirect
 
-    logger.error('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
@@ -216,7 +218,7 @@ async def double_leader_inner(cluster, discard):
         # will discard the messages that were blocked so
         # leader gets missed messages
         ts_1.unblock_network()
-        logger.error('---------!!!!!!! starting comms')
+        logger.info('---------!!!!!!! starting comms')
         await cluster.start_auto_comms()
     else:
         # will deliver blocked message
@@ -243,7 +245,7 @@ async def double_leader_inner(cluster, discard):
         await asyncio.sleep(0.0001)
     assert command_result is not None
     assert command_result.redirect == uri_2
-    logger.error('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
     logger.info('------------------------ Correct redirect (follower) done')
     
@@ -460,20 +462,7 @@ async def test_leader_explodes_in_command(cluster_maker):
         await asyncio.sleep(0.0001)
     assert command_result is not None
     assert command_result.error is not None
-
-    if False:
-        # Need to write something in leader that causes it to retry
-        # now we need to trigger a heartbeat so that
-        # followers will see the commitIndex is higher
-        # and apply and locally commit
-        await ts_1.hull.state.send_heartbeats()
-        
-        # followers need time to run commands
-        start_time = time.time()
-        while time.time() - start_time < 0.25 and ts_2.operations.total != 2:
-            await asyncio.sleep(0.0001)
-        assert ts_2.operations.total == 2
-        assert ts_3.operations.total == 1
+    await cluster.stop_auto_comms()
     
 async def test_long_catchup(cluster_maker):
     cluster = cluster_maker(3)
@@ -491,7 +480,7 @@ async def test_long_catchup(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -507,12 +496,12 @@ async def test_long_catchup(cluster_maker):
     # the catchup process gets them all. 
     
 
-    logger.error('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
              uri_2: ts_2}
-    logger.error('---------!!!!!!! spliting network ')
+    logger.info('---------!!!!!!! spliting network ')
     cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
     await cluster.stop_auto_comms()
@@ -527,7 +516,7 @@ async def test_long_catchup(cluster_maker):
             if  logger_name == "test_commands_1" or logger_name == "Leader" or logger_name == "Follower":
                 continue
             old_levels[logger_name] = logger.level
-            print(f"Changing logger named '{logger_name}' to error")
+            #print(f"Changing logger named '{logger_name}' to error")
             logger.setLevel('ERROR')
 
     loop_limit = 20
@@ -543,13 +532,13 @@ async def test_long_catchup(cluster_maker):
         for logger_name in old_levels:
             logger = logging.getLogger(logger_name)
             old_value = old_levels[logger_name]
-            print(f"Changing logger named '{logger_name}' to {old_value}")
+            #print(f"Changing logger named '{logger_name}' to {old_value}")
             logger.setLevel(old_value)
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
     await cluster.deliver_all_pending()
     cluster.unsplit()
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
 
@@ -557,6 +546,7 @@ async def test_long_catchup(cluster_maker):
     while time.time() - start_time < 0.5 and ts_3.operations.total < total:
         await asyncio.sleep(0.0001)
     assert ts_3.operations.total == total
+    await cluster.stop_auto_comms()
     logger.info('------------------------ All caught up')
 
 async def test_full_catchup(cluster_maker):
@@ -575,7 +565,7 @@ async def test_full_catchup(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
 
@@ -585,12 +575,12 @@ async def test_full_catchup(cluster_maker):
     # the catchup process gets them all. 
     
 
-    logger.error('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
              uri_2: ts_2}
-    logger.error('---------!!!!!!! spliting network ')
+    logger.info('---------!!!!!!! spliting network ')
     cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -615,7 +605,7 @@ async def test_full_catchup(cluster_maker):
     # will discard the messages that were blocked
     cluster.unsplit()
     logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, ts_1.operations.total)
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
@@ -642,7 +632,7 @@ async def test_follower_run_error(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
 
@@ -652,12 +642,12 @@ async def test_follower_run_error(cluster_maker):
     # the catchup process gets them all. 
     
 
-    logger.error('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
              uri_2: ts_2}
-    logger.error('---------!!!!!!! spliting network ')
+    logger.info('---------!!!!!!! spliting network ')
     cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, running', uri_3)
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -673,7 +663,7 @@ async def test_follower_run_error(cluster_maker):
     # will discard the messages that were blocked
     cluster.unsplit()
     logger.info('------------------ unblocking follower %s hit error running command', uri_3)
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
     ts_3.operations.return_error = True
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
@@ -721,9 +711,9 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
         assert ts_3.operations.total == 1
         
         
-    logger.error("---------!!!!!!! Blocking leader's network ")
+    logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
-    logger.error('---------!!!!!!! starting comms')
+    logger.info('---------!!!!!!! starting comms')
 
     command_result = None
     async def command_runner(ts, command):
@@ -871,7 +861,7 @@ async def follower_rewrite34_inner(cluster_maker, command_first):
         assert ts_2.operations.total == 1
         assert ts_3.operations.total == 1
         
-    logger.error("---------!!!!!!! Blocking one followers network ")
+    logger.info("---------!!!!!!! Blocking one followers network ")
     ts_3.block_network()
     logger.debug('------------------------ Running a couple of commands ---')
     command_result = None
