@@ -39,8 +39,7 @@ async def test_empty_log_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
@@ -48,8 +47,7 @@ async def test_empty_log_1(cluster_maker):
     logger.info('------------------------ Election done')
 
     for i in range(50):
-        sequence2 = SNormalCommand(cluster, "add 1", 1)
-        command_result = await cluster.run_sequence(sequence2)
+        command_result = await cluster.run_command("add 1", 1)
 
     assert ts_1.operations.total == 50
     # Now "crash" the leader, run an election, then have
@@ -63,8 +61,7 @@ async def test_empty_log_1(cluster_maker):
     await ts_2.enable_timers()
     await ts_3.enable_timers()
     logger.info('------------------------ Running Partial Election')
-    sequence = SPartialElection(cluster, voters=[uri_2, uri_3])
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
 
     # old leader is now ignorant of all past
     ts_1.replace_log()
@@ -97,8 +94,7 @@ async def test_empty_log_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
