@@ -18,9 +18,9 @@ from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.servers import setup_logging, log_config
 
-#extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
-#extra_logging = [dict(name=__name__, level="debug"),]
-#log_config = setup_logging(extra_logging)
+#extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
+#extra_logging = [dict(name="test_code", level="debug"), ]
+#log_config = setup_logging(extra_logging, default_level="debug")
 log_config = setup_logging()
 logger = logging.getLogger("test_code")
 
@@ -88,10 +88,13 @@ async def test_command_1(cluster_maker):
     command_result = await ts_1.hull.run_command("add 1")
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
-    # cleanup attempt to start election
     ts_1.clear_all_msgs()
-    # set term back so it won't trigger leader to quit
-    await ts_1.hull.get_log().set_term(orig_term)
+    await ts_1.log.set_term(orig_term - 1)
+    # get the leader to send it a heartbeat while it is a candidate
+    await ts_3.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    # cleanup traces of attempt to start election
+    await ts_1.log.set_term(orig_term)
 
     await ts_1.hull.demote_and_handle()
     await ts_3.hull.state.send_heartbeats()
@@ -141,8 +144,7 @@ async def test_command_sqlite_1(cluster_maker):
     await cluster.start()
     await ts_3.hull.start_campaign()
 
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
@@ -150,8 +152,7 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command("add 1", 1)
     
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
@@ -180,8 +181,7 @@ async def double_leader_inner(cluster, discard):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
@@ -189,10 +189,7 @@ async def double_leader_inner(cluster, discard):
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
-
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
@@ -208,8 +205,7 @@ async def double_leader_inner(cluster, discard):
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
@@ -227,22 +223,7 @@ async def double_leader_inner(cluster, discard):
         
     logger.debug('------------------ Command AppendEntries should get rejected -')
 
-    command_result = None
-    async def command_runner(ts):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.hull.run_command("add 1", timeout=0.01)
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-        logger.debug('running command in background done')
-    logger.debug('------------------------ Running command ---')
-    asyncio.create_task(command_runner(ts_1))
-    await cluster.start_auto_comms()
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and command_result is None:
-        await asyncio.sleep(0.0001)
+    command_result = await cluster.run_command("add 1", timeout=0.1)
     assert command_result is not None
     assert command_result.redirect == uri_2
     logger.info('---------!!!!!!! stopping comms')
@@ -280,17 +261,14 @@ async def test_command_after_heal_1(cluster_maker):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
-    await cluster.start_auto_comms()
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command(command="add 1", timeout=1)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -309,15 +287,7 @@ async def test_command_after_heal_1(cluster_maker):
     # now ts_2 and ts_3 are alone, have ts_2
     # get elected
     await ts_2.hull.state.leader_lost()
-    ts_2.set_trigger(WhenElectionDone(voters=[uri_2, uri_3]))
-    ts_3.set_trigger(WhenElectionDone(voters=[uri_2, uri_3]))
-    
-    await asyncio.gather(ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
-    
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
-
+    await cluster.run_election()
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
     last_term = await ts_2.hull.log.get_term()
@@ -358,27 +328,28 @@ async def test_follower_explodes_in_command(cluster_maker):
     await cluster.start()
     await ts_1.hull.start_campaign()
 
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_1
     assert ts_2.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    await cluster.start_auto_comms()
 
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
-    
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
-    await cluster.deliver_all_pending()
     logger.debug('------------------------ Correct command done')
 
     # now arrange for follower to blow up.
     ts_3.operations.explode = True
 
+    #
+    # Can't use normal command for this because it waits
+    # until all followers have applied the command
+    # message, assuring that the command is done. But in
+    # this case one follower will not respond
+    await cluster.start_auto_comms()
     command_result = None
     async def command_runner(ts):
         nonlocal command_result
@@ -422,44 +393,24 @@ async def test_leader_explodes_in_command(cluster_maker):
     await cluster.start()
     await ts_1.hull.start_campaign()
 
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_1
     assert ts_2.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command("add 1", 1)
     
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
-    await cluster.deliver_all_pending()
     logger.debug('------------------------ Correct command done')
 
-    # now arrange for follower to blow up.
+    # now arrange for leader to blow up.
     ts_1.operations.explode = True
 
-    command_result = None
-    async def command_runner(ts):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.hull.run_command("add 1", timeout=0.01)
-            logger.debug('running command in background done with NO error')
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-            logger.debug('running command in background done with error')
-    logger.debug('------------------------ Running command ---')
-    asyncio.create_task(command_runner(ts_1))
-    await cluster.start_auto_comms()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
+    command_result = await cluster.run_command("add 1", timeout=0.01)
     assert command_result is not None
     assert command_result.error is not None
     await cluster.stop_auto_comms()
@@ -472,22 +423,18 @@ async def test_long_catchup(cluster_maker):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
 
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
-    await cluster.deliver_all_pending()
     logger.debug('------------------------ Correct command done')
 
     # Now we want to block all messages from the leader to
@@ -516,13 +463,11 @@ async def test_long_catchup(cluster_maker):
             if  logger_name == "test_commands_1" or logger_name == "Leader" or logger_name == "Follower":
                 continue
             old_levels[logger_name] = logger.level
-            #print(f"Changing logger named '{logger_name}' to error")
             logger.setLevel('ERROR')
 
-    loop_limit = 20
+    loop_limit = 50
     for i in range(loop_limit):
-        sequence2 = SNormalCommand(cluster, "add 1", 1)
-        command_result = await cluster.run_sequence(sequence2)
+        command_result = await cluster.run_command("add 1", 1)
     total = ts_1.operations.total
     assert ts_2.operations.total == total
     assert ts_3.operations.total != total
@@ -532,7 +477,6 @@ async def test_long_catchup(cluster_maker):
         for logger_name in old_levels:
             logger = logging.getLogger(logger_name)
             old_value = old_levels[logger_name]
-            #print(f"Changing logger named '{logger_name}' to {old_value}")
             logger.setLevel(old_value)
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
@@ -557,53 +501,34 @@ async def test_full_catchup(cluster_maker):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    
+    await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
-
 
     # Now we want to block all messages from the leader to
     # one follower, as though it has crashed, then
     # run a bunch of commands and make sure that
     # the catchup process gets them all. 
-    
 
     logger.info('---------!!!!!!! stopping comms')
-    await cluster.stop_auto_comms()
-    part1 = {uri_3: ts_3}
-    part2 = {uri_1: ts_1,
-             uri_2: ts_2}
-    logger.info('---------!!!!!!! spliting network ')
-    cluster.split_network([part1, part2])
+    ts_3.block_network()
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and ts_2.operations.total < ts_1.operations.total:
-        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == ts_1.operations.total
     logger.debug('------------------------ Correct command 1 done')
-    sequence3 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence3)
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 2
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and ts_2.operations.total < ts_1.operations.total:
-        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == ts_1.operations.total
     logger.debug('------------------------ Correct command 2 done')
 
     assert ts_3.operations.total != ts_1.operations.total
-    await cluster.stop_auto_comms()
     # will discard the messages that were blocked
-    cluster.unsplit()
+    ts_3.unblock_network()
     logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
@@ -612,9 +537,7 @@ async def test_full_catchup(cluster_maker):
     while time.time() - start_time < 0.5 and ts_3.operations.total < ts_1.operations.total:
         await asyncio.sleep(0.0001)
     assert ts_3.operations.total == ts_1.operations.total
-    await cluster.stop_auto_comms()
     logger.info('------------------------ All caught up')
-
 
 async def test_follower_run_error(cluster_maker):
     cluster = cluster_maker(3)
@@ -624,55 +547,48 @@ async def test_follower_run_error(cluster_maker):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-    
+    await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
-    logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
 
-
-    # Now we want to block all messages from the leader to
-    # one follower, as though it has crashed, then
-    # run a bunch of commands and make sure that
-    # the catchup process gets them all. 
-    
+    # Block messages to one follower, run a comand,
+    # then unblock it and send heartbeats, causing
+    # it to try to catch up, however have the
+    # "state machine" command pretend it had
+    # an error. This should excersize some
+    # error handling code, but then the next command
+    # should go through without problem.
 
     logger.info('---------!!!!!!! stopping comms')
-    await cluster.stop_auto_comms()
-    part1 = {uri_3: ts_3}
-    part2 = {uri_1: ts_1,
-             uri_2: ts_2}
     logger.info('---------!!!!!!! spliting network ')
-    cluster.split_network([part1, part2])
+    ts_3.block_network()
     logger.info('------------------ follower %s isolated, running', uri_3)
-    sequence2 = SNormalCommand(cluster, "add 1", 1)
-    command_result = await cluster.run_sequence(sequence2)
+    
+    command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and ts_2.operations.total < ts_1.operations.total:
-        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == ts_1.operations.total
     logger.debug('------------------------ Correct command 1 done')
 
-    await cluster.stop_auto_comms()
-    # will discard the messages that were blocked
-    cluster.unsplit()
-    logger.info('------------------ unblocking follower %s hit error running command', uri_3)
-    logger.info('---------!!!!!!! starting comms')
+    logger.info('------------------ unblocking follower %s to hit error running command', uri_3)
     ts_3.operations.return_error = True
+    ts_3.unblock_network()
+    logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
-    await ts_1.hull.state.send_heartbeats()
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and not ts_3.operations.reported_error:
         await asyncio.sleep(0.0001)
     assert ts_3.operations.reported_error
-    logger.info('------------------------ Error as expected')
+    logger.info('------------------------ Error as expected, removing error insertion and trying again')
+    ts_3.operations.return_error = False
+    await cluster.start_auto_comms()
+    await ts_1.hull.state.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and ts_3.operations.total !=ts_1.operations.total:
+        await asyncio.sleep(0.0001)
+    assert ts_3.operations.total == ts_1.operations.total
 
 
 async def test_follower_rewrite_1(cluster_maker):
@@ -682,6 +598,20 @@ async def test_follower_rewrite_2(cluster_maker):
     await follower_rewrite12_inner(cluster_maker, False)
     
 async def follower_rewrite12_inner(cluster_maker, command_first):
+    """ Tests scenarios where a server becomes leader,
+    then gets disconnected from followers, but not yet realizing
+    that it accepts some client command requests, logs them, sends
+    broadcast to try to commit them. The while this is going on,
+    the followers hold an election and a new leader is chosen. That
+    leader accepts some commands and is able to commit them because
+    it has a quorum, 2 servers, in this case, itself and one follower. 
+    Then the old leader connect to the new leader, and messages 
+    fly to the effect that the ex-leader has log records that 
+    match the index of the new leader, but not their term, so those
+    records have to be discarded. After that is done the ex-leader
+    can now catchup, with the help of messages from the new leader.
+    Sheesh.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -689,227 +619,100 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     logger = logging.getLogger(__name__)
     await cluster.start()
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-    
+    await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
-    calls = 0
     running_total = 0
     if command_first:
-
-        sequence2 = SNormalCommand(cluster, "add 1", 1)
-        command_result = await cluster.run_sequence(sequence2)
-        calls += 1
+        command_result = await cluster.run_command("add 1", 1)
         running_total += 1
-        assert ts_1.operations.total == 1
-        assert ts_2.operations.total == 1
-        assert ts_3.operations.total == 1
+        assert ts_1.operations.total == ts_2.operations.total == ts_3.operations.total == 1
         
-        
+    last_index = await ts_1.log.get_last_index()
     logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
-    logger.info('---------!!!!!!! starting comms')
-
-    command_result = None
-    async def command_runner(ts, command):
-        nonlocal command_result
-        nonlocal calls
-        nonlocal running_total
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.hull.run_command(command, timeout=0.01)
-            logger.debug('running command in background done with NO error')
-            calls += 1
-            if command_result.result:
-                if command == "add 1":
-                    running_total += 1
-                elif command == "sub 1":
-                    running_total -= 1
-                else:
-                    raise Exception('huh?')
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-            logger.debug('running command in background done with error')
-    logger.debug('------------------------ Running command ---')
-    asyncio.create_task(command_runner(ts_1, "sub 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result.timeout
-
-    command_result = None
-    asyncio.create_task(command_runner(ts_1, "sub 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
-        await cluster.deliver_all_pending()
-    assert command_result.timeout
-    assert await ts_1.hull.log.get_last_index() == calls + 1 # first record is start_term
-
+    logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
+    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    assert command_result.timeout_expired
+    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    assert command_result.timeout_expired
+    assert await ts_1.hull.log.get_last_index() == last_index + 2
+    logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
-    await ts_2.hull.log.set_term(2)
+    #await ts_2.hull.log.set_term(2)
     await ts_2.hull.start_campaign()
-    assert ts_2.hull.get_state_code() == "CANDIDATE"
-    await cluster.deliver_all_pending()
+    await cluster.run_election()
     assert ts_2.hull.get_state_code() == "LEADER"
-    assert await ts_2.hull.log.get_term() == 3
+    logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
+    # we do this now so that the cluster run_command method will not get confused
+    # about which server is the leader
+    await ts_1.hull.demote_and_handle(None)
+    assert ts_1.hull.get_state_code() == "FOLLOWER"
 
     # now do a three commands at new leader
     command_result = None
     logger.debug('------------------------ Running commands at new leader---')
-    asyncio.create_task(command_runner(ts_2, "add 1"))
-    await cluster.start_auto_comms()
-
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
+    command_result = await cluster.run_command("add 1", timeout=0.01)
+    running_total += 1
     assert command_result.result == running_total
 
-    command_result = None
-    asyncio.create_task(command_runner(ts_2, "add 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
+    command_result = await cluster.run_command("add 1", timeout=0.01)
+    running_total += 1
     assert command_result.result == running_total
 
-    command_result = None
-    asyncio.create_task(command_runner(ts_2, "add 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.5 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
+    command_result = await cluster.run_command("add 1", timeout=0.01)
+    running_total += 1
     assert command_result.result == running_total
+    
     total = ts_2.operations.total
     # ts_3 needs a heartbeat to know to commit
     await ts_2.hull.state.send_heartbeats()
     start_time = time.time()
-    while time.time() - start_time < 0.25 and ts_3.operations.total != total:
+    while time.time() - start_time < 0.25 and ts_3.operations.total != running_total:
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.0001)
     assert ts_3.operations.total == total
-    await cluster.deliver_all_pending()
 
-    # Now let the orignal leader rejoin, already demoted to
+    # Now let the ex-leader rejoin, already demoted to
     # follower, and let it get a heartbeat. this should trigger it to
     # overwrite the existing records in its log with the new ones
-    # from the new leader
-    orig_1 = await ts_1.hull.log.read(2) # the first record is start term record
-    orig_2 = await ts_1.hull.log.read(3)
+    # from the new leader.
+    #
+    # The ex-leadere will have two or four records in the log, depending
+    # on whether this function was run with "command_firsT" True.
+    # In either case, the first record will be the "no-op" or "TERM_START"
+    # record for when the ex-leader took power.
+    # If command_first was False, then there will ony be two command records in the
+    # log, for the two "sub 1" commands. 
+    # If command_first was True, then there will ony be one "add 1" record in the
+    # log that should also be present in the logs of the other two servers, since the
+    # command was committed before the break. Then there should two command records 
+    # logged for the two "sub 1" commands.
+    #
+    # Capture the content of the two "sub 1" records, which will be overwritten
+    # when the cluster heals and the ex-leader synchronizes.
     if command_first:
-        orig_3 = await ts_1.hull.log.read(4)
-    await ts_1.hull.demote_and_handle(None)
-    assert ts_1.hull.get_state_code() == "FOLLOWER"
-    
-    logger.debug('------------------------ Unblocking old leader, should overwrite logs ---')
+        first_relevant_index = 3
+    else:
+        first_relevant_index = 2
+    orig_1 = await ts_1.hull.log.read(first_relevant_index) # the first record is start term record
+    orig_2 = await ts_1.hull.log.read(first_relevant_index + 1)
+    logger.debug('------------------------ Unblocking ex-leader, should overwrite logs ---')
     ts_1.unblock_network() # discards missed messages
-    
     await ts_2.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
-
     start_time = time.time()
     # log should be 1 for start_term, and one for each command, so 4
-    while time.time() - start_time < 0.5 and await ts_1.hull.log.get_last_index() != 4:
+    while time.time() - start_time < 0.5 and await ts_1.log.get_last_index() != await ts_2.log.get_last_index():
         await asyncio.sleep(0.0001)
 
-    assert await ts_1.hull.log.get_last_index() == await ts_2.hull.log.get_last_index()
-    new_1 = await ts_1.hull.log.read(2) # the first record is start term record
-    new_2 = await ts_1.hull.log.read(3)
-    new_3 = await ts_1.hull.log.read(4)
-    if command_first:
-        assert new_2.command != orig_2.command
-        assert new_3.command != orig_3.command
-    else:
-        assert new_1.command != orig_1.command
-        assert new_2.command != orig_2.command
+    assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
+    new_1 = await ts_1.log.read(first_relevant_index) # the first record is start term record
+    new_2 = await ts_1.log.read(first_relevant_index + 1)
+    assert new_1.command != orig_1.command
+    assert new_2.command != orig_2.command
 
-async def test_follower_rewrite_3(cluster_maker):
-    await follower_rewrite34_inner(cluster_maker, True)
-    
-async def test_follower_rewrite_4(cluster_maker):
-    await follower_rewrite34_inner(cluster_maker, False)
-    
-async def follower_rewrite34_inner(cluster_maker, command_first):
-    cluster = cluster_maker(3)
-    cluster.set_configs()
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    logger = logging.getLogger(__name__)
-    await cluster.start()
-    await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-    
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
-    logger = logging.getLogger(__name__)
-    logger.info('------------------------ Election done')
-    await cluster.start_auto_comms()
 
-    if command_first:
-        sequence2 = SNormalCommand(cluster, "add 1", 1)
-        command_result = await cluster.run_sequence(sequence2)
-        assert ts_1.operations.total == 1
-        assert ts_2.operations.total == 1
-        assert ts_3.operations.total == 1
-        
-    logger.info("---------!!!!!!! Blocking one followers network ")
-    ts_3.block_network()
-    logger.debug('------------------------ Running a couple of commands ---')
-    command_result = None
-    async def command_runner(ts, command):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.hull.run_command(command, timeout=0.01)
-            logger.debug('running command in background done with NO error')
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-            logger.debug('running command in background done with error')
-    command_result = None
-    asyncio.create_task(command_runner(ts_1, "add 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
-    command_result = None
-    asyncio.create_task(command_runner(ts_1, "add 1"))
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
-    total = ts_1.operations.total
-    # ts_2 needs a heartbeat to know to commit
-    await ts_1.hull.state.send_heartbeats()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and ts_2.operations.total != total:
-        await cluster.deliver_all_pending()
-        await asyncio.sleep(0.0001)
-    assert ts_2.operations.total == total
-    if command_first:
-        assert ts_3.operations.total == 1
-    else:
-        assert ts_3.operations.total == 0
-    logger.info("---------!!!!!!! Unblocking followers network and sending hearbeats")
-    ts_3.unblock_network()
-    # ts_3 needs a heartbeat to pick up the missing records,
-    # and should run commands and commit records too
-    await ts_1.hull.state.send_heartbeats()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and ts_3.operations.total != total:
-        await asyncio.sleep(0.0001)
-    assert ts_3.operations.total == total
-
-    start_time = time.time()
-    while time.time() - start_time < 2.0 and ts_3.operations.total != total:
-        await asyncio.sleep(0.0001)
-    

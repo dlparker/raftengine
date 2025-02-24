@@ -161,7 +161,9 @@ class WhenMessageOut(PauseTrigger):
         self.trigger_message = None
 
     def __repr__(self):
-        msg = f"{self.__class__.__name__} {self.message_code} {self.message_target}"
+        msg = f"{self.__class__.__name__} {self.message_code}"
+        if self.message_target:
+            msg += f"target={self.message_target}"
         return msg
 
     async def is_tripped(self, server):
@@ -1056,6 +1058,9 @@ class PausingCluster:
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
         
+class CommandFailedTaskGroup(Exception):
+    """Exception raised to terminate a task group due to command returning retry, redirect, timeout, etc.."""
+    
 class TestServerTimeout(Exception):
     """Exception raised because of unexpected timeout in running test server support code."""
         
@@ -1285,20 +1290,23 @@ class SPartialCommand(StdSequence):
                 await node.run_till_triggers()
         self.done_count += 1
         
-    async def command_wrapper(self, node, command):
+    async def command_wrapper(self, node, command, timeout=0.1):
         self.logger.debug("Running command %s at  %s", command, node.uri)
-        self.command_result = await node.hull.run_command(command, timeout=0.1)
-        
+        self.command_result = await node.hull.run_command(command, timeout=timeout)
+        self.logger.debug("%s command_result = %s", node.uri, self.command_result.__dict__)
+        if self.command_result.result is None:
+            raise CommandFailedTaskGroup(f'command_result = {self.command_result.__dict__}')
     async def wait_till_done(self):
         async def do_timeout(timeout):
             start_time = time.time()
-            while self.done_count < self.expected_count:
+            while self.done_count < self.expected_count and self.command_result is None:
                 await asyncio.sleep(timeout/100.0)
-            if time.time() - start_time >= timeout:
+            if not self.command_result and time.time() - start_time >= timeout:
                 raise TimeoutTaskGroup()
         try:
+            self.command_result = None
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(self.command_wrapper(self.leader, self.command))
+                tg.create_task(self.command_wrapper(self.leader, self.command, timeout=self.timeout))
                 for uri in self.voters:
                     node = self.network.nodes[uri]
                     tg.create_task(self.runner_wrapper(node))
@@ -1306,6 +1314,8 @@ class SPartialCommand(StdSequence):
                 tg.create_task(do_timeout(self.timeout))
         except* TimeoutTaskGroup:
             raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        except* CommandFailedTaskGroup:
+            self.logger.debug('command failed, returning details')
         return self.command_result
     
     async def do_teardown(self):
