@@ -35,8 +35,8 @@ class Follower(BaseState):
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
         if message.prevLogIndex == 0 and message.prevLogTerm == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
-            await self.log.delete_all_from(1)
-        if await self.log.get_last_index() > message.prevLogIndex:
+            await self.log.delete_all_from(0)
+        elif await self.log.get_last_index() > message.prevLogIndex:
             our_rec = await self.log.read(message.prevLogIndex)
             if our_rec.term != message.prevLogTerm:
                 self.logger.warning("%s Leader indicates invalid record after index %s, deleting",

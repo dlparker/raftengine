@@ -67,8 +67,8 @@ def set_levels(handler_names, additions=None): # pragma: no cover
     log_loggers['PausingServer'] = info_log
     default_log =  info_log
     #default_log =  debug_log
-    log_loggers['Leader'] = default_log
-    log_loggers['Follower'] = default_log
+    log_loggers['Leader'] = debug_log
+    log_loggers['Follower'] = debug_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseState'] = default_log
     log_loggers['Hull'] = default_log
@@ -494,7 +494,11 @@ class Network:
 
     async def post_in_message(self, message):
         node = self.nodes[message.receiver]
-        node.in_messages.append(message)
+        if node.block_messages:
+            self.logger.debug("Blocking in message %s", message)
+            node.blocked_in_messages.append(message)
+        else:
+            node.in_messages.append(message)
         
     async def deliver_all_pending(self, out_only=False):
         """ This does the final part of the work for the Cluster "mamual" 
@@ -556,7 +560,7 @@ class Network:
             node.lost_out_messages.append(msg)
             return
         self.logger.debug("%s forwarding message %s", node.uri, msg)
-        target.in_messages.append(msg)
+        await self.post_in_message(msg)
         return msg
         
 
@@ -745,9 +749,13 @@ class PausingServer(PilotAPI):
     def block_network(self):
         self.blocked_in_messages = []
         self.blocked_out_messages = []
+        self.in_messages = []
+        self.out_messages = []
         self.block_messages = True
     
     def unblock_network(self, deliver=False):
+        if len(self.in_messages) > 0:
+            breakpoint()
         self.block_messages = False
         if not deliver:
             self.blocked_in_messages = None
@@ -1181,3 +1189,91 @@ class SPartialElection(StdSequence):
             node = self.cluster.nodes[uri]
             node.clear_triggers()
             
+class SPartialCommand(StdSequence):
+
+    def __init__(self, cluster, command, voters, timeout=1):
+        super().__init__(cluster=cluster, name="PartialCommand")
+        self.timeout = timeout
+        self.command = command
+        self.voters = voters
+        self.timeout = timeout
+        self.logger = logging.getLogger('PausingServer')
+        self.done_count = 0
+        self.expected_count = 0
+        self.restore_auto = False
+        self.leader = None
+        self.command_result = None
+        self.target_index = None
+        self.network = None
+
+    async def do_setup(self):
+        self.restore_auto = self.cluster.auto_comms_flag
+        if self.cluster.auto_comms_flag:
+            await self.cluster.stop_auto_comms()
+        self.network = self.cluster.net_mgr.get_majority_network()
+        for uri in self.voters:
+            if uri not in self.network.nodes:
+                raise Exception(f'bad setup, {voter} not in majority network')
+            node = self.network.nodes[uri]
+            node.clear_triggers()
+            if node.hull.state.state_code == "LEADER":
+                self.leader = node
+                orig_index = await node.log.get_commit_index()
+                self.target_index = orig_index + 1
+                break
+        for uri in self.voters:
+            node = self.network.nodes[uri]
+            trigger = WhenHasCommitIndex(self.target_index)
+            self.logger.debug("set %s trigger for node %s", trigger, node)
+            node.set_trigger(trigger)
+            self.expected_count += 1
+        self.logger.debug("Setup normal command sequence, will run command at %s", node.uri)
+        
+    async def runner_wrapper(self, node):
+        # wait until has commit index
+        await node.run_till_triggers()
+        if node == self.leader:
+            # also need to send heartbeats so others get the commit index update
+            self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
+            node.clear_triggers()
+            await node.hull.state.send_heartbeats()
+            self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
+            node.set_trigger(WhenCommitIndexSent(self.target_index))
+            # leader needs to send commit index to all other nodes, even
+            # if they are blocked or partitioned away
+            for i in  range(0, len(self.cluster.nodes) -1):
+                if node.uri not in self.voters:
+                    continue
+                await node.run_till_triggers()
+        self.done_count += 1
+        
+    async def command_wrapper(self, node, command):
+        self.logger.debug("Running command %s at  %s", command, node.uri)
+        self.command_result = await node.hull.run_command(command, timeout=0.1)
+        
+    async def wait_till_done(self):
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while self.done_count < self.expected_count:
+                await asyncio.sleep(timeout/100.0)
+            if time.time() - start_time >= timeout:
+                raise TimeoutTaskGroup()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(self.command_wrapper(self.leader, self.command))
+                for uri in self.voters:
+                    node = self.network.nodes[uri]
+                    tg.create_task(self.runner_wrapper(node))
+                    self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
+                tg.create_task(do_timeout(self.timeout))
+        except* TimeoutTaskGroup:
+            raise TestServerTimeout('timeout on wait till done on %s!', self.name)
+        return self.command_result
+    
+    async def do_teardown(self):
+        for uri in self.voters:
+            node = self.network.nodes[uri]
+            node.clear_triggers()
+            
+        if self.restore_auto:
+            await self.cluster.start_auto_comms()

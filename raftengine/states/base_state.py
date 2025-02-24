@@ -66,7 +66,7 @@ class BaseState:
 
     async def on_append_entries(self, message):
         problem = 'append_entries not implemented in the class '
-        problem += f'"{self.__class__.__name__}", sending rejection'
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.send_reject_append_response(message)
         await self.hull.record_message_problem(message, problem)
@@ -74,7 +74,7 @@ class BaseState:
     async def on_append_entries_response(self, message):
         if self.state_code == "FOLLOWER":
             problem = 'append_entries_response not implemented in the class '
-            problem += f'"{self.__class__.__name__}", ignoring '
+            problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
             if hasattr(message, 'leaderId'):
                 if message.term == await self.log.get_term() and self.leader_uri is None:
                     self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
@@ -85,7 +85,7 @@ class BaseState:
 
     async def on_vote_request(self, message):
         problem = 'request_vote not implemented in the class '
-        problem += f'"{self.__class__.__name__}", sending rejection'
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.send_reject_vote_response(message)
         await self.hull.record_message_problem(message, problem)
@@ -95,7 +95,7 @@ class BaseState:
             self.logger.info('request_vote_response leftover from finished election, ignoring')
             return
         problem = 'request_vote_response not implemented in the class '
-        problem += f'"{self.__class__.__name__}", sending rejection'
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
         

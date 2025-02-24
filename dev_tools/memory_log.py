@@ -47,7 +47,10 @@ class Records:
         return 0
 
     def delete_all_from(self, index: int):
-        self.entries = self.entries[:index-1]
+        if index == 0:
+            self.entries = []
+        else:
+            self.entries = self.entries[:index-1]
         
         
     
