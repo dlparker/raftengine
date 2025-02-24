@@ -185,3 +185,56 @@ async def test_partition_1(cluster_maker):
     assert ts_4.operations.total == 3
     assert ts_5.operations.total == 3
 
+async def test_partition_2_leader(cluster_maker):
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+    logger = logging.getLogger(__name__)
+    logger.info('------------------------ Election done')
+    logger.info('---------!!!!!!! starting comms')
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    logger.debug('------------------------ Correct command done')
+
+    # Now we want to block all messages from the leader, then
+    # trigger a follower to hold an election, wait for it to
+    # win, then unblock the old leader, and then let the
+    # ex-leader send a heartbeat. The result of this should
+    # tell the ex-leader who the new leader is, and it should
+    # demote to follower. Another heartbeat from the real
+    # leader and it should update everything.
+
+
+    part1 = {uri_1: ts_1}
+    part2 = {uri_2: ts_2,
+             uri_3: ts_3}
+    cluster.split_network([part1, part2])
+
+    logger.info('---------!!!!!!! stopping comms')
+    await ts_2.hull.start_campaign()
+    await cluster.run_election()
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.get_state_code() == "LEADER"
+    assert ts_3.hull.state.leader_uri == uri_2
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_2.operations.total == 2
+    cluster.unsplit()
+    logger.info('------------------------ Sending heartbeats from out of date leader')
+    await ts_1.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_1.hull.get_state_code() == "FOLLOWER"
+    # let ex-leader catch up
+    await ts_2.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_1.operations.total == 2
+    logger.info('------------------------ Leadership change correctly detected')

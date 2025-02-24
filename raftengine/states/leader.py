@@ -26,7 +26,7 @@ class FollowerTracker:
 class CommandResult:
 
     def __init__(self, command, result=None, committed=False,
-                 redirect=None, retry=None, logRec=None, error=None, timeout=False):
+                 redirect=None, retry=None, logRec=None, error=None, timeout_expired=False):
         self.command = command
         self.result = result
         self.committed = committed
@@ -34,7 +34,7 @@ class CommandResult:
         self.retry = retry
         self.logRec = logRec
         self.error = error
-        self.timeout = timeout
+        self.timeout_expired = timeout_expired
         
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
@@ -84,12 +84,15 @@ class CommandWaiter:
                     leader_uri = hull.state.leader_uri
                 self.leader.logger.debug("%s after timeout exception am no longer leader! maybe %s?",
                                          self.leader.my_uri(), leader_uri)
-            self.result = CommandResult(command=self.orig_log_record.command,
-                                        committed=False,
-                                        timeout=True,
-                                        result=None,
-                                        error=None,
-                                        redirect=leader_uri)
+                self.result = CommandResult(command=self.orig_log_record.command,
+                                            committed=False,
+                                            redirect=leader_uri)
+            else:
+                self.leader.logger.debug("%s command timeout exception",
+                                         self.leader.my_uri())
+                self.result = CommandResult(command=self.orig_log_record.command,
+                                            committed=False,
+                                            timeout_expired=True)
             
         return self.result
 
@@ -99,7 +102,7 @@ class CommandWaiter:
         self.local_error = error_data
         result = CommandResult(command=self.orig_log_record.command,
                                committed=self.committed,
-                               timeout=False,
+                               timeout_expired=False,
                                result=command_result,
                                error=error_data,
                                redirect=None)

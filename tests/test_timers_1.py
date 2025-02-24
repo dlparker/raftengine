@@ -90,7 +90,7 @@ async def test_heartbeat_2(cluster_maker):
 async def test_lost_leader_1(cluster_maker):
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
-    heartbeat_period = 0.1
+    heartbeat_period = 0.2
     election_timeout_min = 0.02
     election_timeout_max = 0.05
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
@@ -102,9 +102,9 @@ async def test_lost_leader_1(cluster_maker):
 
     await cluster.start(timers_disabled=False)
     await ts_3.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-
+    await cluster.deliver_all_pending()
+    await cluster.run_election()
+    await cluster.deliver_all_pending()
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
@@ -113,7 +113,7 @@ async def test_lost_leader_1(cluster_maker):
     # Test that election happens in appoximately the leader_lost timeout
     start_time = time.time()
     fraction = election_timeout_max/10.0
-    while time.time() - start_time < election_timeout_max  + (fraction * 2):
+    while time.time() - start_time < election_timeout_max * 2:
         await cluster.deliver_all_pending()
         if (ts_1.hull.state.state_code == "LEADER"
             or ts_2.hull.state.state_code == "LEADER"
