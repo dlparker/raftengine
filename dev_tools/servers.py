@@ -947,6 +947,28 @@ class PausingCluster:
         result = await sequence.wait_till_done()
         await sequence.do_teardown()
         return result
+
+    async def run_election(self, timeout=1.0):
+        voters = []
+        net = self.net_mgr.get_majority_network()
+        for uri, node in net.nodes.items():
+            if node.block_messages:
+                continue
+            voters.append(uri)
+        sequence = SPartialElection(self, voters=voters, timeout=timeout)
+        res = await self.run_sequence(sequence)
+        return res
+        
+    async def run_command(self, command, timeout=1.0):
+        voters = []
+        net = self.net_mgr.get_majority_network()
+        for uri, node in net.nodes.items():
+            if node.block_messages:
+                continue
+            voters.append(uri)
+        sequence = SPartialCommand(self, command, voters=voters, timeout=timeout)
+        res = await self.run_sequence(sequence)
+        return res
         
     async def post_in_message(self, message):
         # special situation, called when trigger trapped on out message,
