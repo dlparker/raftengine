@@ -11,8 +11,8 @@ from dev_tools.servers import setup_logging
 from dev_tools.servers import WhenElectionDone
 from dev_tools.servers import PausingCluster, cluster_maker
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 async def test_log_stuff():
     from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec

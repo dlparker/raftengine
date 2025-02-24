@@ -11,8 +11,8 @@ from raftengine.api.types import StateCode, SubstateCode
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 async def test_bogus_pilot(cluster_maker):
     cluster = cluster_maker(3)

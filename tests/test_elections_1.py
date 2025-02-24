@@ -9,8 +9,10 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+#extra_logging = [dict(name=__name__, level="debug"),]
+#setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 
 async def test_election_1(cluster_maker):
@@ -199,7 +201,6 @@ async def test_reelection_3(cluster_maker):
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
 
-    logger = logging.getLogger(__name__)
     logger.warning('setting up re-election')
     # tell leader to resign and manually trigger elections on all the
     # servers, ts_2 should win because of timeout

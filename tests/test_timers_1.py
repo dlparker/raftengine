@@ -12,8 +12,10 @@ from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
 from dev_tools.servers import SNormalElection
 
-extra_logging = [dict(name=__name__, level="debug"),]
-setup_logging(extra_logging)
+#extra_logging = [dict(name=__name__, level="debug"),]
+#setup_logging(extra_logging)
+setup_logging()
+logger = logging.getLogger("test_code")
 
 
 async def test_heartbeat_1(cluster_maker):
@@ -24,7 +26,6 @@ async def test_heartbeat_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    logger = logging.getLogger(__name__)
     await cluster.start(timers_disabled=False)
     await ts_3.hull.start_campaign()
 
@@ -65,7 +66,6 @@ async def test_heartbeat_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    logger = logging.getLogger(__name__)
     await cluster.start(timers_disabled=False)
     await ts_3.hull.start_campaign()
 
@@ -100,7 +100,6 @@ async def test_lost_leader_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    logger = logging.getLogger(__name__)
     await cluster.start(timers_disabled=False)
     await ts_3.hull.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -144,7 +143,6 @@ async def test_election_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    logger = logging.getLogger(__name__)
     await cluster.start(timers_disabled=True)
     await ts_1.hull.start_campaign()
     sequence = SNormalElection(cluster, 1)
