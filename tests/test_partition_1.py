@@ -8,7 +8,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 
 from dev_tools.servers import WhenElectionDone
 from dev_tools.servers import PausingCluster, cluster_maker
-from dev_tools.servers import SNormalElection, SNormalCommand
+from dev_tools.servers import SNormalElection, SNormalCommand, SPartialCommand
 from dev_tools.servers import setup_logging
 
 extra_logging = [dict(name=__name__, level="debug"),]

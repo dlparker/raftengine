@@ -15,7 +15,7 @@ from dev_tools.servers import WhenHasCommitIndex
 from dev_tools.servers import WhenInMessageCount, WhenElectionDone
 from dev_tools.servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from dev_tools.servers import PausingCluster, cluster_maker
-from dev_tools.servers import SNormalElection, SNormalCommand
+from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.servers import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
@@ -23,6 +23,10 @@ extra_logging = [dict(name=__name__, level="debug"),]
 log_config = setup_logging(extra_logging)
 
 async def test_command_1(cluster_maker):
+    """ This runs commands using highly granular control of test servers 
+    so that basic bugs in the first command processing will show up at a detailed 
+    level. Timers are disabled.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
 
@@ -102,41 +106,23 @@ async def test_command_1(cluster_maker):
     # so the tardy follower will catch up
 
     ts_1.block_network()
-    logger.debug('------------------------ Follower one isolated, running commands')
-    command_result = None
-    async def command_runner(ts):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.hull.run_command("add 1")
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            
-        logger.debug('running command in background done')
-    asyncio.create_task(command_runner(ts_3))
-    await cluster.start_auto_comms()
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
     logger.debug('------------------------ Running command ---')
-    command_result = None
-    asyncio.create_task(command_runner(ts_3))
-    await cluster.deliver_all_pending()
-    while time.time() - start_time < 0.1 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
+    sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
+    command_result = await cluster.run_sequence(sequence)
+    assert ts_3.operations.total == 2
+    sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
+    command_result = await cluster.run_sequence(sequence)
     assert ts_3.operations.total == 3
-    logger.debug('------------------------ Doing hearbeats ---')
-    await ts_3.hull.state.send_heartbeats()
-    await cluster.deliver_all_pending()
+    start_time = time.time()
     while time.time() - start_time < 0.1 and ts_2.operations.total != 3:
         await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 3
 
-    logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
+    logger.debug('\n\n\n------------------------ Unblocking, doing hearbeats, should catch up ---\n\n\n')
     ts_1.unblock_network() # default is discard messages, lets do that
     await ts_3.hull.state.send_heartbeats()
+    await cluster.start_auto_comms()
+    start_time = time.time()
     while time.time() - start_time < 0.1 and ts_1.operations.total != 3:
         await asyncio.sleep(0.0001)
     assert ts_1.operations.total == 3

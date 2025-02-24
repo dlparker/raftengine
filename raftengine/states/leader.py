@@ -222,7 +222,7 @@ class Leader(BaseState):
                                            prevLogTerm=last_term,
                                            prevLogIndex=last_index,
                                            commitIndex=commit_index)
-            self.logger.debug("%s sending heartbeat to %s", message.sender, message.receiver)
+            self.logger.debug("%s sending heartbeat %s", my_uri, message)
             await self.hull.send_message(message)
             await self.record_sent_message(message)
             self.last_broadcast_time = time.time()
@@ -230,7 +230,7 @@ class Leader(BaseState):
     async def on_append_entries_response(self, message):
         tracker = self.follower_trackers[message.sender]
         self.logger.debug('handling response %s', message)
-        self.logger.debug('%s tracker.nextIndex = %d tracker.matchIndex = %d',
+        self.logger.debug('%s at message beginning tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
         await self.record_received_message(message)
         if message.success:
@@ -239,17 +239,11 @@ class Leader(BaseState):
                 # follower added a record (some records?) we sent
                 tracker.matchIndex = message.maxIndex
                 tracker.nextIndex = message.maxIndex + 1
-            #else:
-                # can it arrive out of order if comms is not RPC based?
-                #if tracker.matchIndex < message.prevLogIndex:
-                    #tracker.matchIndex = message.prevLogIndex
             if (tracker.matchIndex > await self.log.get_commit_index()):
                 log_rec = await self.log.read(tracker.matchIndex)
                 await self.record_commit_checker(log_rec)
             if tracker.nextIndex <= await self.log.get_last_index():
-                if message.maxIndex < tracker.nextIndex:
-                    tracker.nextIndex = message.maxIndex + 1
-                await self.send_catchup(message.sender, tracker.nextIndex)
+                await self.send_catchup(message)
             self.logger.debug('After response processing %s tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
             # all in sync, done
@@ -262,14 +256,22 @@ class Leader(BaseState):
             # message. If anyone ever makes that change, this code will be 
             # needed
             # if tracker.nextIndex == 1:
-            #    await self.send_catchup(message.sender, 1)
+            #    await self.send_catchup(message)
             # else:
-            #    await self.backdown_follower(message.sender)
-            await self.backdown_follower(message.sender)
+            #    await self.backdown_follower(message)
+            await self.backdown_follower(message)
         self.logger.debug('After response processing %s tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
 
-    async def send_catchup(self, uri, next_index):
+    async def send_catchup(self, message):
+        uri = message.sender
+        tracker = self.follower_trackers[uri]
+        # we should be here only if previous record is a match, and
+        # the follower is responsible for deleting any records beyond
+        # the first match
+        tracker.matchIndex = message.maxIndex
+        tracker.nextIndex = message.maxIndex + 1
+        next_index = tracker.nextIndex
         MAX_RECS_PER_MESSAGE = 10
         max_index = min(next_index + MAX_RECS_PER_MESSAGE, await self.log.get_last_index())
         entries = []
@@ -278,24 +280,16 @@ class Leader(BaseState):
             # make sure the follower doesn't get confused about their local commit status
             rec.committed = False
             entries.append(rec)
-        # The following code is vulnerable if next_index == 1,
-        # because it will blow up trying to read the record
-        # However, it should not happen because the only.
-        # way the first record will sent to a client that is behind,
-        # meaning that it did not get it when it was initially sent out
-        # is if the leader does a backdown operation.
-        # If somebody ever tries to optimize the backdown operation, that
-        # could break this, and you'd need:
-        # if next_index == 1:
-        #    prevLogIndex = 0
-        #    prevLogTerm = 0
-        # else:
+        # Don't think this can happen, 
+        #if next_index == 1:
+        #   prevLogIndex = 0
+        #   prevLogTerm = 0
+        #else:
         pre_rec = await self.log.read(next_index - 1)
         prevLogIndex = pre_rec.index
         prevLogTerm = pre_rec.term
 
-        tracker = self.follower_trackers[uri]
-        tracker.nextIndex = next_index + 1
+        tracker.nextIndex = next_index + len(entries)
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,
                                        term=await self.log.get_term(),
@@ -303,13 +297,17 @@ class Leader(BaseState):
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
-        self.logger.info("sending catchup %s", message)
+        self.logger.debug("sending catchup %s", message)
         await self.hull.record_substate(SubstateCode.sending_catchup)
         await self.record_sent_message(message)
         await self.hull.send_message(message)
         
-    async def backdown_follower(self, uri):
+    async def backdown_follower(self, message):
+        uri = message.sender
         tracker = self.follower_trackers[uri]
+        if  message.prevLogIndex > tracker.nextIndex - 1:
+            # we've already backed down from this log position
+            return
         next_index = tracker.nextIndex - 1
         tracker.nextIndex = next_index 
         if next_index == 1:
