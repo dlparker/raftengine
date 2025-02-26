@@ -153,17 +153,24 @@ class Follower(BaseState):
             
         # Leadership claims have to be for max log commit index of
         # at least the same as our local copy
-        last_index = await self.log.get_last_index()
-        # If the messages claim for log index or term are not at least as high
-        # as our local values, then vote no.
-        if message.prevLogIndex < last_index or message.term < await self.log.get_term():
-            self.logger.info("%s voting false on %s", self.my_uri(),
-                             message.sender)
-            vote = False
-        else: # both term and index proposals are acceptable, so vote yes
+        commit_index = await self.log.get_commit_index()
+        if commit_index > 0:
+            # If the messages claim for last committed log index or term are not at least as high
+            # as our local values, then vote no.
+            rec = await self.log.read(commit_index)
+            if message.prevLogIndex < commit_index or message.term < rec.term:
+                self.logger.info("%s voting false on %s", self.my_uri(),
+                                 message.sender)
+                vote = False
+            else: # both term and index proposals are acceptable, so vote yes
+                self.last_vote = message
+                self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
+                vote = True
+        else: # we don't have any entries, so everybody else wins
             self.last_vote = message
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
+            
         await self.send_vote_response_message(message, vote_yes=vote)
             
     async def term_expired(self, message):

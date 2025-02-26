@@ -23,6 +23,72 @@ Library Features:
    and give pilot an api entry on hull to call to get errors? This is kinda partly done in the
    client command execution code. Maybe we need an Error class set and a local log feature?
 
- 
 
 
+anomalies: Partition, Crash
+victims: Leader, follower, candidate
+pre-anomaly cluster state: stable, (one candidate multiple candidates) X (from stable, from leaderless)
+pre-anomaly command state: none, some committed, none committed but some active, some committed and some active
+in-anomaly Majority network: old leader, no leader, new leader, multiterm election
+in-anomaly minority network: all crashed so no action, old_leader, no leader, quiet, try election, multiterm election
+in-anomaly command ops: none, actual leader only, ex-leader (isolated) only, 2 leader overlap
+in-anomaly config ops: none, add server, remove server
+exiting anomaly majority net: stable, election in progress
+exiting anomaly minority net: ex-leader alive, followers only, candidate(s) running, recovering server(s)
+exiting server log states:
+
+enum cluster_states
+     all_stable
+     net_split
+     some_crashed
+
+enum net pop(ulation):  (one for each current network)
+   no quorum
+   quorum  (but partial)
+   complete
+   
+enum net state:  (one for each current network)
+   starting
+   stable	 
+   electing (only one candidate)
+   contesting_election (multiple candidates)
+
+enum log_state:
+     no commands
+     committed commands
+     pending commands
+     pending and committed commands
+     
+anomaly start:
+   net_state
+   victim_list (e.g. leader, follower, candidate)
+   anomaly type (partition or crash)
+   log_replication state: inactive, leader local only, all but victim saved, all but victim committed
+
+anomaly_server_phase:
+	server_id
+	required role (follower, candidate, leader)
+	serial
+	net (majority, minority)
+	action (crash, stay crashed, restart, change to min network, change to maj network,
+	       start election, re-start election, queue command, add server, remove server)
+
+anomaly_cluster_phase:
+	list of anomaly_server_phase, server missing implies it has no action
+
+anomaly end: (implies all phases complete)
+   This is a checklist tool to ensure anomaly phases did what you think they should do
+   server roles dict  (maybe a flag to say just restarted?)
+   server log states dict: term, last_index, last_term, optional log tail of X records
+   net state 
+   
+XS													x
+Epoc          | Maj Net State  | Min Net State | S1 
+Pre    | stable         | None          | leader, pIndx=1 pTerm=1 term=1 ci=1
+Break anomaly  | quorum         | None          |
+Broken
+Reparing
+Healed
+
+
+dict(
