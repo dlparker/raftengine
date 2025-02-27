@@ -16,8 +16,8 @@ from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import SNormalElection
 from dev_tools.servers import setup_logging
 
-#extra_logging = [dict(name=__name__, level="debug"),]
-#setup_logging(extra_logging)
+extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
+#setup_logging(extra_logging, default_level="debug")
 setup_logging()
 logger = logging.getLogger("test_code")
 
@@ -351,3 +351,191 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
     
+async def test_election_candidate_log_too_old_1(cluster_maker):
+    cluster = cluster_maker(3)
+    heartbeat_period = 0.2
+    election_timeout_min = 0.02
+    election_timeout_max = 0.05
+    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max)
+    cluster.set_configs(config)
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+
+    logger.info("-------- Initial election completion, running command ")
+
+    # block one server
+    ts_3.block_network()
+
+    # now advance the commit index
+    await cluster.run_command('add 1', 1)
+    # now ts_3 should have a lower prevLogIndex and so it will lose the vote
+    # once we arrange the election the right way
+
+    # just to make the logging messages clearer during debug, make sure
+    # all the messages have been processed since the run_command method only
+    # checks to see if a majority reported saving the log, there are also
+    # commit messages that should go on next heartbeat
+    await ts_1.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+
+    logger.info("-------- Command complete,  starting messed up re-election")
+    # demote leader to follower
+    await ts_1.hull.demote_and_handle(None)
+    ts_3.unblock_network()
+    await ts_3.hull.start_campaign()
+    ts3_out_1 = await ts_3.do_next_out_msg()
+    ts3_out_2 = await ts_3.do_next_out_msg()
+    logger.info("-------- Target code should run on next message to ts_1,  should vote no")
+    ts_1_in_1 = await ts_1.do_next_in_msg()
+    assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
+    ts_1_out_1 = await ts_1.do_next_out_msg()
+    assert ts_1_out_1.get_code() == RequestVoteResponseMessage.get_code()
+    assert ts_1_out_1.vote is False
+
+    logger.info("-------- Vote as expected letting election finish ----")
+    await cluster.deliver_all_pending()
+    assert ts_3.hull.get_state_code() != "LEADER"
+    await ts_1.hull.start_campaign()
+
+    await cluster.deliver_all_pending()
+    assert ts_1.hull.get_state_code() == "LEADER"
+    logger.info("-------- Re-election of ts_1 finished ----")
+    
+async def test_failed_first_election_1(cluster_maker):
+    """ Let a leader win, but before the followers get his
+        term_start log message, make him die (disconnect). 
+        Have a new election, then re-start the ex leader.
+        His log will have one record in it, and so will the 
+        new leader's, but the terms will be different. This
+        hits a special case in follower code.
+    """
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await cluster.start()
+    await ts_3.hull.start_campaign()
+    out1 = WhenMessageOut(RequestVoteMessage.get_code(),
+                          message_target=uri_1, flush_when_done=False)
+    ts_3.add_trigger(out1)
+    out2 = WhenMessageOut(RequestVoteMessage.get_code(),
+                          message_target=uri_2, flush_when_done=False)
+    ts_3.add_trigger(out2)
+    await ts_3.run_till_triggers()
+    ts_3.clear_triggers()
+
+    # Candidate is poised to send request for vote to other two servers
+    # let the messages go out
+    candidate = ts_3.hull.state
+    logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
+    logger.debug("ts_1 term %d", await ts_1.log.get_term())
+    logger.debug("ts_2 term %d", await ts_1.log.get_term())
+
+    # let just these messages go
+    ts_3.set_trigger(WhenAllMessagesForwarded())
+    await ts_3.run_till_triggers()
+    ts_3.clear_triggers()
+
+    # Wait for the other services to send their vote responses back
+    ts_1.set_trigger(WhenMessageIn(RequestVoteMessage.get_code()))
+    ts_2.set_trigger(WhenMessageIn(RequestVoteMessage.get_code()))
+    await ts_1.run_till_triggers()
+    ts_1.clear_triggers()
+    await ts_2.run_till_triggers()
+    ts_2.clear_triggers()
+
+    logger.debug("Followers have messages pending")
+    ts_1.set_trigger(WhenAllInMessagesHandled())
+    ts_2.set_trigger(WhenAllInMessagesHandled())
+    await ts_1.run_till_triggers()
+    await ts_2.run_till_triggers()
+
+    logger.debug("Followers outgoing vote response messages pending")
+
+    assert ts_1.hull.state.last_vote.sender == uri_3
+    assert ts_2.hull.state.last_vote.sender == uri_3
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    ts_3.clear_triggers()
+
+    ts_1.set_trigger(WhenMessageOut(RequestVoteResponseMessage.get_code()))
+    ts_2.set_trigger(WhenMessageOut(RequestVoteResponseMessage.get_code()))
+    await ts_1.run_till_triggers()
+    await ts_2.run_till_triggers()
+
+    ts_3.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code()))
+    await ts_3.run_till_triggers()
+    assert ts_3.hull.get_state_code() == "LEADER"
+
+    # Now block the leader and trigger an election
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    ts_3.clear_triggers()
+    ts_3.block_network()
+    await ts_1.hull.start_campaign()
+    await cluster.run_election()
+    assert ts_3.hull.get_state_code() == "LEADER"
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert await ts_3.log.get_last_term() == 1
+
+    # now unblock the ex leader and make sure his log updates
+    logger.info("-------- Unblocking old leader ------")
+    ts_3.unblock_network()
+    await ts_1.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    await cluster.deliver_all_pending()
+    await cluster.deliver_all_pending()
+    assert ts_3.hull.get_state_code() != "LEADER"
+    assert await ts_3.log.get_last_term() > 1
+    
+    
+    logger.info("-------- Old leader has new first log rec, test passed ------")
+
+async def test_election_leader_goes_too_far_1(cluster_maker):
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await cluster.start()
+    await ts_1.hull.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+
+    logger.info("-------- Initial election completion, blocking leader and re-runnig")
+
+    ts_1.block_network()
+    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    assert command_result.timeout_expired
+    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    assert command_result.timeout_expired
+
+    await ts_2.hull.start_campaign()
+    await cluster.run_election()
+    assert ts_2.hull.get_state_code() == "LEADER"
+    assert ts_3.hull.state.leader_uri == uri_2
+
+    assert await ts_1.log.get_last_index() == 3
+    assert await ts_2.log.get_last_index() == 2
+    assert await ts_3.log.get_last_index() == 2
+
+    ts_1.unblock_network()
+    await ts_2.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert await ts_1.log.get_last_index() == 2

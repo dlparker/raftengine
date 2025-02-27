@@ -633,9 +633,11 @@ class NetManager:
         if self.quorum_segment is None:
             await self.full_cluster.post_in_message(message)
             return
-        if message.receiver in self.quorum_segment.nodes:
-            await self.quorum_segment.post_in_message(message)
-            return
+        partitions = [self.quorum_segment] + self.other_segments
+        for partition in partitions:
+            if message.receiver in partition.nodes and message.sender in partition.nodes:
+                await partition.post_in_message(message)
+                return
 
     async def deliver_all_pending(self,  quorum_only=False, out_only=False):
         """ This does the first part of the work for the Cluster "mamual" 
@@ -734,9 +736,9 @@ class PausingServer(PilotAPI):
 
     async def disable_timers(self):
         return await self.hull.disable_timers()
-    
-    async def enable_timers(self):
-        return await self.hull.enable_timers()
+
+    async def enable_timers(self, reset=True):
+        return await self.hull.enable_timers(reset=reset)
 
     def replace_log(self, new_log=None):
         if self.use_log == SqliteLog:
@@ -937,6 +939,14 @@ class PausingCluster:
     def unsplit(self):
         self.net_mgr.unsplit()
 
+    async def disable_timers(self):
+        for node in self.nodes.values():
+            await node.disable_timers()
+            
+    async def enable_timers(self, reset=True):
+        for node in self.nodes.values():
+            await node.enable_timers(reset=reset)
+            
     def get_leader(self):
         for uri, node in self.nodes.items():
             if node.hull.state.state_code == "LEADER":
@@ -1028,6 +1038,8 @@ class PausingCluster:
             return
         try:
             self.auto_comms_flag = True
+             # don't know why, but things can get delivered out of order without this
+            await self.deliver_all_pending()
             loop = asyncio.get_event_loop()
             self.async_handle = loop.call_soon(lambda:
                                                loop.create_task(self.auto_comms_runner(quorum_only)))
@@ -1296,6 +1308,7 @@ class SPartialCommand(StdSequence):
         self.logger.debug("%s command_result = %s", node.uri, self.command_result.__dict__)
         if self.command_result.result is None:
             raise CommandFailedTaskGroup(f'command_result = {self.command_result.__dict__}')
+
     async def wait_till_done(self):
         async def do_timeout(timeout):
             start_time = time.time()

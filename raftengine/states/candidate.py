@@ -69,6 +69,7 @@ class Candidate(BaseState):
 
     async def term_expired(self, message):
         await self.hull.record_substate(SubstateCode.newer_term)
+        await self.log.set_term(message.term)
         await self.hull.demote_and_handle(message)
         return None
 
