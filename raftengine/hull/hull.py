@@ -57,18 +57,20 @@ class Hull(HullAPI):
             self.logger.error(error)
             await self.record_message_problem(in_message, error)
             return None
-        return await self.inner_on_message(message)
+        res = await self.inner_on_message(message)
+        return res
         
     async def inner_on_message(self, message):
         res = None
+        error = None
         try:
             self.logger.debug("%s Handling message type %s", self.get_my_uri(), message.get_code())
             res = await self.state.on_message(message)
         except Exception as e:
             error = traceback.format_exc()
             self.logger.error(error)
+        if error:
             await self.record_message_problem(message, error)
-            return None
         return res
 
     # Part of API

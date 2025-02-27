@@ -55,5 +55,5 @@ class AppendResponseMessage(BaseMessage):
         
     def __repr__(self):
         msg = super().__repr__()
-        msg += f" s={self.success} mi={self.maxIndex} le={self.leaderId}"
+        msg += f" s={self.success} mi={self.maxIndex} li={self.leaderId}"
         return msg

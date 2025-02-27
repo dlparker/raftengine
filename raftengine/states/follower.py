@@ -28,14 +28,26 @@ class Follower(BaseState):
         
     async def on_append_entries(self, message):
         self.last_leader_contact = time.time()
-        self.logger.debug("%s append term = %d prev_index = %d local_term = %d local_index = %d",
-                          self.my_uri(),  message.term,
-                          message.prevLogIndex, await self.log.get_term(), await self.log.get_last_index())
+        self.logger.debug("%s append term=%d local_term=%d prev_index=%d local_index=%d, prev_term=%d, local_prev_term=%d, entry_count=%d",
+                          self.my_uri(),
+                          message.term,  await self.log.get_term(),
+                          message.prevLogIndex, await self.log.get_last_index(),
+                          message.prevLogTerm,  await self.log.get_last_term(),
+                          len(message.entries))
 
+        if message.term == await self.log.get_term() and self.leader_uri != message.sender:
+            self.leader_uri = message.sender
+            self.last_vote = message
+            self.logger.info("%s accepting new leader %s", self.my_uri(),
+                             self.leader_uri)
+            await self.hull.record_substate(SubstateCode.joined_leader)
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
-        if message.prevLogIndex == 0 and message.prevLogTerm == 0 and await self.log.get_last_index() > 0:
+        if message.prevLogIndex == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
             await self.log.delete_all_from(0)
+        elif message.term != await self.log.get_term():
+            await self.send_no_sync_append_response(message)
+            return
         elif await self.log.get_last_index() > message.prevLogIndex:
             our_rec = await self.log.read(message.prevLogIndex)
             if our_rec.term != message.prevLogTerm:
@@ -44,17 +56,11 @@ class Follower(BaseState):
                 await self.log.delete_all_from(message.prevLogIndex + 1)
                 await self.send_no_sync_append_response(message)
                 return
-        if (message.term != await self.log.get_term()
-            or await self.log.get_last_index() != message.prevLogIndex
-            or await self.log.get_last_term() != message.prevLogTerm):
+            
+        elif (await self.log.get_last_index() != message.prevLogIndex
+              or await self.log.get_last_term() != message.prevLogTerm):
             await self.send_no_sync_append_response(message)
             return
-        if self.leader_uri != message.sender:
-            self.leader_uri = message.sender
-            self.last_vote = message
-            self.logger.info("%s accepting new leader %s", self.my_uri(),
-                             self.leader_uri)
-            await self.hull.record_substate(SubstateCode.joined_leader)
         if len(message.entries) == 0:
             self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                               message.sender)
@@ -170,7 +176,6 @@ class Follower(BaseState):
             self.last_vote = message
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
-            
         await self.send_vote_response_message(message, vote_yes=vote)
             
     async def term_expired(self, message):

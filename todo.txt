@@ -1,3 +1,34 @@
+Leader keeps nextIndex and matchIndex
+nextIndex starts at last_index + 1
+matchIndex starts at 0
+
+
+1. Leader sends heatbeat, no entries
+   a. Follower replies success. Leader updates matchIndex to nextIndex - 1
+   b. Follower replies failed. Leadder starts backdown
+2. Leader sends single log record, can be a new record or a backdown or a catchup
+   a. Follower replies success. Leader knows that the message had a (some) record(s)
+      because the Follower includes maxIndex in reply. However many records where
+      sent and accepted can be calculated by subtracting message prevLogIndex from
+      maxIndex. Leader updates matchIndex tp message.maxIndex. It updates
+      nextIndex to matchIndex + 1. If nextIndex is less than last_index, start catchup
+   b. Follower replies failed. Leader starts backdown
+   
+Backdown:
+1. Leader knows that the Follower does not have the record at message.prevLogIndex.
+   It does not know if the Follower has the one before, unless the maxIndex value
+   in the reply is less than message.prevLogIndex - 1. In that case the Leader
+   sets nextIndex to maxIndex + 2 and sends the record at maxIndex + 1. If maxIndex
+   is greater than or equal to message.prevLogIndex,then Leader sets nextIndex
+   to message.prevLogIndex and sends message.prevLogIndex - 1. This second case
+   will result in the Follower deleting one or more records starting at
+   message.prevLogIndex. It may or may not match the new record.
+
+Catchup
+Leader starts sending records at message.maxIndex + 1, and sets nextIndex to index after
+last message sent.
+
+
 
 Protocol
 
@@ -9,6 +40,9 @@ Protocol
 60. Cluster change protocol
 
 Library Features:
+
+xs45. See if leader can be simplified based on the idea that no command commits will be done without
+    a pending object to report too. Code current assumes that it could happend, which is wrong.
 
 41. rough out ideas for cluster class
     1. Knows about "static config" provided at startup. Can be programatically changed? See thesis
@@ -22,6 +56,48 @@ Library Features:
    such as rejected append entries and fiddle. Maybe can use substate stuff to alert to error
    and give pilot an api entry on hull to call to get errors? This is kinda partly done in the
    client command execution code. Maybe we need an Error class set and a local log feature?
+
+
+### Make the following work for thee servers, then think about five
+# !!!! Think about it! Partition happens moving leader to partition. New leader is elected, does some work,
+       then gets partitioned to a different partition number. New leader is elected, does some work. Now
+       one heal after another (same order, reverse order) or both at once. Only for five server version!!!!!	     
+
+# Define functions that check to see:
+1. The logged state term, last_index, last_term, commit_index, are a legal combination
+2. That one legal state can follow another (prevents running backwards when generating, prevents advancing
+   last_term but not last_index, last_term <= term)
+
+Then
+Generate a set of legal combinations, with differences in each value changing up to three units
+    (define logic for this and adjust if needed)
+
+Then:
+1. define functions that test two legal log states from above to see if they could be present on two
+   servers at the same same, based on the servers role  and network membership
+   Can define network membership as 0 = crashed, 1 = majority network, 2,3,4 etc means minority network partition number
+   See if it is possible to design and alogythm, or if it has to be table driven. Try hard with the algo.
+2. Either document reason that checking each pair is enough, or add a function that compares all three.
+3. Generate all the legal combinations from above.
+
+Then:
+1. Define the legal actions that can happen to a server that are not RAFT messages "action code"
+   10. Becomes leader, follower or candidate
+   12. Candidate election timeout, retry
+   20. Receives user command (only as leader, no state transitions happen otherwise)
+   30. Crash soft (log retained)
+   40. Crash hard (log lost)
+   50. Switches network from majority(1) to minority 2 or 3 (4 is probably not needed)
+
+Then:
+1. define a function that tests to see if one state for three servers could legally follow the previous
+   state. This needs to be able to analize whether commit could happen. It needs to understand what
+   effect crashes have, and what effects partitions have. So it would look at the "action code". 
+
+Build a tool that uses generated states and network and roles and turns it into a series of messages and actions
+from one state to the next.
+
+
 
 
 
