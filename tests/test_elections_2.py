@@ -352,6 +352,11 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.hull.state.leader_uri == uri_3
     
 async def test_election_candidate_log_too_old_1(cluster_maker):
+    # It is possible for a candidate to have a log state that
+    # is older than the state of other servers during an
+    # election. The follower election code should detect that and
+    # vote no on the candidate
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.2
     election_timeout_min = 0.02
@@ -372,10 +377,9 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
 
-    logger.info("-------- Initial election completion, running command ")
+    logger.info("-------- Initial election completion, crashing follower and running command ")
 
-    # block one server
-    ts_3.block_network()
+    await ts_3.simulate_crash()
 
     # now advance the commit index
     await cluster.run_command('add 1', 1)
@@ -392,7 +396,8 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     logger.info("-------- Command complete,  starting messed up re-election")
     # demote leader to follower
     await ts_1.hull.demote_and_handle(None)
-    ts_3.unblock_network()
+    # restart the crashed server, which now has out of date log
+    await ts_3.recover_from_crash()
     await ts_3.hull.start_campaign()
     ts3_out_1 = await ts_3.do_next_out_msg()
     ts3_out_2 = await ts_3.do_next_out_msg()
@@ -414,7 +419,7 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     
 async def test_failed_first_election_1(cluster_maker):
     """ Let a leader win, but before the followers get his
-        term_start log message, make him die (disconnect). 
+        term_start log message, make him die (simuated). 
         Have a new election, then re-start the ex leader.
         His log will have one record in it, and so will the 
         new leader's, but the terms will be different. This
@@ -483,27 +488,44 @@ async def test_failed_first_election_1(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    ts_3.block_network()
+    await ts_3.simulate_crash()
     await ts_1.hull.start_campaign()
     await cluster.run_election()
-    assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.get_state_code() == "LEADER"
     assert await ts_3.log.get_last_term() == 1
 
-    # now unblock the ex leader and make sure his log updates
-    logger.info("-------- Unblocking old leader ------")
-    ts_3.unblock_network()
+    # now restart the ex leader and make sure his log updates
+    logger.info("-------- Restarting old leader ------")
+    await ts_3.recover_from_crash()
+    
     await ts_1.hull.state.send_heartbeats()
+    # don't know how many of these are needed, because
+    # timing can delay a message passed detection
+    # by the simulated newtowk code, so do extras for good measure
     await cluster.deliver_all_pending()
     await cluster.deliver_all_pending()
     await cluster.deliver_all_pending()
-    assert ts_3.hull.get_state_code() != "LEADER"
     assert await ts_3.log.get_last_term() > 1
     
     
     logger.info("-------- Old leader has new first log rec, test passed ------")
 
 async def test_election_leader_goes_too_far_1(cluster_maker):
+    # If the leader gets disconnected from the rest of the
+    # cluster, and receives one or more client commands,
+    # it will save those log records and send messages. Since
+    # the messages will not reach any other servers, the
+    # leader will not commit the records.
+    # Meanwhile, if the rest of the cluster holds a successful
+    # election, then the other servers will get the "term_start"
+    # record in their logs. This log index will be the same as
+    # one of the uncommited command records in the older leader,
+    # but the term will be different. If the ex-leader reconnects
+    # to the rest of the cluster, it should demote itself because
+    # the cluster has a new term. If it has crashed and restarted,
+    # it will already be a follower. In either case the log
+    # replication messages from new leader to ex-leader now follower
+    # should cause follower to overwrite the uncommitted records.
     cluster = cluster_maker(3)
     cluster.set_configs()
 

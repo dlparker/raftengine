@@ -104,12 +104,12 @@ async def test_command_1(cluster_maker):
     assert ts_1.hull.state.leader_uri == uri_3
 
 
-    # Now block a follower's messages, like it crashed,
+    # Now simulate a crash of a follower,
     # and then do a couple of commands. Once the
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
-    ts_1.block_network()
+    await ts_1.simulate_crash()
     logger.debug('------------------------ Running command ---')
     sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
     command_result = await cluster.run_sequence(sequence)
@@ -125,7 +125,7 @@ async def test_command_1(cluster_maker):
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
-    ts_1.unblock_network() # default is discard messages, lets do that
+    await ts_1.recover_from_crash()
     await ts_3.hull.state.send_heartbeats()
     await cluster.start_auto_comms()
     start_time = time.time()
@@ -210,18 +210,31 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.hull.state.leader_uri == uri_2
 
     if discard:
-        # will discard the messages that were blocked so
-        # leader gets missed messages
+        # Will discard the messages that were blocked 
+        # so it looks like the network was broken
+        # during that time.
         ts_1.unblock_network()
         logger.info('---------!!!!!!! starting comms')
         await cluster.start_auto_comms()
     else:
-        # will deliver blocked message
-        logger.info('\n\n\n------------------ unblocking and delivering \n\n\n')
+        # Will deliver messages that were blocked during
+        # the disconnect period, simulating some sort
+        # of major latency issue, or maybe just a timing
+        # problem. For example, it is possible that the
+        # first leader sent heartbeats to the cluster
+        # that did not get delivered, and just when the
+        # cluster gave up and called an election the
+        # leader host machine also had a massive slow down such
+        # the the leader code could not execute for a second or
+        # so but the message delivery was never really blocked.
+        # These are the sort of timing and network problem
+        # that Raft is meant to handle. They might be unlikely,
+        # but they are possible.
+        logger.info('------------------ unblocking and delivering ')
         ts_1.unblock_network(deliver=True)
         await cluster.start_auto_comms()
         
-    logger.debug('\n\n\n------------------ Command AppendEntries should get rejected -\n\n\n')
+    logger.debug('------------------ Command AppendEntries should get rejected -')
 
     # can't use cluster command runner here, it might not find the right leader
     command_result = None
@@ -525,14 +538,14 @@ async def test_full_catchup(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger.info('------------------------ Election done')
 
-    # Now we want to block all messages from the leader to
-    # one follower, as though it has crashed, then
-    # run a bunch of commands and make sure that
-    # the catchup process gets them all. 
+    # Now we simulate the crash of  one follower,
+    # then run a bunch of commands, restart the
+    # follower and make sure that
+    # the catchup process gets them all the messages
 
     logger.info('---------!!!!!!! stopping comms')
-    ts_3.block_network()
-    logger.info('------------------ follower %s isolated, starting command loop', uri_3)
+    await ts_3.simulate_crash()
+    logger.info('------------------ follower %s crashed, starting command loop', uri_3)
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == ts_1.operations.total
@@ -542,10 +555,10 @@ async def test_full_catchup(cluster_maker):
     assert ts_2.operations.total == ts_1.operations.total
     logger.debug('------------------------ Correct command 2 done')
 
+
+    await ts_3.recover_from_crash()
+    logger.info('------------------ restarting follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     assert ts_3.operations.total != ts_1.operations.total
-    # will discard the messages that were blocked
-    ts_3.unblock_network()
-    logger.info('------------------ unblocking follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
@@ -569,9 +582,9 @@ async def test_follower_run_error(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger.info('------------------------ Election done')
 
-    # Block messages to one follower, run a comand,
-    # then unblock it and send heartbeats, causing
-    # it to try to catch up, however have the
+    # Simulate crash of one follower, run a comand,
+    # then restart it and send heartbeats, causing
+    # it to try to catch up. However have the
     # "state machine" command pretend it had
     # an error. This should excersize some
     # error handling code, but then the next command
@@ -579,17 +592,17 @@ async def test_follower_run_error(cluster_maker):
 
     logger.info('---------!!!!!!! stopping comms')
     logger.info('---------!!!!!!! spliting network ')
-    ts_3.block_network()
-    logger.info('------------------ follower %s isolated, running', uri_3)
+    await ts_3.simulate_crash()
+    logger.info('------------------ follower %s crashed, running', uri_3)
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == ts_1.operations.total
     logger.debug('------------------------ Correct command 1 done')
 
-    logger.info('------------------ unblocking follower %s to hit error running command', uri_3)
+    logger.info('------------------ restarted follower %s to hit error running command', uri_3)
     ts_3.operations.return_error = True
-    ts_3.unblock_network()
+    await ts_3.recover_from_crash()
     logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()

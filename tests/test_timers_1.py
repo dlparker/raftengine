@@ -145,8 +145,7 @@ async def test_election_timeout_1(cluster_maker):
 
     await cluster.start(timers_disabled=True)
     await ts_1.hull.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
+    await cluster.run_election()
 
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
@@ -157,6 +156,7 @@ async def test_election_timeout_1(cluster_maker):
     # incr the term and retry so we can monitor by term value
     orig_term = await ts_2.log.get_term()
     ts_1.block_network()
+    # we don't want ts_3 to vote yes, so block it too
     ts_3.block_network()
     await ts_1.hull.demote_and_handle(None)
     await cluster.start_auto_comms()
