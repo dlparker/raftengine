@@ -116,7 +116,10 @@ class Hull(HullAPI):
                              self.cluster_config.election_timeout_max)
         return res
 
-    # Part of API ?
+    # Part of API 
+    async def stop(self):
+        await self.stop_state()
+
     async def stop_state(self):
         await self.state.stop()
         if self.state_async_handle:

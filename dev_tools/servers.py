@@ -574,7 +574,12 @@ class Network:
         await self.post_in_message(msg)
         return msg
         
+    def isolate_server(self, node):
+        node.block_network()
 
+    def reconnect_server(self, node, deliver=False):
+        node.unblock_network(deliver=deliver)
+        
 class NetManager:
 
     def __init__(self, all_nodes:dict, start_nodes:dict):
@@ -708,6 +713,23 @@ class PausingServer(PilotAPI):
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         self.operations = simpleOps()
 
+    async def simulate_crash(self, save_log=True, save_ops=True):
+        await self.hull.stop()
+        if not save_log:
+            self.log.close()
+            if self.use_log == MemoryLog:
+                self.log = MemoryLog()
+            else:
+                self.log = setup_sqlite_log(self.uri)
+        if not save_ops:
+            self.operations = simpleOps()
+        self.hull = TestHull(self.cluster_config, self.local_config, self)
+        self.network.isolate_server(self)
+        
+    async def recover_from_crash(self, deliver=False):
+        self.network.reconnect_server(self, deliver=deliver)
+        await self.hull.start()
+        
     # Part of PilotAPI
     def get_log(self):
         return self.log
