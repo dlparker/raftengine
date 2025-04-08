@@ -229,7 +229,11 @@ class Leader(BaseState):
             self.logger.debug('After backdown to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
             return
-
+        if message.maxIndex == tracker.nextIndex:
+            tracker.nextIndex += 1
+            tracker.matchIndex = message.maxIndex
+            self.logger.debug('Success to %s upped tracker.nextIndex to %d',
+                              message.sender, tracker.nextIndex)
         if tracker.nextIndex > await self.log.get_last_index():
             self.logger.debug('After success to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
