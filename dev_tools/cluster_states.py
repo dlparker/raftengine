@@ -1,7 +1,6 @@
-from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Any
-from raftengine.api.log_api import LogAPI
+from enum import Enum
+from typing import Optional
 
 
 class MessageCode(str, Enum):
@@ -30,13 +29,13 @@ class CommsEdge(str, Enum):
     before_send = "BEFORE_SEND"
     
     # Pausing here means that the node has
-    # completed the processing required in
+    # completed the processing required
     # in order to send the message and the
     # handoff has been made to the input
     # processing at the target node. Unless
     # target node is paused or pauses as
     # a result of this message, then it
-    # will process the messsage.
+    # will process the message.
     after_send = "AFTER_SEND"
 
     # Pausing here means that the simulated
@@ -119,8 +118,8 @@ class ActionCode(str, Enum):
     start_campaign = "START_CAMPAIGN"
     
     # The node targeted with this action will
-    # send a heatbeat append entries. Should
-    # only be target at nodes in the leader state.
+    # send a heartbeat append entries. Should
+    # only be targeted at nodes in the leader state.
     send_heartbeats = "SEND_HEARTBEATS"
 
     def __str__(self):
@@ -146,7 +145,7 @@ class RunState(str, Enum):
 
 class NetworkMode(str, Enum):
     """ This assumes we only need to care about a single
-    partition event, not multiple simultaneous partions. So
+    partition event, not multiple simultaneous partitions. So
     a node is either part of the majority network, or it
     is part of a single minority network. If analysis
     shows that multiple minority networks are logically
@@ -214,7 +213,7 @@ class NoOp:
     action_code: ActionCode = ActionCode.noop 
     description: str = None
 
-class PhaseStep2:
+class PhaseStep:
 
     def __init__(self, node_uri, runner_class=None, validate_class=None, do_now_class=None, description=None):
         self.node_uri = node_uri
@@ -264,9 +263,9 @@ class PhaseStep2:
 
 @dataclass
 class Phase:
-    node_ops: list[PhaseStep2] # must have all nodes even if the action is nothing
+    node_ops: list[PhaseStep] # must have all nodes even if the action is nothing
     description: str = None
-    
+
 class Sequence:
 
     def __init__(self, start_state=None, node_count=3, description=None):
@@ -281,7 +280,7 @@ class Sequence:
             if node_count and len(self.start_state.nodes) != node_count:
                 raise Exception('node_count and start_state inconsistent, prolly supply one or the other')
             self.node_count = 0
-            for node in self.start_state:
+            for node in self.start_state.nodes:
                 if node.uri in self.nodes:
                     raise Exception(f'node.uri {node.uri} used twice in supplied start state')
                 self.nodes[node.uri] = node
@@ -321,21 +320,7 @@ class Sequence:
         self.phases = []
         self.phase_cursor = 0
 
-        
 
-@dataclass
-class PhaseStep:
-    # you can define a noop my supplying the node_uri but nothing else
-    node_uri: str
-    take_action: Optional[ActionCode] = None
-    requires_role: Optional[RoleCode] = None
-    requires_state: Optional[LogState] = None
-    requires_flowpoint: Optional[CommsOp] = None
-    
-@dataclass
-class ActionPhase:
-    actions: list[PhaseStep] # must have all nodes even if the action is nothing
-    
 @dataclass
 class ClusterState:
     nodes: list[NodeState]

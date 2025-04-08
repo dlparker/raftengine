@@ -1,10 +1,13 @@
 import asyncio
 from dataclasses import dataclass
-from dev_tools.cluster_states import (ClusterState, RoleCode, NodeState, ActionPhase, LogState, ActionOnState, ActionOnMessage,
-                                      ValidateState, MessageCode, CommsOp, CommsEdge, ActionCode, Sequence, DoNow, PhaseStep2, NoOp, Phase)
-from dev_tools.servers import PausingCluster, SNormalElection, PausingServer, PauseTrigger
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+
+from dev_tools.cluster_states import (NodeState, LogState, ActionOnState, ActionOnMessage,
+                                      ValidateState, MessageCode, CommsOp, CommsEdge, ActionCode, Sequence, DoNow,
+                                      PhaseStep, NoOp, Phase)
+from dev_tools.servers import PausingCluster, PausingServer, PauseTrigger
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
+
 
 @dataclass
 class NodeRecord:
@@ -266,26 +269,26 @@ class StandardElectionSequence(Sequence):
         phase_1_steps = []
         do_now = DoNow(ActionCode.start_campaign,
                        description="Node 1 starts campaign as though election timeout has occured")
-        ps = PhaseStep2(node_1.uri, do_now_class=do_now)
+        ps = PhaseStep(node_1.uri, do_now_class=do_now)
         phase_1_steps.append(ps)
         for nid in self.nodes_by_id:
             if nid != 1:
                 node = self.nodes_by_id[nid]
-                phase_1_steps.append(PhaseStep2(node.uri, do_now_class=NoOp()))
+                phase_1_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
         phase_1 = Phase(phase_1_steps, description="Starts campaign at node 1, others do nothing, ensuring node 1 wins election")
         self.add_phase(phase_1)
 
         phase_2_steps = []
         leader_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=None)
         action_2 = ActionOnState(log_state=leader_state, action_code=ActionCode.pause)
-        ps = PhaseStep2(node_1.uri, runner_class=action_2)
+        ps = PhaseStep(node_1.uri, runner_class=action_2)
         phase_2_steps.append(ps)
         comms_op_2b = CommsOp(MessageCode.append_entries_response, CommsEdge.after_send)
         action_2b = ActionOnMessage(comms_op=comms_op_2b, action_code=ActionCode.pause)
         for nid in self.nodes_by_id:
             if nid != 1:
                 node = self.nodes_by_id[nid]
-                ps = PhaseStep2(node.uri, runner_class=action_2b)
+                ps = PhaseStep(node.uri, runner_class=action_2b)
                 phase_2_steps.append(ps)
         phase_2 = Phase(phase_2_steps,
                         description="Runs until leader sees commit of first log record and all followers have agreed")
@@ -293,12 +296,12 @@ class StandardElectionSequence(Sequence):
 
         phase_3_steps = []
         do_now = DoNow(ActionCode.send_heartbeats, description="Node 1 sends heartbeats to followers")
-        ps = PhaseStep2(node_1.uri, do_now_class=do_now)
+        ps = PhaseStep(node_1.uri, do_now_class=do_now)
         phase_3_steps.append(ps)
         for nid in self.nodes_by_id:
             if nid != 1:
                 node = self.nodes_by_id[nid]
-                phase_3_steps.append(PhaseStep2(node.uri, do_now_class=NoOp()))
+                phase_3_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
         phase_3 = Phase(phase_3_steps, description="Leader queues heartbeats to followers so they can see commit")
         self.add_phase(phase_3)
         
@@ -306,12 +309,12 @@ class StandardElectionSequence(Sequence):
         comms_op_4 = CommsOp(MessageCode.append_entries_response, CommsEdge.after_all_responses)
         action_4 = ActionOnMessage(comms_op=comms_op_4, action_code=ActionCode.pause)
         desc = "Leader runs until it has handled one of the pending append entries response messages"
-        ps = PhaseStep2(node_1.uri, runner_class=action_4, description=desc)
+        ps = PhaseStep(node_1.uri, runner_class=action_4, description=desc)
         phase_4_steps.append(ps)
         follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
         for nid in self.nodes_by_id:
             if nid != 1:
                 node = self.nodes_by_id[nid]
-                phase_4_steps.append(PhaseStep2(node.uri, validate_class=ValidateState(log_state=follower_state)))
+                phase_4_steps.append(PhaseStep(node.uri, validate_class=ValidateState(log_state=follower_state)))
         phase_4 = Phase(phase_4_steps, description="Leader handles all heartbeat responses and followers see commit")
         self.add_phase(phase_4)
