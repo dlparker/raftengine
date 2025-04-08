@@ -401,11 +401,14 @@ class TriggerSet:
         self.triggers = triggers
         self.mode = mode
         if name is None:
-            name = f"Set-[str(cond) for cond in triggers]"
+            bits = ' '.join([str(cond) for cond in triggers])
+            name = f"Set-{bits}"
         self.name = name
 
     def __repr__(self):
-        return self.name
+        bits = ' '.join([str(cond) for cond in self.triggers])
+        name = f"Set-{bits}"
+        return name
 
     def add_trigger(self, trigger):
         self.triggers.append(trigger)
@@ -599,6 +602,9 @@ class NetManager:
             return self.quorum_segment
         return self.full_cluster
     
+    def get_minority_networks(self):
+        return self.other_segments
+    
     def split_network(self, segments):
         # don't mess with original
         # validate first
@@ -729,6 +735,15 @@ class PausingServer(PilotAPI):
     async def recover_from_crash(self, deliver=False):
         self.network.reconnect_server(self, deliver=deliver)
         await self.hull.start()
+
+    def get_state_code(self):
+        return self.hull.get_state_code()
+    
+    def get_state(self):
+        return self.hull.state
+    
+    async def start_campaign(self):
+        return await self.hull.start_campaign()
         
     # Part of PilotAPI
     def get_log(self):
