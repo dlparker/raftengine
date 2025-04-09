@@ -557,7 +557,7 @@ class Network:
             node.blocked_in_messages.append(msg)
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
-        await node.hull.on_message(json.dumps(msg, default=lambda o:o.__dict__))
+        await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
         return msg
     
     async def do_next_out_msg(self, node):
@@ -712,6 +712,10 @@ class PausingServer(PilotAPI):
         self.block_messages = False
         self.blocked_in_messages = None
         self.blocked_out_messages = None
+        self.am_crashed = False
+        self.in_message_history = []
+        self.out_message_history = []
+        self.save_message_history = False
 
     def set_configs(self, local_config, cluster_config):
         self.cluster_config = cluster_config
@@ -719,6 +723,22 @@ class PausingServer(PilotAPI):
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         self.operations = simpleOps()
 
+    def start_saving_messages(self):
+        self.save_message_history = True 
+
+    def stop_saving_messages(self):
+        self.save_message_history = False
+        self.in_message_history = []
+        self.out_message_history = []
+        
+    def get_saved_messages(self, clear=True):
+        res = dict(in_msgs=self.in_message_history,
+                   out_msg=self.out_message_history)
+        if clear:
+            self.in_message_history = []
+            self.out_message_history = []
+        return res
+    
     async def simulate_crash(self, save_log=True, save_ops=True):
         await self.hull.stop()
         if not save_log:
@@ -729,11 +749,13 @@ class PausingServer(PilotAPI):
                 self.log = setup_sqlite_log(self.uri)
         if not save_ops:
             self.operations = simpleOps()
+        self.am_crashed = True
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         self.network.isolate_server(self)
         
     async def recover_from_crash(self, deliver=False):
         self.network.reconnect_server(self, deliver=deliver)
+        self.am_crashed = False
         await self.hull.start()
 
     def get_state_code(self):
@@ -754,16 +776,27 @@ class PausingServer(PilotAPI):
         return await self.operations.process_command(command, serial)
         
     # Part of PilotAPI
-    async def send_message(self, target, in_msg):
-        msg = self.hull.decode_message(in_msg)
+    async def on_message(self, in_msg):
+        if self.save_message_history:
+            msg = self.hull.decode_message(in_msg)
+            self.in_message_history.append(msg)
+        await self.hull.on_message(in_msg)
+        
+    # Part of PilotAPI
+    async def send_message(self, target, out_msg):
+        msg = self.hull.decode_message(out_msg)
         self.logger.debug("queueing out msg %s", msg)
         self.out_messages.append(msg) 
+        if self.save_message_history:
+            self.out_message_history.append(msg)
 
     # Part of PilotAPI
-    async def send_response(self, target, in_msg, in_reply):
+    async def send_response(self, target, out_msg, in_reply):
         reply = self.hull.decode_message(in_reply)
         self.logger.debug("queueing out reply %s", reply)
         self.out_messages.append(reply) 
+        if self.save_message_history:
+            self.out_message_history.append(reply)
         
     async def start(self):
         await self.hull.start()
