@@ -207,7 +207,11 @@ async def test_election_short_1():
     quiet with no further operations needed until an new log record is created.
 
     This test uses the phase sequencer to handle the absolute minimum number of operations
-    possible in this test environment in order to have a fully consistent cluster."""
+    possible in this test environment in order to have a fully consistent cluster.
+
+    This sequence is replicated in the dev_utils/stepper.py file as the
+    StandardElectionSequence class that is used in other tests.
+    """
     
     sequence = Sequence(node_count=3,
                         description="Starts 3 node cluster, runs with minimal steps "\
@@ -252,17 +256,27 @@ async def test_election_short_1():
     sequence.add_phase(phase_3)
 
 
+
     phase_4_steps = []
     comms_op_4 = CommsOp(MessageCode.append_entries_response, CommsEdge.after_all_responses)
     action_4 = ActionOnMessage(comms_op=comms_op_4, action_code=ActionCode.pause)
     desc = "Leader runs until it has handled one of the pending append entries response messages"
     ps = PhaseStep(node_1.uri, runner_class=action_4, description=desc)
     phase_4_steps.append(ps)
-    follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
-    phase_4_steps.append(PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state)))
-    phase_4_steps.append(PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state)))
+    comms_op_4b = CommsOp(MessageCode.append_entries_response, CommsEdge.after_send)
+    action_4b = ActionOnMessage(comms_op=comms_op_2b, action_code=ActionCode.pause)
+    phase_4_steps.append(PhaseStep(node_2.uri, runner_class=action_4b))
+    phase_4_steps.append(PhaseStep(node_3.uri, runner_class=action_4b))
     phase_4 = Phase(phase_4_steps, description="Leader handles all heartbeat responses and followers see commit")
     sequence.add_phase(phase_4)
+
+    phase_5_steps = []
+    phase_5_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
+    follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
+    phase_5_steps.append(PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state)))
+    phase_5_steps.append(PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state)))
+    phase_5 = Phase(phase_5_steps, description="Validating state at followers shows commit of term start log record")
+    sequence.add_phase(phase_5)
     
     async def phase_done(phase_result):
         phase = phase_result.phase
@@ -408,21 +422,22 @@ async def test_re_election_1():
             
     sq = Sequencer(sequence, phase_done)
     re_election_results = await sq.run_sequence()
-    for phase_result in election_results:
-        phase = phase_result.phase
-        index = phase_result.index
-        cluster_state = phase_result.cluster_state
-        print("-"*100)
-        print(f"phase index in election={index}, {phase.description}")
-        print(json.dumps(cluster_state, default=lambda o:o.__dict__, indent=4))
+    if printing:
+        for phase_result in election_results:
+            phase = phase_result.phase
+            index = phase_result.index
+            cluster_state = phase_result.cluster_state
+            print("-"*100)
+            print(f"phase index in election={index}, {phase.description}")
+            print(json.dumps(cluster_state, default=lambda o:o.__dict__, indent=4))
 
-    for phase_result in re_election_results:
-        phase = phase_result.phase
-        index = phase_result.index
-        cluster_state = phase_result.cluster_state
-        print("-"*100)
-        print(f"phase index in re-election={index}, {phase.description}")
-        print(json.dumps(cluster_state, default=lambda o:o.__dict__, indent=4))
+        for phase_result in re_election_results:
+            phase = phase_result.phase
+            index = phase_result.index
+            cluster_state = phase_result.cluster_state
+            print("-"*100)
+            print(f"phase index in re-election={index}, {phase.description}")
+            print(json.dumps(cluster_state, default=lambda o:o.__dict__, indent=4))
 
     await sq.cluster.cleanup()
 
@@ -441,7 +456,6 @@ async def test_partition_1():
     sequence = StandardElectionSequence(node_count=3)
     sequence.do_setup()
 
-    printing = True
     target_phase = None
     async def phase_done(phase_result):
         phase = phase_result.phase
