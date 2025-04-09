@@ -165,19 +165,6 @@ class LogState:
     commit_index: int
     leader_id: Optional[str] = None
 
-@dataclass
-class NodeState:
-    node_id: int
-    role: RoleCode
-    run_state: RunState
-    network_mode: NetworkMode
-    log_state: LogState
-    uri: Optional[str] = None
-
-    def __post_init__(self):
-        if self.uri is None:
-            # this is tied to uri generation in the PausingCluster and PausingServer classes
-            self.uri = f"mcpy://{self.node_id}"
 
 @dataclass
 class CommsOp:
@@ -260,22 +247,50 @@ class PhaseStep:
             return self.do_now_class
         return None
     
+@dataclass
+class NodeState:
+    node_id: int
+    role: RoleCode
+    run_state: RunState
+    network_mode: NetworkMode
+    log_state: LogState
+    uri: Optional[str] = None
+    messages: Optional[dict[str, list]] = None
+
+    def __post_init__(self):
+        if self.uri is None:
+            # this is tied to uri generation in the PausingCluster and PausingServer classes
+            self.uri = f"mcpy://{self.node_id}"
+        if self.messages is None:
+            self.messages = {}
+
+@dataclass
+class ClusterState:
+    nodes: list[NodeState]
+    
 
 @dataclass
 class Phase:
     node_ops: list[PhaseStep] # must have all nodes even if the action is nothing
     description: str = None
 
+@dataclass
+class PhaseResult:
+    phase: Phase
+    index: int
+    cluster_state: ClusterState
+
 class Sequence:
 
     def __init__(self, start_state=None, node_count=3, description=None):
         self.start_state = start_state
+        self.current_state = start_state
         self.node_count = node_count
         self.description = description
         self.phases = []
         self.phase_cursor = 0
         self.nodes = {}
-        self.nodes_by_id = {}
+        self.uris_by_id = {}
         if self.start_state:
             if node_count and len(self.start_state.nodes) != node_count:
                 raise Exception('node_count and start_state inconsistent, prolly supply one or the other')
@@ -284,7 +299,7 @@ class Sequence:
                 if node.uri in self.nodes:
                     raise Exception(f'node.uri {node.uri} used twice in supplied start state')
                 self.nodes[node.uri] = node
-                self.nodes_by_id[node.node_id] = node
+                self.uris_by_id[node.node_id] = node.uri
                 self.node_count += 1
         else:
             node_list = []
@@ -292,9 +307,15 @@ class Sequence:
                 node = NodeState(i, RoleCode.follower, RunState.normal, NetworkMode.majority,
                                  LogState(0, 0, 0, 0, None))
                 self.nodes[node.uri] = node
-                self.nodes_by_id[node.node_id] = node
+                self.uris_by_id[node.node_id] = node.uri
                 node_list.append(node)
             self.start_state = ClusterState(node_list)
+
+    def save_state(self, cluster_state):
+        for node in cluster_state.nodes:
+            self.nodes[node.uri] = node
+            self.uris_by_id[node.node_id] = node.uri
+        self.current_state = cluster_state
 
     def add_phase(self, phase):
         found_uris = []
@@ -320,10 +341,6 @@ class Sequence:
         self.phases = []
         self.phase_cursor = 0
 
-
-@dataclass
-class ClusterState:
-    nodes: list[NodeState]
-    
-
+    def node_by_id(self, nid):
+        return self.nodes[self.uris_by_id[nid]]
 
