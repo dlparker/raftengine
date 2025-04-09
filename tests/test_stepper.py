@@ -1,4 +1,8 @@
-#!/usr/bin/env python
+"""
+The tests in this file focus on the use of the Sequence class defined in dev_utils/cluster_state.py and the
+Sequencer class from dev_utils/stepper.py that run the sequences so defined.
+
+"""
 import logging
 import json
 
@@ -9,7 +13,7 @@ from dev_tools.stepper import Sequencer, StandardElectionSequence
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
-setup_logging(default_level="debug")
+setup_logging()
 logger = logging.getLogger("test_code")
 
 printing = False
@@ -441,8 +445,13 @@ async def test_re_election_1():
 
     await sq.cluster.cleanup()
 
-    
 async def test_partition_1():
+    await partition_1_inner(3)
+    
+async def test_partition_2():
+    await partition_1_inner(5)
+    
+async def partition_1_inner(node_count):
     """ This test runs the standard sequence for starting a cluster and completing the election
     to the point where no more action is pending, all followers have committed the first
     log record and the leader has collected their responses. It then isolates the leader by
@@ -453,7 +462,7 @@ async def test_partition_1():
     lower. Tell that node to send a heartbeat broadcast. It should example the first response
     it sees and resign to become a follower in the new term."""
 
-    sequence = StandardElectionSequence(node_count=3)
+    sequence = StandardElectionSequence(node_count=node_count)
     sequence.do_setup()
 
     target_phase = None
@@ -475,92 +484,101 @@ async def test_partition_1():
 
     sequence.clear_phases()
     
-    node_1 = sequence.node_by_id(1)
-    node_2 = sequence.node_by_id(2)
-    node_3 = sequence.node_by_id(3)
+    nodes = []
+    for i in range(1, node_count + 1):
+        nodes.append(sequence.node_by_id(i))
+    first_leader = sequence.node_by_id(1)
 
     phase_0_steps = []
     partition_now = DoNow(ActionCode.network_to_minority, description="Node 1, leader gets partitioned")
-    ps = PhaseStep(node_1.uri, do_now_class=partition_now)
+    ps = PhaseStep(first_leader.uri, do_now_class=partition_now)
     phase_0_steps.append(ps)
-    phase_0_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
-    phase_0_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    for node in nodes:
+        if node.uri != first_leader.uri:
+            phase_0_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_0 = Phase(phase_0_steps, description="Leader loses network connection")
     sequence.add_phase(phase_0)
     
     phase_1_steps = []
     run_now = DoNow(ActionCode.start_campaign,
                    description="Node 2 starts campaign as though election timeout has occured")
-    ps = PhaseStep(node_2.uri, do_now_class=run_now)
+    second_leader = nodes[1]
+    ps = PhaseStep(second_leader.uri, do_now_class=run_now)
     phase_1_steps.append(ps)
-    phase_1_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
-    phase_1_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    for node in nodes:
+        if node.uri != second_leader.uri:
+            phase_1_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_1 = Phase(phase_1_steps, description="Node 2 starts election")
     sequence.add_phase(phase_1)
 
     
     phase_2_steps = []
-    phase_2_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
+    phase_2_steps.append(PhaseStep(first_leader.uri, do_now_class=NoOp()))
     # only one follower is going to reply, so let's wait for just one
     comms_op_2 = CommsOp(MessageCode.append_entries_response, CommsEdge.after_handle)
     action_2 = ActionOnMessage(comms_op=comms_op_2, action_code=ActionCode.pause)
-    ps = PhaseStep(node_2.uri, runner_class=action_2, description="Node 2 runs till wins election")
+    ps = PhaseStep(second_leader.uri, runner_class=action_2, description="Node 2 runs till wins election")
     phase_2_steps.append(ps)
     comms_op_2b = CommsOp(MessageCode.append_entries_response, CommsEdge.after_send)
     action_2b = ActionOnMessage(comms_op=comms_op_2b, action_code=ActionCode.pause)
-    ps = PhaseStep(node_3.uri, runner_class=action_2b)
-    phase_2_steps.append(ps)
+    for node in nodes:
+        if node.uri != second_leader.uri and node.uri != first_leader.uri:
+            # first_leader is doing noop
+            ps = PhaseStep(node.uri, runner_class=action_2b)
+            phase_2_steps.append(ps)
     phase_2 = Phase(phase_2_steps, description="Node 2 wins election")
     sequence.add_phase(phase_2)
 
     phase_3_steps = []
     recover_now = DoNow(ActionCode.network_to_majority, description="Node 1, old leader, reconnects")
-    phase_3_steps.append(PhaseStep(node_1.uri, do_now_class=recover_now))
-    phase_3_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
-    phase_3_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    phase_3_steps.append(PhaseStep(first_leader.uri, do_now_class=recover_now))
+    for node in nodes:
+        if node.uri != first_leader.uri:
+            phase_3_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_3 = Phase(phase_3_steps, description="Node 1 reconnects")
     sequence.add_phase(phase_3)
     
     phase_4_steps = []
     do_now = DoNow(ActionCode.send_heartbeats, description="Node 1, old leader, sends heartbeats which will be rejected")
-    ps = PhaseStep(node_1.uri, do_now_class=do_now)
+    ps = PhaseStep(first_leader.uri, do_now_class=do_now)
     phase_4_steps.append(ps)
-    phase_4_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
-    phase_4_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
+    for node in nodes:
+        if node.uri != first_leader.uri:
+            phase_4_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_4 = Phase(phase_4_steps, description="Old Leader queues heartbeats to followers")
     sequence.add_phase(phase_4)
-
 
     phase_5_steps = []
     comms_op_5 = CommsOp(MessageCode.append_entries_response, CommsEdge.after_all_responses)
     action_5 = ActionOnMessage(comms_op=comms_op_5, action_code=ActionCode.pause)
     desc = "Old Leader runs until it has handled all of the hearbeat response messages"
-    ps = PhaseStep(node_1.uri, runner_class=action_5, description=desc)
+    ps = PhaseStep(first_leader.uri, runner_class=action_5, description=desc)
     phase_5_steps.append(ps)
     comms_op_5b = CommsOp(MessageCode.append_entries_response, CommsEdge.after_send)
     action_5b = ActionOnMessage(comms_op=comms_op_5b, action_code=ActionCode.pause)
-    ps = PhaseStep(node_2.uri, runner_class=action_5b)
-    phase_5_steps.append(ps)
-    ps = PhaseStep(node_3.uri, runner_class=action_5b)
-    phase_5_steps.append(ps)
+    for node in nodes:
+        if node.uri != first_leader.uri:
+            ps = PhaseStep(node.uri, runner_class=action_5b)
+            phase_5_steps.append(ps)
     phase_5 = Phase(phase_5_steps, description="Old leader handles all heartbeat responses, see new term, becomes follower")
     sequence.add_phase(phase_5)
 
     phase_6_steps = []
-    old_leader_state = LogState(term=2, index=1, last_term=1, commit_index=1, leader_id=node_2.uri)
-    phase_6_steps.append(PhaseStep(node_1.uri, validate_class=ValidateState(log_state=old_leader_state)))
-    phase_6_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
-    phase_6_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    old_leader_state = LogState(term=2, index=1, last_term=1, commit_index=1, leader_id=second_leader.uri)
+    phase_6_steps.append(PhaseStep(first_leader.uri, validate_class=ValidateState(log_state=old_leader_state)))
+    for node in nodes:
+        if node.uri != first_leader.uri:
+            phase_6_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_6 = Phase(phase_6_steps, description="Old leader state is not updated yet, except for term and leader_id")
     sequence.add_phase(phase_6)
 
-
     phase_7_steps = []
     do_now = DoNow(ActionCode.send_heartbeats, description="Node 2, current leader, sends heartbeats")
-    ps = PhaseStep(node_2.uri, do_now_class=do_now)
+    ps = PhaseStep(second_leader.uri, do_now_class=do_now)
     phase_7_steps.append(ps)
-    phase_7_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
-    phase_7_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    for node in nodes:
+        if node.uri != second_leader.uri:
+            phase_7_steps.append(PhaseStep(node.uri, do_now_class=NoOp()))
     phase_7 = Phase(phase_7_steps, description="New Leader queues heartbeats to followers")
     sequence.add_phase(phase_7)
 
@@ -568,20 +586,73 @@ async def test_partition_1():
     comms_op_8 = CommsOp(MessageCode.append_entries_response, CommsEdge.after_all_responses)
     action_8 = ActionOnMessage(comms_op=comms_op_8, action_code=ActionCode.pause)
     desc = "Leader runs until it has handled all of the hearbeat response messages"
-    ps = PhaseStep(node_2.uri, runner_class=action_8, description=desc)
+    ps = PhaseStep(second_leader.uri, runner_class=action_8, description=desc)
     phase_8_steps.append(ps)
     comms_op_8b = CommsOp(MessageCode.append_entries_response, CommsEdge.after_send)
     action_8b = ActionOnMessage(comms_op=comms_op_8b, action_code=ActionCode.pause)
-    ps = PhaseStep(node_1.uri, runner_class=action_8b)
-    phase_8_steps.append(ps)
-    ps = PhaseStep(node_3.uri, runner_class=action_8b)
-    phase_8_steps.append(ps)
+    for node in nodes:
+        if node.uri != second_leader.uri:
+            ps = PhaseStep(node.uri, runner_class=action_8b)
+            phase_8_steps.append(ps)
     phase_8 = Phase(phase_8_steps, description="New leader handles all heartbeat responses")
     sequence.add_phase(phase_8)
 
     re_election_result = await sq.run_sequence()
 
     await sq.cluster.cleanup()
+    
+    
+async def test_command_1():
+    """ After running the standard election sequence to start the cluster, this
+    test runs a command sequence and checks that the state is correct after
+    propogation."""
+
+    sequence = StandardElectionSequence(node_count=3)
+    sequence.do_setup()
+    
+    async def phase_done(phase_result):
+        phase = phase_result.phase
+        index = phase_result.index
+        cluster_state = phase_result.cluster_state
+        if printing:
+            print(f'\n phase done: {phase.description}\n')
+            if len(sequence.phases) > index+1:
+                next_phase = sequence.phases[index+1]
+                print(f'\n next is: {next_phase.description}\n')
+                
+    sq = Sequencer(sequence, phase_done)
+    await sq.run_sequence()
+    sequence.clear_phases()
+
+
+    node_1 = sequence.node_by_id(1)
+    node_2 = sequence.node_by_id(2)
+    node_3 = sequence.node_by_id(3)
+
+    # node.server.operations is an instance of SimpleOps in dev_utils.servers
+    assert node_1.server.operations.total == 0
+    assert node_2.server.operations.total == 0
+    assert node_3.server.operations.total == 0
+    
+    phase_1_steps = []
+    command_now = DoNow(ActionCode.run_command, description="Node 1 gets a command",
+                        command="add 1")
+    ps = PhaseStep(node_1.uri, do_now_class=command_now)
+    phase_1_steps.append(ps)
+    phase_1_steps.append(PhaseStep(node_2.uri, do_now_class=NoOp()))
+    phase_1_steps.append(PhaseStep(node_3.uri, do_now_class=NoOp()))
+    phase_1 = Phase(phase_1_steps, description="Leader starts command sequence")
+    sequence.add_phase(phase_1)
 
     
+    await sq.run_sequence()
+
+    # now let the messages fly till done
+    await sq.finish_message_traffic()
+
+    assert node_1.server.operations.total == 1
+    assert node_2.server.operations.total == 1
+    assert node_3.server.operations.total == 1
     
+    await sq.cluster.cleanup()
+

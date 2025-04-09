@@ -109,14 +109,14 @@ async def cluster_maker():
         await the_cluster.stop_auto_comms()
         await the_cluster.cleanup()
     
-class simpleOps(): # pragma: no cover
+class SimpleOps(): # pragma: no cover
     total = 0
     explode = False
     exploded = False
     return_error = False
     reported_error = False
     async def process_command(self, command, serial):
-        logger = logging.getLogger("simpleOps")
+        logger = logging.getLogger("SimpleOps")
         error = None
         result = None
         self.exploded = False
@@ -721,7 +721,7 @@ class PausingServer(PilotAPI):
         self.cluster_config = cluster_config
         self.local_config = local_config
         self.hull = TestHull(self.cluster_config, self.local_config, self)
-        self.operations = simpleOps()
+        self.operations = SimpleOps()
 
     def start_saving_messages(self):
         self.save_message_history = True 
@@ -739,8 +739,13 @@ class PausingServer(PilotAPI):
             self.out_message_history = []
         return res
     
-    async def simulate_crash(self, save_log=True, save_ops=True):
+    async def simulate_crash(self):
         await self.hull.stop()
+        self.am_crashed = True
+        self.network.isolate_server(self)
+        self.hull = None
+        
+    async def recover_from_crash(self, deliver=False, save_log=True, save_ops=True):
         if not save_log:
             self.log.close()
             if self.use_log == MemoryLog:
@@ -748,15 +753,11 @@ class PausingServer(PilotAPI):
             else:
                 self.log = setup_sqlite_log(self.uri)
         if not save_ops:
-            self.operations = simpleOps()
-        self.am_crashed = True
-        self.hull = TestHull(self.cluster_config, self.local_config, self)
-        self.network.isolate_server(self)
-        
-    async def recover_from_crash(self, deliver=False):
-        self.network.reconnect_server(self, deliver=deliver)
+            self.operations = SimpleOps()
         self.am_crashed = False
+        self.hull = TestHull(self.cluster_config, self.local_config, self)
         await self.hull.start()
+        self.network.reconnect_server(self, deliver=deliver)
 
     def get_state_code(self):
         return self.hull.get_state_code()

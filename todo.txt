@@ -1,10 +1,10 @@
  New Test stuff
 
-1. Fix split_from_main_net in stepper.py, it doesn't work with more than one node splitting
-2. Fix msg trigger to get the node count from the network when waiting for all messages
-3. Add a function to clear pending messages to something as an abstraction on top of
+X 1. Fix split_from_main_net in stepper.py, it doesn't work with more than one node splitting
+X 2. Fix msg trigger to get the node count from the network when waiting for all messages
+# 3. Add a function to clear pending messages to something as an abstraction on top of
    the actual cluster code. Maybe the cluster_state? Maybe the sequence?
-4. See if crash and recover can be rewritten so that the new node is created during recover, not during crash
+#4. See if crash and recover can be rewritten so that the new node is created during recover, not during crash
 5. Add a send command mechansim and test
 
 

@@ -1,3 +1,49 @@
+"""
+The main class in this module is the Sequencer class, which executes the phases of server simulation defined
+in an instance of the Sequence class from dev_utils/cluster_states.py. The simulations are provided by classes
+in the dev_utils.servers module.
+
+Some important points about this simulation and how this module uses it.
+
+1. The simulated network code has multiple operational modes. This module only uses the "manual" mode, meaning
+   that messages are transported and handled only when the transport mechanism is explicitly activated. This 
+   module uses two methods to do that:
+
+   A. The "run_till_trigger" method. In this method the code driving the simulation sets up a trigger class instance
+      for one or more servers that defines a condition at which message delivery should pause. There is no arbitrary
+      limit on what the trigger condition can be, but this module only uses two kinds, message movement triggers and
+      state matching triggers. Once a trigger has been set up for a server, the server's run_till_triggers method
+      is called. The network simulation tied to that server will begin delivering messages, checking the trigger
+      after each message action, and will continue until the trigger fires or a time limit is reached. It is
+      important to note that all the servers that are part of the desired message driven interaction must be
+      in the run_till_triggers loop as well or they will not participate. 
+   B. The "run until quiet" method, which just transports messages until all the output and input buffers are empty.
+      The nature of the raftengine code is such that this will happen fairly quickly after any event that starts
+      messages moving around.
+
+2. The simulated servers are running with rediculously long timer values for the election timeout and lost leader timeouts,
+   so the actions that would normally start an election have to be triggered by the driver code. It is possible to run
+   the simulated servers with realistic timeouts, and that is done in some of the unit tests, but it is not done here.
+   So test design here can be sure that a timeout is not going to disrupt the expected sequence. The result is that it
+   is possible to design test sequences that are determinstic and easy to predict, and that won't blow up on you while
+   you have the code under test paused in the debugger.
+
+3. The network simulation run_till_triggers tool allows tests to pause server action:
+   a. After a message is produced by the sender, but before it is queued for the receiver, the sender is paused.
+   b. After a message has been queued for the receiver, the sender is paused.
+   c. After a message has been queued for the receiver, the receiver is paused.
+   d. After a message has been handled by the receiver, the receiver is paused.
+
+   It is important to note that it is common for the handling of an incoming message to generate an
+   outgoing message, so test designers must consider where the pause should take place.
+
+4. The network simulation supports simulation of partitioned networks. One or more simulated servers can
+   be moved to a different simulated net and continue to talk to each other but not be in touch with
+   the majority network. Note that this code has not been tested when the cluster is configured with
+   an even number of servers, and it is likely to fail in that case.
+
+
+"""
 import asyncio
 from dataclasses import dataclass
 
@@ -147,8 +193,17 @@ class Sequencer:
             server.start_saving_messages()
             self.node_records[node.uri] = NodeRecord(node, server)
         self.current_state = self.sequence.start_state
-        self.nets = None # will be a list of networks if they are split
 
+    async def finish_message_traffic(self):
+        # The "run until quiet" method of transport.
+        # If you don't want to build up a phase for allowing the
+        # message traffic to complete when running something that
+        # involves multiple steps, such as a command sequence,
+        # or the recovered process for a crashed server, you
+        # can call this method. It transports pending messages
+        # for as long as there are any and then returns.
+        await self.cluster.deliver_all_pending()
+        
     async def run_sequence(self):
         results = []
         phase = self.sequence.next_phase()
@@ -181,7 +236,7 @@ class Sequencer:
             # for now, we accept only one per node_op, in future we might
             # allow combinations, but probably not
             if do_now:
-                await self.dispatch_action(do_now.action_code, rec)
+                await self.dispatch_action(do_now.action_code, node_op, rec)
             elif msg_runner:
                 trigger = WhenMsgOp(msg_runner.comms_op, len(self.node_records))
                 rec.server.add_trigger(trigger)
@@ -197,7 +252,7 @@ class Sequencer:
                 if state_runner.action_code != ActionCode.pause:
                     pending_actions.append([rec, state_runner.action_code,])
             elif state_validation:
-                self.assert_log_state(rec.server, node_op)
+                await self.assert_log_state(rec.server, node_op)
             else:
                 raise Exception('invalid node op')
         if len(found) != len(self.node_records):
@@ -208,9 +263,9 @@ class Sequencer:
         for crec in clears_needed:
             crec.server.clear_triggers()
         for rec,action_code in pending_actions:
-            await self.dispatch_action(action_code, rec)
+            await self.dispatch_action(action_code, node_op, rec)
 
-    async def dispatch_action(self, action_code, rec):
+    async def dispatch_action(self, action_code, node_op, rec):
         if action_code == ActionCode.network_to_minority:
             await self.split_from_main_net(rec)
         elif action_code == ActionCode.network_to_majority:
@@ -225,15 +280,23 @@ class Sequencer:
             await self.start_campaign(rec)
         elif action_code == ActionCode.send_heartbeats:
             await self.send_heartbeats(rec)
+        elif action_code == ActionCode.run_command:
+            await self.run_command(rec, node_op)
         elif action_code == ActionCode.noop:
             pass
         elif action_code == ActionCode.pause:
             raise Exception("somehow tried to dispatch a pause action, did you define a do_now action with it?")
         else:
             raise Exception(f'somehow got and invalid action, maybe code out of sync? {action_code}')
+
+    async def run_command(self, rec, node_op):
+        do_now = node_op.get_do_now()
+        command = do_now.command
+        return await self.cluster.run_command(command)
         
     async def split_from_main_net(self, rec):
-        if self.nets is None:
+        min_nets = self.cluster.net_mgr.get_minority_networks()
+        if min_nets is None:
             main = {}
             split = {}
             split[rec.server.uri] = rec.server
@@ -241,9 +304,12 @@ class Sequencer:
                 if uri != rec.server.uri:
                     main[orec.server.uri] = orec.server
             self.cluster.split_network([main, split])
-            self.nets = []
-            self.nets.append(self.cluster.net_mgr.get_majority_network())
-            self.nets.extend(self.cluster.net_mgr.get_minority_networks())
+            min_nets = self.cluster.net_mgr.get_minority_networks()
+        else:
+            min_net = min_nets[0]
+            cur_net = rec.server.network
+            cur_net.remove_node(rec.server)
+            min_net.add_node(rec.server)
         
     async def rejoin_main_net(self, rec):
         main_net = self.cluster.net_mgr.get_majority_network()
@@ -280,10 +346,11 @@ class Sequencer:
         last_term = await log.get_last_term()
         commit_index = await log.get_commit_index()
         role = server.get_state_code()
-        assert node_op.log_state.term == term
-        assert node_op.log_state.index == index
-        assert node_op.log_state.last_term == last_term
-        assert node_op.log_state.commit_index == commit_index
+        exp_state = node_op.get_state_validate().log_state
+        assert exp_state.term == term
+        assert exp_state.index == index
+        assert exp_state.last_term == last_term
+        assert exp_state.commit_index == commit_index
 
     async def build_cluster_state(self):
         nodes = []
@@ -304,17 +371,18 @@ class Sequencer:
                              index=index,
                              last_term=last_term,
                              commit_index=commit_index)
-        role = server.get_state_code()
         if server.am_crashed:
             run_state = RunState.crashed
+            role_code = RoleCode.follower
         else:
             run_state = RunState.paused
-        if role.lower() == "leader":
-            role_code = RoleCode.leader
-        elif role.lower() == "candidate":
-            role_code = RoleCode.candidate
-        elif role.lower() == "follower":
-            role_code = RoleCode.follower
+            role = server.get_state_code()
+            if role.lower() == "leader":
+                role_code = RoleCode.leader
+            elif role.lower() == "candidate":
+                role_code = RoleCode.candidate
+            elif role.lower() == "follower":
+                role_code = RoleCode.follower
         if server.network == server.cluster.net_mgr.get_majority_network():
             net_mode = NetworkMode.majority
         else:
@@ -326,7 +394,8 @@ class Sequencer:
                         network_mode=net_mode,
                         log_state=log_state,
                         uri=node_uri,
-                        messages=messages)
+                        messages=messages,
+                        server=server)
         
 
 class StandardElectionSequence(Sequence):

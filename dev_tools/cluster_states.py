@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 
 class MessageCode(str, Enum):
@@ -122,6 +122,11 @@ class ActionCode(str, Enum):
     # only be targeted at nodes in the leader state.
     send_heartbeats = "SEND_HEARTBEATS"
 
+    # The node targeted with this action will
+    # be given a command to execute. Should
+    # only be targeted at nodes in the leader state.
+    run_command = "RUN_COMMAND"
+
     def __str__(self):
         return self.value
 
@@ -193,7 +198,8 @@ class ValidateState:
 @dataclass
 class DoNow:
     action_code: ActionCode
-    description: str = None
+    description: Optional[str] = None
+    command: Optional[str] = None
 
 @dataclass
 class NoOp:
@@ -256,6 +262,7 @@ class NodeState:
     log_state: LogState
     uri: Optional[str] = None
     messages: Optional[dict[str, list]] = None
+    server: Optional[Any] = None
 
     def __post_init__(self):
         if self.uri is None:
@@ -324,8 +331,11 @@ class Sequence:
                 raise Exception(f'cannot add node {node_op.node_uri} to phase, not in sequence node dict')
             found_uris.append(node_op.node_uri)
             
-        if len(found_uris) !=  len(self.nodes):
+        if len(found_uris) >  len(self.nodes):
             raise Exception(f'phase has {len(found_uris)}, not expected {len(self.nodes)}, must be duplicates')
+        if len(found_uris) <  len(self.nodes):
+            raise Exception(f'phase has {len(found_uris)}, not expected {len(self.nodes)}, not enough configured')
+
         self.phases.append(phase)
 
     def next_phase(self):
