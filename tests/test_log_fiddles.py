@@ -52,8 +52,7 @@ async def test_empty_log_1(cluster_maker):
     assert ts_1.operations.total == 50
     # Now "crash" the leader, run an election, then have
     # the leader come up with an empty log
-    await ts_1.simulate_crash(save_log=False, save_ops=False)
-    # old leader is now ignorant of all past
+    await ts_1.simulate_crash()
 
     await cluster.start_auto_comms()
     await ts_2.enable_timers()
@@ -63,7 +62,8 @@ async def test_empty_log_1(cluster_maker):
 
     # let the timers run so it things catch up normally
     logger.info('------------------------ Restoring timers and waiting for ts_1 to catch up')
-    await ts_1.recover_from_crash()
+    # old leader is now ignorant of all past
+    await ts_1.recover_from_crash(save_log=False, save_ops=False)
     await ts_1.enable_timers()
     start_time = time.time()
     while (time.time() - start_time < election_timeout_max * 2
@@ -96,8 +96,8 @@ async def test_empty_log_2(cluster_maker):
     logger.info('------------------------ Election done')
 
     # Now "crash" the a follower and clear its log
-    await ts_2.simulate_crash(save_log=False)
-    await ts_2.recover_from_crash()
+    await ts_2.simulate_crash()
+    await ts_2.recover_from_crash(save_log=False)
     assert await ts_2.log.get_last_index() == 0
     await cluster.start_auto_comms()
     await ts_1.enable_timers()
