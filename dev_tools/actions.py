@@ -13,6 +13,28 @@ class Action:
         self.code = code
         self.required_role = required_role
 
+    def can_apply(self, change_def, change_proposal):
+        """ Return a tuple, (flag, reason) where flag indicates whether
+        action can be to produce the requested change given the change proposal.
+        If flag is False then reason should explain why.
+        The can_apply calls can add data to the change proposal in order
+        to affect the can_apply calls for later change_defs. 
+        """
+         raise NotImplementedError
+
+    def does_full_phase(self):
+        raise NotImplementedError
+
+    def generate_phase(self, change_def, change_proposal):
+        """ Generate a code block that will perform the change specified
+        in change_def given the change_proposal as a complete phase."""
+        raise NotImplementedError
+        
+    def generate_phase_step(self, change_def, change_proposal):
+        """ Generate a code block that will perform the change specified
+        in change_def given the change_proposal as a step in a phase"""
+        raise NotImplementedError
+        
 class StartCampaign(Action):
 
     def __init__(self):
@@ -32,8 +54,11 @@ class StartCampaign(Action):
                 continue
             prom = MessagePromise(code=MessageCode.request_vote, sender=node.node_uri, target=o_node.node_uri)
             change_proposal.push_message_promise(prom)
-        return False, "Only requirement is that node must be follower, validated"
+        return True, "Only requirement is that node must be follower, validated"
 
+    def does_full_phase(self):
+        return True
+    
     def generate_phase(self, change_def, change_proposal):
         node = change_proposal.get_node_start(change_def.uri)
         res = []
@@ -73,36 +98,34 @@ class VoteYes(Action):
         if not vote_msg:
             return False, f"Node has no pending vote_request message"
 
-        if self.log_state.votedFor != vote_msg.sender:
-            return False, f"Already voted for other this term"
-            
+        if self.log_state.votedFor is not None:
+            return False, f"Already voted this term"
+
+        # if there is a pending vote message, then we know that the sender will
+        # have incremented its term before sending, so we can check and see if it
+        # will succeed
         for o_node in change_proposal.start_state.nodes:
             if o_node.node_uri != vote_msg.sender:
                 continue
-            if o_node.log_state
-            prom = MessagePromise(code=MessageCode.request_vote, sender=node.node_uri, target=o_node.node_uri)
-            change_proposal.push_message_promise(prom)
-        return False, "Only requirement is that node must be follower, validated"
+            if o_node.log_state.term + 1 > node.log_state.term:
+                return True,"message pending and sender is higher term"
+        return False,"Problem verifying term for vote"
 
-    def generate_phase(self, change_def, change_proposal):
+    def does_full_phase(self):
+        return False
+    
+    def generate_phase_step(self, change_def, change_proposal):
         node = change_proposal.get_node_start(change_def.uri)
         res = []
-        res.append("# This action causes stepper to use simulation control to ")
-        res.append("# trigger the code that would run if the election_timeout ")
-        res.append("# triggered. This results the targeted node incrementing its term"
-        res.append("# an sending a broadcast of the RequestVote message.")
-        res.append("# This action DOES NOT allow the flow of the actual messages.")
-        res.append("start = DoNow(ActionCode.start_campaign)")
-        res.append('ps = PhaseStep("{node.uri}", do_now_class=start)')
-        res.append("")
-        res.append("# All the other nodes do nothing for this phase")
-        res.append("steps = []")
-        for o_node in change_proposal.start_state.nodes:
-            if o_node.node_uri == node.uri:
-                continue
-            res.append('steps.append(PhaseStep("{o_node.uri}", do_now_class=NoOp()))')
-        res.append(f'desc = "Causes node {node.node_uri} to start a campaign to be leader, other nodes idle"')
-        res.append('sequence.add_phase(Phase(steps), desc=desc)')
+        res.append("# This action causes stepper to run the messages transport ")
+        res.append("# until the expected vote request message delivery and ")
+        res.append("# handling is complete and the node has voted.")
+
+        res.append("comms_op = CommsOp(MessageCode.request_vote_response, CommsEdge.after_send)")
+        res.append("action = ActionOnMessage(comms_op=comms_op, action_code=ActionCode.pause)")
+        res.append('fdesc = "Follower node runs until it has responded to the request vote message"')
+        res.append(f'ps = PhaseStep("{node.uri}", runner_class=action_2b, description=desc)')
+        res.append('phase_steps.append(ps)')
         return res
     
     
