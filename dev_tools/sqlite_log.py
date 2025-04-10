@@ -19,6 +19,7 @@ class Records:
         self.entries = []
         self.db = None
         self.term = -1
+        self.voted_for = None
         self.max_index = -1
         # Don't call open from here, we may be in the wrong thread,
         # at least in testing. Maybe in real server if threading is used.
@@ -41,12 +42,14 @@ class Records:
         if row:
             self.max_index = row['max_index']
             self.term = row['term']
+            self.voted_for = row['voted_for']
         else:
             self.max_index = 0
             self.term = 0
-            sql = "replace into stats (dummy, max_index, term)" \
-                " values (?, ?,?)"
-            cursor.execute(sql, [1, self.max_index, self.term])
+            self.voted_for = None
+            sql = "replace into stats (dummy, max_index, term, voted_for)" \
+                " values (?,?,?,?)"
+            cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
         
     def close(self) -> None:
         if self.db is None:  # pragma: no cover
@@ -69,7 +72,7 @@ class Records:
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
-            " term INTEGER)"
+            " term INTEGER, voted_for TEXT)"
         cursor.execute(schema)
         self.db.commit()
         cursor.close()
@@ -110,8 +113,8 @@ class Records:
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
             self.max_index = cursor.lastrowid
-        sql = "replace into stats (dummy, max_index, term) values (?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term])
+        sql = "replace into stats (dummy, max_index, term, voted_for) values (?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
         self.db.commit()
         cursor.close()
         return self.read_entry(entry.index)
@@ -144,9 +147,20 @@ class Records:
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         self.term = value
-        sql = "replace into stats (dummy, max_index, term)" \
-            " values (?, ?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term])
+        sql = "replace into stats (dummy, max_index, term, voted_for)" \
+            " values (?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+        self.db.commit()
+        cursor.close()
+    
+    def set_voted_for(self, value):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        cursor = self.db.cursor()
+        self.voted_for = value
+        sql = "replace into stats (dummy, max_index, term, voted_for)" \
+            " values (?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
         self.db.commit()
         cursor.close()
     
@@ -183,9 +197,9 @@ class Records:
         cursor = self.db.cursor()
         cursor.execute("delete from records where rec_index >= ?", [index,])
         self.max_index = index - 1
-        sql = "replace into stats (dummy, max_index, term)" \
-            " values (?, ?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term])
+        sql = "replace into stats (dummy, max_index, term, voted_for)" \
+            " values (?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
         self.db.commit()
         cursor.close()
     
@@ -214,6 +228,16 @@ class SqliteLog(LogAPI):
             self.records.open() # pragma: no cover
         self.records.set_term(value)
 
+    async def get_voted_for(self) -> Union[int, None]:
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return self.records.voted_for
+    
+    async def set_voted_for(self, value: str):
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        self.records.set_voted_for(value)
+        
     async def incr_term(self):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover

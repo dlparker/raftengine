@@ -14,7 +14,6 @@ class Follower(BaseState):
         super().__init__(hull, StateCode.follower)
         # log is set in BaseState as is leader_uri
         # only used during voting for leadership
-        self.last_vote = None
         # Needs to be as recent as configured maximum silence period, or we raise hell.
         # Pretend we just got a call, that gives possible actual leader time to ping us
         self.last_leader_contact = time.time()
@@ -37,7 +36,6 @@ class Follower(BaseState):
 
         if message.term == await self.log.get_term() and self.leader_uri != message.sender:
             self.leader_uri = message.sender
-            self.last_vote = message
             self.logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
             await self.hull.record_substate(SubstateCode.joined_leader)
@@ -147,15 +145,13 @@ class Follower(BaseState):
             new_rec = await self.log.replace(log_record)
     
     async def on_vote_request(self, message):
-        if self.last_vote is not None:
-            if self.last_vote.term >= message.term:
-                # we only vote once per term, unlike some dead people I know
-                self.logger.info("%s voting false on %s, already voted for %s", self.my_uri(),
-                                 message.sender, self.last_vote.sender)
-                await self.send_vote_response_message(message, vote_yes=False)
-                return
-            # we have a new vote with a higher term, so forget about the last term's vote
-            self.last_vote = None
+        last_vote = await self.log.get_voted_for()
+        if last_vote is not None:
+            # we only vote once per term, unlike some dead people I know
+            self.logger.info("%s voting false on %s, already voted for %s", self.my_uri(),
+                             message.sender, last_vote)
+            await self.send_vote_response_message(message, vote_yes=False)
+            return
             
         # Leadership claims have to be for max log commit index of
         # at least the same as our local copy
@@ -169,11 +165,11 @@ class Follower(BaseState):
                                  message.sender)
                 vote = False
             else: # both term and index proposals are acceptable, so vote yes
-                self.last_vote = message
+                await self.log.set_voted_for(message.sender)
                 self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
                 vote = True
         else: # we don't have any entries, so everybody else wins
-            self.last_vote = message
+            await self.log.set_voted_for(message.sender)
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
@@ -185,6 +181,7 @@ class Follower(BaseState):
         # Followers never decide that a higher term is not valid
         await self.hull.record_substate(SubstateCode.newer_term)
         await self.log.set_term(message.term)
+        await self.log.set_voted_for(None) # in case we voted during the now expired term
         # Tell the base class method to route the message back to us as normal
         return message
         

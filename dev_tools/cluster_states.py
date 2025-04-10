@@ -133,6 +133,14 @@ class ActionCode(str, Enum):
     # only be targeted at nodes in the leader state.
     start_term = "START_TERM"
 
+    # This action will happen in response to a message,
+    # not manually triggered.
+    vote_yes = "VOTE_YES"
+
+    # This action will happen in response to a message,
+    # not manually triggered.
+    vote_no = "VOTE_NO"
+
     def __str__(self):
         return self.value
 
@@ -175,6 +183,7 @@ class LogState:
     last_term: int
     commit_index: int
     leader_id: Optional[str] = None
+    voted_for: Optional[str] = None
 
 
 @dataclass
