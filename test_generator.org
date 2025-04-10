@@ -59,7 +59,7 @@ Maybe the action class needs to be S_RPC or E_RPC base class.
 
 | R | Operation         | Caused by msg  | Causes Message        | Changes log state   | Changes Role | Changes network state    | Changes Run State |
 | F | Start Campaign    |                | Request Vote * N -1   | Term + 1            | to Candidate |                          |                   |
-| F | Vote              | request vote   | Vote Response         | Term + 1            |              |                          |                   |
+| F | Vote Yes          | request vote   | Vote Response         | Term + 1, votedFor  |              |                          |                   |
 | C | Resign 1          | yes vote < n/2 |                       |                     | to Follower  |                          |                   |
 | C | Resign 2          | timeout        |                       |                     | to Follower  |                          |                   |
 | C | Resign 3          | any > term     |                       | Term + X            | to Follower  |                          |                   |

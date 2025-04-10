@@ -91,10 +91,10 @@ async def test_election_granular_1():
     sequence.add_phase(phase_20)
     
     phase_30_steps = []
-    leader_state = LogState(term=1, index=1, last_term=1, commit_index=0, leader_id=None)
+    leader_state = LogState(term=1, last_index=1, last_term=1, commit_index=0, leader_id=None)
     ps = PhaseStep(node_1.uri, validate_class=ValidateState(log_state=leader_state))
     phase_30_steps.append(ps)
-    follower_state = LogState(term=1, index=1, last_term=1, commit_index=0, leader_id=node_1.uri)
+    follower_state = LogState(term=1, last_index=1, last_term=1, commit_index=0, leader_id=node_1.uri)
     ps = PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state))
     phase_30_steps.append(ps)
     ps = PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state))
@@ -118,10 +118,10 @@ async def test_election_granular_1():
 
 
     phase_50_steps = []
-    leader_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=None)
+    leader_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=None)
     ps = PhaseStep(node_1.uri, validate_class=ValidateState(log_state=leader_state))
     phase_50_steps.append(ps)
-    follower_state = LogState(term=1, index=1, last_term=1, commit_index=0, leader_id=node_1.uri)
+    follower_state = LogState(term=1, last_index=1, last_term=1, commit_index=0, leader_id=node_1.uri)
     ps = PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state))
     phase_50_steps.append(ps)
     ps = PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state))
@@ -158,10 +158,10 @@ async def test_election_granular_1():
     sequence.add_phase(phase_80)
 
     phase_90_steps = []
-    leader_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=None)
+    leader_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=None)
     ps = PhaseStep(node_1.uri, validate_class=ValidateState(log_state=leader_state))
     phase_90_steps.append(ps)
-    follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
+    follower_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
     ps = PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state))
     phase_90_steps.append(ps)
     ps = PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state))
@@ -236,7 +236,7 @@ async def test_election_short_1():
     sequence.add_phase(phase_1)
     
     phase_2_steps = []
-    leader_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=None)
+    leader_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=None)
     action_2 = ActionOnState(log_state=leader_state, action_code=ActionCode.pause)
     ps = PhaseStep(node_1.uri, runner_class=action_2)
     phase_2_steps.append(ps)
@@ -276,7 +276,7 @@ async def test_election_short_1():
 
     phase_5_steps = []
     phase_5_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
-    follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
+    follower_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
     phase_5_steps.append(PhaseStep(node_2.uri, validate_class=ValidateState(log_state=follower_state)))
     phase_5_steps.append(PhaseStep(node_3.uri, validate_class=ValidateState(log_state=follower_state)))
     phase_5 = Phase(phase_5_steps, description="Validating state at followers shows commit of term start log record")
@@ -564,7 +564,7 @@ async def partition_1_inner(node_count):
     sequence.add_phase(phase_5)
 
     phase_6_steps = []
-    old_leader_state = LogState(term=2, index=1, last_term=1, commit_index=1, leader_id=second_leader.uri)
+    old_leader_state = LogState(term=2, last_index=1, last_term=1, commit_index=1, leader_id=second_leader.uri)
     phase_6_steps.append(PhaseStep(first_leader.uri, validate_class=ValidateState(log_state=old_leader_state)))
     for node in nodes:
         if node.uri != first_leader.uri:

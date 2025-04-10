@@ -371,7 +371,7 @@ class Sequencer:
         last_term = await log.get_last_term()
         commit_index = await log.get_commit_index()
         log_state = LogState(term=term,
-                             index=index,
+                             last_index=index,
                              last_term=last_term,
                              commit_index=commit_index)
         if server.am_crashed:
@@ -422,7 +422,7 @@ class StandardElectionSequence(Sequence):
         self.add_phase(phase_1)
 
         phase_2_steps = []
-        leader_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=None)
+        leader_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=None)
         action_2 = ActionOnState(log_state=leader_state, action_code=ActionCode.pause)
         ps = PhaseStep(node_1.uri, runner_class=action_2)
         phase_2_steps.append(ps)
@@ -466,7 +466,7 @@ class StandardElectionSequence(Sequence):
         phase_5_steps = []
         
         phase_5_steps.append(PhaseStep(node_1.uri, do_now_class=NoOp()))
-        follower_state = LogState(term=1, index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
+        follower_state = LogState(term=1, last_index=1, last_term=1, commit_index=1, leader_id=node_1.uri)
         for nid in self.uris_by_id:
             if nid != 1:
                 node = self.node_by_id(nid)

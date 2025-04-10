@@ -76,8 +76,8 @@ async def test_stepwise_election_1(cluster_maker):
 
     logger.debug("Followers outgoing vote response messages pending")
 
-    assert ts_1.hull.state.last_vote.sender == uri_3
-    assert ts_2.hull.state.last_vote.sender == uri_3
+    assert await ts_1.log.get_voted_for() == uri_3
+    assert await ts_2.log.get_voted_for() == uri_3
     # Let all the messages fly until delivered
     await cluster.deliver_all_pending()
     assert ts_3.hull.get_state_code() == "LEADER"
@@ -469,8 +469,8 @@ async def test_failed_first_election_1(cluster_maker):
 
     logger.debug("Followers outgoing vote response messages pending")
 
-    assert ts_1.hull.state.last_vote.sender == uri_3
-    assert ts_2.hull.state.last_vote.sender == uri_3
+    assert await ts_1.log.get_voted_for() == uri_3
+    assert await ts_2.log.get_voted_for() == uri_3
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()

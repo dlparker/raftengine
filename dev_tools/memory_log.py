@@ -76,6 +76,12 @@ class MemoryLog(LogAPI):
     async def set_term(self, value: int):
         self.term = value
 
+    async def get_voted_for(self) -> Union[int, None]:
+        return self.voted_for
+    
+    async def set_voted_for(self, value: int):
+        self.voted_for = value
+
     async def incr_term(self):
         self.term += 1
         return self.term
