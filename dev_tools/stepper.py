@@ -169,7 +169,7 @@ class WhenState(PauseTrigger):
         role = server.get_state_code()
         if self.log_state.term != term:
             done = False
-        if self.log_state.index != index:
+        if self.log_state.last_index != index:
             done = False
         if self.log_state.last_term != last_term:
             done = False
@@ -294,6 +294,9 @@ class Sequencer:
         command = do_now.command
         return await self.cluster.run_command(command)
         
+    async def apply_run_command(self, command):
+        return await self.cluster.run_command(command)
+        
     async def split_from_main_net(self, rec):
         min_nets = self.cluster.net_mgr.get_minority_networks()
         if min_nets is None:
@@ -348,7 +351,7 @@ class Sequencer:
         role = server.get_state_code()
         exp_state = node_op.get_state_validate().log_state
         assert exp_state.term == term
-        assert exp_state.index == index
+        assert exp_state.last_index == index
         assert exp_state.last_term == last_term
         assert exp_state.commit_index == commit_index
 

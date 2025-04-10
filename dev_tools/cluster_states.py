@@ -127,6 +127,12 @@ class ActionCode(str, Enum):
     # only be targeted at nodes in the leader state.
     run_command = "RUN_COMMAND"
 
+    # The node targeted with this action will
+    # save a TERM_START log record and broadcast
+    # append entries to start replication.
+    # only be targeted at nodes in the leader state.
+    start_term = "START_TERM"
+
     def __str__(self):
         return self.value
 
@@ -165,7 +171,7 @@ class NetworkMode(str, Enum):
 @dataclass
 class LogState:
     term: int
-    index: int
+    last_index: int
     last_term: int
     commit_index: int
     leader_id: Optional[str] = None
@@ -180,15 +186,18 @@ class CommsOp:
 class ActionOnMessage:
     comms_op: CommsOp
     action_code: ActionCode
-    run_till_trigger: bool = True
-    description: str = None
+    description: Optional[str] = None
+    run_till_trigger: Optional[bool] = True
+    pause_implied: Optional[bool] = True
     
 
 @dataclass
 class ActionOnState:
     log_state: LogState
     action_code: ActionCode
-    run_till_trigger: bool = True
+    description: Optional[str] = None
+    run_till_trigger: Optional[bool] = True
+    pause_implied: Optional[bool] = True
 
 @dataclass
 class ValidateState:
@@ -200,12 +209,15 @@ class DoNow:
     action_code: ActionCode
     description: Optional[str] = None
     command: Optional[str] = None
+    run_till_trigger: Optional[bool] = True
+    pause_implied: Optional[bool] = True
 
 @dataclass
 class NoOp:
     action_code: ActionCode = ActionCode.noop 
     description: str = None
-
+    
+    
 class PhaseStep:
 
     def __init__(self, node_uri, runner_class=None, validate_class=None, do_now_class=None, description=None):
