@@ -1,0 +1,78 @@
+
+The stuff in this directory is some unfinished experiments with different
+testing methods. I had a goal to try to come up with a way to generate
+lots of different test scenarios, basically codifying the possible state
+transitions and events that a raft cluster might experience and then
+building a generator that iterated over all the possible combinations
+making tests for each one.
+
+The reason for this was to try to overcome my uneasiness about the
+accuracy of my understanding of the raft principles. I was able
+to raise the test code coverage to 100%, and all of the tests
+are actual tests rather than the code exercisers that you see
+some people building. So, I am very confident that the code
+in this library does what I think it should. What I am not
+confident of is that what I think it should do is actually
+what it should do. In other words, beginning with the proposition
+that the Raft algorithm is correct, and ending with my tests
+working, does not prove that the code correctly implements
+the algorithm.
+
+Although I strongly agree with the claim
+that Raft is easier to underestand than Paxos, that doesn't
+mean that it is impossible to misunderstand it. I did that
+a couple of times during development. For example, for a
+while I confused myself by conflating Raft commit logic
+with distributed two phase commit. My fault entirely, but
+that's kind of my point. Am I confused about something
+else and unaware of it?
+
+The only way I could think of to get a handle on this
+problem given that I am a lone developer with no
+collaborators was to build some form of exhaustive
+testing mechanism.
+
+My last attempt at it seem promising. It is described
+in test_generator.org and a little bit of untested implementation
+for it is in actions.py. It uses the cluster_states.py and stepper.py
+test tools, which do have some testing, in test_stepper.py.
+I thought I had figured it out, but when I began to try to
+implement the code generators for the Actions table in
+test_generator.org, I realized that I could not escape the
+trap of building my own understanding of the protocol into
+the tests.
+
+In particular, the theory was that I should be able to take
+a definition of a given starting cluster state and a target
+cluster state and run it through a checker. The checker would
+ask eacn encoded Action to check whether it could legally
+apply to the starting state. In many cases this is not worrying,
+so for example an Action that encodes running a command would
+reject an attempt to run it on a node that is in the follower
+mode.
+
+However, once you look a little more deeply at the question
+"is this a legal action", you get to specifics such as
+"can a follower vote yes when it receives a vote request
+from a candidate that has a lower term". If you look at
+enough of these you realize that the test will reduce
+to another implementation of the Raft algorithm, so
+I would have no guaratee that I didn't just replicate
+an error in my understanding. It would be a lot of
+work for essentially no value.
+
+I toyed with the idea of letting the generator create
+illegal scenarios and then manually inspecting failures
+to create a lookup table that would mark individual
+state and action combinations as illegal, but that
+seemed likely to produce too large a task. I may eventually
+take another look at that possibilty, letting the
+can_apply methods on actions encode only the most basic
+tests that I am unlikely to misunderstand, and see if
+the legality lookup table is actually a human scale task.
+
+I doubt it though, as what I am essentially trying to
+do is to write a program that will tell me that I am
+right or wrong about how I think. Alghough I can easily
+imagine it telling me I am wrong, should I ever believe
+it if it told me I am right? 
