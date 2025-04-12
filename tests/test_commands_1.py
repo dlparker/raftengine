@@ -311,7 +311,7 @@ async def test_command_after_heal_1(cluster_maker):
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
-    cluster.split_network([part1, part2])
+    await cluster.split_network([part1, part2])
 
     logger.info('-------------- Split network done, expecting election of %s', uri_2)
     # now ts_2 and ts_3 are alone, have ts_2
@@ -322,7 +322,7 @@ async def test_command_after_heal_1(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_2
     last_term = await ts_2.hull.log.get_term()
     logger.info('-------------- %s elected, unspliting the network', uri_2)
-    cluster.unsplit()
+    await cluster.unsplit()
     assert ts_1.hull.get_state_code() == "LEADER"
     logger.info('-------------- %s reconneted, thinks it is still leader', uri_1)
     
@@ -478,7 +478,7 @@ async def test_long_catchup(cluster_maker):
     part2 = {uri_1: ts_1,
              uri_2: ts_2}
     logger.info('---------!!!!!!! spliting network ')
-    cluster.split_network([part1, part2])
+    await cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
     await cluster.stop_auto_comms()
     # quiet the logging down
@@ -510,7 +510,7 @@ async def test_long_catchup(cluster_maker):
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
     await cluster.deliver_all_pending()
-    cluster.unsplit()
+    await cluster.unsplit()
     logger.info('---------!!!!!!! starting comms')
     await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()

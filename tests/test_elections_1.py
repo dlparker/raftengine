@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
+import os
+import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
@@ -11,9 +12,10 @@ from dev_tools.servers import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
-setup_logging()
+setup_logging(default_level="debug")
 logger = logging.getLogger("test_code")
 
+save_trace = True
 
 async def test_election_1(cluster_maker):
     """This is the happy path, everybody has same state, only one server
@@ -70,7 +72,6 @@ async def test_election_1(cluster_maker):
     assert len(ts_1.in_messages) == 2
     assert ts_1.in_messages[0].get_code() == AppendResponseMessage.get_code()
     assert ts_1.in_messages[1].get_code() == AppendResponseMessage.get_code()
-
 
 async def test_election_2(cluster_maker):
     """Just a simple test of first election with 5 servers, to ensure it

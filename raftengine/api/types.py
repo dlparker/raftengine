@@ -165,7 +165,6 @@ class SubstateCode(str, Enum):
     def __str__(self):
         return self.value
 
-
 class CommandSerialRange:
     """ Command serial number generated for client 
     (when requested) will be in this range. This 

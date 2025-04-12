@@ -6,19 +6,21 @@ import time
 import json
 
 from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.hull_api import CommandResult
 from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.states.follower import Follower
 from raftengine.states.candidate import Candidate
-from raftengine.states.leader import Leader, CommandResult
-from raftengine.states.leader import CommandResult
+from raftengine.states.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
+from raftengine.api.hull_config import ClusterConfig, LocalConfig
 
 class Hull(HullAPI):
 
-    def __init__(self, cluster_config, local_config, pilot: PilotAPI):
+    # Part of API
+    def __init__(self, cluster_config: ClusterConfig, local_config: LocalConfig, pilot: PilotAPI):
         self.cluster_config = cluster_config
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
@@ -36,6 +38,7 @@ class Hull(HullAPI):
     async def start(self):
         await self.state.start()
 
+    # Part of API
     def decode_message(self, in_message):
         mdict = json.loads(in_message)
         mtypes = [AppendEntriesMessage,AppendResponseMessage,

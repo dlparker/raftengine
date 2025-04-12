@@ -8,6 +8,7 @@ from typing import Dict, List, Any
 from enum import Enum
 from raftengine.api.types import StateCode, SubstateCode
 from raftengine.api.log_api import LogRec, RecordCode
+from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.base_message import BaseMessage
 from raftengine.states.base_state import BaseState
@@ -23,19 +24,6 @@ class FollowerTracker:
     last_msg_time: int = 0
     last_reply_time: int = 0
 
-
-class CommandResult:
-
-    def __init__(self, command, result=None, committed=False,
-                 redirect=None, retry=None, logRec=None, error=None, timeout_expired=False):
-        self.command = command
-        self.result = result
-        self.committed = committed
-        self.redirect = redirect
-        self.retry = retry
-        self.logRec = logRec
-        self.error = error
-        self.timeout_expired = timeout_expired
         
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""

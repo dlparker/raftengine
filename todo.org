@@ -3,7 +3,7 @@
 
 * Protocol
 
-1. Need to add persistence for votedFor, and write test where follower votes for candi with term X, crashes,
+1.[x] Need to add persistence for votedFor, and write test where follower votes for candi with term X, crashes,
    restarts and then rejects vote request from different candi also at Term X.
 
 2. Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
@@ -18,17 +18,17 @@
 
 * Library Features:
 
-1. [x] See if leader can be simplified based on the idea that no command commits will be done without
+1. Find all places where servers.py and tests open the white box and replace them with event
+   generation and delivery to the pilot interface. 
+2. [x] See if leader can be simplified based on the idea that no command commits will be done without
    a pending object to report too. Code current assumes that it could happend, which is wrong.
-2. rough out ideas for cluster class
+3. rough out ideas for cluster class
    1. Knows about "static config" provided at startup. Can be programatically changed? See thesis
    2. Knows about "dynamic config" resulting from cluster changes while running. See thesis
    3. teach candidate and leader to use it. See thesis
-
-3. Think about providing an optional uri map implementation for users. If provided, need to think
+4. Think about providing an optional uri map implementation for users. If provided, need to think
    about how to use it in API calls to let users know the "real" address
-
-4. Think deep about reporting errors in raft code, and detecting them in testing. Break something
+5. Think deep about reporting errors in raft code, and detecting them in testing. Break something
   such as rejected append entries and fiddle. Maybe can use substate stuff to alert to error
   and give pilot an api entry on hull to call to get errors? This is kinda partly done in the
   client command execution code. Maybe we need an Error class set and a local log feature?
@@ -164,12 +164,11 @@ anomaly end: (implies all phases complete)
    net state 
    
 XS													x
-Epoc          | Maj Net State  | Min Net State | S1 
-Pre    | stable         | None          | leader, pIndx=1 pTerm=1 term=1 ci=1
-Break anomaly  | quorum         | None          |
-Broken
-Reparing
-Healed
+| Epoc          | Maj Net State | Min Net State | S1                                  |
+| Pre           | stable        | None          | leader, pIndx=1 pTerm=1 term=1 ci=1 |
+| Break anomaly | quorum        | None          |                                     |
+| Broken        |               |               |                                     |
+| Reparing      |               |               |                                     |
+| Healed        |               |               |                                     |
 
 
-dict(
