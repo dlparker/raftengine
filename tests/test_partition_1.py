@@ -64,7 +64,7 @@ async def test_partition_1(cluster_maker):
              uri_3: ts_3}
     part2 = {uri_4: ts_4,
              uri_5: ts_5}
-    cluster.split_network([part1, part2])
+    await cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
     sequence3 = SNormalCommand(cluster, "add 1", 1)
@@ -98,7 +98,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Now healing partition and looking for sync ----')
     await cluster.stop_auto_comms()
-    cluster.net_mgr.unsplit()
+    await cluster.unsplit()
     logger.info('--------- Sending heartbeats ----')
     await ts_1.hull.state.send_heartbeats()
     # gonna send four
@@ -197,7 +197,7 @@ async def test_partition_2_leader(cluster_maker):
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
-    cluster.split_network([part1, part2])
+    await cluster.split_network([part1, part2])
 
     logger.info('---------!!!!!!! stopping comms')
     await ts_2.hull.start_campaign()
@@ -207,7 +207,7 @@ async def test_partition_2_leader(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_2
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
-    cluster.unsplit()
+    await cluster.unsplit()
     logger.info('------------------------ Sending heartbeats from out of date leader')
     await ts_1.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()

@@ -59,6 +59,7 @@ class MemoryLog(LogAPI):
     def __init__(self):
         self.records = Records()
         self.term = 0
+        self.voted_for = None
 
     @classmethod
     def from_json_dict(cls, jdict):

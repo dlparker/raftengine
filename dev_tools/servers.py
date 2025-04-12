@@ -1,25 +1,38 @@
 import asyncio
 import logging
 import time
-import pytest
-import functools
+import os
 import dataclasses
+from dataclasses import dataclass
 import traceback
+from copy import deepcopy
+from enum import Enum
 import json
 from pathlib import Path
+from typing import Optional
 from logging.config import dictConfig
 from collections import defaultdict
+import pytest
+
+from raftengine.api.hull_config import ClusterConfig, LocalConfig
 from raftengine.api.log_api import LogRec
-from raftengine.hull.hull_config import ClusterConfig, LocalConfig
 from raftengine.hull.hull import Hull
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.messages.base_message import BaseMessage
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 
 from raftengine.api.pilot_api import PilotAPI
 log_config = None
+
+save_trace = True
+
+def get_current_test():
+    full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]
+    test_file = full_name.split("::")[0].split('/')[-1].split('.py')[0]
+    test_name = full_name.split("::")[1]
+
+    return full_name, test_file, test_name
 
 def setup_logging(additions=None, default_level="error"): # pragma: no cover
     #lfstring = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -107,6 +120,24 @@ async def cluster_maker():
     yield make_cluster
     if the_cluster is not None:
         await the_cluster.stop_auto_comms()
+        trace_dir = Path(Path(__file__).parent.parent.resolve(), "state_traces")
+        if not trace_dir.exists():
+            trace_dir.mkdir()
+        full_name, tfile, test_name = get_current_test()
+        # convert the full name to something that doesn't look like a file path
+        x = full_name.split('::')
+        x = '_'.join(x)
+        x = x.split('/')
+        x = '_'.join(x)
+        x = x.split('.py')
+        x = '_'.join(x)
+        fname = x + ".csv"
+        fpath = Path(trace_dir, fname)
+        csv_lines = the_cluster.test_trace.to_csv()
+        with open(fpath, 'w') as f:
+            for line in csv_lines:
+                outline = ','.join(line)
+                f.write(outline + "\n")
         await the_cluster.cleanup()
     
 class SimpleOps(): # pragma: no cover
@@ -442,7 +473,6 @@ class TestHull(Hull):
         self.wrapper_logger = logging.getLogger("SimulatedNetwork")
         
     async def on_message(self, message):
-
         dmsg = self.decode_message(message)
         if self.break_on_message_code == dmsg.get_code():
             print('here to catch break')
@@ -485,6 +515,7 @@ class Network:
         self.name = name
         self.nodes = {}
         self.net_mgr = net_mgr
+        self.test_trace = None
         self.logger = logging.getLogger("SimulatedNetwork")
         for uri,node in nodes.items():
             self.add_node(node)
@@ -492,6 +523,9 @@ class Network:
     def __str__(self):
         return f"Net: {self.name} {len(self.nodes)} nodes"
     
+    def set_test_trace(self, test_trace):
+        self.test_trace = test_trace
+        
     def add_node(self, node):
         if node.uri not in self.nodes:
             self.nodes[node.uri] = node
@@ -511,8 +545,10 @@ class Network:
         if node.block_messages:
             self.logger.debug("Blocking in message %s", message)
             node.blocked_in_messages.append(message)
+            await self.test_trace.note_blocked_message(node, message)
         else:
             node.in_messages.append(message)
+            await self.test_trace.note_queued_in_message(node, message)
         
     async def deliver_all_pending(self, out_only=False):
         """ This does the final part of the work for the Cluster "mamual" 
@@ -534,6 +570,7 @@ class Network:
         while any:
             any = False
             for uri, node in self.nodes.items():
+                node.am_paused = False
                 if len(node.in_messages) > 0 and not out_only:
                     msg = await node.do_next_in_msg()
                     if msg:
@@ -546,6 +583,8 @@ class Network:
                         count += 1
                         out_ledger.append(msg)
                         any = True
+        for node in self.nodes.values():
+            node.am_paused = True
         return dict(in_ledger=in_ledger, out_ledger=out_ledger, count=count)
 
     async def do_next_in_msg(self, node):
@@ -557,6 +596,7 @@ class Network:
             node.blocked_in_messages.append(msg)
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
+        await self.test_trace.note_message_handled(node, msg)
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
         return msg
     
@@ -567,13 +607,16 @@ class Network:
         if node.block_messages:
             self.logger.info("------------ Network Simulation DROPPING (caching) outgoing message %s", msg)
             node.blocked_out_messages.append(msg)
+            await self.test_trace.note_blocked_send(node, msg)
             return None
         target = self.get_node_by_uri(msg.receiver)
         if not target:
             self.logger.info("%s target is not on this network, loosing message %s", node.uri, msg)
             node.lost_out_messages.append(msg)
+            await self.test_trace.note_lost_send(node, msg)
             return
         self.logger.debug("%s forwarding message %s", node.uri, msg)
+        await self.test_trace.note_message_sent(node, msg)
         await self.post_in_message(msg)
         return msg
         
@@ -591,12 +634,23 @@ class NetManager:
         self.full_cluster = None
         self.quorum_segment = None
         self.other_segments = None
+        self.test_trace = None
         self.logger = logging.getLogger("SimulatedNetwork")
 
     def setup_network(self):
         self.full_cluster = Network("main", self.start_nodes, self)
+        self.full_cluster.set_test_trace(self.test_trace)
         return self.full_cluster
 
+    def set_test_trace(self, test_trace):
+        self.test_trace = test_trace
+        if self.full_cluster:
+            self.full_cluster.set_test_trace(test_trace)
+        if self.quorum_segment:
+            self.quorum_segment.set_test_trace(test_trace)
+            for seg in self.other_segments:
+                seg.set_test_trace(test_trace)
+        
     def get_majority_network(self):
         if self.quorum_segment:
             return self.quorum_segment
@@ -622,10 +676,12 @@ class NetManager:
             if seg_len > len(self.full_cluster.nodes) / 2:
                 net = Network("quorum", part, self)
                 self.quorum_segment = net
+                net.set_test_trace(self.test_trace)
             else:
                 net_name = f"seg-{len(self.other_segments)}"
                 net = Network(net_name, part, self)
                 self.other_segments.append(net)
+                net.set_test_trace(self.test_trace)
             disp.append(f"{net.name}:{len(net.nodes)}")
         self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into seg lengths {','.join(disp)}")
 
@@ -712,6 +768,7 @@ class PausingServer(PilotAPI):
         self.block_messages = False
         self.blocked_in_messages = None
         self.blocked_out_messages = None
+        self.am_paused = True
         self.am_crashed = False
         self.in_message_history = []
         self.out_message_history = []
@@ -722,27 +779,13 @@ class PausingServer(PilotAPI):
         self.local_config = local_config
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         self.operations = SimpleOps()
-
-    def start_saving_messages(self):
-        self.save_message_history = True 
-
-    def stop_saving_messages(self):
-        self.save_message_history = False
-        self.in_message_history = []
-        self.out_message_history = []
-        
-    def get_saved_messages(self, clear=True):
-        res = dict(in_msgs=self.in_message_history,
-                   out_msg=self.out_message_history)
-        if clear:
-            self.in_message_history = []
-            self.out_message_history = []
-        return res
     
     async def simulate_crash(self):
         await self.hull.stop()
         self.am_crashed = True
         self.network.isolate_server(self)
+        test_trace = self.network.test_trace
+        await test_trace.note_crash(self)
         self.hull = None
         
     async def recover_from_crash(self, deliver=False, save_log=True, save_ops=True):
@@ -758,16 +801,25 @@ class PausingServer(PilotAPI):
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         await self.hull.start()
         self.network.reconnect_server(self, deliver=deliver)
+        test_trace = self.network.test_trace
+        await test_trace.note_recover(self)
 
     def get_state_code(self):
+        if self.hull is None:
+            return None
         return self.hull.get_state_code()
     
     def get_state(self):
+        if self.hull is None:
+            return None
         return self.hull.state
     
     async def start_campaign(self):
-        return await self.hull.start_campaign()
-        
+        res =  await self.hull.start_campaign()
+        test_trace = self.network.test_trace
+        await test_trace.note_role_changed(self)
+        return res
+    
     # Part of PilotAPI
     def get_log(self):
         return self.log
@@ -830,6 +882,12 @@ class PausingServer(PilotAPI):
             self.logger.info("%s changing networks, must be partition or heal, new net %s", self.uri, str(network))
         self.network = network
 
+    def is_on_quorum_net(self):
+        maj = self.network.net_mgr.get_majority_network()
+        if self.network == maj:
+            return True
+        return False
+        
     def block_network(self):
         self.blocked_in_messages = []
         self.blocked_out_messages = []
@@ -849,6 +907,16 @@ class PausingServer(PilotAPI):
             self.in_messages.append(msg)
         for msg in self.blocked_out_messages:
             self.out_messages.append(msg)
+
+    def get_leader_id(self):
+        if self.hull is None:
+            return None
+        if self.hull.state.state_code == "LEADER":
+            return self.uri
+        elif self.hull.state.state_code == "FOLLOWER":
+            return self.hull.state.leader_uri
+        else:
+            return None
 
     async def do_next_in_msg(self):
         # sometimes test code wants to cycle individual servers specifically
@@ -908,6 +976,9 @@ class PausingServer(PilotAPI):
         self.trigger_set.add_trigger(trigger)
         
     async def run_till_triggers(self, timeout=1, free_others=False):
+        start_state = self.hull.state.state_code
+            
+        self.am_paused = False
         start_time = time.time()
         done = False
         while not done and time.time() - start_time < timeout:
@@ -936,6 +1007,11 @@ class PausingServer(PilotAPI):
         if not done:
             raise Exception(f'{self.uri} timeout waiting for triggers')
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
+        self.am_paused = True
+        if start_state != self.hull.state.state_code:
+            test_trace = self.network.test_trace
+            await test_trace.note_role_changed(self)
+
         return # all triggers tripped as required by mode flags, so pause ops
     
     async def dump_stats(self):
@@ -950,8 +1026,273 @@ class PausingServer(PilotAPI):
                      prevLogTerm=await self.log.get_last_term(),
                      leaderId=leaderId)
         return stats
-                     
 
+
+class SaveEvent(str, Enum):
+    message_op = "MESSAGE_OP"
+    role_changed = "ROLE_CHANGED"
+    crashed = "CRASHED"
+    recovered = "RECOVERED"
+    started = "STARTED"
+    net_partition = "NET_PARTITION"
+    partition_healed = "PARTITION_HEALED"
+
+    def __str__(self):
+        return self.value
+    
+@dataclass
+class NodeState:
+    save_event: SaveEvent
+    uri: str
+    log_rec: LogRec
+    commit_index: int
+    term: int
+    state_code: str
+    on_quorum_net: bool = True
+    is_paused: bool = False
+    is_crashed: bool = False
+    leader_id: Optional[str] = None
+    voted_for: Optional[str] = None
+    message_action: Optional[str] = None
+    message: Optional[str] = None
+    
+    
+class TestTrace:
+
+    def __init__(self, cluster):
+        self.cluster = cluster
+        self.node_states = {}
+        self.trace_lines = []
+
+    async def start(self):
+        tl = []
+        for uri,node in self.cluster.nodes.items():
+            ns = self.node_states[uri] = await self.create_node_state(node)
+            tl.append(deepcopy(ns))
+            ns.save_event = None
+        self.trace_lines.append(tl)
+        
+        
+    async def create_node_state(self, node):
+        ns = NodeState(save_event=SaveEvent.started,
+                       uri=node.uri,
+                       log_rec=await node.log.read(),
+                       term=await node.log.get_term(),
+                       commit_index=await node.log.get_commit_index(),
+                       state_code=node.get_state_code(),
+                       on_quorum_net=node.is_on_quorum_net(),
+                       is_paused=node.am_paused,
+                       is_crashed=node.am_crashed,
+                       leader_id=node.get_leader_id(),
+                       voted_for=await node.log.get_voted_for())
+        return ns
+
+    async def update_node_state(self, node, ns):
+        ns.log_rec = await node.log.read()
+        ns.term = await node.log.get_term()
+        ns.on_quorum_net = node.is_on_quorum_net()
+        ns.commit_index = await node.log.get_commit_index()
+        ns.state_code = node.get_state_code()
+        ns.is_paused = node.am_paused
+        ns.is_crashed = node.am_crashed
+        ns.leader_id = node.get_leader_id()
+        ns.voted_for  = await node.log.get_voted_for()
+        return ns
+
+    async def save_trace_line(self):
+        # We write a new trace line for any change to any node, and each
+        # trace line records everything about every node.
+        # This is not efficient, but it cannot result in confusion about
+        # order
+        tl = []
+        for uri,node in self.cluster.nodes.items():
+            ns = self.node_states[uri]
+            ns = await self.update_node_state(node, ns)
+            tl.append(deepcopy(ns))
+        self.trace_lines.append(tl)
+
+    async def note_role_changed(self, node):
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.role_changed
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_partition(self):
+        min_net = self.cluster.net_mgr.get_minority_networks()[0]
+        key0 = list(min_net.nodes.keys())[0]
+        node = min_net.nodes[key0]
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.net_partition
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_heal(self):
+        # just pick one
+        key0 = list(self.node_states.keys())[0]
+        ns = self.node_states[key0]
+        ns.save_event = SaveEvent.partition_healed
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_crash(self, node):
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.crashed
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_recover(self, node):
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.recovered
+        await self.save_trace_line()
+        ns.save_event = None
+    
+    async def note_blocked_message(self, target, message):
+        ns = self.node_states[target.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "blocked_in"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    async def note_queued_in_message(self, target, message):
+        ns = self.node_states[target.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "queued_in"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    async def note_message_handled(self, target, message):
+        ns = self.node_states[target.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "handled_in"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    async def note_blocked_send(self, sender, message):
+        ns = self.node_states[sender.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "blocked_send"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    async def note_lost_send(self, sender, message):
+        ns = self.node_states[sender.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "lost_send"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    async def note_message_sent(self, sender, message):
+        ns = self.node_states[sender.uri]
+        ns.save_event = SaveEvent.message_op
+        ns.message = message
+        ns.message_action = "sent"
+        await self.save_trace_line()
+        ns.save_event = None
+        ns.message = None
+        ns.message_action = None
+
+    def to_csv(self):
+        cols = []
+        cols.append('event')
+        cols.append('event_node')
+        cols.append('message_sender')
+        cols.append('message_target')
+        cols.append('message_status')
+        cols.append('message_type')
+        cols.append('entries_count')
+        cols.append('commit_index')
+        cols.append('reply_entries_ok')
+        cols.append('reply_max_index')
+        for i in range(1, len(self.cluster.nodes) + 1):
+            cols.append(f'n{i}-uri')
+            cols.append(f'n{i}-state')
+            cols.append(f'n{i}-term')
+            cols.append(f'n{i}-on_quorum_net')
+            cols.append(f'n{i}-last_index')
+            cols.append(f'n{i}-last_term')
+            cols.append(f'n{i}-commit_index')
+            cols.append(f'n{i}-leader_uri')
+            cols.append(f'n{i}-voted_for')
+            cols.append(f'n{i}-is_crashed')
+        csv_lines = [cols,]
+        for line in self.trace_lines:
+            cols = []
+            for ns in line:
+                if ns.save_event is not None:
+                    cols.append(f'{ns.save_event}')
+                    cols.append(str(ns.uri))
+                    if ns.message_action:
+                        cols.append(ns.message.sender)
+                        cols.append(ns.message.receiver)
+                        cols.append(str(ns.message_action))
+                        cols.append(ns.message.code)
+                        if ns.message.code == "append_entries":
+                            cols.append(f'{len(ns.message.entries)}')
+                            cols.append(f'{ns.message.commitIndex}')
+                            cols.append('')
+                            cols.append('')
+                        elif ns.message.code == "append_response":
+                            cols.append('')
+                            cols.append('')
+                            cols.append(f'{ns.message.success}')
+                            cols.append(f'{ns.message.maxIndex}')
+                        else:
+                            cols.append('')
+                            cols.append('')
+                            cols.append('')
+                            cols.append('')
+                    else:
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                        cols.append('')
+                    break
+            in_order = []
+            while len(in_order) < len(self.cluster.nodes):
+                for ns in line:
+                    for index, uri in enumerate(self.cluster.nodes):
+                        if uri == ns.uri:
+                            if index == len(in_order):
+                                in_order.append(ns)
+                                break
+            for ns in in_order:
+                cols.append(ns.uri)
+                cols.append(str(ns.state_code))
+                cols.append(str(ns.term))
+                cols.append(str(ns.on_quorum_net))
+                if ns.log_rec is None:
+                    cols.append('0')
+                    cols.append('0')
+                else:
+                    cols.append(str(ns.log_rec.index))
+                    cols.append(str(ns.log_rec.term))
+                cols.append(str(ns.commit_index))
+                cols.append(f'{ns.leader_id}')
+                cols.append(f'{ns.voted_for}')
+                cols.append(f'{ns.is_crashed}')
+            csv_lines.append(cols)
+        return csv_lines
+        
+        
 class PausingCluster:
 
     def __init__(self, node_count, use_log=MemoryLog):
@@ -960,6 +1301,7 @@ class PausingCluster:
         self.logger = logging.getLogger("PausingCluster")
         self.auto_comms_flag = False
         self.async_handle = None
+        self.test_trace = TestTrace(self)
         for i in range(node_count):
             nid = i + 1
             uri = f"mcpy://{nid}"
@@ -967,6 +1309,7 @@ class PausingCluster:
             t1s = PausingServer(uri, self, use_log=use_log)
             self.nodes[uri] = t1s
         self.net_mgr = NetManager(self.nodes, self.nodes)
+        self.net_mgr.set_test_trace(self.test_trace)
         net = self.net_mgr.setup_network()
         for uri, node in self.nodes.items():
             node.network = net
@@ -999,16 +1342,19 @@ class PausingCluster:
             node.set_configs(local_config, cc)
 
     async def start(self, only_these=None, timers_disabled=True):
+        await self.test_trace.start()
         for uri, node in self.nodes.items():
             await node.start()
             if timers_disabled:
                 await node.disable_timers()
 
-    def split_network(self, segments):
+    async def split_network(self, segments):
         self.net_mgr.split_network(segments)
-
-    def unsplit(self):
+        await self.test_trace.note_partition()
+        
+    async def unsplit(self):
         self.net_mgr.unsplit()
+        await self.test_trace.note_heal()
 
     async def disable_timers(self):
         for node in self.nodes.values():

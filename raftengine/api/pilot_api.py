@@ -3,7 +3,7 @@ from typing import List, Any
 from raftengine.api.log_api import LogAPI
 
 
-class PilotAPI(metaclass=abc.ABCMeta):
+class PilotAPI(abc.ABC):
     """
     Abstract base class that functions as an interface definition for 
     implmentations the interface between the raft library and the containing 

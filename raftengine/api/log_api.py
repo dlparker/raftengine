@@ -51,7 +51,7 @@ class ConfigLogRec(LogRec):
 
 
 # abstract class for all states
-class LogAPI(metaclass=abc.ABCMeta):
+class LogAPI(abc.ABC):
     """
     Abstract base class that functions as an interface definition for 
     implmentations of Log storage that can be used by the raftengine state classes
