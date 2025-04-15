@@ -22,13 +22,34 @@ from dev_tools.servers import setup_logging, log_config
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
 #log_config = setup_logging(extra_logging, default_level="debug")
-log_config = setup_logging()
+default_level="debug"
+#default_level="warn"
+log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
 async def test_command_1(cluster_maker):
-    """ This runs commands using highly granular control of test servers 
+    """
+    This runs "commands" using highly granular control of test servers 
     so that basic bugs in the first command processing will show up at a detailed 
-    level. Timers are disabled.
+    level. It also tests that invalid command attemps receive the right response.
+    Finally, it validates that crashing a follower, running a command, and recovering
+    the follower eventually results in the crashed follower being in sync.
+    
+    The invalid commands tested are
+
+    1. Sending a command request to a follower, which should result in a redirect
+    2. Sending a command request to a candidate, which should result in a "retry", meaning
+       that the cluster is currently unable to process commands, so a later retry is recommended
+
+    The second test is performed by doing some artifical manupulation of the state of one of the
+    nodes. It is pushed to become a candidate, which will caused it to increase its term. After
+    the command is rejected with a retry, the candidate node is forced back to follower mode and
+    its term is artificially adjusted down to zero so that it will accept the current leader.
+
+    Because the term is now zero, when the former candidate node receives a heartbeat it
+    will accept the current leader.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(3)
     cluster.set_configs()
@@ -95,20 +116,15 @@ async def test_command_1(cluster_maker):
     command_result = await ts_1.run_command("add 1")
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
-    ts_1.clear_all_msgs()
-    await ts_1.log.set_term(orig_term - 1)
     # get the leader to send it a heartbeat while it is a candidate
     cluster.test_trace.start_subtest("Pushing Leader to send heartbeats, after forcing candidate's term back down")
-    await ts_3.hull.state.send_heartbeats()
-    await cluster.deliver_all_pending()
     # cleanup traces of attempt to start election
+    logger.debug('------------------------ forcing candidate term down')
+    ts_1.clear_all_msgs()
     await ts_1.log.set_term(orig_term)
-
-    await ts_1.do_demote_and_handle()
+    logger.debug('------------------------ sending heartbeats, should make candidate resign')
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
-    #print(await ts_1.dump_stats())
-    await asyncio.sleep(0.01)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     assert ts_1.hull.state.leader_uri == uri_3
 
@@ -151,12 +167,25 @@ async def test_command_1(cluster_maker):
     cluster.test_trace.to_condensed_org()
 
 async def test_command_sqlite_1(cluster_maker):
+    """
+    Test election and state machine command operations while using
+    a sqlite implementation of the LogAPI. Most other tests use
+    an in memory log implemetation, so this test is mostly focused
+    on whether the basic logging operations work correctly against
+    a real db. If another test is using sqlite and has problems,
+    this test might help call out something basic.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
     from dev_tools.sqlite_log import SqliteLog
     cluster = cluster_maker(3, use_log=SqliteLog)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_command_sqlite_1.__doc__)
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -167,6 +196,7 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
+    cluster.test_trace.start_subtest("Run command and check results at all nodes")
     command_result = await cluster.run_command("add 1", 1)
     
     assert ts_1.operations.total == 1
@@ -190,10 +220,53 @@ async def test_command_sqlite_1(cluster_maker):
     await cluster.stop_auto_comms()
     
 async def double_leader_inner(cluster, discard):
+    """This function is called once by each of two actual test functions. Once with
+    the "discard" flag False and once with it True.
+
+
+    The sequence begins with a normal election, followed by a state machine command
+    which all of the nodes replicate.
+
+    Next there is a network problem and a new election is started. When the discard
+    flag is True this looks like a regular partition type test, the new leader will
+    take over and allow a new command. The rejoin of the old leader will proceed
+    as normal.
+
+    However, when the discard flag is False, the messages sent to and from the original
+    leader will not be lost, they will be delivered when it rejoins. Although this
+    sort of transient network problem is not common, it certainly can happen, and
+    it is possible that a follower's leader lost timeout fires while leader
+    heartbeats are delayed but not lost.
+
+    For example, it is possible that the first leader sent heartbeats
+    to the cluster that did not get delivered because of network, and
+    just when the cluster gave up and called an election the leader
+    host machine also had a massive slow down (maybe trying to switch
+    networks but thrashing on low memory) such the the leader code
+    could not execute for a second or so but the message delivery was
+    never really blocked.  These are the sort of timing and network
+    problem that Raft is meant to handle. They might be unlikely, but
+    they are possible.
+
+    Regardless of how the affected messages are handled, the rejoin should deliver the same
+    result, the new leader's state being replicated to the old leader.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
+    """
+    
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+    if discard is True:
+        t_func = test_command_2_leaders_1
+    else:
+        t_func = test_command_2_leaders_2
+    
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=t_func.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -203,6 +276,7 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.hull.state.leader_uri == uri_1
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
+    cluster.test_trace.start_subtest("Running command normally")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -216,6 +290,7 @@ async def double_leader_inner(cluster, discard):
 
     logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
+    cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.start_campaign()
@@ -224,10 +299,15 @@ async def double_leader_inner(cluster, discard):
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
 
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_2.operations.total == 2
+    assert ts_3.operations.total == 2
+
     if discard:
         # Will discard the messages that were blocked 
         # so it looks like the network was broken
         # during that time.
+        cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period")
         ts_1.unblock_network()
         logger.info('---------!!!!!!! starting comms')
         await cluster.start_auto_comms()
@@ -246,35 +326,18 @@ async def double_leader_inner(cluster, discard):
         # that Raft is meant to handle. They might be unlikely,
         # but they are possible.
         logger.info('------------------ unblocking and delivering ')
-        ts_1.unblock_network(deliver=True)
-        await cluster.start_auto_comms()
-        
-    logger.debug('------------------ Command AppendEntries should get rejected -')
+        cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages")
 
-    # can't use cluster command runner here, it might not find the right leader
-    command_result = None
-    async def command_runner(ts):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.run_command("add 1", timeout=0.01)
-            logger.debug('running command in background done with NO error')
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-            logger.debug('running command in background done with error')
-    logger.debug('------------------------ Running command ---')
+        ts_1.unblock_network(deliver=True)
+        await cluster.deliver_all_pending()
+
+    assert ts_1.operations.total <= ts_2.operations.total
+    cluster.test_trace.start_subtest("New leader sending heartbeats")
+    logger.info('\n\n sending heartbeat, but old leader should already be up to date\n\n')
+    await ts_2.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
-    asyncio.create_task(command_runner(ts_1))
-    await cluster.start_auto_comms()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.01)
-    assert command_result is not None
-    assert command_result.redirect == uri_2
-    logger.info('---------!!!!!!! stopping comms')
+    assert ts_1.operations.total == ts_2.operations.total
     await cluster.stop_auto_comms()
-    logger.info('------------------------ Correct redirect (follower) done')
     
 async def test_command_2_leaders_1(cluster_maker):
     cluster = cluster_maker(3)

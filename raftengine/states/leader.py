@@ -213,6 +213,9 @@ class Leader(BaseState):
                           message.sender, tracker.nextIndex, tracker.matchIndex)
         await self.record_received_message(message)
         if not message.success:
+            # there are async issues when networks are flaky, this could be a rejection of an old
+            # append, so check what we sent in this message against what we recorded that we
+            # sent in the last message
             await self.send_backdown(message)
             self.logger.debug('After backdown to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
