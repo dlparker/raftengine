@@ -11,11 +11,13 @@
   N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , N-2->vote  yes=True              ,           
   N-3  , FLWR  ,          , lt=1 li=1 , FLWR  ,          , lt=1 li=1 , LEAD  , N-1->ent_reply  ok=True mi=1     ,           
   N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , N-2->ent_reply  ok=True mi=1     , ci=1      
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , CMD START                        ,           
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , entries->N-1 li=1 lt=1 ec=1 ci=1 , lt=1      
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , entries->N-2 li=1 lt=1 ec=1 ci=1 ,           
-  N-3  , FLWR  ,          , lt=1      , FLWR  ,          , lt=1      , LEAD  , N-1->ent_reply  ok=True mi=2     ,           
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , N-2->ent_reply  ok=True mi=2     ,           
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , CMD DONE                         , ci=2      
-  N-3  , FLWR  ,          , ci=2      , FLWR  ,          , ci=2      , LEAD  , N-1->ent_reply  ok=True mi=2     ,           
-  N-3  , FLWR  ,          ,           , FLWR  ,          ,           , LEAD  , N-2->ent_reply  ok=True mi=2     ,           
+ event , N-1   , N-1 , N-1   , N-2   , N-2 , N-2   , N-3   , N-3                              , N-3   
+ node  , Role  , Op  , Delta , Role  , Op  , Delta , Role  , Op                               , Delta 
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , CMD START                        ,       
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , entries->N-1 li=1 lt=1 ec=1 ci=1 , lt=1  
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , entries->N-2 li=1 lt=1 ec=1 ci=1 ,       
+  N-3  , FLWR  ,     , lt=1  , FLWR  ,     , lt=1  , LEAD  , N-1->ent_reply  ok=True mi=2     ,       
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , N-2->ent_reply  ok=True mi=2     ,       
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , CMD DONE                         , ci=2  
+  N-3  , FLWR  ,     , ci=2  , FLWR  ,     , ci=2  , LEAD  , N-1->ent_reply  ok=True mi=2     ,       
+  N-3  , FLWR  ,     ,       , FLWR  ,     ,       , LEAD  , N-2->ent_reply  ok=True mi=2     ,       

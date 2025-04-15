@@ -973,12 +973,12 @@ class PausingServer(PilotAPI):
             return
         for msg in self.blocked_in_messages:
             self.in_messages.append(msg)
-            print(f'\npending_in')
-            print(f'{msg}\n')
+            #print(f'\npending_in')
+            #print(f'{msg}\n')
         for msg in self.blocked_out_messages:
             self.out_messages.append(msg)
-            print(f'\npending_out')
-            print(f'{msg}\n')
+            #print(f'\npending_out')
+            #print(f'{msg}\n')
         self.blocked_in_messages = None
         self.blocked_out_messages = None
         
