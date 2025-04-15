@@ -54,7 +54,10 @@ class Follower(BaseState):
                 await self.log.delete_all_from(message.prevLogIndex + 1)
                 await self.send_no_sync_append_response(message)
                 return
-            
+            else:
+                self.logger.warning("%s Leader resent same log record pi=%d, pt=%d, probably async out of order issue, ignoring",
+                                    self.my_uri(), message.prevLogIndex,  message.prevLogTerm)
+                return
         elif (await self.log.get_last_index() != message.prevLogIndex
               or await self.log.get_last_term() != message.prevLogTerm):
             await self.send_no_sync_append_response(message)

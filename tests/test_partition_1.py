@@ -3,6 +3,7 @@ import asyncio
 import logging
 import pytest
 import time
+from pathlib import Path
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
@@ -15,14 +16,38 @@ extra_logging = [dict(name="test_code", level="debug"), ]
 #setup_logging(extra_logging, default_level="debug")
 setup_logging()
 logger = logging.getLogger("test_code")
-
+qq
 async def test_partition_1(cluster_maker):
+    """
+    This is a basic test of network partitioning and recovery. Five nodes are
+    started and brought into sync after and election. Then two nodes are
+    configured to be on a different simulated network partition than the
+    leader and two other nodes. This means that the leader still has a quorum
+    and can continue to advance the log. So, the leader runs a couple of commands
+    after partition and we check to see that the reachable nodes get updated
+    properly. We also check that the unreachable ones don't, but that is more
+    about testing the simulation rather than any raft feature.
+
+    One these verifications are done, the isolated nodes are configured to rejoin
+    the main network and the leader is prodded to do a heartbeat broadcast. Some
+    fiddly simulation control bits are used to single step through the message
+    delivery process so as to verify that each heartbeat message reaches
+    the right target and the target does the correct state ops and encodes
+    the right reply. The rejoined nodes should walk through the state changes
+    until they have correctly replicated the leader's log and the simulation
+    state machine's final state.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
     cluster = cluster_maker(5)
     cluster.set_configs()
 
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_partition_1.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -37,6 +62,9 @@ async def test_partition_1(cluster_maker):
     assert ts_5.hull.state.leader_uri == uri_1
 
     logger.info('-------- Election done, saving a command record')
+
+    cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit, check follower's final state")
+    
     await cluster.start_auto_comms()
     sequence2 = SNormalCommand(cluster, "add 1", 1)
     command_result = await cluster.run_sequence(sequence2)
@@ -56,36 +84,38 @@ async def test_partition_1(cluster_maker):
                 any = True
                 break
 
+    logger.info('--------- Everbody has first record, partitioning network to isolate nodes 2 and 3')
 
-    logger.info('--------- Everbody has first record, partitioning network')
-
+    cluster.test_trace.start_subtest("Partitioning the network to isolate nodes 2 and 3")
+    # the partition sets were chosen to make the traces easier to follow
     part1 = {uri_1: ts_1,
-             uri_2: ts_2,
-             uri_3: ts_3}
-    part2 = {uri_4: ts_4,
+             uri_4: ts_4,
              uri_5: ts_5}
+    part2 = {uri_2: ts_2,
+             uri_3: ts_3}
     await cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
+    cluster.test_trace.start_subtest("Running two commands, only nodes 1, 4 and 5 should participate")
     sequence3 = SNormalCommand(cluster, "add 1", 1)
     command_result = await cluster.run_sequence(sequence3)
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 2
-    assert ts_2.operations.total == 2
-    assert ts_3.operations.total == 2
-    assert ts_4.operations.total == 1
-    assert ts_5.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    assert ts_4.operations.total == 2
+    assert ts_5.operations.total == 2
     logger.info('--------- Main partition has update, doing it again')
     sequence4 = SNormalCommand(cluster, "add 1", 1)
     command_result = await cluster.run_sequence(sequence4)
     assert command_result is not None
     assert command_result.result is not None
     assert ts_1.operations.total == 3
-    assert ts_2.operations.total == 3
-    assert ts_3.operations.total == 3
-    assert ts_4.operations.total == 1
-    assert ts_5.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    assert ts_4.operations.total == 3
+    assert ts_5.operations.total == 3
 
     any = True
     while any:
@@ -98,6 +128,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Now healing partition and looking for sync ----')
     await cluster.stop_auto_comms()
+    cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats")
     await cluster.unsplit()
     logger.info('--------- Sending heartbeats ----')
     await ts_1.hull.state.send_heartbeats()
@@ -111,20 +142,21 @@ async def test_partition_1(cluster_maker):
         if msg.receiver == uri_5:
             ts_5_msg = msg
     # let the up to date node do their heartbeat sequence
-    assert await ts_2.do_next_in_msg() is not None
-    assert await ts_2.do_next_out_msg() is not None
-    assert await ts_3.do_next_in_msg() is not None
-    assert await ts_3.do_next_out_msg() is not None
+    assert await ts_4.do_next_in_msg() is not None
+    assert await ts_4.do_next_out_msg() is not None
+    assert await ts_5.do_next_in_msg() is not None
+    assert await ts_5.do_next_out_msg() is not None
     # get two back, now those guys are out of the way
     replys = []
     for i in range(2):
         msg = await ts_1.do_next_in_msg()
         assert msg is not None
-        assert msg.sender in [uri_2, uri_3]
+        assert msg.sender in [uri_4, uri_5]
     # so know we can let are behind the times ones respond
 
-    logger.debug('--------- 4 and 5 should be pending, doing message sequence on one then other ')
-    for node in [ts_4, ts_5]:
+    cluster.test_trace.start_subtest("Nodes 4 and 5 have processed heartbeats, now nodes 2 and 3 should do so")
+    logger.debug('--------- 2 and 3 should be pending, doing message sequence on one then other ')
+    for node in [ts_2, ts_3]:
         msg = await node.do_next_in_msg() 
         assert msg is not None
         msg = await node.do_next_out_msg() 
@@ -161,15 +193,45 @@ async def test_partition_1(cluster_maker):
     await asyncio.sleep(0.01)
 
 
-    assert ts_4.operations.total == 3
-    assert ts_5.operations.total == 3
+    assert ts_2.operations.total == 3
+    assert ts_3.operations.total == 3
+    cluster.test_trace.end_subtest()
 
 async def test_partition_2_leader(cluster_maker):
+    """
+    Tests that the correct state results when a network partitions and leaves the leader
+    isolated from the majority of the cluster nodes, and then rejoins the majority network.
+
+    This is verified by completing an election, and running a state machine command to
+    establish replicated state.
+
+    Then the leader is partitioned, then a new election is held. After completing the election,
+    a new state machine command is executed, which should succeed because the
+    new leader has a quorum.
+
+    After that log record is replicated, the old leader is allowed to rejoin the majority network.
+
+    The old leader is prodded to send out a heartbeat. This will get rejections and the old
+    leader should notice the new term in the responses. When it does, it will resign.
+
+    Finally a heartbeat sequence is executed so that the old leader sees then new
+    log state from the new leader, and it will tell the leader to catch it up with
+    an additional append_entries message.
+
+    When all that is done, the state machine state at the old leader should match the replicated
+    state in the other nodes.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_partition_2_leader.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -178,6 +240,7 @@ async def test_partition_2_leader(cluster_maker):
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
     logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Election complete, running a command ")
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
     command_result = await cluster.run_command("add 1", 1)
@@ -194,26 +257,34 @@ async def test_partition_2_leader(cluster_maker):
     # leader and it should update everything.
 
 
+    cluster.test_trace.start_subtest("Command complete, partitioning leader ")
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
     logger.info('---------!!!!!!! stopping comms')
+    cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
     await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
+    cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
+    await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Letting old leader re-join majority network")
     await cluster.unsplit()
     logger.info('------------------------ Sending heartbeats from out of date leader')
+    cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign")
     await ts_1.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     # let ex-leader catch up
+    cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader")
     await ts_2.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.operations.total == 2
+    cluster.test_trace.end_subtest()
     logger.info('------------------------ Leadership change correctly detected')

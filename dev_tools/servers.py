@@ -700,7 +700,7 @@ class NetManager:
     def get_minority_networks(self):
         return self.other_segments
     
-    def split_network(self, segments):
+    async def split_network(self, segments):
         # don't mess with original
         # validate first
         node_set = set()
@@ -723,17 +723,25 @@ class NetManager:
                 net = Network(net_name, part, self)
                 self.other_segments.append(net)
                 net.set_test_trace(self.test_trace)
+                for node in part.values():
+                    await self.test_trace.note_partition(node)
             disp.append(f"{net.name}:{len(net.nodes)}")
         self.logger.info(f"Split {len(self.full_cluster.nodes)} node network into seg lengths {','.join(disp)}")
 
-    def unsplit(self):
+    async def unsplit(self):
         if self.other_segments is None:
             return
+        # this process is touchy because of the call to
+        # test_trace.note_heal in the middle. The
+        # call checks to see if the node is on the quorum
+        # network, which effectively means we could mess
+        # it up doing simple things here.
         for uri,node in self.full_cluster.nodes.items():
             cur_net = node.network
             cur_net.remove_node(node)
             self.full_cluster.add_node(node)
-            node.hull.cluster_config.node_uris =  list(self.full_cluster.nodes.keys())
+            if cur_net != self.quorum_segment:
+                await self.test_trace.note_heal(node)
         self.quorum_segment = None
         self.other_segments = None
 
@@ -941,10 +949,14 @@ class PausingServer(PilotAPI):
         self.network = network
 
     def is_on_quorum_net(self):
-        maj = self.network.net_mgr.get_majority_network()
-        if self.network == maj:
+        # this code could be simpler, but it gets called during
+        # unsplit for test_trace purposes, so this has to be done
+        min_nets = self.network.net_mgr.get_minority_networks()
+        if min_nets is None:
             return True
-        return False
+        if self.network in min_nets:
+            return False
+        return True
         
     def block_network(self):
         self.blocked_in_messages = []
@@ -954,8 +966,6 @@ class PausingServer(PilotAPI):
         self.block_messages = True
     
     def unblock_network(self, deliver=False):
-        if len(self.in_messages) > 0:
-            breakpoint()
         self.block_messages = False
         if not deliver:
             self.blocked_in_messages = None
@@ -963,9 +973,15 @@ class PausingServer(PilotAPI):
             return
         for msg in self.blocked_in_messages:
             self.in_messages.append(msg)
+            print(f'\npending_in')
+            print(f'{msg}\n')
         for msg in self.blocked_out_messages:
             self.out_messages.append(msg)
-
+            print(f'\npending_out')
+            print(f'{msg}\n')
+        self.blocked_in_messages = None
+        self.blocked_out_messages = None
+        
     def get_leader_id(self):
         if self.hull is None:
             return None
@@ -1214,19 +1230,16 @@ class TestTrace:
         await self.save_trace_line()
         ns.save_event = None
 
-    async def note_partition(self):
+    async def note_partition(self, node):
         min_net = self.cluster.net_mgr.get_minority_networks()[0]
-        key0 = list(min_net.nodes.keys())[0]
-        node = min_net.nodes[key0]
         ns = self.node_states[node.uri]
         ns.save_event = SaveEvent.net_partition
         await self.save_trace_line()
         ns.save_event = None
 
-    async def note_heal(self):
+    async def note_heal(self, node):
         # just pick one
-        key0 = list(self.node_states.keys())[0]
-        ns = self.node_states[key0]
+        ns = self.node_states[node.uri]
         ns.save_event = SaveEvent.partition_healed
         await self.save_trace_line()
         ns.save_event = None
@@ -1303,7 +1316,7 @@ class TestTrace:
         ns.message = None
         ns.message_action = None
 
-    def to_condensed_org(self):
+    def to_condensed_org(self, include_legend=True):
         if len(self.trace_lines) == 0:
             return []
         tables = self.to_condensed_tables()
@@ -1317,6 +1330,10 @@ class TestTrace:
                 all_rows.append("")
             if len(all_rows) > 1:
                 break
+        if include_legend:
+            all_rows.append("")
+            all_rows.append(" *[[condensed Trace Table Legend][Table legend]] located after last table in file*")
+            all_rows.append("")
         for t_index, table in enumerate(tables):
             max_chars = 0
             # get the column widths
@@ -1342,6 +1359,12 @@ class TestTrace:
             if False:
                 for trow in final_rows:
                     print(trow)
+        if include_legend:
+            legend_path = Path(Path(__file__).parent, "table_legend.org")
+            with open(legend_path, 'r') as f:
+                buff = f.read()
+            for lline in buff.split('\n'):
+                all_rows.append(lline)
         return all_rows
     
     def to_csv(self):
@@ -1459,7 +1482,7 @@ class TestTrace:
         wrap.end_pos = pos - 1
         return wrap
         
-    def to_condensed_tables(self):
+    def to_condensed_tables(self, include_index=False):
         tables = []
         table = self.wrap_table(0)
         tables.append(table)
@@ -1487,30 +1510,32 @@ class TestTrace:
             else:
                 event = ns.save_event
             return event
-        
+
         for table in tables:
             table.condensed = rows = []
             cols = []
+            if include_index:
+                cols.append("idx")
             cols.append('event') # node id, event_type
             start_line = self.trace_lines[table.start_pos]
             for index,ns in enumerate(start_line):
-                cols.append(f' n-{index+1}')
-                cols.append(f' n-{index+1}')  # # message type + sender/target, or action
-                cols.append(f' n-{index+1}')
-                cols.append(f' n-{index+1}')
+                cols.append(f' N-{index+1}')
+                cols.append(f' N-{index+1}')  # # message type + sender/target, or action
+                cols.append(f' N-{index+1}' )
             rows.append(cols)
             cols = []
+            if include_index:
+                cols.append("")
             cols.append("node ")
             for index,ns in enumerate(start_line):
-                cols.append(f' role ')
-                cols.append(f' net ')
-                cols.append(f' op ')  # # message type + sender/target, or action
-                cols.append(f' delta ')
+                cols.append(f' Role')
+                cols.append(f' Op')
+                cols.append(f' Delta')
             rows.append(cols)
             events_to_show = []
             for pos, line in enumerate(self.trace_lines[table.start_pos: table.end_pos + 1]):
                 if pos == table.start_pos or pos == table.end_pos:
-                    events_to_show.append(line)
+                    events_to_show.append((pos,line))
                     continue
                 for index, ns in enumerate(line):
                     if ns.save_event is not None:
@@ -1520,17 +1545,20 @@ class TestTrace:
                             # condition is sent or handled
                             if ns.state_code == "LEADER" or ns.state_code  == "CANDIDATE":
                                 if ns.message_action in ("sent", "handled_in"):
-                                    events_to_show.append(line)
+                                    events_to_show.append((pos,line))
                         else:
-                            events_to_show.append(line)
+                            events_to_show.append((pos, line))
             last_states = {}
-            for subpos,line in enumerate(events_to_show):
+            for subpos,line_spec in enumerate(events_to_show):
+                pos,line = line_spec
                 cols = []
                 col_done = False
+                if include_index:
+                    cols.append(f" {pos} ")
                 # do the op event column
                 for index, ns in enumerate(line):
                     if ns.save_event is not None and not col_done:
-                        cols.append(f" n-{index+1} ")
+                        cols.append(f" N-{index+1} ")
                         col_done = True
                 # fix up any empty log records, it makes it clearer that something changed
                 for index, ns in enumerate(line):
@@ -1541,10 +1569,6 @@ class TestTrace:
                         cols.append(' CNDI ')
                     elif ns.state_code == "LEADER":
                         cols.append(' LEAD ')
-                    if ns.on_quorum_net:
-                        cols.append(' 1 ')
-                    else:
-                        cols.append(' 2 ')
                     # do the op column
                     if ns.save_event is None:
                         cols.append('')
@@ -1560,7 +1584,7 @@ class TestTrace:
                                 short_code = "vote"
                             if ns.message_action == "sent":
                                 target = ns.message.receiver.split("/")[-1]
-                                value = f' {short_code}->n-{target}'
+                                value = f' {short_code}->N-{target}'
                                 if ns.message.code == "append_entries":
                                     value += f" li={ns.message.prevLogIndex} lt={ns.message.prevLogTerm}"
                                     value += f" ec={len(ns.message.entries)} ci={ns.message.commitIndex}"
@@ -1574,7 +1598,7 @@ class TestTrace:
                                 cols.append(value)
                             if ns.message_action == "handled_in":
                                 sender = ns.message.sender.split("/")[-1]
-                                value = f' n-{sender}->{short_code} '
+                                value = f' N-{sender}->{short_code} '
                                 if ns.message.code == "append_response":
                                     value += f" ok={ns.message.success} mi={ns.message.maxIndex}"
                                 elif ns.message.code == "request_vote_response":
@@ -1592,21 +1616,36 @@ class TestTrace:
                     if ns.log_rec is None:
                         # fake it up for comparisons
                         ns.log_rec = LogRec()
-                    if subpos == 0:
-                        value = f" t={ns.term} lt={ns.log_rec.term} li={ns.log_rec.index} ci={ns.commit_index}"
-                        cols.append(value)
-                    else:
+
+                    d_t = ""
+                    d_lt = ""
+                    d_li = ""
+                    d_ci = ""
+                    d_net = ""
+                    if str(ns.save_event) == "PARTITION_HEALED" and subpos == 0:
+                        # can happen if netjoin is first in table
+                        # due to subtest calls
+                        d_net = " n=1"
+                    if subpos > 0:
+                        
                         last = last_states[index]
-                        value = ""
                         if ns.term != last.term:
-                            value += f" t={ns.term}"
+                            d_t = f" t={ns.term}"
                         if ns.log_rec.index != last.log_rec.index:
-                            value += f" li={ns.log_rec.index}"
+                            d_lt = f" lt={ns.log_rec.term}"
                         if ns.log_rec.term != last.log_rec.term:
-                            value += f" lt={ns.log_rec.term}"
+                            d_li = f" li={ns.log_rec.index}"
                         if ns.commit_index != last.commit_index:
-                            value += f" ci={ns.commit_index}"
-                        cols.append(value)
+                            d_ci = f" ci={ns.commit_index}"
+                        if ns.on_quorum_net:
+                            if not last.on_quorum_net:
+                                d_net = " n=1"
+                            else:
+                                d_net = ""
+                        else:
+                                
+                            d_net = " n=2"
+                    cols.append(d_t + d_lt + d_li + d_ci + d_net)
                     last_states[index] = ns
                 rows.append(cols)
         return tables
@@ -1668,12 +1707,10 @@ class PausingCluster:
                 await node.disable_timers()
 
     async def split_network(self, segments):
-        self.net_mgr.split_network(segments)
-        await self.test_trace.note_partition()
+        await self.net_mgr.split_network(segments)
         
     async def unsplit(self):
-        self.net_mgr.unsplit()
-        await self.test_trace.note_heal()
+        await self.net_mgr.unsplit()
 
     async def disable_timers(self):
         for node in self.nodes.values():
