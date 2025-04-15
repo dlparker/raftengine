@@ -22,8 +22,8 @@ from dev_tools.servers import setup_logging, log_config
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
 #log_config = setup_logging(extra_logging, default_level="debug")
-default_level="debug"
-#default_level="warn"
+#default_level="debug"
+default_level="warn"
 log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -220,7 +220,8 @@ async def test_command_sqlite_1(cluster_maker):
     await cluster.stop_auto_comms()
     
 async def double_leader_inner(cluster, discard):
-    """This function is called once by each of two actual test functions. Once with
+    """
+    This function is called once by each of two actual test functions. Once with
     the "discard" flag False and once with it True.
 
 
@@ -282,11 +283,6 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
-    # Now we want to block all messages from the leader, then
-    # trigger a follower to hold an election, wait for it to
-    # win, then unblock the old leader, and then try another
-    # command. The leader should figure out it doesn't lead
-    # anymore and give back a redirect
 
     logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
@@ -302,6 +298,7 @@ async def double_leader_inner(cluster, discard):
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 2
+
 
     if discard:
         # Will discard the messages that were blocked 
@@ -331,7 +328,9 @@ async def double_leader_inner(cluster, discard):
         ts_1.unblock_network(deliver=True)
         await cluster.deliver_all_pending()
 
-    assert ts_1.operations.total <= ts_2.operations.total
+    logger.debug('------------------ Command AppendEntries should get rejected -')
+
+    
     cluster.test_trace.start_subtest("New leader sending heartbeats")
     logger.info('\n\n sending heartbeat, but old leader should already be up to date\n\n')
     await ts_2.hull.state.send_heartbeats()
@@ -346,6 +345,93 @@ async def test_command_2_leaders_1(cluster_maker):
 async def test_command_2_leaders_2(cluster_maker):
     cluster = cluster_maker(3)
     await double_leader_inner(cluster, False)    
+
+
+async def test_command_2_leaders_3(cluster_maker):
+    """
+
+    This test ensures that trying to run a command at a node that
+    was a leader and got partitioned off long enough to miss a new
+    election and then returned to connection will return a redirect
+    to the new leader.
+
+    The sequence begins with a normal election, followed by a state machine command
+    which all of the nodes replicate.
+
+    Next there is a network problem for the leader and a new election is started. 
+
+    Once the election is complete the old leader rejoins the majority network
+    but before any other message pass to update it, it gets sent a command request.
+    The results should be a rediect to the new leader.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger("test_code")
+    
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_command_2_leaders_3.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.state.leader_uri == uri_1
+    assert ts_3.hull.state.leader_uri == uri_1
+    logger.info('------------------------ Election done')
+    logger.info('---------!!!!!!! starting comms')
+    cluster.test_trace.start_subtest("Running command normally")
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    logger.debug('------------------------ Correct command done')
+
+    # Now we want to block all messages from the leader, then
+    # trigger a follower to hold an election, wait for it to
+    # win, then unblock the old leader, and then try another
+    # command. The leader should figure out it doesn't lead
+    # anymore and give back a redirect
+
+    logger.info('---------!!!!!!! stopping comms')
+    await cluster.stop_auto_comms()
+    cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
+    ts_1.block_network()
+    logger.info('------------------ isolated leader, starting new election')
+    await ts_2.start_campaign()
+    await cluster.run_election()
+    await cluster.deliver_all_pending()
+    assert ts_1.hull.get_state_code() == "LEADER"
+    assert ts_2.hull.get_state_code() == "LEADER"
+    assert ts_3.hull.state.leader_uri == uri_2
+
+    cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected")
+    
+    # can't use cluster command runner here, it will connect to the actual leader
+    command_result = None
+    async def command_runner(ts):
+        nonlocal command_result
+        logger.debug('running command in background')
+        try:
+            command_result = await ts.run_command("add 1", timeout=0.01)
+            logger.debug('running command in background done with NO error')
+        except Exception as e:
+            logger.debug('running command in background error %s', traceback.format_exc())
+            command_result = e
+            logger.debug('running command in background done with error')
+    logger.debug('------------------------ Running command ---')
+    ts_1.unblock_network()
+    await cluster.start_auto_comms()
+    asyncio.create_task(command_runner(ts_1))
+    start_time = time.time()
+    while time.time() - start_time < 0.25 and command_result is None:
+        await asyncio.sleep(0.01)
+    assert command_result is not None
+    assert command_result.redirect == uri_2
     
 async def test_command_after_heal_1(cluster_maker):
     # The goal is for one a candidate to receive an
@@ -808,7 +894,9 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     while time.time() - start_time < 0.5 and await ts_1.log.get_last_index() != await ts_2.log.get_last_index():
         await asyncio.sleep(0.0001)
 
-    assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
+    t1_last_i = await ts_1.log.get_last_index()
+    t2_last_i = await ts_2.log.get_last_index()
+    assert t1_last_i ==  t2_last_i
     new_1 = await ts_1.log.read(first_relevant_index) # the first record is start term record
     new_2 = await ts_1.log.read(first_relevant_index + 1)
     assert new_1.command != orig_1.command

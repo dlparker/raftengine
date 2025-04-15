@@ -16,7 +16,7 @@ extra_logging = [dict(name="test_code", level="debug"), ]
 #setup_logging(extra_logging, default_level="debug")
 setup_logging()
 logger = logging.getLogger("test_code")
-qq
+
 async def test_partition_1(cluster_maker):
     """
     This is a basic test of network partitioning and recovery. Five nodes are

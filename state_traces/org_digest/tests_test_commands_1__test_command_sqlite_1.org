@@ -1,7 +1,20 @@
+* Test from file tests/test_commands_1.py
+
+
+    Test election and state machine command operations while using
+    a sqlite implementation of the LogAPI. Most other tests use
+    an in memory log implemetation, so this test is mostly focused
+    on whether the basic logging operations work correctly against
+    a real db. If another test is using sqlite and has problems,
+    this test might help call out something basic.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_command_sqlite_1
+** Initial election, normal
 ------------------------------------------------------------------------------------------------------------------------------
 | event | N-1   | N-1      | N-1       | N-2   | N-2      | N-2       | N-3   | N-3                              | N-3       |
 | node  | Role  | Op       | Delta     | Role  | Op       | Delta     | Role  | Op                               | Delta     |
@@ -16,15 +29,20 @@
 |  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->vote  yes=True              |           |
 |  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |          | lt=1 li=1 | LEAD  | N-1->ent_reply  ok=True mi=1     |           |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply  ok=True mi=1     | ci=1      |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | CMD START                        |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=1 | lt=1      |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-2 li=1 lt=1 ec=1 ci=1 |           |
-|  N-3  | FLWR  |          | lt=1      | FLWR  |          | lt=1      | LEAD  | N-1->ent_reply  ok=True mi=2     |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply  ok=True mi=2     |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | CMD DONE                         | ci=2      |
-|  N-3  | FLWR  |          | ci=2      | FLWR  |          | ci=2      | LEAD  | N-1->ent_reply  ok=True mi=2     |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply  ok=True mi=2     |           |
 ------------------------------------------------------------------------------------------------------------------------------
+** Run command and check results at all nodes
+--------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1 | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                              | N-3   |
+| node  | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                               | Delta |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | CMD START                        |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=1 | lt=1  |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | entries->N-2 li=1 lt=1 ec=1 ci=1 |       |
+|  N-3  | FLWR  |     | lt=1  | FLWR  |     | lt=1  | LEAD  | N-1->ent_reply  ok=True mi=2     |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=2     |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | CMD DONE                         | ci=2  |
+|  N-3  | FLWR  |     | ci=2  | FLWR  |     | ci=2  | LEAD  | N-1->ent_reply  ok=True mi=2     |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=2     |       |
+--------------------------------------------------------------------------------------------------------
 
 
 

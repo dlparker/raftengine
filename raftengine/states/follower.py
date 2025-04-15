@@ -51,7 +51,7 @@ class Follower(BaseState):
             if our_rec.term != message.prevLogTerm:
                 self.logger.warning("%s Leader indicates invalid record after index %s, deleting",
                                     self.my_uri(), message.prevLogIndex)
-                await self.log.delete_all_from(message.prevLogIndex + 1)
+                await self.log.delete_all_from(message.prevLogIndex)
                 await self.send_no_sync_append_response(message)
                 return
             else:
