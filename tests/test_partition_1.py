@@ -24,7 +24,7 @@ async def test_partition_1(cluster_maker):
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
 
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -171,7 +171,7 @@ async def test_partition_2_leader(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -200,7 +200,7 @@ async def test_partition_2_leader(cluster_maker):
     await cluster.split_network([part1, part2])
 
     logger.info('---------!!!!!!! stopping comms')
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.get_state_code() == "LEADER"

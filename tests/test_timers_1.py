@@ -27,7 +27,7 @@ async def test_heartbeat_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.start(timers_disabled=False)
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
 
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -67,7 +67,7 @@ async def test_heartbeat_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.start(timers_disabled=False)
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
 
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -101,14 +101,14 @@ async def test_lost_leader_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.start(timers_disabled=False)
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     await cluster.deliver_all_pending()
     await cluster.run_election()
     await cluster.deliver_all_pending()
     assert ts_3.hull.get_state_code() == "LEADER"
     assert ts_1.hull.state.leader_uri == uri_3
     assert ts_2.hull.state.leader_uri == uri_3
-    await ts_3.hull.demote_and_handle(None)
+    await ts_3.do_demote_and_handle(None)
     
     # Test that election happens in appoximately the leader_lost timeout
     start_time = time.time()
@@ -144,7 +144,7 @@ async def test_election_timeout_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.start(timers_disabled=True)
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
 
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -158,7 +158,7 @@ async def test_election_timeout_1(cluster_maker):
     ts_1.block_network()
     # we don't want ts_3 to vote yes, so block it too
     ts_3.block_network()
-    await ts_1.hull.demote_and_handle(None)
+    await ts_1.do_demote_and_handle(None)
     await cluster.start_auto_comms()
     await ts_2.enable_timers()
     start_time = time.time()

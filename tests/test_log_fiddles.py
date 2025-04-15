@@ -38,7 +38,7 @@ async def test_empty_log_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -87,7 +87,7 @@ async def test_empty_log_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"

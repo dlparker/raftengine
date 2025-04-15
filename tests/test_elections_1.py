@@ -32,7 +32,7 @@ async def test_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     # tell first one to start election, should send request vote messages to other two
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_2.in_messages) == 1
     assert len(ts_3.in_messages) == 1
@@ -86,7 +86,7 @@ async def test_election_2(cluster_maker):
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -110,7 +110,7 @@ async def test_reelection_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -120,10 +120,10 @@ async def test_reelection_1(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
 
     # now have leader resign, by telling it to become follower
-    await ts_1.hull.demote_and_handle(None)
+    await ts_1.do_demote_and_handle(None)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     # pretend timeout on heartbeat on only one, ensuring it will win
-    await ts_2.hull.state.leader_lost()
+    await ts_2.do_leader_lost()
     await cluster.deliver_all_pending()
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.get_state_code() == "FOLLOWER"
@@ -144,7 +144,7 @@ async def test_reelection_2(cluster_maker):
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -156,10 +156,10 @@ async def test_reelection_2(cluster_maker):
     assert ts_5.hull.state.leader_uri == uri_1
 
     # now have leader resign, by telling it to become follower
-    await ts_1.hull.demote_and_handle(None)
+    await ts_1.do_demote_and_handle(None)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     # pretend timeout on heartbeat on only one followers, so it should win
-    await ts_2.hull.state.leader_lost()
+    await ts_2.do_leader_lost()
     await cluster.deliver_all_pending()
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_1.hull.get_state_code() == "FOLLOWER"
@@ -212,14 +212,14 @@ async def test_reelection_3(cluster_maker):
     ts_2.hull.cluster_config.election_timeout_max = 0.0011
     ts_3.hull.cluster_config.election_timeout_min = 1
     ts_3.hull.cluster_config.election_timeout_max = 1.2
-    await ts_3.hull.demote_and_handle(None)
-    await ts_3.hull.start_campaign()
+    await ts_3.do_demote_and_handle(None)
+    await ts_3.start_campaign()
     logger.warning('leader ts_3 demoted and campaign started')
     # ts_2 started last, but should win and raise term to 3 because of timeout
     
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     logger.warning('ts_1 starting campaign')
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     logger.warning('ts_2 starting campaign, delivering messages')
     await cluster.deliver_all_pending()
     logger.warning('waiting for re-election to happend')
