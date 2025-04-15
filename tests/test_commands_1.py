@@ -4,6 +4,7 @@ import logging
 import pytest
 import time
 import traceback
+from pathlib import Path
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.api.log_api import LogRec
@@ -35,8 +36,11 @@ async def test_command_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_command_1.__doc__)
     await cluster.start()
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
@@ -46,7 +50,8 @@ async def test_command_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    command_result = await ts_3.hull.run_command("add 1")
+    cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit")
+    command_result = await ts_3.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
     assert ts_3.operations.total == 1
@@ -54,6 +59,7 @@ async def test_command_1(cluster_maker):
     # followers will see the commitIndex is higher
     # and apply and locally commit
     await cluster.stop_auto_comms()
+    cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat")
     await ts_3.hull.state.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.hull.log.get_term()
@@ -77,28 +83,31 @@ async def test_command_1(cluster_maker):
     logger.debug('------------------------ Correct command done')
 
     await cluster.stop_auto_comms()
-    command_result = await ts_1.hull.run_command("add 1")
+    cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect")
+    command_result = await ts_1.run_command("add 1")
     assert command_result.redirect == uri_3
     logger.debug('------------------------ Correct redirect (follower) done')
     
+    cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
     orig_term =  await ts_1.hull.get_term() 
-    await ts_1.hull.state.leader_lost()
+    await ts_1.do_leader_lost()
     assert ts_1.hull.get_state_code() == "CANDIDATE"
-    command_result = await ts_1.hull.run_command("add 1")
+    command_result = await ts_1.run_command("add 1")
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
     ts_1.clear_all_msgs()
     await ts_1.log.set_term(orig_term - 1)
     # get the leader to send it a heartbeat while it is a candidate
+    cluster.test_trace.start_subtest("Pushing Leader to send heartbeats, after forcing candidate's term back down")
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     # cleanup traces of attempt to start election
     await ts_1.log.set_term(orig_term)
 
-    await ts_1.hull.demote_and_handle()
+    await ts_1.do_demote_and_handle()
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
-    print(await ts_1.dump_stats())
+    #print(await ts_1.dump_stats())
     await asyncio.sleep(0.01)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
     assert ts_1.hull.state.leader_uri == uri_3
@@ -109,6 +118,7 @@ async def test_command_1(cluster_maker):
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
+    cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower")
     await ts_1.simulate_crash()
     logger.debug('------------------------ Running command ---')
     sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
@@ -124,6 +134,7 @@ async def test_command_1(cluster_maker):
     await cluster.deliver_all_pending()
     await ts_3.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up")
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     await ts_1.recover_from_crash()
     await ts_3.hull.state.send_heartbeats()
@@ -133,7 +144,11 @@ async def test_command_1(cluster_maker):
         await asyncio.sleep(0.0001)
     assert ts_1.operations.total == 3
     await cluster.stop_auto_comms()
+    await cluster.deliver_all_pending()
+    await cluster.deliver_all_pending()
     logger.debug('------------------------ Tardy follower caught up ---')
+    cluster.test_trace.end_subtest()
+    cluster.test_trace.to_condensed_org()
 
 async def test_command_sqlite_1(cluster_maker):
     from dev_tools.sqlite_log import SqliteLog
@@ -143,7 +158,7 @@ async def test_command_sqlite_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
 
     await cluster.run_election()
     assert ts_3.hull.get_state_code() == "LEADER"
@@ -180,7 +195,7 @@ async def double_leader_inner(cluster, discard):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -203,7 +218,7 @@ async def double_leader_inner(cluster, discard):
     await cluster.stop_auto_comms()
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.get_state_code() == "LEADER"
@@ -242,7 +257,7 @@ async def double_leader_inner(cluster, discard):
         nonlocal command_result
         logger.debug('running command in background')
         try:
-            command_result = await ts.hull.run_command("add 1", timeout=0.01)
+            command_result = await ts.run_command("add 1", timeout=0.01)
             logger.debug('running command in background done with NO error')
         except Exception as e:
             logger.debug('running command in background error %s', traceback.format_exc())
@@ -291,7 +306,7 @@ async def test_command_after_heal_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -316,7 +331,7 @@ async def test_command_after_heal_1(cluster_maker):
     logger.info('-------------- Split network done, expecting election of %s', uri_2)
     # now ts_2 and ts_3 are alone, have ts_2
     # get elected
-    await ts_2.hull.state.leader_lost()
+    await ts_2.do_leader_lost()
     await cluster.run_election()
     assert ts_2.hull.get_state_code() == "LEADER"
     assert ts_3.hull.state.leader_uri == uri_2
@@ -328,9 +343,9 @@ async def test_command_after_heal_1(cluster_maker):
     
     logger.info('-------------- Forcing %s to candidate, but not allowing any messages out', uri_2)
     ts_2.block_network()
-    await ts_2.hull.demote_and_handle(None)
+    await ts_2.do_demote_and_handle(None)
     assert ts_2.hull.get_state_code() == "FOLLOWER"
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     assert ts_2.hull.get_state_code() == "CANDIDATE"
     
     logger.info('-------------- telling old leader %s to send heartbeats, %s should reject in candidate',
@@ -356,7 +371,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
 
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -383,7 +398,7 @@ async def test_follower_explodes_in_command(cluster_maker):
         nonlocal command_result
         logger.debug('running command in background')
         try:
-            command_result = await ts.hull.run_command("add 1", timeout=0.01)
+            command_result = await ts.run_command("add 1", timeout=0.01)
             logger.debug('running command in background done with NO error')
         except Exception as e:
             logger.debug('running command in background error %s', traceback.format_exc())
@@ -420,7 +435,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
 
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -451,7 +466,7 @@ async def test_long_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -529,7 +544,7 @@ async def test_full_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     
     await cluster.run_election()
     
@@ -575,7 +590,7 @@ async def test_follower_run_error(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
@@ -647,7 +662,7 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     await cluster.run_election()
     assert ts_1.hull.get_state_code() == "LEADER"
     assert ts_2.hull.state.leader_uri == uri_1
@@ -664,21 +679,21 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
     logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
-    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    command_result = await ts_1.run_command("sub 1", timeout=0.01)
     assert command_result.timeout_expired
-    command_result = await ts_1.hull.run_command("sub 1", timeout=0.01)
+    command_result = await ts_1.run_command("sub 1", timeout=0.01)
     assert command_result.timeout_expired
     assert await ts_1.hull.log.get_last_index() == last_index + 2
     logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
     #await ts_2.hull.log.set_term(2)
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_2.hull.get_state_code() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
     # we do this now so that the cluster run_command method will not get confused
     # about which server is the leader
-    await ts_1.hull.demote_and_handle(None)
+    await ts_1.do_demote_and_handle(None)
     assert ts_1.hull.get_state_code() == "FOLLOWER"
 
     # now do a command at the new leader

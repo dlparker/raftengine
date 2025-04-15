@@ -25,7 +25,9 @@ from dev_tools.sqlite_log import SqliteLog
 from raftengine.api.pilot_api import PilotAPI
 log_config = None
 
-save_trace = True
+trace_to_csv = True
+digest_org = True
+digest_csv = True
 
 def get_current_test():
     full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]
@@ -120,24 +122,60 @@ async def cluster_maker():
     yield make_cluster
     if the_cluster is not None:
         await the_cluster.stop_auto_comms()
-        trace_dir = Path(Path(__file__).parent.parent.resolve(), "state_traces")
-        if not trace_dir.exists():
-            trace_dir.mkdir()
-        full_name, tfile, test_name = get_current_test()
-        # convert the full name to something that doesn't look like a file path
-        x = full_name.split('::')
-        x = '_'.join(x)
-        x = x.split('/')
-        x = '_'.join(x)
-        x = x.split('.py')
-        x = '_'.join(x)
-        fname = x + ".csv"
-        fpath = Path(trace_dir, fname)
-        csv_lines = the_cluster.test_trace.to_csv()
-        with open(fpath, 'w') as f:
-            for line in csv_lines:
-                outline = ','.join(line)
-                f.write(outline + "\n")
+        if trace_to_csv or digest_org or digest_csv:
+            full_name, tfile, test_name = get_current_test()
+            # convert the full name to something that doesn't look like a file path
+            x = full_name.split('::')
+            x = '_'.join(x)
+            x = x.split('/')
+            x = '_'.join(x)
+            x = x.split('.py')
+            x = '_'.join(x)
+            fstem = x
+            trace_dir = Path(Path(__file__).parent.parent.resolve(), "state_traces")
+            if not trace_dir.exists():
+                trace_dir.mkdir()
+        if trace_to_csv:
+            csvname = fstem + ".csv"
+            full_trace_dir = Path(trace_dir, "full_csv")
+            if not full_trace_dir.exists():
+                full_trace_dir.mkdir()
+            fpath = Path(full_trace_dir, csvname)
+            csv_lines = the_cluster.test_trace.to_csv()
+            with open(fpath, 'w') as f:
+                for line in csv_lines:
+                    outline = ','.join(line)
+                    f.write(outline + "\n")
+        if digest_org or digest_csv:
+            org_lines = the_cluster.test_trace.to_condensed_org()
+        if digest_org:
+            orgname = fstem + ".org"
+            org_dir = Path(trace_dir, "org_digest")
+            if not org_dir.exists():
+                org_dir.mkdir()
+            fpath = Path(org_dir, orgname)
+            if len(org_lines) > 0:
+                with open(fpath, 'w') as f:
+                    for line in org_lines:
+                        f.write(line + "\n")
+        if digest_csv:
+            csv_digest_name = fstem + ".csv"
+            csv_digest_dir = Path(trace_dir, "csv_digest")
+            if not csv_digest_dir.exists():
+                csv_digest_dir.mkdir()
+            fpath = Path(csv_digest_dir, csv_digest_name)
+            if len(org_lines) > 0:
+                with open(fpath, 'w') as f:
+                    for line in org_lines:
+                        tmp = line.strip("|").split("|")
+                        # this test is pretty fuzzy might fail, but
+                        # it is hard to know how many columns there are
+                        if len(tmp) < 10:
+                            continue
+                        new_line = ",".join(tmp)
+                        f.write(new_line + "\n")
+            
+        
         await the_cluster.cleanup()
     
 class SimpleOps(): # pragma: no cover
@@ -597,7 +635,10 @@ class Network:
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
         await self.test_trace.note_message_handled(node, msg)
+        start_state = node.hull.state.state_code
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
+        if start_state != node.hull.state.state_code:
+            await self.test_trace.note_role_changed(node)
         return msg
     
     async def do_next_out_msg(self, node):
@@ -820,6 +861,23 @@ class PausingServer(PilotAPI):
         await test_trace.note_role_changed(self)
         return res
     
+    async def do_leader_lost(self):
+        await self.hull.state.leader_lost()
+        test_trace = self.network.test_trace
+        await test_trace.note_role_changed(self)
+        
+    async def do_demote_and_handle(self, message=None):
+        await self.hull.demote_and_handle(message)
+        test_trace = self.network.test_trace
+        await test_trace.note_role_changed(self)
+
+    async def run_command(self, command, timeout=1.0):
+        test_trace = self.network.test_trace
+        await test_trace.note_command_started(self)
+        res = await self.hull.run_command(command, timeout)
+        await test_trace.note_command_finished(self)
+        return res
+        
     # Part of PilotAPI
     def get_log(self):
         return self.log
@@ -976,7 +1034,6 @@ class PausingServer(PilotAPI):
         self.trigger_set.add_trigger(trigger)
         
     async def run_till_triggers(self, timeout=1, free_others=False):
-        start_state = self.hull.state.state_code
             
         self.am_paused = False
         start_time = time.time()
@@ -1008,9 +1065,6 @@ class PausingServer(PilotAPI):
             raise Exception(f'{self.uri} timeout waiting for triggers')
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
         self.am_paused = True
-        if start_state != self.hull.state.state_code:
-            test_trace = self.network.test_trace
-            await test_trace.note_role_changed(self)
 
         return # all triggers tripped as required by mode flags, so pause ops
     
@@ -1036,6 +1090,8 @@ class SaveEvent(str, Enum):
     started = "STARTED"
     net_partition = "NET_PARTITION"
     partition_healed = "PARTITION_HEALED"
+    command_started = "COMMAND_STARTED"
+    command_finished = "COMMAND_FINISHED"
 
     def __str__(self):
         return self.value
@@ -1057,13 +1113,25 @@ class NodeState:
     message: Optional[str] = None
     
     
+@dataclass
+class TableWrap:
+    start_pos: int
+    description: str
+    test_path: Optional[str] = None
+    test_doc_string: Optional[str] = None
+    end_pos: Optional[int] = None
+    lines: Optional[list] = None
+    condensed: Optional[list] = None
+    
 class TestTrace:
 
     def __init__(self, cluster):
         self.cluster = cluster
         self.node_states = {}
         self.trace_lines = []
-
+        self.table_wraps = {}
+        self.current_wrap = None
+        
     async def start(self):
         tl = []
         for uri,node in self.cluster.nodes.items():
@@ -1099,6 +1167,23 @@ class TestTrace:
         ns.voted_for  = await node.log.get_voted_for()
         return ns
 
+
+    def start_subtest(self, description, test_path_str=None, test_doc_string=None):
+        old_st = self.current_wrap
+        if old_st and old_st.end_pos is None:
+            old_st.end_pos=len(self.trace_lines)-1,
+        st = TableWrap(start_pos=len(self.trace_lines),
+                          description=description,
+                          test_path=test_path_str,
+                          test_doc_string=test_doc_string)
+        self.current_wrap = st
+        self.table_wraps[st.start_pos] = st
+        
+    def end_subtest(self):
+        st = self.current_wrap
+        st.end_pos = len(self.trace_lines)
+        self.current_wrap = None
+        
     async def save_trace_line(self):
         # We write a new trace line for any change to any node, and each
         # trace line records everything about every node.
@@ -1114,6 +1199,18 @@ class TestTrace:
     async def note_role_changed(self, node):
         ns = self.node_states[node.uri]
         ns.save_event = SaveEvent.role_changed
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_command_started(self, node):
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.command_started
+        await self.save_trace_line()
+        ns.save_event = None
+
+    async def note_command_finished(self, node):
+        ns = self.node_states[node.uri]
+        ns.save_event = SaveEvent.command_finished
         await self.save_trace_line()
         ns.save_event = None
 
@@ -1206,6 +1303,47 @@ class TestTrace:
         ns.message = None
         ns.message_action = None
 
+    def to_condensed_org(self):
+        if len(self.trace_lines) == 0:
+            return []
+        tables = self.to_condensed_tables()
+        all_rows = []
+        for t_index, table in enumerate(tables):
+            if table.test_path:
+                all_rows.append(f"* Test from file {table.test_path}")
+                all_rows.append("")
+            if table.test_doc_string:
+                all_rows.append(table.test_doc_string)
+                all_rows.append("")
+            if len(all_rows) > 1:
+                break
+        for t_index, table in enumerate(tables):
+            max_chars = 0
+            # get the column widths
+            row0 = table.condensed[0]
+            col_widths = [0 for col in row0 ]
+            trows = []
+            for row in table.condensed:
+                for col_index, col in enumerate(row):
+                    col_widths[col_index] = max(col_widths[col_index], len(str(col)))
+            trows.append(f"** {table.description}")
+            for row in table.condensed:
+                str_line = "| "
+                for col_index, col in enumerate(row):
+                    str_line += f"{col:{col_widths[col_index]}s} |"
+                trows.append(str_line)
+                max_chars = max(max_chars, len(str_line))
+            #trows.append(f" End of {table.description}")
+            trows.append('-' * max_chars)
+            final_rows = [trows[0],]
+            final_rows.append('-' * max_chars)
+            final_rows.extend(trows[1:])
+            all_rows.extend(final_rows)
+            if False:
+                for trow in final_rows:
+                    print(trow)
+        return all_rows
+    
     def to_csv(self):
         cols = []
         cols.append('event')
@@ -1291,6 +1429,187 @@ class TestTrace:
                 cols.append(f'{ns.is_crashed}')
             csv_lines.append(cols)
         return csv_lines
+
+    def wrap_table(self, start_pos):
+        if start_pos not in self.table_wraps:
+            # we don't have instructions from the test code, so we just
+            # make it up
+            try:
+                full_name, tfile, test_name = get_current_test()
+            except Exception:
+                test_name = "not in test, name unknown"
+            wrap =  TableWrap(start_pos=start_pos,
+                               description=test_name)
+        else:
+            wrap = self.table_wraps[start_pos]
+
+        wrap.lines = []
+        wrap.lines.append(wrap)
+        pos = start_pos + 1
+        while pos < len(self.trace_lines):
+            wrap.lines.append(self.trace_lines[pos])
+            if pos == wrap.end_pos:
+                return wrap
+            if pos in self.table_wraps:
+                # this pos is the start of another table
+                # nobody called end for this table
+                wrap.end_pos = pos - 1
+                return wrap
+            pos += 1 
+        wrap.end_pos = pos - 1
+        return wrap
+        
+    def to_condensed_tables(self):
+        tables = []
+        table = self.wrap_table(0)
+        tables.append(table)
+        while table.end_pos + 1 < len(self.trace_lines):
+            table = self.wrap_table(table.end_pos + 1)
+            tables.append(table)
+
+        def short_event(ns):
+            if str(ns.save_event) == "ROLE_CHANGED":
+                event = "NEW ROLE"
+            elif str(ns.save_event) == "MESSAGE_OP":
+                event = "MSG"
+            elif str(ns.save_event) == "CRASHED":
+                event = "CRASH"
+            elif str(ns.save_event) == "RECOVERED":
+                event = "RESTART"
+            elif str(ns.save_event) == "NET_PARTITION":
+                event = "NETSPLIT"
+            elif str(ns.save_event) == "PARTITION_HEALED":
+                event = "NETJOIN"
+            elif str(ns.save_event) == "COMMAND_STARTED":
+                event = "CMD START"
+            elif str(ns.save_event) == "COMMAND_FINISHED":
+                event = "CMD DONE"
+            else:
+                event = ns.save_event
+            return event
+        
+        for table in tables:
+            table.condensed = rows = []
+            cols = []
+            cols.append('event') # node id, event_type
+            start_line = self.trace_lines[table.start_pos]
+            for index,ns in enumerate(start_line):
+                cols.append(f' n-{index+1}')
+                cols.append(f' n-{index+1}')  # # message type + sender/target, or action
+                cols.append(f' n-{index+1}')
+                cols.append(f' n-{index+1}')
+            rows.append(cols)
+            cols = []
+            cols.append("node ")
+            for index,ns in enumerate(start_line):
+                cols.append(f' role ')
+                cols.append(f' net ')
+                cols.append(f' op ')  # # message type + sender/target, or action
+                cols.append(f' delta ')
+            rows.append(cols)
+            events_to_show = []
+            for pos, line in enumerate(self.trace_lines[table.start_pos: table.end_pos + 1]):
+                if pos == table.start_pos or pos == table.end_pos:
+                    events_to_show.append(line)
+                    continue
+                for index, ns in enumerate(line):
+                    if ns.save_event is not None:
+                        if ns.save_event == SaveEvent.message_op:
+                            # we are only going to show the trace if the
+                            # resender or receiver is a leader, and only if the
+                            # condition is sent or handled
+                            if ns.state_code == "LEADER" or ns.state_code  == "CANDIDATE":
+                                if ns.message_action in ("sent", "handled_in"):
+                                    events_to_show.append(line)
+                        else:
+                            events_to_show.append(line)
+            last_states = {}
+            for subpos,line in enumerate(events_to_show):
+                cols = []
+                col_done = False
+                # do the op event column
+                for index, ns in enumerate(line):
+                    if ns.save_event is not None and not col_done:
+                        cols.append(f" n-{index+1} ")
+                        col_done = True
+                # fix up any empty log records, it makes it clearer that something changed
+                for index, ns in enumerate(line):
+                    # do the role column
+                    if ns.state_code == "FOLLOWER" or ns.state_code is None:
+                        cols.append(' FLWR ')
+                    elif ns.state_code == "CANDIDATE":
+                        cols.append(' CNDI ')
+                    elif ns.state_code == "LEADER":
+                        cols.append(' LEAD ')
+                    if ns.on_quorum_net:
+                        cols.append(' 1 ')
+                    else:
+                        cols.append(' 2 ')
+                    # do the op column
+                    if ns.save_event is None:
+                        cols.append('')
+                    else:
+                        if ns.save_event == SaveEvent.message_op:
+                            if ns.message.code == "append_entries":
+                                short_code = "entries"
+                            elif ns.message.code == "append_response":
+                                short_code = "ent_reply"
+                            if ns.message.code == "request_vote":
+                                short_code = "give_vote"
+                            elif ns.message.code == "request_vote_response":
+                                short_code = "vote"
+                            if ns.message_action == "sent":
+                                target = ns.message.receiver.split("/")[-1]
+                                value = f' {short_code}->n-{target}'
+                                if ns.message.code == "append_entries":
+                                    value += f" li={ns.message.prevLogIndex} lt={ns.message.prevLogTerm}"
+                                    value += f" ec={len(ns.message.entries)} ci={ns.message.commitIndex}"
+                                elif ns.message.code == "request_vote":
+                                    value += f" term={ns.message.term} li={ns.message.prevLogIndex} lt={ns.message.prevLogTerm}"
+                                elif (ns.message.code == "request_vote_response"
+                                      or ns.message.code == "append_response"):
+                                    value = ""
+                                else:
+                                    raise Exception('no code for message type')
+                                cols.append(value)
+                            if ns.message_action == "handled_in":
+                                sender = ns.message.sender.split("/")[-1]
+                                value = f' n-{sender}->{short_code} '
+                                if ns.message.code == "append_response":
+                                    value += f" ok={ns.message.success} mi={ns.message.maxIndex}"
+                                elif ns.message.code == "request_vote_response":
+                                    value += f" yes={ns.message.vote} "
+                                elif (ns.message.code == "request_vote"
+                                      or ns.message.code == "append_entries"):
+                                    value = ""
+                                else:
+                                    raise Exception('no code for message type')
+                                cols.append(value)
+                        else:
+                            cols.append(f" {short_event(ns)} ")
+                    # do the delta column
+                    # see if state changed
+                    if ns.log_rec is None:
+                        # fake it up for comparisons
+                        ns.log_rec = LogRec()
+                    if subpos == 0:
+                        value = f" t={ns.term} lt={ns.log_rec.term} li={ns.log_rec.index} ci={ns.commit_index}"
+                        cols.append(value)
+                    else:
+                        last = last_states[index]
+                        value = ""
+                        if ns.term != last.term:
+                            value += f" t={ns.term}"
+                        if ns.log_rec.index != last.log_rec.index:
+                            value += f" li={ns.log_rec.index}"
+                        if ns.log_rec.term != last.log_rec.term:
+                            value += f" lt={ns.log_rec.term}"
+                        if ns.commit_index != last.commit_index:
+                            value += f" ci={ns.commit_index}"
+                        cols.append(value)
+                    last_states[index] = ns
+                rows.append(cols)
+        return tables
         
         
 class PausingCluster:
@@ -1591,7 +1910,7 @@ class SNormalCommand(StdSequence):
         
     async def command_wrapper(self, node, command):
         self.logger.debug("Running command %s at  %s", command, node.uri)
-        self.command_result = await node.hull.run_command(command, timeout=0.1)
+        self.command_result = await node.run_command(command, timeout=0.1)
         
     async def wait_till_done(self):
         async def do_timeout(timeout):
@@ -1721,7 +2040,7 @@ class SPartialCommand(StdSequence):
         
     async def command_wrapper(self, node, command, timeout=0.1):
         self.logger.debug("Running command %s at  %s", command, node.uri)
-        self.command_result = await node.hull.run_command(command, timeout=timeout)
+        self.command_result = await node.run_command(command, timeout=timeout)
         self.logger.debug("%s command_result = %s", node.uri, self.command_result.__dict__)
         if self.command_result.result is None:
             raise CommandFailedTaskGroup(f'command_result = {self.command_result.__dict__}')

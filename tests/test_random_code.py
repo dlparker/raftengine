@@ -33,7 +33,7 @@ async def test_normal_election_sequence_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -51,7 +51,7 @@ async def test_normal_election_sequence_2(cluster_maker):
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -70,7 +70,7 @@ async def test_normal_command_sequence_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     
     sequence1 = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence1)
@@ -103,7 +103,7 @@ async def test_partial_sequences_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.start()
-    await ts_1.hull.start_campaign()
+    await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
@@ -120,9 +120,9 @@ async def test_partial_sequences_1(cluster_maker):
 
     # Now "crash" the leader, run an election
     ts_1.block_network()
-    await ts_1.hull.demote_and_handle(None)
+    await ts_1.do_demote_and_handle(None)
 
-    await ts_2.hull.start_campaign()
+    await ts_2.start_campaign()
     await cluster.start_auto_comms()
     logger.info('------------------------ Running Partial Election')
     sequence = SPartialElection(cluster, voters=[uri_2, uri_3])

@@ -29,7 +29,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.start()
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
     ts_2.set_trigger(WhenElectionDone())
     ts_3.set_trigger(WhenElectionDone())
@@ -57,11 +57,11 @@ async def test_restart_during_heartbeat(cluster_maker):
     assert len(ts_1.in_messages) == 1
     assert len(ts_2.in_messages) == 1
     logger.debug("about to demote %s %s", uri_3, ts_3.hull.state)
-    await ts_3.hull.demote_and_handle()
+    await ts_3.do_demote_and_handle()
     await cluster.deliver_all_pending()
     assert len(ts_3.hull.message_problem_history) == 2
 
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
     ts_2.set_trigger(WhenElectionDone())
     ts_3.set_trigger(WhenElectionDone())
@@ -104,7 +104,7 @@ async def test_slow_voter(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.start()
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
     ts_2.set_trigger(WhenElectionDone())
     ts_3.set_trigger(WhenElectionDone())
@@ -125,8 +125,8 @@ async def test_slow_voter(cluster_maker):
     # candidate to retry, which will up the term, then let
     # the old votes flow in. They should get ignored
     # and the election should succeed
-    await ts_3.hull.demote_and_handle(None)
-    await ts_3.hull.state.leader_lost()
+    await ts_3.do_demote_and_handle(None)
+    await ts_3.do_leader_lost()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     msg = await ts_1.do_next_in_msg()
@@ -193,7 +193,7 @@ async def test_message_errors(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.start()
-    await ts_3.hull.start_campaign()
+    await ts_3.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
     ts_2.set_trigger(WhenElectionDone())
     ts_3.set_trigger(WhenElectionDone())

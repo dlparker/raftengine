@@ -1,0 +1,79 @@
+ event , n-1   , n-1  , n-1                              , n-1                , n-2   , n-2  , n-2                              , n-2                , n-3   , n-3  , n-3      , n-3                
+ node  , role  , net  , op                               , delta              , role  , net  , op                               , delta              , role  , net  , op       , delta              
+  n-1  , FLWR  , 1    , STARTED                          , t=0 lt=0 li=0 ci=0 , FLWR  , 1    , STARTED                          , t=0 lt=0 li=0 ci=0 , FLWR  , 1    , STARTED  , t=0 lt=0 li=0 ci=0 
+  n-1  , CNDI  , 1    , NEW ROLE                         , t=1                , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , CNDI  , 1    , give_vote->n-2 term=1 li=0 lt=1  ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , CNDI  , 1    , give_vote->n-3 term=1 li=0 lt=1  ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , CNDI  , 1    , n-2->vote  yes=True              ,                    , FLWR  , 1    ,                                  , t=1                , FLWR  , 1    ,          , t=1                
+  n-1  , LEAD  , 1    , NEW ROLE                         , li=1 lt=1          , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=0 lt=0 ec=1 ci=0 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=0 lt=0 ec=1 ci=0 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->vote  yes=True              ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=1     ,                    , FLWR  , 1    ,                                  , li=1 lt=1          , FLWR  , 1    ,          , li=1 lt=1          
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=1     , ci=1               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=1 lt=1 ec=1 ci=1 , li=2               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=1 lt=1 ec=1 ci=1 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=2     ,                    , FLWR  , 1    ,                                  , li=2               , FLWR  , 1    ,          , li=2               
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=2     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD DONE                         , ci=2               , FLWR  , 1    ,                                  , ci=2               , FLWR  , 1    ,          , ci=2               
+  n-1  , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=2 lt=1 ec=1 ci=2 , li=3               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=2 lt=1 ec=1 ci=2 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=2     ,                    , FLWR  , 1    ,                                  , li=3               , FLWR  , 1    ,          , li=3               
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=3     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=2     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=3     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD DONE                         , ci=3               , FLWR  , 1    ,                                  , ci=3               , FLWR  , 1    ,          , ci=3               
+  n-1  , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=3 lt=1 ec=1 ci=3 , li=4               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=3 lt=1 ec=1 ci=3 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=3     ,                    , FLWR  , 1    ,                                  , li=4               , FLWR  , 1    ,          , li=4               
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=4     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=3     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=4     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD DONE                         , ci=4               , FLWR  , 1    ,                                  , ci=4               , FLWR  , 1    ,          , ci=4               
+  n-1  , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=4 lt=1 ec=1 ci=4 , li=5               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=4 lt=1 ec=1 ci=4 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=4     ,                    , FLWR  , 1    ,                                  , li=5               , FLWR  , 1    ,          , li=5               
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=5     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=4     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=5     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD DONE                         , ci=5               , FLWR  , 1    ,                                  , ci=5               , FLWR  , 1    ,          , ci=5               
+  n-1  , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-2 li=5 lt=1 ec=1 ci=5 , li=6               , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , entries->n-3 li=5 lt=1 ec=1 ci=5 ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=5     ,                    , FLWR  , 1    ,                                  , li=6               , FLWR  , 1    ,          , li=6               
+  n-1  , LEAD  , 1    , n-2->ent_reply  ok=True mi=6     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=5     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , n-3->ent_reply  ok=True mi=6     ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-1  , LEAD  , 1    , CMD DONE                         , ci=6               , FLWR  , 1    ,                                  , ci=6               , FLWR  , 1    ,          , ci=6               
+  n-1  , FLWR  , 1    , NEW ROLE                         ,                    , FLWR  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , CNDI  , 1    , NEW ROLE                         , t=2                , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , CNDI  , 1    ,                                  ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , CNDI  , 1    , give_vote->n-1 term=2 li=6 lt=2  ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , CNDI  , 1    , give_vote->n-3 term=2 li=6 lt=2  ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , CNDI  , 1    , n-3->vote  yes=True              ,                    , FLWR  , 1    ,          , t=2                
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , NEW ROLE                         , li=7 lt=2          , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-1 li=6 lt=1 ec=1 ci=6 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-3 li=6 lt=1 ec=1 ci=6 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=7     ,                    , FLWR  , 1    ,          , li=7 lt=2          
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , CMD START                        , ci=7               , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-3 li=7 lt=2 ec=1 ci=7 , li=8               , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=8     ,                    , FLWR  , 1    ,          , li=8               
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , CMD DONE                         , ci=8               , FLWR  , 1    ,          , ci=8               
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=8     ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , CMD START                        ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-3 li=8 lt=2 ec=1 ci=8 , li=9               , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=9     ,                    , FLWR  , 1    ,          , li=9               
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , CMD DONE                         , ci=9               , FLWR  , 1    ,          , ci=9               
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=9     ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-1 li=9 lt=2 ec=0 ci=9 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  , t=2                , LEAD  , 1    , n-1->ent_reply  ok=False mi=6    ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-3 li=9 lt=2 ec=0 ci=9 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , n-3->ent_reply  ok=True mi=9     ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-1 li=6 lt=1 ec=1 ci=9 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  , li=7 lt=2 ci=7     , LEAD  , 1    , n-1->ent_reply  ok=True mi=7     ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  ,                    , LEAD  , 1    , entries->n-1 li=7 lt=2 ec=2 ci=9 ,                    , FLWR  , 1    ,          ,                    
+  n-2  , FLWR  , 1    ,                                  , li=9 ci=9          , LEAD  , 1    , n-1->ent_reply  ok=True mi=9     ,                    , FLWR  , 1    ,          ,                    

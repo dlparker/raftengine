@@ -1,0 +1,21 @@
+** test_message_errors
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1      | n-1                | n-2   | n-2  | n-2      | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op       | delta              | role  | net  | op       | delta              | role  | net  | op                               | delta              |
+|  n-1  | FLWR  | 1    | STARTED  | t=0 lt=0 li=0 ci=0 | FLWR  | 1    | STARTED  | t=0 lt=0 li=0 ci=0 | FLWR  | 1    | STARTED                          | t=0 lt=0 li=0 ci=0 |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | NEW ROLE                         | t=1                |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | give_vote->n-1 term=1 li=0 lt=1  |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | give_vote->n-2 term=1 li=0 lt=1  |                    |
+|  n-3  | FLWR  | 1    |          | t=1                | FLWR  | 1    |          | t=1                | CNDI  | 1    | n-1->vote  yes=True              |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | NEW ROLE                         | li=1 lt=1          |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-1 li=0 lt=0 ec=1 ci=0 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-2 li=0 lt=0 ec=1 ci=0 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | n-2->vote  yes=True              |                    |
+|  n-3  | FLWR  | 1    |          | li=1 lt=1          | FLWR  | 1    |          | li=1 lt=1          | LEAD  | 1    | n-1->ent_reply  ok=True mi=1     |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=1     | ci=1               |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-1 li=1 lt=1 ec=0 ci=1 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-2 li=1 lt=1 ec=0 ci=1 |                    |
+|  n-3  | FLWR  | 1    |          | ci=1               | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-1 li=1 lt=1 ec=0 ci=1 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-2 li=1 lt=1 ec=0 ci=1 |                    |
+|  n-1  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    |                                  |                    |
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

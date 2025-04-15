@@ -1,0 +1,108 @@
+* Test from file tests/test_commands_1.py
+
+ This runs commands using highly granular control of test servers 
+    so that basic bugs in the first command processing will show up at a detailed 
+    level. Timers are disabled.
+    
+
+** Initial election, normal
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1      | n-1                | n-2   | n-2  | n-2      | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op       | delta              | role  | net  | op       | delta              | role  | net  | op                               | delta              |
+|  n-1  | FLWR  | 1    | STARTED  | t=0 lt=0 li=0 ci=0 | FLWR  | 1    | STARTED  | t=0 lt=0 li=0 ci=0 | FLWR  | 1    | STARTED                          | t=0 lt=0 li=0 ci=0 |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | NEW ROLE                         | t=1                |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | give_vote->n-1 term=1 li=0 lt=1  |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | CNDI  | 1    | give_vote->n-2 term=1 li=0 lt=1  |                    |
+|  n-3  | FLWR  | 1    |          | t=1                | FLWR  | 1    |          | t=1                | CNDI  | 1    | n-1->vote  yes=True              |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | NEW ROLE                         | li=1 lt=1          |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-1 li=0 lt=0 ec=1 ci=0 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | entries->n-2 li=0 lt=0 ec=1 ci=0 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | n-2->vote  yes=True              |                    |
+|  n-3  | FLWR  | 1    |          | li=1 lt=1          | FLWR  | 1    |          | li=1 lt=1          | LEAD  | 1    | n-1->ent_reply  ok=True mi=1     |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |          |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=1     | ci=1               |
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Run one command, normal sequence till leader commit
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1 | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op  | delta              | role  | net  | op  | delta              | role  | net  | op                               | delta              |
+|  n-3  | FLWR  | 1    |     | t=1 lt=1 li=1 ci=0 | FLWR  | 1    |     | t=1 lt=1 li=1 ci=0 | LEAD  | 1    | CMD START                        | t=1 lt=1 li=1 ci=1 |
+|  n-3  | FLWR  | 1    |     |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=1 lt=1 ec=1 ci=1 | li=2               |
+|  n-3  | FLWR  | 1    |     | li=2               | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=True mi=2     |                    |
+|  n-3  | FLWR  | 1    |     |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=1 lt=1 ec=1 ci=1 |                    |
+|  n-3  | FLWR  | 1    |     |                    | FLWR  | 1    |     | li=2               | LEAD  | 1    | n-2->ent_reply  ok=True mi=2     |                    |
+|  n-3  | FLWR  | 1    |     |                    | FLWR  | 1    |     |                    | LEAD  | 1    | CMD DONE                         | ci=2               |
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Finish command by notifying followers of commit with heartbeat
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1 | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op  | delta              | role  | net  | op  | delta              | role  | net  | op                               | delta              |
+|  n-3  | FLWR  | 1    |     | t=1 lt=1 li=2 ci=0 | FLWR  | 1    |     | t=1 lt=1 li=2 ci=0 | LEAD  | 1    | entries->n-1 li=2 lt=1 ec=0 ci=2 | t=1 lt=1 li=2 ci=2 |
+|  n-3  | FLWR  | 1    |     |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=2 lt=1 ec=0 ci=2 |                    |
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Trying to run command at follower, looking for redirect
+----------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1        | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3 | n-3                |
+| node  | role  | net  | op         | delta              | role  | net  | op  | delta              | role  | net  | op  | delta              |
+|  n-1  | FLWR  | 1    | CMD START  | t=1 lt=1 li=2 ci=2 | FLWR  | 1    |     | t=1 lt=1 li=2 ci=2 | LEAD  | 1    |     | t=1 lt=1 li=2 ci=2 |
+|  n-1  | FLWR  | 1    | CMD DONE   |                    | FLWR  | 1    |     |                    | LEAD  | 1    |     |                    |
+----------------------------------------------------------------------------------------------------------------------------------------------
+** Pushing one follower to candidate, then trying command to it, looking for retry
+----------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1        | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3 | n-3                |
+| node  | role  | net  | op         | delta              | role  | net  | op  | delta              | role  | net  | op  | delta              |
+|  n-1  | CNDI  | 1    | NEW ROLE   | t=2 lt=1 li=2 ci=2 | FLWR  | 1    |     | t=1 lt=1 li=2 ci=2 | LEAD  | 1    |     | t=1 lt=1 li=2 ci=2 |
+|  n-1  | CNDI  | 1    | CMD START  |                    | FLWR  | 1    |     |                    | LEAD  | 1    |     |                    |
+|  n-1  | CNDI  | 1    | CMD DONE   |                    | FLWR  | 1    |     |                    | LEAD  | 1    |     |                    |
+----------------------------------------------------------------------------------------------------------------------------------------------
+** Pushing Leader to send heartbeats, after forcing candidate's term back down
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1       | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op        | delta              | role  | net  | op  | delta              | role  | net  | op                               | delta              |
+|  n-3  | CNDI  | 1    |           | t=0 lt=1 li=2 ci=2 | FLWR  | 1    |     | t=1 lt=1 li=2 ci=2 | LEAD  | 1    | n-1->ent_reply  ok=True mi=2     | t=1 lt=1 li=2 ci=2 |
+|  n-3  | CNDI  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=2 lt=1 ec=0 ci=2 |                    |
+|  n-1  | CNDI  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    |                                  |                    |
+|  n-1  | FLWR  | 1    | NEW ROLE  | t=1                | FLWR  | 1    |     |                    | LEAD  | 1    |                                  |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=2     |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=2 lt=1 ec=0 ci=2 |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=True mi=2     |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=2     |                    |
+|  n-1  | FLWR  | 1    | NEW ROLE  |                    | FLWR  | 1    |     |                    | LEAD  | 1    |                                  |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=2 lt=1 ec=0 ci=2 |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=True mi=2     |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=2 lt=1 ec=0 ci=2 |                    |
+|  n-3  | FLWR  | 1    |           |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=2     |                    |
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Crashing one follower, then running command to ensure it works with only one follower
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1    | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op     | delta              | role  | net  | op  | delta              | role  | net  | op                               | delta              |
+|  n-1  | FLWR  | 1    | CRASH  | t=1 lt=1 li=2 ci=2 | FLWR  | 1    |     | t=1 lt=1 li=2 ci=2 | LEAD  | 1    |                                  | t=1 lt=1 li=2 ci=2 |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | CMD START                        |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=2 lt=1 ec=1 ci=2 | li=3               |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=2 lt=1 ec=1 ci=2 |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     | li=3               | LEAD  | 1    | n-2->ent_reply  ok=True mi=3     |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | CMD DONE                         | ci=3               |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     | ci=3               | LEAD  | 1    | CMD START                        |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=3 lt=1 ec=1 ci=3 | li=4               |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=3     |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     | li=4               | LEAD  | 1    | n-2->ent_reply  ok=True mi=4     |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | CMD DONE                         | ci=4               |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     | ci=4               | LEAD  | 1    | n-2->ent_reply  ok=True mi=4     |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=4 lt=1 ec=0 ci=4 |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=4 lt=1 ec=0 ci=4 |                    |
+|  n-3  | FLWR  | 1    |        |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=4     |                    |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Recovering follower, then pushing hearbeat to get it to catch up
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| event | n-1   | n-1  | n-1      | n-1                | n-2   | n-2  | n-2 | n-2                | n-3   | n-3  | n-3                              | n-3                |
+| node  | role  | net  | op       | delta              | role  | net  | op  | delta              | role  | net  | op                               | delta              |
+|  n-1  | FLWR  | 1    | RESTART  | t=1 lt=1 li=2 ci=2 | FLWR  | 1    |     | t=1 lt=1 li=4 ci=4 | LEAD  | 1    |                                  | t=1 lt=1 li=4 ci=4 |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=4 lt=1 ec=0 ci=4 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=False mi=2    |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-2 li=4 lt=1 ec=0 ci=4 |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | n-2->ent_reply  ok=True mi=4     |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=2 lt=1 ec=1 ci=4 |                    |
+|  n-3  | FLWR  | 1    |          | li=3 ci=3          | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=True mi=3     |                    |
+|  n-3  | FLWR  | 1    |          |                    | FLWR  | 1    |     |                    | LEAD  | 1    | entries->n-1 li=3 lt=1 ec=1 ci=4 |                    |
+|  n-3  | FLWR  | 1    |          | li=4 ci=4          | FLWR  | 1    |     |                    | LEAD  | 1    | n-1->ent_reply  ok=True mi=4     |                    |
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
