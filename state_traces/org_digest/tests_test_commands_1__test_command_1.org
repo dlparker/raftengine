@@ -1,9 +1,9 @@
-* Test from file tests/test_commands_1.py
+* Test test_command_1 from file tests/test_commands_1.py
 
 
     This runs "commands" using highly granular control of test servers 
     so that basic bugs in the first command processing will show up at a detailed 
-    level. It also tests that invalid command attemps receive the right response.
+    level. It also tests that invalid command attempts receive the right response.
     Finally, it validates that crashing a follower, running a command, and recovering
     the follower eventually results in the crashed follower being in sync.
     
@@ -13,7 +13,7 @@
     2. Sending a command request to a candidate, which should result in a "retry", meaning
        that the cluster is currently unable to process commands, so a later retry is recommended
 
-    The second test is performed by doing some artifical manupulation of the state of one of the
+    The second test is performed by doing some artificial manipulation of the state of one of the
     nodes. It is pushed to become a candidate, which will caused it to increase its term. After
     the command is rejected with a retry, the candidate node is forced back to follower mode and
     its term is artificially adjusted down to zero so that it will accept the current leader.
@@ -35,23 +35,23 @@
 |  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | NEW ROLE                         | t=1       |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-1 term=1 li=0 lt=1  |           |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           |
-|  N-3  | FLWR  |          | t=1       | FLWR  |          | t=1       | CNDI  | N-1->vote  yes=True              |           |
+|  N-3  | FLWR  |          | t=1       | FLWR  |          | t=1       | CNDI  | N-1->vote-> yes=True             |           |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | NEW ROLE                         | lt=1 li=1 |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-1 li=0 lt=0 ec=1 ci=0 |           |
 |  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->vote  yes=True              |           |
-|  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |          | lt=1 li=1 | LEAD  | N-1->ent_reply  ok=True mi=1     |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply  ok=True mi=1     | ci=1      |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->vote-> yes=True             |           |
+|  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |          | lt=1 li=1 | LEAD  | N-1->ent_reply-> ok=True mi=1    |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply-> ok=True mi=1    | ci=1      |
 ------------------------------------------------------------------------------------------------------------------------------
 ** Run one command, normal sequence till leader commit
 --------------------------------------------------------------------------------------------------------
 | event | N-1   | N-1 | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                              | N-3   |
 | node  | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                               | Delta |
 |  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | CMD START                        |       |
-|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=1 | lt=1  |
-|  N-3  | FLWR  |     | lt=1  | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=True mi=2     |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=1 | li=2  |
+|  N-3  | FLWR  |     | li=2  | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=2    |       |
 |  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | entries->N-2 li=1 lt=1 ec=1 ci=1 |       |
-|  N-3  | FLWR  |     |       | FLWR  |     | lt=1  | LEAD  | N-2->ent_reply  ok=True mi=2     |       |
+|  N-3  | FLWR  |     |       | FLWR  |     | li=2  | LEAD  | N-2->ent_reply-> ok=True mi=2    |       |
 |  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | CMD DONE                         | ci=2  |
 --------------------------------------------------------------------------------------------------------
 ** Finish command by notifying followers of commit with heartbeat
@@ -77,37 +77,37 @@
 |  N-1  | CNDI  | CMD DONE   |       | FLWR  |     |       | LEAD  |     |       |
 ----------------------------------------------------------------------------------
 ** Pushing Leader to send heartbeats, after forcing candidate's term back down
---------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1       | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                              | N-3   |
-| node  | Role  | Op        | Delta | Role  | Op  | Delta | Role  | Op                               | Delta |
-|  N-3  | CNDI  |           |       | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=True mi=2     |       |
-|  N-3  | CNDI  |           |       | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=0 ci=2 |       |
-|  N-1  | CNDI  |           |       | FLWR  |     |       | LEAD  |                                  |       |
-|  N-1  | FLWR  | NEW ROLE  |       | FLWR  |     |       | LEAD  |                                  |       |
-|  N-3  | FLWR  |           |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=2     |       |
-|  N-3  | FLWR  |           |       | FLWR  |     |       | LEAD  | entries->N-2 li=2 lt=1 ec=0 ci=2 |       |
-|  N-3  | FLWR  |           |       | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=True mi=2     |       |
-|  N-3  | FLWR  |           |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=2     |       |
---------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1                                | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                              | N-3   |
+| node  | Role  | Op                                 | Delta | Role  | Op  | Delta | Role  | Op                               | Delta |
+|  N-3  | CNDI  |                                    |       | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=2    |       |
+|  N-3  | CNDI  |                                    |       | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=0 ci=2 |       |
+|  N-1  | CNDI  | N-3->entries-> li=2 lt=1 ec=0 ci=2 |       | FLWR  |     |       | LEAD  |                                  |       |
+|  N-1  | FLWR  | NEW ROLE                           |       | FLWR  |     |       | LEAD  |                                  |       |
+|  N-3  | FLWR  |                                    |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=2    |       |
+|  N-3  | FLWR  |                                    |       | FLWR  |     |       | LEAD  | entries->N-2 li=2 lt=1 ec=0 ci=2 |       |
+|  N-3  | FLWR  |                                    |       | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=2    |       |
+|  N-3  | FLWR  |                                    |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=2    |       |
+---------------------------------------------------------------------------------------------------------------------------------------
 ** Crashing one follower, then running command to ensure it works with only one follower
 -----------------------------------------------------------------------------------------------------------
 | event | N-1   | N-1    | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                              | N-3   |
 | node  | Role  | Op     | Delta | Role  | Op  | Delta | Role  | Op                               | Delta |
 |  N-1  | FLWR  | CRASH  |       | FLWR  |     |       | LEAD  |                                  |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | CMD START                        |       |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=2 | lt=1  |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=2 | li=3  |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=2 lt=1 ec=1 ci=2 |       |
-|  N-3  | FLWR  |        |       | FLWR  |     | lt=1  | LEAD  | N-2->ent_reply  ok=True mi=3     |       |
+|  N-3  | FLWR  |        |       | FLWR  |     | li=3  | LEAD  | N-2->ent_reply-> ok=True mi=3    |       |
 |  N-3  | FLWR  |        |       | FLWR  |     | ci=3  | LEAD  | CMD DONE                         | ci=3  |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | CMD START                        |       |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=3 lt=1 ec=1 ci=3 | lt=1  |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=3     |       |
-|  N-3  | FLWR  |        |       | FLWR  |     | lt=1  | LEAD  | N-2->ent_reply  ok=True mi=4     |       |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=3 lt=1 ec=1 ci=3 | li=4  |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=3    |       |
+|  N-3  | FLWR  |        |       | FLWR  |     | li=4  | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
 |  N-3  | FLWR  |        |       | FLWR  |     | ci=4  | LEAD  | CMD DONE                         | ci=4  |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=4     |       |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-1 li=4 lt=1 ec=0 ci=4 |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=4 lt=1 ec=0 ci=4 |       |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=4     |       |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
 -----------------------------------------------------------------------------------------------------------
 ** Recovering follower, then pushing hearbeat to get it to catch up
 -----------------------------------------------------------------------------------------------------------------
@@ -115,19 +115,18 @@
 | node  | Role  | Op       | Delta     | Role  | Op  | Delta | Role  | Op                               | Delta |
 |  N-1  | FLWR  | RESTART  |           | FLWR  |     |       | LEAD  |                                  |       |
 |  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | entries->N-1 li=4 lt=1 ec=0 ci=4 |       |
-|  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=False mi=2    |       |
+|  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=False mi=2   |       |
 |  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | entries->N-2 li=4 lt=1 ec=0 ci=4 |       |
-|  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | N-2->ent_reply  ok=True mi=4     |       |
+|  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
 |  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=4 |       |
-|  N-3  | FLWR  |          | lt=1 ci=3 | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=True mi=3     |       |
+|  N-3  | FLWR  |          | li=3 ci=3 | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=3    |       |
 |  N-3  | FLWR  |          |           | FLWR  |     |       | LEAD  | entries->N-1 li=3 lt=1 ec=1 ci=4 |       |
-|  N-3  | FLWR  |          | lt=1 ci=4 | FLWR  |     |       | LEAD  | N-1->ent_reply  ok=True mi=4     |       |
+|  N-3  | FLWR  |          | li=4 ci=4 | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=4    |       |
 -----------------------------------------------------------------------------------------------------------------
 
 
-
 * Condensed Trace Table Legend
-All the items in this table labeled N-X are placeholders for actual node id values,
+All the items in these legends labeled N-X are placeholders for actual node id values,
 actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the cluster. Yes, One based, not zero.
 
 | Column Label | Description     | Details                                                                                        |
@@ -166,6 +165,24 @@ Any item in this column indicates that the value of that item has changed since 
 | li=X | prevLogIndex has changed to X, indicating a log record has been stored                                                          |
 | ci=X | Indicates commitIndex has changed to X, meaning log record has been committed, and possibly applied depending on type of record |
 | n=X  | Indicates a change in networks status, X=1 means re-joined majority network, X=2 means partitioned to minority network          |
+
+** Notes about interpreting traces
+The way in which the traces are collected can occasionally obscure what is going on. A case in point is the commit of records at followers.
+The commit process is triggered by an append_entries message arriving at the follower with a commitIndex value that exceeds the local
+commit index, and that matches a record in the local log. This starts the commit process AFTER the response message is sent. You might
+be expecting it to be prior to sending the response, in bound, as is often said. Whether this is expected behavior is not called out
+as an element of the Raft protocol. It is certainly not required, however, as the follower doesn't report the commit index back to the
+leader.
+
+The definition of the commit state for a record is that a majority of nodes (leader and followers) have saved the record. Once
+the leader detects this it applies and commits the record. At some point it will send another append_entries to the followers and they
+will apply and commit. Or, if the leader dies before doing this, the next leader will commit by implication when it sends a term start
+log record.
+
+So when you are looking at the traces, you should not expect to see the commit index increas at a follower until some other message
+traffic occurs, because the tracing function only checks the commit index at message transmission boundaries.
+
+
 
 
 

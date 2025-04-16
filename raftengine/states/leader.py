@@ -115,6 +115,7 @@ class Leader(BaseState):
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()
         self.command_waiters = dict()
+        self.max_entries_per_message = 9 # should this be configurable?
                 
     async def start(self):
         await super().start()
@@ -298,8 +299,9 @@ class Leader(BaseState):
         tracker.matchIndex = message.maxIndex
         send_start_index = tracker.matchIndex + 1
         send_end_index = await self.log.get_last_index()
-        if send_end_index - send_start_index > 10:
-            send_end_index = send_start_index + 10
+        # we want to send max of XXX, math is inclusive of both start and end
+        if send_end_index - send_start_index > self.max_entries_per_message:
+            send_end_index = send_start_index + self.max_entries_per_message
         tracker.nextIndex = send_end_index + 1
         tracker.lastSentIndex = send_end_index
         entries = []
