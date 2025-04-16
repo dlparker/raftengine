@@ -98,13 +98,13 @@
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=2 | li=3  |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=2 lt=1 ec=1 ci=2 |       |
 |  N-3  | FLWR  |        |       | FLWR  |     | li=3  | LEAD  | N-2->ent_reply-> ok=True mi=3    |       |
-|  N-3  | FLWR  |        |       | FLWR  |     | ci=3  | LEAD  | CMD DONE                         | ci=3  |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | CMD START                        |       |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | CMD DONE                         | ci=3  |
+|  N-3  | FLWR  |        |       | FLWR  |     | ci=3  | LEAD  | CMD START                        |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=3 lt=1 ec=1 ci=3 | li=4  |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=3    |       |
 |  N-3  | FLWR  |        |       | FLWR  |     | li=4  | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
-|  N-3  | FLWR  |        |       | FLWR  |     | ci=4  | LEAD  | CMD DONE                         | ci=4  |
-|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
+|  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | CMD DONE                         | ci=4  |
+|  N-3  | FLWR  |        |       | FLWR  |     | ci=4  | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-1 li=4 lt=1 ec=0 ci=4 |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | entries->N-2 li=4 lt=1 ec=0 ci=4 |       |
 |  N-3  | FLWR  |        |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=4    |       |

@@ -55,11 +55,11 @@ async def test_partition_1(cluster_maker):
     await cluster.run_sequence(sequence)
     
 
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
-    assert ts_4.hull.state.leader_uri == uri_1
-    assert ts_5.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    assert ts_4.get_leader_uri() == uri_1
+    assert ts_5.get_leader_uri() == uri_1
 
     logger.info('-------- Election done, saving a command record')
 
@@ -131,7 +131,7 @@ async def test_partition_1(cluster_maker):
     cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats")
     await cluster.unsplit()
     logger.info('--------- Sending heartbeats ----')
-    await ts_1.hull.state.send_heartbeats()
+    await ts_1.send_heartbeats()
     # gonna send four
     sends = []
     for i in range(4):
@@ -236,9 +236,9 @@ async def test_partition_2_leader(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
     cluster.test_trace.start_subtest("Election complete, running a command ")
     logger.info('------------------------ Election done')
@@ -267,9 +267,9 @@ async def test_partition_2_leader(cluster_maker):
     cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
     await ts_2.start_campaign()
     await cluster.run_election()
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.get_state_code() == "LEADER"
-    assert ts_3.hull.state.leader_uri == uri_2
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_state_code() == "LEADER"
+    assert ts_3.get_leader_uri() == uri_2
     cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
@@ -278,12 +278,12 @@ async def test_partition_2_leader(cluster_maker):
     await cluster.unsplit()
     logger.info('------------------------ Sending heartbeats from out of date leader')
     cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign")
-    await ts_1.hull.state.send_heartbeats()
+    await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    assert ts_1.hull.get_state_code() == "FOLLOWER"
+    assert ts_1.get_state_code() == "FOLLOWER"
     # let ex-leader catch up
     cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader")
-    await ts_2.hull.state.send_heartbeats()
+    await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.operations.total == 2
     cluster.test_trace.end_subtest()

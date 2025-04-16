@@ -38,9 +38,9 @@ async def test_normal_election_sequence_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
 
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
 
 
 async def test_normal_election_sequence_2(cluster_maker):
@@ -56,11 +56,11 @@ async def test_normal_election_sequence_2(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
 
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
-    assert ts_4.hull.state.leader_uri == uri_1
-    assert ts_5.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    assert ts_4.get_leader_uri() == uri_1
+    assert ts_5.get_leader_uri() == uri_1
 
 async def test_normal_command_sequence_1(cluster_maker):
     cluster = cluster_maker(3)
@@ -75,9 +75,9 @@ async def test_normal_command_sequence_1(cluster_maker):
     sequence1 = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence1)
 
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
 
     sequence2 = SNormalCommand(cluster, "add 1", 1)
     result = await cluster.run_sequence(sequence2)
@@ -107,9 +107,9 @@ async def test_partial_sequences_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
     for i in range(5):
@@ -140,7 +140,7 @@ async def test_partial_sequences_1(cluster_maker):
 
     logger.info('------------------------ Restoring network and waiting for ts_1 to catch up')
     ts_1.unblock_network()
-    await ts_2.hull.state.send_heartbeats()
+    await ts_2.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.1 and ts_1.operations.total  != ts_2.operations.total:
         await asyncio.sleep(0.0001)

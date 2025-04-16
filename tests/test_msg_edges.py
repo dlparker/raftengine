@@ -41,9 +41,9 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.hull.get_state_code() == "LEADER"
-    assert ts_1.hull.state.leader_uri == uri_3
-    assert ts_2.hull.state.leader_uri == uri_3
+    assert ts_3.get_state_code() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_3
+    assert ts_2.get_leader_uri() == uri_3
 
     # Get the leader to send out heartbeats, but
     # don't allow receives to get them yet, then
@@ -52,11 +52,11 @@ async def test_restart_during_heartbeat(cluster_maker):
     # of reply messages that it doesn't expect, and
     # should show up in hull log
     ts_3.hull.message_problem_history = []
-    await ts_3.hull.state.send_heartbeats()
+    await ts_3.send_heartbeats()
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_1.in_messages) == 1
     assert len(ts_2.in_messages) == 1
-    logger.debug("about to demote %s %s", uri_3, ts_3.hull.state)
+    logger.debug("about to demote %s %s", uri_3, ts_3.get_state())
     await ts_3.do_demote_and_handle()
     await cluster.deliver_all_pending()
     assert len(ts_3.hull.message_problem_history) == 2
@@ -73,9 +73,9 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.hull.get_state_code() == "LEADER"
-    assert ts_1.hull.state.leader_uri == uri_3
-    assert ts_2.hull.state.leader_uri == uri_3
+    assert ts_3.get_state_code() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_3
+    assert ts_2.get_leader_uri() == uri_3
     # now just poke a random message in there to get
     # at the code that is very hard to arrange by
     # tweaking states, a vote response that isn't expected
@@ -116,9 +116,9 @@ async def test_slow_voter(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.hull.get_state_code() == "LEADER"
-    assert ts_1.hull.state.leader_uri == uri_3
-    assert ts_2.hull.state.leader_uri == uri_3
+    assert ts_3.get_state_code() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_3
+    assert ts_2.get_leader_uri() == uri_3
 
     # Now get an re-election started on current leader,
     # but block the follower's votes, then trigger the
@@ -135,9 +135,9 @@ async def test_slow_voter(cluster_maker):
     assert msg is not None
     assert len(ts_1.out_messages) == 1
     assert len(ts_2.out_messages) == 1
-    old_term = await ts_3.hull.log.get_term()
-    await ts_3.hull.state.start_campaign()
-    assert old_term + 1 == await ts_3.hull.log.get_term()
+    old_term = await ts_3.log.get_term()
+    await ts_3.start_campaign()
+    assert old_term + 1 == await ts_3.log.get_term()
     # this should be a stale vote
     msg = await ts_1.do_next_out_msg()
     msg = await ts_3.do_next_in_msg()
@@ -154,7 +154,7 @@ async def test_slow_voter(cluster_maker):
     # then two outs from them to get their new votes
     # then two ins to candiate and the first one should
     # settle the election
-    new_term = await ts_3.hull.log.get_term()
+    new_term = await ts_3.log.get_term()
     msg = await ts_3.do_next_out_msg()
     assert msg.term == new_term
     msg = await ts_3.do_next_out_msg()
@@ -172,12 +172,12 @@ async def test_slow_voter(cluster_maker):
     msg = await ts_3.do_next_in_msg()
     assert msg.term == new_term
     assert msg.vote == True
-    assert ts_3.hull.get_state_code() == "LEADER"
+    assert ts_3.get_state_code() == "LEADER"
     msg = await ts_3.do_next_in_msg()
     assert msg.term == new_term
     assert msg.vote == True
-    assert ts_1.hull.state.leader_uri == uri_3
-    assert ts_2.hull.state.leader_uri == uri_3
+    assert ts_1.get_leader_uri() == uri_3
+    assert ts_2.get_leader_uri() == uri_3
 
 
 async def test_message_errors(cluster_maker):
@@ -205,14 +205,14 @@ async def test_message_errors(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.hull.get_state_code() == "LEADER"
-    assert ts_1.hull.state.leader_uri == uri_3
-    assert ts_2.hull.state.leader_uri == uri_3
+    assert ts_3.get_state_code() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_3
+    assert ts_2.get_leader_uri() == uri_3
     
     ts_1.hull.explode_on_message_code = AppendEntriesMessage.get_code()
     
     ts_1.hull.message_problem_history = []
-    await ts_3.hull.state.send_heartbeats()
+    await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()
@@ -222,7 +222,7 @@ async def test_message_errors(cluster_maker):
 
     ts_1.hull.corrupt_message_with_code = AppendEntriesMessage.get_code()
     ts_1.hull.message_problem_history = []
-    await ts_3.hull.state.send_heartbeats()
+    await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()

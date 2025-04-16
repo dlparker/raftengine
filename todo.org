@@ -2,12 +2,16 @@
 
 * Protocol
 
-1. [] Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
+1. Need to implement lastApplied, and make sure that commit index is set before command is run. Currently
+   I am using commitIndex as though it were last applied. The idea that commit comes before apply is strange
+   to me, but that is what it says. Prolly need some tests for failure between commit index incr and
+   last applied incr.
+2. [] Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
   https://github.com/ongardie/dissertation?tab=readme-ov-file
   https://decentralizedthoughts.github.io/2020-12-12-raft-liveness-full-omission/
-  Want to implement them as opt in features, segregate tests
-2. [] Cluster membership change protocol
-3. [] Snapshots
+  Want to implement them as opt in features, segregate tests 
+3. [] Cluster membership change protocol
+4. [] Snapshots
 
 * Test questions and issues and Demo issues
 
