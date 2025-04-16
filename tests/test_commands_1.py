@@ -22,8 +22,8 @@ from dev_tools.servers import setup_logging, log_config
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
 #log_config = setup_logging(extra_logging, default_level="debug")
-#default_level="debug"
-default_level="warn"
+default_level="debug"
+#default_level="warn"
 log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -31,7 +31,7 @@ async def test_command_1(cluster_maker):
     """
     This runs "commands" using highly granular control of test servers 
     so that basic bugs in the first command processing will show up at a detailed 
-    level. It also tests that invalid command attemps receive the right response.
+    level. It also tests that invalid command attempts receive the right response.
     Finally, it validates that crashing a follower, running a command, and recovering
     the follower eventually results in the crashed follower being in sync.
     
@@ -41,7 +41,7 @@ async def test_command_1(cluster_maker):
     2. Sending a command request to a candidate, which should result in a "retry", meaning
        that the cluster is currently unable to process commands, so a later retry is recommended
 
-    The second test is performed by doing some artifical manupulation of the state of one of the
+    The second test is performed by doing some artificial manipulation of the state of one of the
     nodes. It is pushed to become a candidate, which will caused it to increase its term. After
     the command is rejected with a retry, the candidate node is forced back to follower mode and
     its term is artificially adjusted down to zero so that it will accept the current leader.
@@ -169,10 +169,10 @@ async def test_command_1(cluster_maker):
 async def test_command_sqlite_1(cluster_maker):
     """
     Test election and state machine command operations while using
-    a sqlite implementation of the LogAPI. Most other tests use
-    an in memory log implemetation, so this test is mostly focused
+    a SQLite implementation of the Logo's. Most other tests use
+    an in memory log implementation, so this test is mostly focused
     on whether the basic logging operations work correctly against
-    a real db. If another test is using sqlite and has problems,
+    a real db. If another test is using SQLite and has problems,
     this test might help call out something basic.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
@@ -224,6 +224,9 @@ async def double_leader_inner(cluster, discard):
     This function is called once by each of two actual test functions. Once with
     the "discard" flag False and once with it True.
 
+    test_command_2_leaders_1 runs with discard = True
+
+    test_command_2_leaders_2  runs with discard = False
 
     The sequence begins with a normal election, followed by a state machine command
     which all of the nodes replicate.
@@ -260,14 +263,10 @@ async def double_leader_inner(cluster, discard):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    if discard is True:
-        t_func = test_command_2_leaders_1
-    else:
-        t_func = test_command_2_leaders_2
     
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=t_func.__doc__)
+                                     test_doc_string=double_leader_inner.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -434,19 +433,16 @@ async def test_command_2_leaders_3(cluster_maker):
     assert command_result.redirect == uri_2
     
 async def test_command_after_heal_1(cluster_maker):
-    # The goal is for one a candidate to receive an
-    # append entries message from a lower of a lower term.
-    # This can happen when a network partition resolves
-    # before the pre-partition leader has resigned, where
-    # the partition leaves the old leader connected to
-    # less than half the cluster, and the other side of the
-    # partition completes a new election before the
-    # partition heals. 
-    #
-    # Likely? I doubt it. Possible? Certainly, so code needs
-    # to exist to handle it (in the candidate state) and that
-    # path needs to be tested.
-    # 
+    """
+    The goal for this test is for a candidate to receive an append entries message from a leader of a lower term.
+    This can happen when a network partition resolves before a new election has completed and the 
+    old leader sends a heartbeat out. There wouldn't be any problem with the candidate resigning in this
+    case because everybody's log states match, but Raft is conservative on this point and requires
+    that the candidate reject an append entries of a lower term.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
 
     cluster = cluster_maker(3)
     cluster.set_configs()
@@ -454,6 +450,10 @@ async def test_command_after_heal_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_command_after_heal_1.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -462,63 +462,75 @@ async def test_command_after_heal_1(cluster_maker):
     assert ts_2.hull.state.leader_uri == uri_1
     assert ts_3.hull.state.leader_uri == uri_1
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
-    command_result = await cluster.run_command(command="add 1", timeout=1)
-    assert ts_1.operations.total == 1
-    assert ts_2.operations.total == 1
-    assert ts_3.operations.total == 1
-    logger.debug('------------------------ Correct command done')
-
-    # now simulate a split newtork with the leader
-    # getting isolated, then trigger one of the followers
-    # to start and election
-    await cluster.stop_auto_comms()
+    cluster.test_trace.start_subtest("Node 1 is leader, splitting network to isolate it")
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
-
-    logger.info('-------------- Split network done, expecting election of %s', uri_2)
+    #logger.info('-------------- Split network done, starting election of %s', uri_2)
     # now ts_2 and ts_3 are alone, have ts_2
-    # get elected
-    await ts_2.do_leader_lost()
-    await cluster.run_election()
-    assert ts_2.hull.get_state_code() == "LEADER"
-    assert ts_3.hull.state.leader_uri == uri_2
-    last_term = await ts_2.hull.log.get_term()
-    logger.info('-------------- %s elected, unspliting the network', uri_2)
-    await cluster.unsplit()
-    assert ts_1.hull.get_state_code() == "LEADER"
-    logger.info('-------------- %s reconneted, thinks it is still leader', uri_1)
-    
-    logger.info('-------------- Forcing %s to candidate, but not allowing any messages out', uri_2)
-    ts_2.block_network()
-    await ts_2.do_demote_and_handle(None)
-    assert ts_2.hull.get_state_code() == "FOLLOWER"
+    cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats")
     await ts_2.start_campaign()
     assert ts_2.hull.get_state_code() == "CANDIDATE"
-    
-    logger.info('-------------- telling old leader %s to send heartbeats, %s should reject in candidate',
-                uri_1, uri_2)
-
+    last_term = await ts_2.hull.log.get_term()
+    await cluster.unsplit()
     assert ts_1.hull.get_state_code() == "LEADER"
-    # don't deliver vote requests, it will complicate things
-    ts_2.unblock_network()
-    await ts_1.hull.state.send_heartbeats()
-    logger.info('-------------- old leader %s sent heartbeats, %s unblocked',
+    logger.info('-------------- telling reconnected old leader %s to send heartbeats, %s should reject in candidate',
                 uri_1, uri_2)
+    assert ts_1.hull.get_state_code() == "LEADER"
+    await ts_1.hull.state.send_heartbeats()
+    logger.info('-------------- old leader %s sent heartbeats', uri_1)
     await cluster.deliver_all_pending()
 
     # don't know how the election will turn out for sure, probably ts_2 will win
     # important thing is that ts_1 responded properly to higher term in response,
-    # meannig that candidate reply did its thing
-    assert await ts_1.hull.log.get_term() > last_term
+    # meaning that candidate reply did its thing
+    assert await ts_1.hull.log.get_term() == last_term
     
 async def test_follower_explodes_in_command(cluster_maker):
+    """
+    This tests that operations are correct in the case where the state machine operation at a single
+    follower experiences an error during command execution, one that does not crash the node.
+
+    The items that are tested are that
+    1. The command succeeds because the leader and one follower agree
+    2. That the follower will retry the command next time it gets a heartbeat 
+    
+
+    There is no discussion in the Raft paper about the possibility that the state machine command
+    processing could experience an error that does not crash the node, but also does not
+    allow the command to be processed. I guess they were thinking about compliled languages
+    that are more likely to crash the process on some serious bug than to detect the bug and try
+    to continue, but this is python which might well have such behavior. I guess it might not
+    then be technically a "state machine", but anything more complex than storing a value (like
+    etcd) is likely to have the possibilty of this kind of failure.
+
+    Rather than try to develop some general mechanism for dealing with this, I throw up my
+    hands and just promise to let you know if it fails at the leader. If that happens then
+    the log record is not committed, so your job is to figure out how to clear the problem condition
+    and retry.
+
+    If it happens at a single follower then that may be okay, if there was more than a quorum, since enough
+    other nodes applied it successfully that the cluster can move on even if the follower continues to
+    fail to apply. There is not yet a mechanism for reporting the error at a follower, but when there is
+    will be local to the follower, and some external action will need to be taken to allow that follower
+    to finish the commit and move on. If the follower was part of a minimum quorum, your whole cluster
+    will be blocked until you fix it.
+
+    This test fixed the simulated problem so that the first retry succeeds.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_follower_explodes_in_command.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -533,56 +545,58 @@ async def test_follower_explodes_in_command(cluster_maker):
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
+    cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command")
 
-    # now arrange for follower to blow up.
+    # The node 3 follower will blow up trying to apply command, so
+    # we use the test control sequence that allows us to specify
+    # which nodes need to make it all the way to committing the
+    # command.
     ts_3.operations.explode = True
-    #
-    # Can't use normal command for this because it waits
-    # until all followers have applied the command
-    # message, assuring that the command is done. But in
-    # this case one follower will not respond
-    await cluster.start_auto_comms()
-    command_result = None
-    async def command_runner(ts):
-        nonlocal command_result
-        logger.debug('running command in background')
-        try:
-            command_result = await ts.run_command("add 1", timeout=0.01)
-            logger.debug('running command in background done with NO error')
-        except Exception as e:
-            logger.debug('running command in background error %s', traceback.format_exc())
-            command_result = e
-            logger.debug('running command in background done with error')
-    logger.debug('------------------------ Running command ---')
+    sequence = SPartialCommand(cluster, "add 1", voters=[uri_1, uri_2])
+    command_result = await cluster.run_sequence(sequence)
     await cluster.deliver_all_pending()
-    asyncio.create_task(command_runner(ts_1))
-    await cluster.start_auto_comms()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and command_result is None:
-        await asyncio.sleep(0.0001)
-    assert command_result is not None
+
+    # make sure the command worked, at the leader and node 2
     assert command_result.result == 2
     assert ts_1.operations.total == 2
-
-    # now we need to trigger a heartbeat so that
-    # followers will see the commitIndex is higher
-    # and apply and locally commit
-    await ts_1.hull.state.send_heartbeats()
-    
-    # followers need time to run commands
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and ts_2.operations.total != 2:
-        await asyncio.sleep(0.0001)
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 1
 
+    cluster.test_trace.start_subtest("Second command succeed, but not at node3. Disarming bomb and sending hearbeats, should cause run and commit")
+    # clear the trigger and run heartbeats, node 3 should rerun command and succeed
+    ts_3.operations.explode = False
+    await ts_1.hull.state.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_3.operations.total == 2
+
 
 async def test_leader_explodes_in_command(cluster_maker):
+    """
+    This tests that operations are correct in the case where the state machine operation at 
+    the leader experiences an error during command execution, one that does not crash the node.
+
+    There is no discussion in the Raft paper about the possibility that the state machine command
+    processing could experience an error that does not crash the node, but also does not
+    allow the command to be processed. 
+
+    Rather than try to develop some general mechanism for dealing with this, I throw up my
+    hands and just promise to let you know if it fails at the leader. If that happens then
+    the log record is not committed, so your job is to figure out how to clear the problem condition
+    and retry.
+
+    This test clears the error condition so that sending heartbeats should trigger a successful retry.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal, running one command in normal fashion after election",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_leader_explodes_in_command.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -591,7 +605,6 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert ts_1.hull.state.leader_uri == uri_1
     assert ts_2.hull.state.leader_uri == uri_1
     logger.info('------------------------ Election done')
-    await cluster.start_auto_comms()
 
     command_result = await cluster.run_command("add 1", 1)
     
@@ -600,12 +613,27 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
+    cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command")
+
     # now arrange for leader to blow up.
     ts_1.operations.explode = True
-
     command_result = await cluster.run_command("add 1", timeout=0.01)
     assert command_result is not None
     assert command_result.error is not None
+    
+    cluster.test_trace.start_subtest("Leader node 1 returned an error from command request, clearing trigger and sending heartbeats to retry")
+    ts_1.operations.explode = False
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_1.operations.total < 2:
+        await asyncio.sleep(0.0001)
+    assert ts_1.operations.total == 2
+    cluster.test_trace.start_subtest("Leader node 1 retry succeeded, now need another heartbeat to trigger followers to apply and commit")
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_2.operations.total == 2
+    assert ts_3.operations.total == 2
     await cluster.stop_auto_comms()
     
 async def test_long_catchup(cluster_maker):
