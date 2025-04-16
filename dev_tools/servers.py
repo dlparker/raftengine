@@ -863,7 +863,19 @@ class PausingServer(PilotAPI):
         if self.hull is None:
             return None
         return self.hull.state
-    
+
+    async def get_term(self):
+        if self.log is None:
+            return None
+        return await self.log.get_term()
+
+    def get_leader_uri(self):
+        if self.hull is None:
+            return None
+        if self.hull.get_state_code() == "LEADER":
+            return self.uri
+        return self.hull.state.leader_uri
+        
     async def start_campaign(self):
         res =  await self.hull.start_campaign()
         test_trace = self.network.test_trace

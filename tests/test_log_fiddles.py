@@ -41,9 +41,9 @@ async def test_empty_log_1(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
     for i in range(50):
@@ -90,9 +90,9 @@ async def test_empty_log_2(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
+    assert ts_1.get_state_code() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
     # Now "crash" the a follower and clear its log
