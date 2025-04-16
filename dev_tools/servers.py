@@ -25,9 +25,9 @@ from dev_tools.sqlite_log import SqliteLog
 from raftengine.api.pilot_api import PilotAPI
 log_config = None
 
-trace_to_csv = True
+trace_to_csv = False
 digest_org = True
-digest_csv = True
+digest_csv = False
 
 def get_current_test():
     full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]
@@ -869,6 +869,9 @@ class PausingServer(PilotAPI):
         await test_trace.note_role_changed(self)
         return res
     
+    async def send_heartbeats(self):
+        return await self.hull.state.send_heartbeats()
+    
     async def do_leader_lost(self):
         await self.hull.state.leader_lost()
         test_trace = self.network.test_trace
@@ -1323,7 +1326,11 @@ class TestTrace:
         all_rows = []
         for t_index, table in enumerate(tables):
             if table.test_path:
-                all_rows.append(f"* Test from file {table.test_path}")
+                try:
+                    full_name, tfile, test_name = get_current_test()
+                except Exception:
+                    test_name = ""
+                all_rows.append(f"* Test {test_name} from file {table.test_path}")
                 all_rows.append("")
             if table.test_doc_string:
                 all_rows.append(table.test_doc_string)
