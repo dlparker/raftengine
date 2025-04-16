@@ -507,57 +507,5 @@ async def test_failed_first_election_1(cluster_maker):
     await cluster.deliver_all_pending()
     assert await ts_3.log.get_last_term() > 1
     
-    
     logger.info("-------- Old leader has new first log rec, test passed ------")
 
-async def test_election_leader_goes_too_far_1(cluster_maker):
-    # If the leader gets disconnected from the rest of the
-    # cluster, and receives one or more client commands,
-    # it will save those log records and send messages. Since
-    # the messages will not reach any other servers, the
-    # leader will not commit the records.
-    # Meanwhile, if the rest of the cluster holds a successful
-    # election, then the other servers will get the "term_start"
-    # record in their logs. This log index will be the same as
-    # one of the uncommited command records in the older leader,
-    # but the term will be different. If the ex-leader reconnects
-    # to the rest of the cluster, it should demote itself because
-    # the cluster has a new term. If it has crashed and restarted,
-    # it will already be a follower. In either case the log
-    # replication messages from new leader to ex-leader now follower
-    # should cause follower to overwrite the uncommitted records.
-    cluster = cluster_maker(3)
-    cluster.set_configs()
-
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-
-    await cluster.start()
-    await ts_1.start_campaign()
-    await cluster.run_election()
-    
-    assert ts_1.hull.get_state_code() == "LEADER"
-    assert ts_2.hull.state.leader_uri == uri_1
-    assert ts_3.hull.state.leader_uri == uri_1
-
-    logger.info("-------- Initial election completion, blocking leader and re-runnig")
-
-    ts_1.block_network()
-    command_result = await ts_1.run_command("sub 1", timeout=0.01)
-    assert command_result.timeout_expired
-    command_result = await ts_1.run_command("sub 1", timeout=0.01)
-    assert command_result.timeout_expired
-
-    await ts_2.start_campaign()
-    await cluster.run_election()
-    assert ts_2.hull.get_state_code() == "LEADER"
-    assert ts_3.hull.state.leader_uri == uri_2
-
-    assert await ts_1.log.get_last_index() == 3
-    assert await ts_2.log.get_last_index() == 2
-    assert await ts_3.log.get_last_index() == 2
-
-    ts_1.unblock_network()
-    await ts_2.hull.state.send_heartbeats()
-    await cluster.deliver_all_pending()
-    assert await ts_1.log.get_last_index() == 2

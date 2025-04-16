@@ -1,38 +1,53 @@
 
 
-
 * Protocol
 
-1.[x] Need to add persistence for votedFor, and write test where follower votes for candi with term X, crashes,
-   restarts and then rejects vote request from different candi also at Term X.
-
-2. Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
+1. [] Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
   https://github.com/ongardie/dissertation?tab=readme-ov-file
   https://decentralizedthoughts.github.io/2020-12-12-raft-liveness-full-omission/
   Want to implement them as opt in features, segregate tests
+2. [] Cluster membership change protocol
+3. [] Snapshots
 
-3. Cluster change protocol
+* Test questions and issues and Demo issues
 
-
+1. [] Is there a test where leader crashes after local commit but before sending append_entries? This checks the
+   implied commit logic that should happen when TERM_START arrives after election of a new leader.
+2. [] Need to change all direct refrences to hull to go through the PausingServer
+3. [] Draft a plan for making test controls such as timers not dependent on internal features of the real code,
+   so maybe defined a timer_gate function that is not used in normal ops but that the real code calls before
+   applying timeout function. Think about the python test controllers doing this with a different language.
+   Maybe test it by adding actual node processes?
+4. [] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
+   Earlier note with same intent:  Find all places where servers.py and tests open the white box and replace them with event
+   generation and delivery to the pilot interface.
+5. Think about building an example mangement interface for doing cluster ops such as config, snapshots.
+ 
 
 
 * Library Features:
 
-1. Find all places where servers.py and tests open the white box and replace them with event
-   generation and delivery to the pilot interface. 
-2. [x] See if leader can be simplified based on the idea that no command commits will be done without
-   a pending object to report too. Code current assumes that it could happend, which is wrong.
-3. rough out ideas for cluster class
+1. rough out ideas for cluster class
    1. Knows about "static config" provided at startup. Can be programatically changed? See thesis
    2. Knows about "dynamic config" resulting from cluster changes while running. See thesis
    3. teach candidate and leader to use it. See thesis
-4. Think about providing an optional uri map implementation for users. If provided, need to think
+2. Think about providing an optional uri map implementation for users. If provided, need to think
    about how to use it in API calls to let users know the "real" address
-5. Think deep about reporting errors in raft code, and detecting them in testing. Break something
-  such as rejected append entries and fiddle. Maybe can use substate stuff to alert to error
-  and give pilot an api entry on hull to call to get errors? This is kinda partly done in the
-  client command execution code. Maybe we need an Error class set and a local log feature?
+3. Think deep about reporting errors in raft code, and detecting them in testing. Break something
+   such as rejected append entries and fiddle. Maybe can use substate stuff to alert to error
+   and give pilot an api entry on hull to call to get errors? This is kinda partly done in the
+   client command execution code. Maybe we need an Error class set and a local log feature?
+   If event callback is implemented, this would be a good way to do it. There is code in follower
+   to collect information about handled command errors, as well as exceptions raised, so look at that
+   and include delivery of that stuff. Add stuff to test tracing for this too.
+4. Think about weather it is possible to have a pauses state in a live cluster. This would have
+   to be done carfully, but if it were ephemeral shooting nodes could clear it in emergencies.
+5. Separate from full pause, it might be enough to just disable new commands, maybe with a
+   timeout and definitely ephemeral so a restart should work.
 
+
+2. [x] See if leader can be simplified based on the idea that no command commits will be done without
+   a pending object to report too. Code current assumes that it could happend, which is wrong.
 
 
 * Notes on log resync:

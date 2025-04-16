@@ -191,6 +191,7 @@ class SimpleOps(): # pragma: no cover
         self.exploded = False
         op, operand = command.split()
         if self.explode:
+            #await asyncio.sleep(0.1)
             self.exploded = True
             raise Exception('boom!')
         if self.return_error:
@@ -1498,25 +1499,45 @@ class TestTrace:
             tables.append(table)
 
         def short_event(ns):
-            if str(ns.save_event) == "ROLE_CHANGED":
-                event = "NEW ROLE"
-            elif str(ns.save_event) == "MESSAGE_OP":
-                event = "MSG"
-            elif str(ns.save_event) == "CRASHED":
-                event = "CRASH"
-            elif str(ns.save_event) == "RECOVERED":
-                event = "RESTART"
-            elif str(ns.save_event) == "NET_PARTITION":
-                event = "NETSPLIT"
-            elif str(ns.save_event) == "PARTITION_HEALED":
-                event = "NETJOIN"
-            elif str(ns.save_event) == "COMMAND_STARTED":
-                event = "CMD START"
-            elif str(ns.save_event) == "COMMAND_FINISHED":
-                event = "CMD DONE"
+            choices = dict(ROLE_CHANGED="NEW ROLE",
+                           MESSAGE_OP="MSG",
+                           CRASHED="CRASH",
+                           RECOVERED="RESTART",
+                           NET_PARTITION="NETSPLIT",
+                           PARTITION_HEALED="NETJOIN",
+                           COMMAND_STARTED="CMD START",
+                           COMMAND_FINISHED="CMD DONE",)
+            if ns.save_event in choices:
+                return choices[ns.save_event]
+            return ns.save_event
+
+        def message_to_trace(ns, message):
+            if message.code == "append_entries":
+                short_code = "entries"
+            elif message.code == "append_response":
+                short_code = "ent_reply"
+            elif message.code == "request_vote":
+                short_code = "give_vote"
+            elif message.code == "request_vote_response":
+                short_code = "vote"
+            target = message.receiver.split("/")[-1]
+            sender = message.sender.split("/")[-1]
+            if message.sender == ns.uri:
+                value = f' {short_code}->N-{target}'
             else:
-                event = ns.save_event
-            return event
+                value = f' N-{sender}->{short_code}->'
+            if message.code == "append_entries":
+                value += f" li={message.prevLogIndex} lt={message.prevLogTerm}"
+                value += f" ec={len(message.entries)} ci={message.commitIndex}"
+            elif message.code == "request_vote":
+                value += f" term={message.term} li={message.prevLogIndex} lt={message.prevLogTerm}"
+            elif message.code == "append_response":
+                value += f" ok={message.success} mi={message.maxIndex}"
+            elif message.code == "request_vote_response":
+                value += f" yes={message.vote} "
+            else:
+                raise Exception('no code for message type')
+            return value
 
         for table in tables:
             table.condensed = rows = []
@@ -1581,41 +1602,8 @@ class TestTrace:
                         cols.append('')
                     else:
                         if ns.save_event == SaveEvent.message_op:
-                            if ns.message.code == "append_entries":
-                                short_code = "entries"
-                            elif ns.message.code == "append_response":
-                                short_code = "ent_reply"
-                            if ns.message.code == "request_vote":
-                                short_code = "give_vote"
-                            elif ns.message.code == "request_vote_response":
-                                short_code = "vote"
-                            if ns.message_action == "sent":
-                                target = ns.message.receiver.split("/")[-1]
-                                value = f' {short_code}->N-{target}'
-                                if ns.message.code == "append_entries":
-                                    value += f" li={ns.message.prevLogIndex} lt={ns.message.prevLogTerm}"
-                                    value += f" ec={len(ns.message.entries)} ci={ns.message.commitIndex}"
-                                elif ns.message.code == "request_vote":
-                                    value += f" term={ns.message.term} li={ns.message.prevLogIndex} lt={ns.message.prevLogTerm}"
-                                elif (ns.message.code == "request_vote_response"
-                                      or ns.message.code == "append_response"):
-                                    value = ""
-                                else:
-                                    raise Exception('no code for message type')
-                                cols.append(value)
-                            if ns.message_action == "handled_in":
-                                sender = ns.message.sender.split("/")[-1]
-                                value = f' N-{sender}->{short_code} '
-                                if ns.message.code == "append_response":
-                                    value += f" ok={ns.message.success} mi={ns.message.maxIndex}"
-                                elif ns.message.code == "request_vote_response":
-                                    value += f" yes={ns.message.vote} "
-                                elif (ns.message.code == "request_vote"
-                                      or ns.message.code == "append_entries"):
-                                    value = ""
-                                else:
-                                    raise Exception('no code for message type')
-                                cols.append(value)
+                            if ns.state_code != "FOLLOWER" and ns.message_action in ("sent", "handled_in"):
+                                cols.append(message_to_trace(ns, ns.message))
                         else:
                             cols.append(f" {short_event(ns)} ")
                     # do the delta column
@@ -1638,9 +1626,9 @@ class TestTrace:
                         last = last_states[index]
                         if ns.term != last.term:
                             d_t = f" t={ns.term}"
-                        if ns.log_rec.index != last.log_rec.index:
-                            d_lt = f" lt={ns.log_rec.term}"
                         if ns.log_rec.term != last.log_rec.term:
+                            d_lt = f" lt={ns.log_rec.term}"
+                        if ns.log_rec.index != last.log_rec.index:
                             d_li = f" li={ns.log_rec.index}"
                         if ns.commit_index != last.commit_index:
                             d_ci = f" ci={ns.commit_index}"

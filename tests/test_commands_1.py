@@ -637,11 +637,25 @@ async def test_leader_explodes_in_command(cluster_maker):
     await cluster.stop_auto_comms()
     
 async def test_long_catchup(cluster_maker):
+    """
+    Test that a follower catches up properly after a network partition and then a heal and rejoin.
+    Do a normal election, then a command. Then partition the network to isolate node 3 and run a
+    bunch of commands. Then heal the network and broadcast a heartbeat which will cause node 3
+    and the leader to dialog until node 3 is caught up.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal, run one command, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_long_catchup.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -651,21 +665,19 @@ async def test_long_catchup(cluster_maker):
     assert ts_3.hull.state.leader_uri == uri_1
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
 
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
-    # Now we want to block all messages from the leader to
-    # one follower, as though it has crashed, then
-    # run a bunch of commands and make sure that
-    # the catchup process gets them all. 
-    
 
-    logger.info('---------!!!!!!! stopping comms')
-    await cluster.stop_auto_comms()
+    # Make sure that the number of commands we send
+    # now will require a couple of catchup messages, so
+    # use the leader's runtime value 
+    loop_limit = ts_1.hull.state.max_entries_per_message * 2 + 2
+    cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
+    
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
              uri_2: ts_2}
@@ -673,7 +685,11 @@ async def test_long_catchup(cluster_maker):
     await cluster.split_network([part1, part2])
     logger.info('------------------ follower %s isolated, starting command loop', uri_3)
     await cluster.stop_auto_comms()
-    # quiet the logging down
+
+
+    # Watching debug level logging for a bunch of commands is painful,
+    # so lets temporarily reduce the log messages to only those from the state classes
+    # and put it back when we are done
     global log_config
     old_levels = dict()
 
@@ -686,13 +702,11 @@ async def test_long_catchup(cluster_maker):
             old_levels[logger_name] = logger.level
             logger.setLevel('ERROR')
 
-    loop_limit = 50
     for i in range(loop_limit):
         command_result = await cluster.run_command("add 1", 1)
     total = ts_1.operations.total
     assert ts_2.operations.total == total
     assert ts_3.operations.total != total
-    await cluster.stop_auto_comms()
     # restore the loggers
     if trim_loggers:
         for logger_name in old_levels:
@@ -701,28 +715,38 @@ async def test_long_catchup(cluster_maker):
             logger.setLevel(old_value)
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
-    await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up")
+    #await cluster.deliver_all_pending()
     await cluster.unsplit()
     logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
+    #await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
 
     start_time = time.time()
-    while time.time() - start_time < 0.5 and ts_3.operations.total < total:
-        await asyncio.sleep(0.0001)
+    while time.time() - start_time < 0.2 and ts_3.operations.total < total:
+        await cluster.deliver_all_pending()
     assert ts_3.operations.total == total
     await cluster.stop_auto_comms()
     logger.info('------------------------ All caught up')
 
 async def test_full_catchup(cluster_maker):
+    """
+    This tests that a follower that crashes and restarts with an empty log will catchup all the
+    way to the latest cluster commited state.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_full_catchup.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
-    
     await cluster.run_election()
     
     assert ts_1.hull.get_state_code() == "LEADER"
@@ -735,6 +759,7 @@ async def test_full_catchup(cluster_maker):
     # follower and make sure that
     # the catchup process gets them all the messages
 
+    cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3, then running two commands")
     logger.info('---------!!!!!!! stopping comms')
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, starting command loop', uri_3)
@@ -748,24 +773,37 @@ async def test_full_catchup(cluster_maker):
     logger.debug('------------------------ Correct command 2 done')
 
 
-    await ts_3.recover_from_crash()
+    cluster.test_trace.start_subtest("Recovering node 3, then sending heartbeat which should result in catchup")
+    await ts_3.recover_from_crash(save_log=False, save_ops=False)
     logger.info('------------------ restarting follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     assert ts_3.operations.total != ts_1.operations.total
     logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and ts_3.operations.total < ts_1.operations.total:
-        await asyncio.sleep(0.0001)
+        await cluster.deliver_all_pending()
     assert ts_3.operations.total == ts_1.operations.total
     logger.info('------------------------ All caught up')
 
 async def test_follower_run_error(cluster_maker):
+    """
+    This test part of an incomplete error reporting mechanism that allows state machine commands to catch
+    errors and return an indication that an error happened when executed in a follower. The follower code
+    will consider the error to invalidate the state transition and so the record will not be committed.
+    The unfinished part is how the fact of the error gets back to the library user's code.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_follower_run_error.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -782,8 +820,8 @@ async def test_follower_run_error(cluster_maker):
     # error handling code, but then the next command
     # should go through without problem.
 
-    logger.info('---------!!!!!!! stopping comms')
     logger.info('---------!!!!!!! spliting network ')
+    cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3  and running a command")
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, running', uri_3)
     
@@ -793,51 +831,54 @@ async def test_follower_run_error(cluster_maker):
     logger.debug('------------------------ Correct command 1 done')
 
     logger.info('------------------ restarted follower %s to hit error running command', uri_3)
+    cluster.test_trace.start_subtest("Setting return error trigger on node 3, recovering it, and running heartbeats")
     ts_3.operations.return_error = True
     await ts_3.recover_from_crash()
     logger.info('---------!!!!!!! starting comms')
-    await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and not ts_3.operations.reported_error:
-        await asyncio.sleep(0.0001)
+        await cluster.deliver_all_pending()
     assert ts_3.operations.reported_error
     logger.info('------------------------ Error as expected, removing error insertion and trying again')
+    cluster.test_trace.start_subtest("Node 3 reported error, removing trigger and running heartbeats to retry")
     ts_3.operations.return_error = False
-    await cluster.start_auto_comms()
     await ts_1.hull.state.send_heartbeats()
     start_time = time.time()
     while time.time() - start_time < 0.5 and ts_3.operations.total !=ts_1.operations.total:
-        await asyncio.sleep(0.0001)
+        await cluster.deliver_all_pending()
     assert ts_3.operations.total == ts_1.operations.total
 
 
 async def test_follower_rewrite_1(cluster_maker):
-    await follower_rewrite12_inner(cluster_maker, True)
 
-async def test_follower_rewrite_2(cluster_maker):
-    await follower_rewrite12_inner(cluster_maker, False)
-    
-async def follower_rewrite12_inner(cluster_maker, command_first):
-    """ Tests scenarios where a server becomes leader,
-    then gets disconnected from followers, but not yet realizing
-    that it accepts some client command requests, logs them, sends
-    broadcast to try to commit them. The while this is going on,
-    the followers hold an election and a new leader is chosen. That
-    leader accepts some commands and is able to commit them because
-    it has a quorum, 2 servers, in this case, itself and one follower. 
-    Then the old leader connect to the new leader, and messages 
-    fly to the effect that the ex-leader has log records that 
-    match the index of the new leader, but not their term, so those
-    records have to be discarded. After that is done the ex-leader
-    can now catchup, with the help of messages from the new leader.
+    """
+    Tests scenarios where a server becomes leader, then gets disconnected from followers, but not
+    yet realizing that it accepts some client command requests, logs them, sends  broadcast to
+    try to commit them.
+
+    The while this is going on, the followers hold an election and a new leader is chosen. That
+    leader accepts some commands and is able to commit them because it has a quorum, 2 servers,
+    in this case, itself and one follower.
+
+    Then the old leader connects to the new leader, and messages  fly to the effect that the
+    ex-leader has log records that  match the index of the new leader, but not their term, so those
+    records have to be discarded. After that is done the ex-leader  can now catchup, with the help of
+    messages from the new leader.
+
     Sheesh.
+    
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     """
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_follower_rewrite_1.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -847,12 +888,9 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
     running_total = 0
-    if command_first:
-        command_result = await cluster.run_command("add 1", 1)
-        running_total += 1
-        assert ts_1.operations.total == ts_2.operations.total == ts_3.operations.total == 1
-        
     last_index = await ts_1.log.get_last_index()
+
+    cluster.test_trace.start_subtest("Node 1 is leader, blocking network traffic to it like a partition and sending two commands")
     logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
     logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
@@ -863,11 +901,12 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     assert await ts_1.hull.log.get_last_index() == last_index + 2
     logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
-    #await ts_2.hull.log.set_term(2)
+    cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
     await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_2.hull.get_state_code() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
+    cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader")
     # we do this now so that the cluster run_command method will not get confused
     # about which server is the leader
     await ts_1.do_demote_and_handle(None)
@@ -881,53 +920,45 @@ async def follower_rewrite12_inner(cluster_maker, command_first):
     assert command_result.result == running_total
     
     total = ts_2.operations.total
-    # ts_3 needs a heartbeat to know to commit
-    await ts_2.hull.state.send_heartbeats()
-    start_time = time.time()
-    while time.time() - start_time < 0.25 and ts_3.operations.total != running_total:
-        await cluster.deliver_all_pending()
-        await asyncio.sleep(0.0001)
     assert ts_3.operations.total == total
 
-    # Now let the ex-leader rejoin, already demoted to
-    # follower, and let it get a heartbeat. this should trigger it to
-    # overwrite the existing records in its log with the new ones
-    # from the new leader.
+    # Now let the ex-leader rejoin, already demoted to follower, and let it get a heartbeat. this should trigger it to
+    # overwrite the existing records in its log with the new ones from the new leader.
     #
-    # The ex-leadere will have two or four records in the log, depending
-    # on whether this function was run with "command_firsT" True.
-    # In either case, the first record will be the "no-op" or "TERM_START"
-    # record for when the ex-leader took power.
-    # If command_first was False, then there will ony be two command records in the
-    # log, for the two "sub 1" commands. 
-    # If command_first was True, then there will ony be one "add 1" record in the
-    # log that should also be present in the logs of the other two servers, since the
-    # command was committed before the break. Then there should two command records 
-    # logged for the two "sub 1" commands.
+    # The old leader will have three records in its log.
+    # The first record will be the "no-op" or "TERM_START" record for when the ex-leader took power.
+    # Then there will be two command records for the two "sub 1" commands. These will
+    # be index 2 and 3 with term 1.
     #
-    # Capture the content of the two "sub 1" records, which will be overwritten
-    # when the cluster heals and the ex-leader synchronizes.
-    if command_first:
-        first_relevant_index = 3
-    else:
-        first_relevant_index = 2
-    orig_1 = await ts_1.hull.log.read(first_relevant_index) # the first record is start term record
-    orig_2 = await ts_1.hull.log.read(first_relevant_index + 1)
+    # The new leader's log will have three records in its log, the TERM_START for term 1, which will match the
+    # record in the old leader's log at index 1 term 1. Then it will have a TERM_START for term 2.
+    # Then it will have the command record at index 2 term 2.
+    #
+    # When the heartbeat arrives at the old leader, it should negotiate with the new leader and learn
+    # that it needs to delete the records with the wrong term.
+    #
+    # After that it should accept the new command record as catchup, and be up to date
+    #
+
+    first_relevant_index = 2
+    orig_rec_2 = await ts_1.hull.log.read(first_relevant_index) # the first record is start term record
+    orig_rec_3 = await ts_1.hull.log.read(first_relevant_index + 1)
     logger.debug('------------------------ Unblocking ex-leader, should overwrite logs ---')
+    cluster.test_trace.start_subtest("Reconnecting old leader as follower, now it should have log records that have to be purged, sending heartbeats")
     ts_1.unblock_network() # discards missed messages
     await ts_2.hull.state.send_heartbeats()
     await cluster.deliver_all_pending()
     start_time = time.time()
     # log should be 1 for start_term, and one for each command, so 4
     while time.time() - start_time < 0.5 and await ts_1.log.get_last_index() != await ts_2.log.get_last_index():
-        await asyncio.sleep(0.0001)
-
+        await cluster.deliver_all_pending()
     t1_last_i = await ts_1.log.get_last_index()
     t2_last_i = await ts_2.log.get_last_index()
     assert t1_last_i ==  t2_last_i
-    new_1 = await ts_1.log.read(first_relevant_index) # the first record is start term record
-    new_2 = await ts_1.log.read(first_relevant_index + 1)
-    assert new_1.command != orig_1.command
-    assert new_2.command != orig_2.command
+    new_rec_2 = await ts_1.log.read(first_relevant_index) # the first record is start term recordc
+    new_rec_3 = await ts_1.log.read(first_relevant_index + 1)
+    assert new_rec_3.command != orig_rec_2.command
+    assert new_rec_3.command != orig_rec_3.command
+    assert ts_1.operations.total == ts_2.operations.total
 
 
