@@ -258,13 +258,13 @@ class PhaseStep:
                 return self.runner_class
         return None
     
-    def get_state_runner(self):
+    def get_role_runner(self):
         if self.runner_class:
             if hasattr(self.runner_class, 'log_state'):
                 return self.runner_class
         return None
 
-    def get_state_validate(self):
+    def get_role_validate(self):
         if self.validate_class:
             return self.validate_class
         return False

@@ -1,11 +1,11 @@
 import asyncio
 import random
 import logging
-from raftengine.states.base_state import BaseState
+from raftengine.roles.base_role import BaseRole
 from raftengine.api.types import StateCode, SubstateCode
 from raftengine.messages.request_vote import RequestVoteMessage
 
-class Candidate(BaseState):
+class Candidate(BaseRole):
 
     def __init__(self, hull):
         super().__init__(hull, StateCode.candidate)

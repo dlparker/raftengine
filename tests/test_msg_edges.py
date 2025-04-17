@@ -56,7 +56,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_1.in_messages) == 1
     assert len(ts_2.in_messages) == 1
-    logger.debug("about to demote %s %s", uri_3, ts_3.get_state())
+    logger.debug("about to demote %s %s", uri_3, ts_3.get_role())
     await ts_3.do_demote_and_handle()
     await cluster.deliver_all_pending()
     assert len(ts_3.hull.message_problem_history) == 2
@@ -78,7 +78,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
     # now just poke a random message in there to get
     # at the code that is very hard to arrange by
-    # tweaking states, a vote response that isn't expected
+    # tweaking roles, a vote response that isn't expected
     # when the receiver is not a newly elected leader,
     # with leftover votes coming in.
     msg = RequestVoteResponseMessage(sender=uri_2, receiver=uri_3,
