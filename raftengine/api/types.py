@@ -1,21 +1,21 @@
 from enum import Enum
     
-class StateCode(str, Enum):
+class RoleName(str, Enum):
 
-    """ Follower state, as defined in raftengine protocol """
+    """ Follower role, as defined in raftengine protocol """
     follower = "FOLLOWER"
 
-    """ Candidate state, as defined in raftengine protocol """
+    """ Candidate role, as defined in raftengine protocol """
     candidate = "CANDIDATE"
 
-    """ Leader state, as defined in raftengine protocol """
+    """ Leader role, as defined in raftengine protocol """
     leader = "LEADER"
 
     def __str__(self):
         return self.value
     
 class SubstateCode(str, Enum):
-    # --- Expect from any state
+    # --- Expect from any role
     """ Before any connections """
     starting = "STARTING"
 
@@ -25,7 +25,7 @@ class SubstateCode(str, Enum):
     """ older term received """
     older_term = "OLDER_TERM"
 
-    # --- end expect from any state
+    # --- end expect from any role
 
     # --- Expect from Follower roles
     """ Follower has not yet received leader contact """

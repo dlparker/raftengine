@@ -6,7 +6,7 @@ import time
 from raftengine.hull.hull import Hull
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode
 
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
@@ -26,7 +26,7 @@ async def test_bogus_pilot(cluster_maker):
         Hull(ts_1.cluster_config, ts_1.local_config, BadPilot())
 
 async def test_str_methods():
-    assert str(StateCode.leader) == 'LEADER'
+    assert str(RoleName.leader) == 'LEADER'
     assert str(SubstateCode.starting) == 'STARTING'
     assert "request_vote" in str(RequestVoteMessage('a','b', 0, 0, 0))
     assert "request_vote_response" in str(RequestVoteResponseMessage('a','b', 0, 0, 0, True))

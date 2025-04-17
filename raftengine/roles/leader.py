@@ -6,7 +6,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Any
 from enum import Enum
-from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
@@ -110,7 +110,7 @@ class CommandWaiter:
 class Leader(BaseRole):
 
     def __init__(self, hull, term):
-        super().__init__(hull, StateCode.leader)
+        super().__init__(hull, RoleName.leader)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()

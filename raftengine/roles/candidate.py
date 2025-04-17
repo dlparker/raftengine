@@ -2,13 +2,13 @@ import asyncio
 import random
 import logging
 from raftengine.roles.base_role import BaseRole
-from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode
 from raftengine.messages.request_vote import RequestVoteMessage
 
 class Candidate(BaseRole):
 
     def __init__(self, hull):
-        super().__init__(hull, StateCode.candidate)
+        super().__init__(hull, RoleName.candidate)
         self.term = None
         self.votes = dict()
         self.reply_count = 0
