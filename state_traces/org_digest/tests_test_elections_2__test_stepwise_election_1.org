@@ -1,22 +1,41 @@
+* Test test_stepwise_election_1 from file tests/test_elections_2.py
+
+
+
+    This test is mainly for the purpose of testing the test support features implemented
+    in the PausingCluster, PausingServer and various related implementations. Other tests already proved
+    the basic election process using more granular control methods, this does the same kind of
+    thing but using the run_till_trigger model of controlling the code. It is still somewhat
+    granular, and serves as a demo of how to build tests that can run things, stop em, examine state, and continue.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_stepwise_election_1
-------------------------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1      | N-1       | N-2   | N-2      | N-2       | N-3   | N-3                              | N-3       |
-| node  | Role  | Op       | Delta     | Role  | Op       | Delta     | Role  | Op                               | Delta     |
-|  N-1  | FLWR  | STARTED  |           | FLWR  | STARTED  |           | FLWR  | STARTED                          |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | NEW ROLE                         | t=1       |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-1 term=1 li=0 lt=1  |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           |
-|  N-3  | FLWR  |          | t=1       | FLWR  |          | t=1       | CNDI  | N-1->vote-> yes=True             |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | NEW ROLE                         | lt=1 li=1 |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-1 li=0 lt=0 ec=1 ci=0 |           |
-|  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |          |           | LEAD  | N-2->vote-> yes=True             |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           |
-|  N-3  | FLWR  |          |           | FLWR  |          | lt=1 li=1 | LEAD  | N-1->ent_reply-> ok=True mi=1    |           |
-|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply-> ok=True mi=1    | ci=1      |
-------------------------------------------------------------------------------------------------------------------------------
+** Starting election at node 3
+----------------------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1      | N-1   | N-2   | N-2      | N-2   | N-3   | N-3                              | N-3       |
+| node  | Role  | Op       | Delta | Role  | Op       | Delta | Role  | Op                               | Delta     |
+|  N-1  | FLWR  | STARTED  |       | FLWR  | STARTED  |       | FLWR  | STARTED                          |           |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | CNDI  | NEW ROLE                         | t=1       |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | CNDI  | give_vote->N-1 term=1 li=0 lt=1  |           |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           |
+|  N-3  | FLWR  |          | t=1   | FLWR  |          | t=1   | CNDI  | N-1->vote-> yes=True             |           |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | LEAD  | NEW ROLE                         | lt=1 li=1 |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | LEAD  | entries->N-1 li=0 lt=0 ec=1 ci=0 |           |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           |
+|  N-3  | FLWR  |          |       | FLWR  |          |       | LEAD  | N-2->vote-> yes=True             |           |
+----------------------------------------------------------------------------------------------------------------------
+** Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record
+-----------------------------------------------------------------------------------------------------
+| event | N-1   | N-1 | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                           | N-3   |
+| node  | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                            | Delta |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | N-1->ent_reply-> ok=True mi=1 |       |
+|  N-3  | FLWR  |     |       | FLWR  |     |       | LEAD  | N-2->ent_reply-> ok=True mi=1 | ci=1  |
+-----------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

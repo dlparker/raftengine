@@ -1525,11 +1525,11 @@ class TestTrace:
 
         def message_to_trace(ns, message):
             if message.code == "append_entries":
-                short_code = "entries"
+                short_code = "ae"
             elif message.code == "append_response":
-                short_code = "ent_reply"
+                short_code = "ae_reply"
             elif message.code == "request_vote":
-                short_code = "give_vote"
+                short_code = "poll"
             elif message.code == "request_vote_response":
                 short_code = "vote"
             target = message.receiver.split("/")[-1]
@@ -1537,12 +1537,12 @@ class TestTrace:
             if message.sender == ns.uri:
                 value = f' {short_code}->N-{target}'
             else:
-                value = f' N-{sender}->{short_code}->'
+                value = f' N-{sender}->{short_code}'
             if message.code == "append_entries":
-                value += f" li={message.prevLogIndex} lt={message.prevLogTerm}"
-                value += f" ec={len(message.entries)} ci={message.commitIndex}"
+                value += f" t={message.term} i={message.prevLogIndex} lt={message.prevLogTerm}"
+                value += f" e={len(message.entries)} c={message.commitIndex}"
             elif message.code == "request_vote":
-                value += f" term={message.term} li={message.prevLogIndex} lt={message.prevLogTerm}"
+                value += f" t={message.term} li={message.prevLogIndex} lt={message.prevLogTerm}"
             elif message.code == "append_response":
                 value += f" ok={message.success} mi={message.maxIndex}"
             elif message.code == "request_vote_response":
@@ -1556,7 +1556,7 @@ class TestTrace:
             cols = []
             if include_index:
                 cols.append("idx")
-            cols.append('event') # node id, event_type
+            #cols.append('event') # node id, event_type
             start_line = self.trace_lines[table.start_pos]
             for index,ns in enumerate(start_line):
                 cols.append(f' N-{index+1}')
@@ -1566,7 +1566,7 @@ class TestTrace:
             cols = []
             if include_index:
                 cols.append("")
-            cols.append("node ")
+            #cols.append("node ")
             for index,ns in enumerate(start_line):
                 cols.append(f' Role')
                 cols.append(f' Op')
@@ -1583,7 +1583,7 @@ class TestTrace:
                             # we are only going to show the trace if the
                             # resender or receiver is a leader, and only if the
                             # condition is sent or handled
-                            if ns.role_name == "LEADER" or ns.role_name  == "CANDIDATE":
+                            if ns.role_name == "LEADER" or ns.role_name  == "CANDIDATE" or True:
                                 if ns.message_action in ("sent", "handled_in"):
                                     events_to_show.append((pos,line))
                         else:
@@ -1592,14 +1592,13 @@ class TestTrace:
             for subpos,line_spec in enumerate(events_to_show):
                 pos,line = line_spec
                 cols = []
-                col_done = False
                 if include_index:
                     cols.append(f" {pos} ")
                 # do the op event column
-                for index, ns in enumerate(line):
-                    if ns.save_event is not None and not col_done:
-                        cols.append(f" N-{index+1} ")
-                        col_done = True
+                #for index, ns in enumerate(line):
+                    #if ns.save_event is not None:
+                        #cols.append(f" N-{index+1} ")
+                        #break
                 # fix up any empty log records, it makes it clearer that something changed
                 for index, ns in enumerate(line):
                     # do the role column
@@ -1614,7 +1613,7 @@ class TestTrace:
                         cols.append('')
                     else:
                         if ns.save_event == SaveEvent.message_op:
-                            if ns.role_name != "FOLLOWER" and ns.message_action in ("sent", "handled_in"):
+                            if ns.message_action in ("sent", "handled_in"):
                                 cols.append(message_to_trace(ns, ns.message))
                         else:
                             cols.append(f" {short_event(ns)} ")

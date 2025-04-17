@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
+from pathlib import Path
+import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
@@ -18,25 +19,34 @@ from dev_tools.servers import setup_logging
 
 extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
 #setup_logging(extra_logging, default_level="debug")
-setup_logging()
+default_level="error"
+#default_level="debug"
+setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
 
 async def test_stepwise_election_1(cluster_maker):
-    """This test is mainly for the purpose of testing the test support
-        features implemented in the PausingCluster, PausingServer and
-        various Condition implementations. Other tests already proved
-        the basic election process using more granular control
-        methods, this does the same kind of thing but using the
-        run_till_trigger model of controlling the code. It is still somewhat
-        granular, and serves as a demo of how to build tests that can run 
-        things, stop em, examine state, and continue
+    """
+
+    This test is mainly for the purpose of testing the test support features implemented
+    in the PausingCluster, PausingServer and various related implementations. Other tests already proved
+    the basic election process using more granular control methods, this does the same kind of
+    thing but using the run_till_trigger model of controlling the code. It is still somewhat
+    granular, and serves as a demo of how to build tests that can run things, stop em, examine state, and continue.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
     """
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+
+    cluster.test_trace.start_subtest("Starting election at node 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_stepwise_election_1.__doc__)
+    # using node 3 to make sure I don't have some sort of unintentional dependence on using node 1
     await cluster.start()
     await ts_3.start_campaign()
     out1 = WhenMessageOut(RequestVoteMessage.get_code(),
@@ -78,6 +88,21 @@ async def test_stepwise_election_1(cluster_maker):
 
     assert await ts_1.log.get_voted_for() == uri_3
     assert await ts_2.log.get_voted_for() == uri_3
+    ts_1.clear_triggers()
+    ts_1.set_trigger(WhenAllMessagesForwarded())
+    await ts_1.run_till_triggers()
+    ts_1.clear_triggers()
+
+    ts_2.clear_triggers()
+    ts_2.set_trigger(WhenAllMessagesForwarded())
+    await ts_2.run_till_triggers()
+    ts_2.clear_triggers()
+
+    ts_3.clear_triggers()
+    ts_3.set_trigger(WhenAllInMessagesHandled())
+    await ts_3.run_till_triggers()
+    ts_3.clear_triggers()
+    cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record")
     # Let all the messages fly until delivered
     await cluster.deliver_all_pending()
     assert ts_3.get_role_name() == "LEADER"
@@ -87,18 +112,32 @@ async def test_stepwise_election_1(cluster_maker):
     logger.info("Stepwise paused election test completed")
 
 async def test_run_to_election_1(cluster_maker):
-    """This test is mainly for the purpose of testing the test support
-        features implemented in the PausingCluster, PausingServer and
-        various Condition implementations. This test shows how to use
-        the least granular style of control, just allowing everything
-        (except timers) proceed normally until the election is complete.
     """
+    This test is mainly for the purpose of testing the test support features implemented in the PausingCluster, PausingServer and
+    related implementations. This test shows how to used two of the least granular styles of control, just allowing everything
+    (except timers) proceed normally until the election is complete.
+
+    In the first phase an election is run but having the cluster run a complete sequence that knows how to
+    define the election result based on how many servers are in the quorum, and then run all nodes until
+    the new TERM_START log record has been committed.
+
+    In the second phase an election is run with a more granular style of condition checker, which can be useful
+    for making things break for testing purposes. Here it is done without error in order to be demonstrate
+    and validate that method.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+
+    cluster.test_trace.start_subtest("Initial election, using fill sequence control",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_run_to_election_1.__doc__)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -109,6 +148,7 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion pause test completed starting reelection")
+    cluster.test_trace.start_subtest("Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -130,10 +170,22 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
+    cluster.test_trace.start_subtest("Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat")
+
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
     logger.info("-------- Re-election test done")
 
     
 async def test_election_timeout_1(cluster_maker):
+    """
+    This test operates using timers instead of the no-timers mode that most other tests use.
+    It manipulates the valid range for the radom selection of election timeout value so
+    that it can be known that a particluar node will timeout first, and therefore will
+    win the election.
+
+    """
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(election_timeout_min=0.01,
                                           election_timeout_max=0.011)
@@ -149,6 +201,10 @@ async def test_election_timeout_1(cluster_maker):
     ts_3.hull.cluster_config.election_timeout_min = 0.01
     ts_3.hull.cluster_config.election_timeout_max = 0.011
 
+
+    cluster.test_trace.start_subtest("Initial election with timers manipulated to ensure node 3 will win",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_election_timeout_1.__doc__)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -159,6 +215,7 @@ async def test_election_timeout_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion, starting reelection")
+    cluster.test_trace.start_subtest("Node 3 is leader know demoting it, timer values equal, poking node 2 to start election ")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -196,10 +253,21 @@ async def test_election_timeout_1(cluster_maker):
     assert ts_3.get_leader_uri() == uri_2
     logger.info("-------- Re-election timeout test done")
 
+    cluster.test_trace.start_subtest("Node 2 is leader, testing election timeout interaction with stop flag")
 
-    # do the same sequence, only this time set the stopped flag on the
+    # Do the same sequence, only this time set the stopped flag on the
     # candidate to make sure the election timeout does not start another
-    # election
+    # election. This tests a bit of code in the hull role_after_runnner
+    # method that is designed to prevent a timer from triggering code
+    # in a role instance that is no longer active.
+    # So, for example, a Candidate has resigned, and the hull.stop_role method 
+    # has been called, and it has gotten far enough to set the stopped
+    # flag, but the election timeout handler task has not yet been
+    # cancelled. If the handler task fires right then it might
+    # break logic that thinks the Candidate is still running.
+    # So we have this mechanism to ensure that it doesn't run because
+    # it is shimmed by the hull.role_after_runner method.
+    
     await ts_2.do_demote_and_handle()
     await ts_1.do_leader_lost()
     assert ts_1.get_role_name() == "CANDIDATE"
@@ -217,12 +285,33 @@ async def test_election_timeout_1(cluster_maker):
     logger.info("-------- Election restart on timeout prevention test passed")
 
 async def test_election_vote_once_1(cluster_maker):
+    """
+    Tests to make sure that followers only vote once in a single term.
+
+    Test begins with a regular election. Next the leader and one other node are forced
+    to start an election.
+
+    The message flow is manipulated to ensure that the only follower node gets a request vote
+    from only one candidate, and will vote yes.
+
+    The message flow is again manipulated to allow the follower to get the other vote request,
+    and it should reply with a no vote because it has already voted in this term.
+
+    Finally the election is allowed to complete normally.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_election_vote_once_1.__doc__)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -233,6 +322,8 @@ async def test_election_vote_once_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
+    cluster.test_trace.start_subtest("Node 3 is leader, forcing it to resign, making it and node 2 start election")
+
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -241,6 +332,7 @@ async def test_election_vote_once_1(cluster_maker):
     await ts_2.do_leader_lost()
     await ts_3.do_leader_lost()
 
+    cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 2 only, and reply with a yes vote")
     # now let the remainging follower see only the vote request from 
     # one candidate, so let one of them send their two messages
     msg1 = await ts_2.do_next_out_msg()
@@ -254,6 +346,7 @@ async def test_election_vote_once_1(cluster_maker):
     assert vote_yes_msg.vote == True
     await ts_2.do_next_in_msg()
 
+    cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 3, which should get a no response")
     # now let the other candidate send requests
     msg3 = await ts_3.do_next_out_msg()
     msg4 = await ts_3.do_next_out_msg()
@@ -268,6 +361,7 @@ async def test_election_vote_once_1(cluster_maker):
 
     # now it should just finish, everybody should know what to do
 
+    cluster.test_trace.start_subtest("Allowing full election run to complete")
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -279,12 +373,43 @@ async def test_election_vote_once_1(cluster_maker):
 
 
 async def test_election_candidate_too_slow_1(cluster_maker):
+    """
+
+    This tests the logic when two candidates are active and one of them has a higher term. This
+    would normally happen when election timeouts line up just right, but we fiddle the
+    log of one of them directly to setup the scenario.
+
+    The test starts with a normal election, then the leader and one other node are pushed
+    to candidate. One node gets the term value increased manually.
+
+    Next, the lower term candidate is allowed to send vote requests and the sole follower is
+    allowed to receive it an reply. 
+
+    So at this point we have node 3 with term 3 and no vote requests out, node 2 with term 2
+    and one yes vote in the input queue, and node 1 having voted for node 2 in term 2.
+
+    Before the node 2 can process the vote, however, the message is intercepted and removed from the input queue.
+
+    Now node 3 (with the higher term) is allowed to send out its request vote messages, and node 2 is allowed
+    to receive one.
+
+    This moment is the focus of the test. Node 2 should notice the higher term and resign.
+
+    As a bonus test we push the earlier yes vote from node 1 back on the input queue and allow
+    node 2 to process it. It should just ignore it. This is probably notthe only test that hits that code.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_election_candidate_too_slow_1.__doc__)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -296,6 +421,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
+    cluster.test_trace.start_subtest("Node 3 is leader, pushing it and node 2 to start elections, but holding messages")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -307,6 +433,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     await ts_3.log.set_term(term + 1)
     await ts_3.do_leader_lost()
 
+    cluster.test_trace.start_subtest("Delivering request votes from node 2 and allowing node 1 to send yes, but holding it in node 2's queue")
     # Let the low term one send vote request first,
     # then before it receives any replies let the second
     # one send requests.
@@ -323,6 +450,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     logger.debug("-------- First candidate is now has yes vote pending ---")
     # save the pending yes vote and let the other candidate's votes in
     # instead
+    cluster.test_trace.start_subtest("Removing node 1's yes vote from queue and allowing node 3 (term 2) to sent request vote messages")
     saved_vote = ts_2.in_messages.pop(0)
     # now let the second candidate requests in to the first one.
     # which should accept the new candidate because of the higher
@@ -336,6 +464,8 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.get_role_name() == "FOLLOWER"
     logger.debug("-------- First candidate has accepted second candidate and resigned ")
 
+    cluster.test_trace.start_subtest("Node 2 has resigned, replacing node 1's yes vote in queue and allowing election to proceed to completion")
+    
     # Push the out of date vote back on to what used
     # to be the old candidate, just for completeness.
     # Might uncover a regression some day

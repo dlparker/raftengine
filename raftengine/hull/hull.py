@@ -170,12 +170,12 @@ class Hull(HullAPI):
         encoded_reply = json.dumps(response, default=lambda o:o.__dict__)
         await self.pilot.send_response(response.receiver, encoded, encoded_reply)
 
-    async def role_after_runner(self, target):
-        if self.role.stopped:
-            return
-        await target()
-        
-    # Called by Role
+    # Called by Role. This may seem odd, but it is done this
+    # way to make it possible to protect against race conditions where a role
+    # instance is shutting down but the timer that it has set fires during shutdown.
+    # The actually happened during testing and it leads to some nasty logic conflicts.
+    # Better to circumvent it by running the actual timers and callbacks in this
+    # class, which never goes away.
     async def role_run_after(self, delay, target):
         loop = asyncio.get_event_loop()
         if self.role_async_handle:
@@ -188,7 +188,14 @@ class Hull(HullAPI):
                                                   lambda target=target:
                                                   asyncio.create_task(self.role_after_runner(target)))
 
+    # see comments above in role_run_after
+    async def role_after_runner(self, target):
+        if self.role.stopped:
+            return
+        await target()
+        
     # Called by Role
+    # see comments above in role_run_after
     async def cancel_role_run_after(self):
         if self.role_async_handle:
             self.role_async_handle.cancel()
