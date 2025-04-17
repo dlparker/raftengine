@@ -1401,7 +1401,7 @@ class TestTrace:
         cols.append('reply_max_index')
         for i in range(1, len(self.cluster.nodes) + 1):
             cols.append(f'n{i}-uri')
-            cols.append(f'n{i}-state')
+            cols.append(f'n{i}-role')
             cols.append(f'n{i}-term')
             cols.append(f'n{i}-on_quorum_net')
             cols.append(f'n{i}-last_index')

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
-from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode
     
 class BaseRole:
 

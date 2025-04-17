@@ -3,7 +3,7 @@ import traceback
 import logging
 import json
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.types import StateCode, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
 from raftengine.roles.base_role import BaseRole
@@ -11,7 +11,7 @@ from raftengine.roles.base_role import BaseRole
 class Follower(BaseRole):
 
     def __init__(self, hull):
-        super().__init__(hull, StateCode.follower)
+        super().__init__(hull, RoleName.follower)
         # log is set in BaseState as is leader_uri
         # only used during voting for leadership
         # Needs to be as recent as configured maximum silence period, or we raise hell.
