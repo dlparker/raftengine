@@ -31,7 +31,7 @@ async def test_heartbeat_1(cluster_maker):
 
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -72,7 +72,7 @@ async def test_heartbeat_2(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     await cluster.start_auto_comms()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     # make sure running for a time exceeding the timeout does not
@@ -82,7 +82,7 @@ async def test_heartbeat_2(cluster_maker):
     while time.time() - start_time < election_timeout_max * 2:
         await asyncio.sleep(fraction)
 
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     await cluster.stop_auto_comms()
@@ -105,7 +105,7 @@ async def test_lost_leader_1(cluster_maker):
     await cluster.deliver_all_pending()
     await cluster.run_election()
     await cluster.deliver_all_pending()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     await ts_3.do_demote_and_handle(None)
@@ -115,17 +115,17 @@ async def test_lost_leader_1(cluster_maker):
     fraction = election_timeout_max/10.0
     while time.time() - start_time < election_timeout_max * 2:
         await cluster.deliver_all_pending()
-        if (ts_1.get_state_code() == "LEADER"
-            or ts_2.get_state_code()  == "LEADER"
-            or ts_3.get_state_code()  == "LEADER"):
+        if (ts_1.get_role_name() == "LEADER"
+            or ts_2.get_role_name()  == "LEADER"
+            or ts_3.get_role_name()  == "LEADER"):
             break
         await asyncio.sleep(fraction)
-    assert (ts_1.get_state_code()  == "LEADER"
-            or ts_2.get_state_code()  == "LEADER"
-            or ts_3.get_state_code()  == "LEADER")
+    assert (ts_1.get_role_name()  == "LEADER"
+            or ts_2.get_role_name()  == "LEADER"
+            or ts_3.get_role_name()  == "LEADER")
 
     for ts in ts_1, ts_2, ts_3:
-        if ts.get_state_code()  == "LEADER":
+        if ts.get_role_name()  == "LEADER":
             leader = ts
             leader_uri = ts.uri
             break
@@ -147,7 +147,7 @@ async def test_election_timeout_1(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
 
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_2.get_leader_uri() == uri_1
 
@@ -182,8 +182,8 @@ async def test_election_timeout_1(cluster_maker):
     # now make sure it can win
     start_time = time.time()
     while (time.time() - start_time < election_timeout_max  * 2
-           and ts_2.get_state_code()  != "LEADER"):
+           and ts_2.get_role_name()  != "LEADER"):
             await asyncio.sleep(fraction)
-    assert ts_2.get_state_code()  == "LEADER"
+    assert ts_2.get_role_name()  == "LEADER"
     
     await cluster.stop_auto_comms()

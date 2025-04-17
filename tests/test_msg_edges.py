@@ -41,7 +41,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -73,7 +73,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     # now just poke a random message in there to get
@@ -116,7 +116,7 @@ async def test_slow_voter(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -172,7 +172,7 @@ async def test_slow_voter(cluster_maker):
     msg = await ts_3.do_next_in_msg()
     assert msg.term == new_term
     assert msg.vote == True
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     msg = await ts_3.do_next_in_msg()
     assert msg.term == new_term
     assert msg.vote == True
@@ -205,7 +205,7 @@ async def test_message_errors(cluster_maker):
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     

@@ -6,9 +6,9 @@ from raftengine.api.types import StateCode, SubstateCode
     
 class BaseState:
     
-    def __init__(self, hull, state_code):
+    def __init__(self, hull, role_name):
         self.hull = hull
-        self.state_code = state_code
+        self.role_name = role_name
         self.logger = logging.getLogger("BaseState")
         self.substate = SubstateCode.starting
         self.log = hull.get_log()
@@ -36,7 +36,7 @@ class BaseState:
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().start())
         self.stopped = False
-        if self.state_code == "LEADER":
+        if self.role_name == "LEADER":
             self.leader_uri = self.my_uri()
 
     async def stop(self):
@@ -72,7 +72,7 @@ class BaseState:
         await self.hull.record_message_problem(message, problem)
 
     async def on_append_entries_response(self, message):
-        if self.state_code == "FOLLOWER":
+        if self.role_name == "FOLLOWER":
             problem = 'append_entries_response not implemented in the class '
             problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
             if hasattr(message, 'leaderId'):
@@ -91,7 +91,7 @@ class BaseState:
         await self.hull.record_message_problem(message, problem)
 
     async def on_vote_response(self, message):
-        if self.state_code == "LEADER" and message.term == await self.log.get_term():
+        if self.role_name == "LEADER" and message.term == await self.log.get_term():
             self.logger.info('request_vote_response leftover from finished election, ignoring')
             return
         problem = 'request_vote_response not implemented in the class '
@@ -100,7 +100,7 @@ class BaseState:
         await self.hull.record_message_problem(message, problem)
         
     async def send_reject_append_response(self, message):
-        if self.state_code == "LEADER":
+        if self.role_name == "LEADER":
             leaderId = self.my_uri()
         else:
             leaderId = self.leader_uri
@@ -128,4 +128,4 @@ class BaseState:
         return self.hull.get_my_uri()
 
     def __repr__(self):
-        return self.state_code
+        return self.role_name

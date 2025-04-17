@@ -379,7 +379,7 @@ class WhenIsLeader(PauseTrigger):
         return msg
     
     async def is_tripped(self, server):
-        if server.hull.get_state_code() == "LEADER":
+        if server.hull.get_role_name() == "LEADER":
             return True
         return False
     
@@ -393,7 +393,7 @@ class WhenHasLeader(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if server.hull.get_state_code() != "FOLLOWER":
+        if server.hull.get_role_name() != "FOLLOWER":
             return False
         if server.hull.state.leader_uri == self.leader_uri:
             return True
@@ -447,7 +447,7 @@ class WhenElectionDone(PauseTrigger):
             self.voters = list(server.cluster.nodes.keys())
         for uri in self.voters:
             node = server.cluster.nodes[uri]
-            if node.hull.get_state_code() == "LEADER":
+            if node.hull.get_role_name() == "LEADER":
                 have_leader = True
                 rec = self.announced[uri]
                 if "is_leader" not in rec:
@@ -526,7 +526,7 @@ class TestHull(Hull):
         return result
 
     async def state_run_after(self, delay, target):
-        self.state_run_later_def = dict(state_code=self.state.state_code,
+        self.state_run_later_def = dict(role_name=self.state.role_name,
                                         delay=delay, target=target)
         if not self.timers_disabled:
             await super().state_run_after(delay, target)
@@ -538,9 +538,9 @@ class TestHull(Hull):
     
     async def enable_timers(self, reset=True):
         if reset:
-            if self.state.state_code == "FOLLOWER":
+            if self.state.role_name == "FOLLOWER":
                 self.last_leader_contact = time.time()
-            elif self.state.state_code == "LEADER":
+            elif self.state.role_name == "LEADER":
                 self.last_broadcast_time = time.time()
         if self.state_run_later_def:
             await super().state_run_after(self.state_run_later_def['delay'],
@@ -636,9 +636,9 @@ class Network:
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
         await self.test_trace.note_message_handled(node, msg)
-        start_state = node.hull.state.state_code
+        start_state = node.hull.state.role_name
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
-        if start_state != node.hull.state.state_code:
+        if start_state != node.hull.state.role_name:
             await self.test_trace.note_role_changed(node)
         return msg
     
@@ -854,10 +854,10 @@ class PausingServer(PilotAPI):
         test_trace = self.network.test_trace
         await test_trace.note_recover(self)
 
-    def get_state_code(self):
+    def get_role_name(self):
         if self.hull is None:
             return None
-        return self.hull.get_state_code()
+        return self.hull.get_role_name()
     
     def get_state(self):
         if self.hull is None:
@@ -872,7 +872,7 @@ class PausingServer(PilotAPI):
     def get_leader_uri(self):
         if self.hull is None:
             return None
-        if self.hull.get_state_code() == "LEADER":
+        if self.hull.get_role_name() == "LEADER":
             return self.uri
         return self.hull.state.leader_uri
         
@@ -1001,9 +1001,9 @@ class PausingServer(PilotAPI):
     def get_leader_id(self):
         if self.hull is None:
             return None
-        if self.hull.state.state_code == "LEADER":
+        if self.hull.state.role_name == "LEADER":
             return self.uri
-        elif self.hull.state.state_code == "FOLLOWER":
+        elif self.hull.state.role_name == "FOLLOWER":
             return self.hull.state.leader_uri
         else:
             return None
@@ -1101,12 +1101,12 @@ class PausingServer(PilotAPI):
         return # all triggers tripped as required by mode flags, so pause ops
     
     async def dump_stats(self):
-        if self.hull.state.state_code == "FOLLOWER":
+        if self.hull.state.role_name == "FOLLOWER":
             leaderId=self.hull.state.leader_uri
         else:
             leaderId=None
         stats = dict(uri=self.uri,
-                     state_code=self.hull.state.state_code,
+                     role_name=self.hull.state.role_name,
                      term=await self.log.get_term(),
                      prevLogIndex=await self.log.get_last_index(),
                      prevLogTerm=await self.log.get_last_term(),
@@ -1135,7 +1135,7 @@ class NodeState:
     log_rec: LogRec
     commit_index: int
     term: int
-    state_code: str
+    role_name: str
     on_quorum_net: bool = True
     is_paused: bool = False
     is_crashed: bool = False
@@ -1179,7 +1179,7 @@ class TestTrace:
                        log_rec=await node.log.read(),
                        term=await node.log.get_term(),
                        commit_index=await node.log.get_commit_index(),
-                       state_code=node.get_state_code(),
+                       role_name=node.get_role_name(),
                        on_quorum_net=node.is_on_quorum_net(),
                        is_paused=node.am_paused,
                        is_crashed=node.am_crashed,
@@ -1192,7 +1192,7 @@ class TestTrace:
         ns.term = await node.log.get_term()
         ns.on_quorum_net = node.is_on_quorum_net()
         ns.commit_index = await node.log.get_commit_index()
-        ns.state_code = node.get_state_code()
+        ns.role_name = node.get_role_name()
         ns.is_paused = node.am_paused
         ns.is_crashed = node.am_crashed
         ns.leader_id = node.get_leader_id()
@@ -1457,7 +1457,7 @@ class TestTrace:
                                 break
             for ns in in_order:
                 cols.append(ns.uri)
-                cols.append(str(ns.state_code))
+                cols.append(str(ns.role_name))
                 cols.append(str(ns.term))
                 cols.append(str(ns.on_quorum_net))
                 if ns.log_rec is None:
@@ -1583,7 +1583,7 @@ class TestTrace:
                             # we are only going to show the trace if the
                             # resender or receiver is a leader, and only if the
                             # condition is sent or handled
-                            if ns.state_code == "LEADER" or ns.state_code  == "CANDIDATE":
+                            if ns.role_name == "LEADER" or ns.role_name  == "CANDIDATE":
                                 if ns.message_action in ("sent", "handled_in"):
                                     events_to_show.append((pos,line))
                         else:
@@ -1603,18 +1603,18 @@ class TestTrace:
                 # fix up any empty log records, it makes it clearer that something changed
                 for index, ns in enumerate(line):
                     # do the role column
-                    if ns.state_code == "FOLLOWER" or ns.state_code is None:
+                    if ns.role_name == "FOLLOWER" or ns.role_name is None:
                         cols.append(' FLWR ')
-                    elif ns.state_code == "CANDIDATE":
+                    elif ns.role_name == "CANDIDATE":
                         cols.append(' CNDI ')
-                    elif ns.state_code == "LEADER":
+                    elif ns.role_name == "LEADER":
                         cols.append(' LEAD ')
                     # do the op column
                     if ns.save_event is None:
                         cols.append('')
                     else:
                         if ns.save_event == SaveEvent.message_op:
-                            if ns.state_code != "FOLLOWER" and ns.message_action in ("sent", "handled_in"):
+                            if ns.role_name != "FOLLOWER" and ns.message_action in ("sent", "handled_in"):
                                 cols.append(message_to_trace(ns, ns.message))
                         else:
                             cols.append(f" {short_event(ns)} ")
@@ -1729,7 +1729,7 @@ class PausingCluster:
             
     def get_leader(self):
         for uri, node in self.nodes.items():
-            if node.hull.state.state_code == "LEADER":
+            if node.hull.state.role_name == "LEADER":
                 return node
         return None
     
@@ -1924,7 +1924,7 @@ class SNormalCommand(StdSequence):
         self.network = self.cluster.net_mgr.get_majority_network()
         for uri,node in self.network.nodes.items():
             node.clear_triggers()
-            if node.hull.state.state_code == "LEADER":
+            if node.hull.state.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
@@ -2051,7 +2051,7 @@ class SPartialCommand(StdSequence):
                 raise Exception(f'bad setup, {voter} not in majority network')
             node = self.network.nodes[uri]
             node.clear_triggers()
-            if node.hull.state.state_code == "LEADER":
+            if node.hull.state.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1

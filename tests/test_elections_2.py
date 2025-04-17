@@ -80,7 +80,7 @@ async def test_stepwise_election_1(cluster_maker):
     assert await ts_2.log.get_voted_for() == uri_3
     # Let all the messages fly until delivered
     await cluster.deliver_all_pending()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -104,14 +104,14 @@ async def test_run_to_election_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion pause test completed starting reelection")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
     await ts_2.do_leader_lost()
     
@@ -127,7 +127,7 @@ async def test_run_to_election_1(cluster_maker):
     ts_2.clear_triggers()
     ts_3.clear_triggers()
 
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     logger.info("-------- Re-election test done")
@@ -154,14 +154,14 @@ async def test_election_timeout_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion, starting reelection")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
     old_term = await ts_2.log.get_term()
     await ts_2.do_leader_lost()
@@ -191,7 +191,7 @@ async def test_election_timeout_1(cluster_maker):
     ts_2.clear_triggers()
     ts_3.clear_triggers()
 
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     logger.info("-------- Re-election timeout test done")
@@ -202,7 +202,7 @@ async def test_election_timeout_1(cluster_maker):
     # election
     await ts_2.do_demote_and_handle()
     await ts_1.do_leader_lost()
-    assert ts_1.get_state_code() == "CANDIDATE"
+    assert ts_1.get_role_name() == "CANDIDATE"
     # Set the stopped flag to prevent timeout from restarting election
     # don't call stop(), it cancels the timeout
     ts_1.hull.state.stopped = True
@@ -210,7 +210,7 @@ async def test_election_timeout_1(cluster_maker):
     old_term = await ts_1.get_term()
     assert ts_1.hull.state_async_handle is not None
     await asyncio.sleep(0.015)
-    assert ts_1.get_state_code() == "CANDIDATE"
+    assert ts_1.get_role_name() == "CANDIDATE"
     new_term = await ts_1.get_term()
     assert new_term == old_term
     
@@ -227,7 +227,7 @@ async def test_election_vote_once_1(cluster_maker):
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -235,7 +235,7 @@ async def test_election_vote_once_1(cluster_maker):
 
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on two followers causing
     # two candidates to try election in same term
     await ts_2.do_leader_lost()
@@ -272,7 +272,7 @@ async def test_election_vote_once_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
 
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     logger.info("-------- Re-election vote once test complete ---")
@@ -290,7 +290,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
@@ -298,7 +298,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on two followers causing
     # two candidates to try election but fiddle one of them
     # to have a higher term
@@ -319,7 +319,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     vote_yes_msg_1 = await ts_1.do_next_out_msg()
     assert vote_yes_msg_1.vote == True
     # Don't let ts_2 get response, we want it to stay a candidate
-    assert ts_2.get_state_code() == "CANDIDATE"
+    assert ts_2.get_role_name() == "CANDIDATE"
     logger.debug("-------- First candidate is now has yes vote pending ---")
     # save the pending yes vote and let the other candidate's votes in
     # instead
@@ -333,7 +333,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     # this should trigger old term candidate to resign
     # in favor of new term candidate
     await ts_2.do_next_in_msg()
-    assert ts_2.get_state_code() == "FOLLOWER"
+    assert ts_2.get_role_name() == "FOLLOWER"
     logger.debug("-------- First candidate has accepted second candidate and resigned ")
 
     # Push the out of date vote back on to what used
@@ -347,7 +347,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     
@@ -373,7 +373,7 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
@@ -410,11 +410,11 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
 
     logger.info("-------- Vote as expected letting election finish ----")
     await cluster.deliver_all_pending()
-    assert ts_3.get_state_code() != "LEADER"
+    assert ts_3.get_role_name() != "LEADER"
     await ts_1.start_campaign()
 
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     logger.info("-------- Re-election of ts_1 finished ----")
     
 async def test_failed_first_election_1(cluster_maker):
@@ -482,7 +482,7 @@ async def test_failed_first_election_1(cluster_maker):
 
     ts_3.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code()))
     await ts_3.run_till_triggers()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
 
     # Now block the leader and trigger an election
     ts_1.clear_triggers()
@@ -491,7 +491,7 @@ async def test_failed_first_election_1(cluster_maker):
     await ts_3.simulate_crash()
     await ts_1.start_campaign()
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert await ts_3.log.get_last_term() == 1
 
     # now restart the ex leader and make sure his log updates

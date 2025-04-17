@@ -66,7 +66,7 @@ async def test_election_1(cluster_maker):
     # now let candidate process votes, should then promote itself
     await ts_1.do_next_in_msg()
     await ts_1.do_next_in_msg()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
 
     cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
 
@@ -115,7 +115,7 @@ async def test_election_2(cluster_maker):
     await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     # append entries, then responses
     await cluster.deliver_all_pending()
@@ -148,7 +148,7 @@ async def test_reelection_1(cluster_maker):
     await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     # append entries, then responses
     await cluster.deliver_all_pending()
     assert ts_2.get_leader_uri() == uri_1
@@ -157,12 +157,12 @@ async def test_reelection_1(cluster_maker):
     cluster.test_trace.start_subtest("Node 1 is leader, demoting it and triggering leader_lost at node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
-    assert ts_1.get_state_code() == "FOLLOWER"
+    assert ts_1.get_role_name() == "FOLLOWER"
     # pretend timeout on heartbeat on only one, ensuring it will win
     await ts_2.do_leader_lost()
     await cluster.deliver_all_pending()
-    assert ts_2.get_state_code() == "LEADER"
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     
 async def test_reelection_2(cluster_maker):
     """
@@ -189,7 +189,7 @@ async def test_reelection_2(cluster_maker):
     await ts_1.start_campaign()
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     # append entries, then responses
     await cluster.deliver_all_pending()
     assert ts_2.get_leader_uri() == uri_1
@@ -200,13 +200,13 @@ async def test_reelection_2(cluster_maker):
     cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
-    assert ts_1.get_state_code() == "FOLLOWER"
+    assert ts_1.get_role_name() == "FOLLOWER"
     # pretend timeout on heartbeat on only one followers, so it should win
     await ts_2.do_leader_lost()
     await cluster.deliver_all_pending()
-    assert ts_2.get_state_code() == "LEADER"
-    assert ts_1.get_state_code() == "FOLLOWER"
-    assert ts_3.get_state_code() == "FOLLOWER"
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_1.get_role_name() == "FOLLOWER"
+    assert ts_3.get_role_name() == "FOLLOWER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     assert ts_4.get_leader_uri() == uri_2
@@ -278,7 +278,7 @@ async def test_reelection_3(cluster_maker):
         await asyncio.sleep(0.01)
         await cluster.deliver_all_pending()
         for ts in [ts_1, ts_2, ts_3]:
-            if ts.get_state_code() == "LEADER":
+            if ts.get_role_name() == "LEADER":
                 leader = ts
                 break
     # vote requests, then vote responses
@@ -311,11 +311,11 @@ async def test_reelection_3(cluster_maker):
     start_time = time.time()
     while time.time() - start_time < 0.01:
         await cluster.deliver_all_pending()
-        if ts_2.get_state_code() == "LEADER":
+        if ts_2.get_role_name() == "LEADER":
             break
         await asyncio.sleep(0.0001)
         
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     await cluster.deliver_all_pending()

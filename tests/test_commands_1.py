@@ -65,7 +65,7 @@ async def test_command_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     logger.info('------------------------ Election done')
@@ -112,7 +112,7 @@ async def test_command_1(cluster_maker):
     cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
     orig_term =  await ts_1.get_term() 
     await ts_1.do_leader_lost()
-    assert ts_1.get_state_code() == "CANDIDATE"
+    assert ts_1.get_role_name() == "CANDIDATE"
     command_result = await ts_1.run_command("add 1")
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
@@ -125,7 +125,7 @@ async def test_command_1(cluster_maker):
     logger.debug('------------------------ sending heartbeats, should make candidate resign')
     await ts_3.send_heartbeats()
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "FOLLOWER"
+    assert ts_1.get_role_name() == "FOLLOWER"
     assert ts_1.get_leader_uri() == uri_3
 
 
@@ -190,7 +190,7 @@ async def test_command_sqlite_1(cluster_maker):
     await ts_3.start_campaign()
 
     await cluster.run_election()
-    assert ts_3.get_state_code() == "LEADER"
+    assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     logger.info('------------------------ Election done')
@@ -271,7 +271,7 @@ async def double_leader_inner(cluster, discard):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -290,8 +290,8 @@ async def double_leader_inner(cluster, discard):
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.start_campaign()
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
 
     command_result = await cluster.run_command("add 1", 1)
@@ -379,7 +379,7 @@ async def test_command_2_leaders_3(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -404,8 +404,8 @@ async def test_command_2_leaders_3(cluster_maker):
     await ts_2.start_campaign()
     await cluster.run_election()
     await cluster.deliver_all_pending()
-    assert ts_1.get_state_code() == "LEADER"
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
 
     cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected")
@@ -458,7 +458,7 @@ async def test_command_after_heal_1(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
@@ -471,13 +471,13 @@ async def test_command_after_heal_1(cluster_maker):
     # now ts_2 and ts_3 are alone, have ts_2
     cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats")
     await ts_2.start_campaign()
-    assert ts_2.get_state_code() == "CANDIDATE"
+    assert ts_2.get_role_name() == "CANDIDATE"
     last_term = await ts_2.log.get_term()
     await cluster.unsplit()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     logger.info('-------------- telling reconnected old leader %s to send heartbeats, %s should reject in candidate',
                 uri_1, uri_2)
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     await ts_1.send_heartbeats()
     logger.info('-------------- old leader %s sent heartbeats', uri_1)
     await cluster.deliver_all_pending()
@@ -535,7 +535,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     await ts_1.start_campaign()
 
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_1
     assert ts_2.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -601,7 +601,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     await ts_1.start_campaign()
 
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_1
     assert ts_2.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -660,7 +660,7 @@ async def test_long_catchup(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -806,7 +806,7 @@ async def test_follower_run_error(cluster_maker):
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -881,7 +881,7 @@ async def test_follower_rewrite_1(cluster_maker):
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
@@ -903,13 +903,13 @@ async def test_follower_rewrite_1(cluster_maker):
     cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
     await ts_2.start_campaign()
     await cluster.run_election()
-    assert ts_2.get_state_code() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
     cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader")
     # we do this now so that the cluster run_command method will not get confused
     # about which server is the leader
     await ts_1.do_demote_and_handle(None)
-    assert ts_1.get_state_code() == "FOLLOWER"
+    assert ts_1.get_role_name() == "FOLLOWER"
 
     # now do a command at the new leader
     command_result = None
