@@ -78,11 +78,11 @@ class Hull(HullAPI):
 
     # Part of API
     async def run_command(self, command, timeout=1):
-        if self.state.state_code == StateCode.leader:
+        if self.state.role_name == StateCode.leader:
             return await self.state.run_command(command, timeout=timeout)
-        elif self.state.state_code == StateCode.follower:
+        elif self.state.role_name == StateCode.follower:
             return CommandResult(command, redirect=self.state.leader_uri)
-        elif self.state.state_code == StateCode.candidate:
+        elif self.state.role_name == StateCode.candidate:
             return CommandResult(command, retry=1)
     
     # Called by State
@@ -90,8 +90,8 @@ class Hull(HullAPI):
         return self.log
 
     # Called by State
-    def get_state_code(self):
-        return self.state.state_code
+    def get_role_name(self):
+        return self.state.role_name
 
     # Called by State
     def get_my_uri(self):

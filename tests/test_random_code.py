@@ -38,7 +38,7 @@ async def test_normal_election_sequence_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
 
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
@@ -56,7 +56,7 @@ async def test_normal_election_sequence_2(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
 
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     assert ts_4.get_leader_uri() == uri_1
@@ -75,7 +75,7 @@ async def test_normal_command_sequence_1(cluster_maker):
     sequence1 = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence1)
 
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
@@ -107,7 +107,7 @@ async def test_partial_sequences_1(cluster_maker):
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     
-    assert ts_1.get_state_code() == "LEADER"
+    assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')

@@ -166,7 +166,7 @@ class WhenState(PauseTrigger):
         index = await log.get_last_index()
         last_term = await log.get_last_term()
         commit_index = await log.get_commit_index()
-        role = server.get_state_code()
+        role = server.get_role_name()
         if self.log_state.term != term:
             done = False
         if self.log_state.last_index != index:
@@ -348,7 +348,7 @@ class Sequencer:
         index = await log.get_last_index()
         last_term = await log.get_last_term()
         commit_index = await log.get_commit_index()
-        role = server.get_state_code()
+        role = server.get_role_name()
         exp_state = node_op.get_state_validate().log_state
         assert exp_state.term == term
         assert exp_state.last_index == index
@@ -379,7 +379,7 @@ class Sequencer:
             role_code = RoleCode.follower
         else:
             run_state = RunState.paused
-            role = server.get_state_code()
+            role = server.get_role_name()
             if role.lower() == "leader":
                 role_code = RoleCode.leader
             elif role.lower() == "candidate":
