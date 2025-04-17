@@ -1,33 +1,65 @@
+* Test test_run_to_election_1 from file tests/test_elections_2.py
+
+
+    This test is mainly for the purpose of testing the test support features implemented in the PausingCluster, PausingServer and
+    related implementations. This test shows how to used two of the least granular styles of control, just allowing everything
+    (except timers) proceed normally until the election is complete.
+
+    In the first phase an election is run but having the cluster run a complete sequence that knows how to
+    define the election result based on how many servers are in the quorum, and then run all nodes until
+    the new TERM_START log record has been committed.
+
+    In the second phase an election is run with a more granular style of condition checker, which can be useful
+    for making things break for testing purposes. Here it is done without error in order to be demonstrate
+    and validate that method.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_run_to_election_1
-------------------------------------------------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1      | N-1       | N-2   | N-2                              | N-2       | N-3   | N-3                              | N-3       |
-| node  | Role  | Op       | Delta     | Role  | Op                               | Delta     | Role  | Op                               | Delta     |
-|  N-1  | FLWR  | STARTED  |           | FLWR  | STARTED                          |           | FLWR  | STARTED                          |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | CNDI  | NEW ROLE                         | t=1       |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | CNDI  | give_vote->N-1 term=1 li=0 lt=1  |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           |
-|  N-3  | FLWR  |          | t=1       | FLWR  |                                  | t=1       | CNDI  | N-1->vote-> yes=True             |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | LEAD  | NEW ROLE                         | lt=1 li=1 |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | LEAD  | entries->N-1 li=0 lt=0 ec=1 ci=0 |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | LEAD  | N-2->vote-> yes=True             |           |
-|  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |                                  | lt=1 li=1 | LEAD  | N-1->ent_reply-> ok=True mi=1    |           |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | LEAD  | N-2->ent_reply-> ok=True mi=1    | ci=1      |
-|  N-3  | FLWR  |          |           | FLWR  |                                  |           | FLWR  | NEW ROLE                         |           |
-|  N-2  | FLWR  |          |           | CNDI  | NEW ROLE                         | t=2       | FLWR  |                                  |           |
-|  N-2  | FLWR  |          |           | CNDI  | give_vote->N-1 term=2 li=1 lt=2  |           | FLWR  |                                  |           |
-|  N-2  | FLWR  |          |           | CNDI  | give_vote->N-3 term=2 li=1 lt=2  |           | FLWR  |                                  |           |
-|  N-2  | FLWR  |          | t=2       | CNDI  | N-3->vote-> yes=True             |           | FLWR  |                                  | t=2       |
-|  N-2  | FLWR  |          |           | LEAD  | NEW ROLE                         | lt=2 li=2 | FLWR  |                                  |           |
-|  N-2  | FLWR  |          |           | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=0 |           | FLWR  |                                  |           |
-|  N-2  | FLWR  |          |           | LEAD  | entries->N-3 li=1 lt=1 ec=1 ci=0 |           | FLWR  |                                  |           |
-|  N-2  | FLWR  |          |           | LEAD  | N-1->vote-> yes=True             |           | FLWR  |                                  |           |
-|  N-2  | FLWR  |          | lt=2 li=2 | LEAD  | N-3->ent_reply-> ok=True mi=2    |           | FLWR  |                                  | lt=2 li=2 |
-|  N-2  | FLWR  |          |           | LEAD  | N-1->ent_reply-> ok=True mi=2    | ci=2      | FLWR  |                                  |           |
-------------------------------------------------------------------------------------------------------------------------------------------------------
+** Initial election, using fill sequence control
+------------------------------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1      | N-1       | N-2   | N-2      | N-2       | N-3   | N-3                              | N-3       |
+| node  | Role  | Op       | Delta     | Role  | Op       | Delta     | Role  | Op                               | Delta     |
+|  N-1  | FLWR  | STARTED  |           | FLWR  | STARTED  |           | FLWR  | STARTED                          |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | NEW ROLE                         | t=1       |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-1 term=1 li=0 lt=1  |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           |
+|  N-3  | FLWR  |          | t=1       | FLWR  |          | t=1       | CNDI  | N-1->vote-> yes=True             |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | NEW ROLE                         | lt=1 li=1 |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-1 li=0 lt=0 ec=1 ci=0 |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->vote-> yes=True             |           |
+|  N-3  | FLWR  |          | lt=1 li=1 | FLWR  |          | lt=1 li=1 | LEAD  | N-1->ent_reply-> ok=True mi=1    |           |
+|  N-3  | FLWR  |          |           | FLWR  |          |           | LEAD  | N-2->ent_reply-> ok=True mi=1    | ci=1      |
+------------------------------------------------------------------------------------------------------------------------------
+** Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete
+--------------------------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1 | N-1       | N-2   | N-2                              | N-2       | N-3   | N-3       | N-3       |
+| node  | Role  | Op  | Delta     | Role  | Op                               | Delta     | Role  | Op        | Delta     |
+|  N-3  | FLWR  |     |           | FLWR  |                                  |           | FLWR  | NEW ROLE  |           |
+|  N-2  | FLWR  |     |           | CNDI  | NEW ROLE                         | t=2       | FLWR  |           |           |
+|  N-2  | FLWR  |     |           | CNDI  | give_vote->N-1 term=2 li=1 lt=2  |           | FLWR  |           |           |
+|  N-2  | FLWR  |     |           | CNDI  | give_vote->N-3 term=2 li=1 lt=2  |           | FLWR  |           |           |
+|  N-2  | FLWR  |     | t=2       | CNDI  | N-3->vote-> yes=True             |           | FLWR  |           | t=2       |
+|  N-2  | FLWR  |     |           | LEAD  | NEW ROLE                         | lt=2 li=2 | FLWR  |           |           |
+|  N-2  | FLWR  |     |           | LEAD  | entries->N-1 li=1 lt=1 ec=1 ci=0 |           | FLWR  |           |           |
+|  N-2  | FLWR  |     |           | LEAD  | entries->N-3 li=1 lt=1 ec=1 ci=0 |           | FLWR  |           |           |
+|  N-2  | FLWR  |     |           | LEAD  | N-1->vote-> yes=True             |           | FLWR  |           |           |
+|  N-2  | FLWR  |     | lt=2 li=2 | LEAD  | N-3->ent_reply-> ok=True mi=2    |           | FLWR  |           | lt=2 li=2 |
+|  N-2  | FLWR  |     |           | LEAD  | N-1->ent_reply-> ok=True mi=2    | ci=2      | FLWR  |           |           |
+--------------------------------------------------------------------------------------------------------------------------
+** Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat
+--------------------------------------------------------------------------------------------------------
+| event | N-1   | N-1 | N-1   | N-2   | N-2                              | N-2   | N-3   | N-3 | N-3   |
+| node  | Role  | Op  | Delta | Role  | Op                               | Delta | Role  | Op  | Delta |
+|  N-2  | FLWR  |     |       | LEAD  | entries->N-1 li=2 lt=2 ec=0 ci=2 |       | FLWR  |     |       |
+|  N-2  | FLWR  |     | ci=2  | LEAD  | N-1->ent_reply-> ok=True mi=2    |       | FLWR  |     |       |
+|  N-2  | FLWR  |     |       | LEAD  | entries->N-3 li=2 lt=2 ec=0 ci=2 |       | FLWR  |     |       |
+|  N-2  | FLWR  |     |       | LEAD  | N-3->ent_reply-> ok=True mi=2    |       | FLWR  |     | ci=2  |
+--------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

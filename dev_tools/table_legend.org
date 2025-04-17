@@ -5,31 +5,30 @@ All the items in these legends labeled N-X are placeholders for actual node id v
 actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the cluster. Yes, One based, not zero.
 
 | Column Label | Description     | Details                                                                                        |
-| Event Node   | Triggering node | The id value of the node that experienced the event that triggered this trace row              |
 | N-X Role     | Raft Role       | FLWR = Follower CNDI = Candidate LEAD = Leader                                                 |
 | N-X Op       | Activity        | Describes a traceable event at this node, see separate table below                             |
 | N-X Delta    | State change    | Describes any change in state since previous trace, see separate table below                   |
 
 
 ** "Op" Column detail legend
-| Value          | Meaning                                                                                      |
-| STARTED        | Simulated node starting with empty log, term=0                                               |
-| CMD START      | Simulated client requested that a node (usually leader, but not for all tests) run a command |
-| CMD DONE       | The previous requested command is finished, whether complete, rejected, failed, whatever     |
-| CRASH          | Simulating node has simulated a crash                                                        |
-| RESTART        | Previously crashed node has restarted. Look at delta column to see effects on log, if any    |
-| NEW ROLE       | The node has changed Raft role since last trace line                                         |
-| NETSPLIT       | The node has been partitioned away from the majority network                                 |
-| NETJOIN        | The node has rejoined the majority network                                                   |
-| endtries->N-X  | Node has sent append_entries message to N-X, next line in this table explains details        |
-| (continued)    | li=1 means prevLogIndex=1, lt=1 means prevLogTerm=1, ci means sender's commitInde            |
-| (continued)    | ec=2 means that the entries list in the is 2 items long. ec=0 is a heartbeat                 |
-| N-X->ent_reply | Node has received the response to an append_entries message, details in continued lines      |
-| (continued)    | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
-| give_vote->N-X | Node has sent request_vote to N-X, term=1 means current term is 1 (continued next line)      |
-| (continued)    | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
-| N-X->vote      | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
-
+| Value         | Meaning                                                                                      |
+| STARTED       | Simulated node starting with empty log, term=0                                               |
+| CMD START     | Simulated client requested that a node (usually leader, but not for all tests) run a command |
+| CMD DONE      | The previous requested command is finished, whether complete, rejected, failed, whatever     |
+| CRASH         | Simulating node has simulated a crash                                                        |
+| RESTART       | Previously crashed node has restarted. Look at delta column to see effects on log, if any    |
+| NEW ROLE      | The node has changed Raft role since last trace line                                         |
+| NETSPLIT      | The node has been partitioned away from the majority network                                 |
+| NETJOIN       | The node has rejoined the majority network                                                   |
+| ae->N-X       | Node has sent append_entries message to N-X, next line in this table explains                |
+| (continued)   | t=1 means current term is 1, i=1 means prevLogIndex=1, lt=1 means prevLogTerm=1              |
+| (continued)   | c=1 means sender's commitIndex is 1,                                                         |
+| (continued)   | e=2 means that the entries list in the message is 2 items long. eXo=0 is a heartbeat         |
+| N-X->ae_reply | Node has received the response to an append_entries message, details in continued lines      |
+| (continued)   | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
+| do_vote->N-X  | Node has sent request_vote to N-X, t=1 means current term is 1 (continued next line)         |
+| (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
+| N-X->vote     | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line
