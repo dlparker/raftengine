@@ -395,7 +395,7 @@ class WhenHasLeader(PauseTrigger):
     async def is_tripped(self, server):
         if server.hull.get_role_name() != "FOLLOWER":
             return False
-        if server.hull.state.leader_uri == self.leader_uri:
+        if server.hull.role.leader_uri == self.leader_uri:
             return True
         return False
     
@@ -507,7 +507,7 @@ class TestHull(Hull):
         self.break_on_message_code = None
         self.explode_on_message_code = None
         self.corrupt_message_with_code = None
-        self.state_run_later_def = None
+        self.role_run_later_def = None
         self.timers_disabled = False
         self.wrapper_logger = logging.getLogger("SimulatedNetwork")
         
@@ -525,26 +525,26 @@ class TestHull(Hull):
             result = await super().on_message(message)
         return result
 
-    async def state_run_after(self, delay, target):
-        self.state_run_later_def = dict(role_name=self.state.role_name,
+    async def role_run_after(self, delay, target):
+        self.role_run_later_def = dict(role_name=self.role.role_name,
                                         delay=delay, target=target)
         if not self.timers_disabled:
-            await super().state_run_after(delay, target)
+            await super().role_run_after(delay, target)
 
     async def disable_timers(self):
         self.timers_disabled = True
-        self.state_async_handle.cancel()
-        self.state_async_handle = None
+        self.role_async_handle.cancel()
+        self.role_async_handle = None
     
     async def enable_timers(self, reset=True):
         if reset:
-            if self.state.role_name == "FOLLOWER":
+            if self.role.role_name == "FOLLOWER":
                 self.last_leader_contact = time.time()
-            elif self.state.role_name == "LEADER":
+            elif self.role.role_name == "LEADER":
                 self.last_broadcast_time = time.time()
-        if self.state_run_later_def:
-            await super().state_run_after(self.state_run_later_def['delay'],
-                                          self.state_run_later_def['target'])
+        if self.role_run_later_def:
+            await super().role_run_after(self.role_run_later_def['delay'],
+                                          self.role_run_later_def['target'])
         self.timers_disabled = False
             
     
@@ -636,9 +636,9 @@ class Network:
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
         await self.test_trace.note_message_handled(node, msg)
-        start_state = node.hull.state.role_name
+        start_state = node.hull.role.role_name
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
-        if start_state != node.hull.state.role_name:
+        if start_state != node.hull.role.role_name:
             await self.test_trace.note_role_changed(node)
         return msg
     
@@ -859,10 +859,10 @@ class PausingServer(PilotAPI):
             return None
         return self.hull.get_role_name()
     
-    def get_state(self):
+    def get_role(self):
         if self.hull is None:
             return None
-        return self.hull.state
+        return self.hull.role
 
     async def get_term(self):
         if self.hull is None:
@@ -874,7 +874,7 @@ class PausingServer(PilotAPI):
             return None
         if self.hull.get_role_name() == "LEADER":
             return self.uri
-        return self.hull.state.leader_uri
+        return self.hull.role.leader_uri
         
     async def start_campaign(self):
         res =  await self.hull.start_campaign()
@@ -883,10 +883,10 @@ class PausingServer(PilotAPI):
         return res
     
     async def send_heartbeats(self):
-        return await self.hull.state.send_heartbeats()
+        return await self.hull.role.send_heartbeats()
     
     async def do_leader_lost(self):
-        await self.hull.state.leader_lost()
+        await self.hull.role.leader_lost()
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
         
@@ -956,7 +956,7 @@ class PausingServer(PilotAPI):
         else:
             self.log = new_log
         self.hull.log = self.log
-        self.hull.state.log = self.log
+        self.hull.role.log = self.log
         return self.log
     
     def change_networks(self, network):
@@ -1001,10 +1001,10 @@ class PausingServer(PilotAPI):
     def get_leader_id(self):
         if self.hull is None:
             return None
-        if self.hull.state.role_name == "LEADER":
+        if self.hull.role.role_name == "LEADER":
             return self.uri
-        elif self.hull.state.role_name == "FOLLOWER":
-            return self.hull.state.leader_uri
+        elif self.hull.role.role_name == "FOLLOWER":
+            return self.hull.role.leader_uri
         else:
             return None
 
@@ -1035,13 +1035,13 @@ class PausingServer(PilotAPI):
         
     async def cleanup(self):
         hull = self.hull
-        if hull.state:
-            self.logger.debug('cleanup stopping %s %s', hull.state, hull.get_my_uri())
-            handle =  hull.state_async_handle
-            await hull.state.stop()
+        if hull.role:
+            self.logger.debug('cleanup stopping %s %s', hull.role, hull.get_my_uri())
+            handle =  hull.role_async_handle
+            await hull.role.stop()
             if handle:
                 self.logger.debug('after %s %s stop, handle.cancelled() says %s',
-                                 hull.state, hull.get_my_uri(), handle.cancelled())
+                                 hull.role, hull.get_my_uri(), handle.cancelled())
             
         self.hull = None
         del hull
@@ -1101,12 +1101,12 @@ class PausingServer(PilotAPI):
         return # all triggers tripped as required by mode flags, so pause ops
     
     async def dump_stats(self):
-        if self.hull.state.role_name == "FOLLOWER":
-            leaderId=self.hull.state.leader_uri
+        if self.hull.role.role_name == "FOLLOWER":
+            leaderId=self.hull.role.leader_uri
         else:
             leaderId=None
         stats = dict(uri=self.uri,
-                     role_name=self.hull.state.role_name,
+                     role_name=self.hull.role.role_name,
                      term=await self.log.get_term(),
                      prevLogIndex=await self.log.get_last_index(),
                      prevLogTerm=await self.log.get_last_term(),
@@ -1729,7 +1729,7 @@ class PausingCluster:
             
     def get_leader(self):
         for uri, node in self.nodes.items():
-            if node.hull.state.role_name == "LEADER":
+            if node.hull.role.role_name == "LEADER":
                 return node
         return None
     
@@ -1924,7 +1924,7 @@ class SNormalCommand(StdSequence):
         self.network = self.cluster.net_mgr.get_majority_network()
         for uri,node in self.network.nodes.items():
             node.clear_triggers()
-            if node.hull.state.role_name == "LEADER":
+            if node.hull.role.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
@@ -1943,7 +1943,7 @@ class SNormalCommand(StdSequence):
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
-            await node.hull.state.send_heartbeats()
+            await node.hull.role.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
             # leader needs to send commit index to all other nodes, even
@@ -2051,7 +2051,7 @@ class SPartialCommand(StdSequence):
                 raise Exception(f'bad setup, {voter} not in majority network')
             node = self.network.nodes[uri]
             node.clear_triggers()
-            if node.hull.state.role_name == "LEADER":
+            if node.hull.role.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
@@ -2071,7 +2071,7 @@ class SPartialCommand(StdSequence):
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
-            await node.hull.state.send_heartbeats()
+            await node.hull.role.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
             # leader needs to send commit index to all other nodes, even

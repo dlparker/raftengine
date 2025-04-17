@@ -50,7 +50,7 @@ async def test_stepwise_election_1(cluster_maker):
 
     # Candidate is poised to send request for vote to other two servers
     # let the messages go out
-    candidate = ts_3.get_state()
+    candidate = ts_3.get_role()
     logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
     logger.debug("ts_1 term %d", await ts_1.log.get_term())
     logger.debug("ts_2 term %d", await ts_1.log.get_term())
@@ -205,10 +205,10 @@ async def test_election_timeout_1(cluster_maker):
     assert ts_1.get_role_name() == "CANDIDATE"
     # Set the stopped flag to prevent timeout from restarting election
     # don't call stop(), it cancels the timeout
-    ts_1.hull.state.stopped = True
+    ts_1.hull.role.stopped = True
     # now delay for more than the timeout, should start new election with new term
     old_term = await ts_1.get_term()
-    assert ts_1.hull.state_async_handle is not None
+    assert ts_1.hull.role_async_handle is not None
     await asyncio.sleep(0.015)
     assert ts_1.get_role_name() == "CANDIDATE"
     new_term = await ts_1.get_term()
@@ -443,7 +443,7 @@ async def test_failed_first_election_1(cluster_maker):
 
     # Candidate is poised to send request for vote to other two servers
     # let the messages go out
-    candidate = ts_3.get_state()
+    candidate = ts_3.get_role()
     logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
     logger.debug("ts_1 term %d", await ts_1.log.get_term())
     logger.debug("ts_2 term %d", await ts_1.log.get_term())

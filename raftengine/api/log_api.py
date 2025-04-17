@@ -50,7 +50,7 @@ class ConfigLogRec(LogRec):
     
 
 
-# abstract class for all states
+# abstract class for all roles
 class LogAPI(abc.ABC):
     """
     Abstract base class that functions as an interface definition for 

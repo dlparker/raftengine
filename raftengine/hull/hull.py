@@ -10,9 +10,9 @@ from raftengine.api.hull_api import CommandResult
 from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.states.follower import Follower
-from raftengine.states.candidate import Candidate
-from raftengine.states.leader import Leader
+from raftengine.roles.follower import Follower
+from raftengine.roles.candidate import Candidate
+from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
 from raftengine.api.hull_config import ClusterConfig, LocalConfig
@@ -27,16 +27,16 @@ class Hull(HullAPI):
             raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
         self.pilot = pilot
         self.log = pilot.get_log()
-        self.state = Follower(self)
+        self.role = Follower(self)
         self.logger = logging.getLogger("Hull")
-        self.state_async_handle = None
-        self.state_run_after_target = None
+        self.role_async_handle = None
+        self.role_run_after_target = None
         self.message_problem_history = []
         self.log_substates = logging.getLogger("Substates")
 
     # Part of API
     async def start(self):
-        await self.state.start()
+        await self.role.start()
 
     # Part of API
     def decode_message(self, in_message):
@@ -68,7 +68,7 @@ class Hull(HullAPI):
         error = None
         try:
             self.logger.debug("%s Handling message type %s", self.get_my_uri(), message.get_code())
-            res = await self.state.on_message(message)
+            res = await self.role.on_message(message)
         except Exception as e:
             error = traceback.format_exc()
             self.logger.error(error)
@@ -78,11 +78,11 @@ class Hull(HullAPI):
 
     # Part of API
     async def run_command(self, command, timeout=1):
-        if self.state.role_name == StateCode.leader:
-            return await self.state.run_command(command, timeout=timeout)
-        elif self.state.role_name == StateCode.follower:
-            return CommandResult(command, redirect=self.state.leader_uri)
-        elif self.state.role_name == StateCode.candidate:
+        if self.role.role_name == StateCode.leader:
+            return await self.role.run_command(command, timeout=timeout)
+        elif self.role.role_name == StateCode.follower:
+            return CommandResult(command, redirect=self.role.leader_uri)
+        elif self.role.role_name == StateCode.candidate:
             return CommandResult(command, retry=1)
     
     # Called by State
@@ -91,7 +91,7 @@ class Hull(HullAPI):
 
     # Called by State
     def get_role_name(self):
-        return self.state.role_name
+        return self.role.role_name
 
     # Called by State
     def get_my_uri(self):
@@ -124,35 +124,35 @@ class Hull(HullAPI):
         await self.stop_state()
 
     async def stop_state(self):
-        await self.state.stop()
-        if self.state_async_handle:
+        await self.role.stop()
+        if self.role_async_handle:
             self.logger.debug("%s canceling scheduled task", self.get_my_uri())
-            self.state_async_handle.cancel()
-            self.state_async_handle = None
+            self.role_async_handle.cancel()
+            self.role_async_handle = None
 
     # Called by State
     async def start_campaign(self):
         await self.stop_state()
-        self.state = Candidate(self)
-        await self.state.start()
+        self.role = Candidate(self)
+        await self.role.start()
         self.logger.warning("%s started campaign term = %s", self.get_my_uri(), await self.log.get_term())
 
     # Called by State
     async def win_vote(self, new_term):
         await self.stop_state()
-        self.state = Leader(self, new_term)
+        self.role = Leader(self, new_term)
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
-        await self.state.start()
+        await self.role.start()
 
     # Called by State
     async def demote_and_handle(self, message=None):
-        self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.state)
+        self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.role)
         await self.stop_state()
-        self.state = Follower(self)
-        await self.state.start()
+        self.role = Follower(self)
+        await self.role.start()
         if message and hasattr(message, 'leaderId'):
             self.logger.debug('%s message says leader is %s, adopting', self.get_my_uri(), message.leaderId)
-            self.state.leader_uri = message.leaderId
+            self.role.leader_uri = message.leaderId
         if message:
             self.logger.warning('%s reprocessing message as follower %s', self.get_my_uri(), message)
             return await self.inner_on_message(message)
@@ -171,28 +171,28 @@ class Hull(HullAPI):
         await self.pilot.send_response(response.receiver, encoded, encoded_reply)
 
     async def state_after_runner(self, target):
-        if self.state.stopped:
+        if self.role.stopped:
             return
         await target()
         
     # Called by State
-    async def state_run_after(self, delay, target):
+    async def role_run_after(self, delay, target):
         loop = asyncio.get_event_loop()
-        if self.state_async_handle:
+        if self.role_async_handle:
             self.logger.debug('%s cancelling after target to %s', self.local_config.uri,
-                        self.state_run_after_target)
-            self.state_async_handle.cancel()
+                        self.role_run_after_target)
+            self.role_async_handle.cancel()
         self.logger.debug('%s setting run after target to %s', self.local_config.uri, target)
-        self.state_run_after_target = target
-        self.state_async_handle = loop.call_later(delay,
+        self.role_run_after_target = target
+        self.role_async_handle = loop.call_later(delay,
                                                   lambda target=target:
                                                   asyncio.create_task(self.state_after_runner(target)))
 
     # Called by State
-    async def cancel_state_run_after(self):
-        if self.state_async_handle:
-            self.state_async_handle.cancel()
-            self.state_async_handle = None
+    async def cancel_role_run_after(self):
+        if self.role_async_handle:
+            self.role_async_handle.cancel()
+            self.role_async_handle = None
         
     # Called by State
     async def record_message_problem(self, message, problem):
@@ -201,7 +201,7 @@ class Hull(HullAPI):
 
     # Called by State
     async def record_substate(self, substate):
-        rec = dict(state=str(self.state), substate=substate, time=time.time())
+        rec = dict(state=str(self.role), substate=substate, time=time.time())
         if self.log_substates:
             self.log_substates.debug("%s %s %s %s", self.get_my_uri(), rec['state'], rec['substate'], rec['time'])
 

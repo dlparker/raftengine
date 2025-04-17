@@ -11,7 +11,7 @@ from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.base_message import BaseMessage
-from raftengine.states.base_state import BaseState
+from raftengine.roles.base_role import BaseRole
 
 @dataclass
 class FollowerTracker:
@@ -68,9 +68,9 @@ class CommandWaiter:
             self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
             hull = self.leader.hull
             leader_uri = None
-            if hull.state != self.leader:
-                if hasattr(hull.state, 'leader_uri'):
-                    leader_uri = hull.state.leader_uri
+            if hull.role != self.leader:
+                if hasattr(hull.role, 'leader_uri'):
+                    leader_uri = hull.role.leader_uri
                 self.leader.logger.debug("%s after timeout exception am no longer leader! maybe %s?",
                                          self.leader.my_uri(), leader_uri)
                 self.result = CommandResult(command=self.orig_log_record.command,
@@ -107,7 +107,7 @@ class CommandWaiter:
             self.done_condition.notify()
         return 
         
-class Leader(BaseState):
+class Leader(BaseRole):
 
     def __init__(self, hull, term):
         super().__init__(hull, StateCode.leader)

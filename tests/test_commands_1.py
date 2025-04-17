@@ -437,7 +437,7 @@ async def test_command_after_heal_1(cluster_maker):
     The goal for this test is for a candidate to receive an append entries message from a leader of a lower term.
     This can happen when a network partition resolves before a new election has completed and the 
     old leader sends a heartbeat out. There wouldn't be any problem with the candidate resigning in this
-    case because everybody's log states match, but Raft is conservative on this point and requires
+    case because everybody's log roles match, but Raft is conservative on this point and requires
     that the candidate reject an append entries of a lower term.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
@@ -675,7 +675,7 @@ async def test_long_catchup(cluster_maker):
     # Make sure that the number of commands we send
     # now will require a couple of catchup messages, so
     # use the leader's runtime value 
-    loop_limit = ts_1.hull.state.max_entries_per_message * 2 + 2
+    loop_limit = ts_1.hull.role.max_entries_per_message * 2 + 2
     cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
     
     part1 = {uri_3: ts_3}

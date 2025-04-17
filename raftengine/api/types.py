@@ -27,7 +27,7 @@ class SubstateCode(str, Enum):
 
     # --- end expect from any state
 
-    # --- Expect from Follower states
+    # --- Expect from Follower roles
     """ Follower has not yet received leader contact """
     leader_unknown = "LEADER_UNKOWN"
 
@@ -87,9 +87,9 @@ class SubstateCode(str, Enum):
 
     """ LAST call from leader synced new records """
     synced_prepare = "SYNCED_RECORDS"
-    # --- end expect from Follower states
+    # --- end expect from Follower roles
 
-    # --- Expect from Candidate states
+    # --- Expect from Candidate roles
     """ Candidate starting election """
     start_election = "START_ELECTION"
 
@@ -111,9 +111,9 @@ class SubstateCode(str, Enum):
     """ Candidate starting new election """
     start_new_election = "START_NEW_ELECTION"
     
-    # --- end expect from Candidate states
+    # --- end expect from Candidate roles
 
-    # --- Expect from Leader states
+    # --- Expect from Leader roles
     """ Just got elected, no broadcasts yet"""
     elected = "ELECTED"
     
@@ -159,7 +159,7 @@ class SubstateCode(str, Enum):
     """ Some error prevented the command sequence from completing """
     failed_command = "FAILED_COMMAND"
 
-    # --- end expect from Leader states
+    # --- end expect from Leader roles
 
     
     def __str__(self):

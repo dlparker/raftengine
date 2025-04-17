@@ -231,8 +231,8 @@ class Sequencer:
                 continue
             do_now = node_op.get_do_now()
             msg_runner = node_op.get_msg_runner()
-            state_runner = node_op.get_state_runner()
-            state_validation = node_op.get_state_validate()
+            state_runner = node_op.get_role_runner()
+            state_validation = node_op.get_role_validate()
             # for now, we accept only one per node_op, in future we might
             # allow combinations, but probably not
             if do_now:
@@ -349,7 +349,7 @@ class Sequencer:
         last_term = await log.get_last_term()
         commit_index = await log.get_commit_index()
         role = server.get_role_name()
-        exp_state = node_op.get_state_validate().log_state
+        exp_state = node_op.get_role_validate().log_state
         assert exp_state.term == term
         assert exp_state.last_index == index
         assert exp_state.last_term == last_term

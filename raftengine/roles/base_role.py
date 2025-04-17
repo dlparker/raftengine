@@ -4,7 +4,8 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.api.types import StateCode, SubstateCode
     
-class BaseState:
+class BaseRole:
+
     
     def __init__(self, hull, role_name):
         self.hull = hull
@@ -45,10 +46,10 @@ class BaseState:
         self.stopped = True
 
     async def run_after(self, delay, target):
-        await self.hull.state_run_after(delay, target)
+        await self.hull.role_run_after(delay, target)
 
     async def cancel_run_after(self):
-        await self.hull.cancel_state_run_after()
+        await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
         if message.term > await self.log.get_term():
