@@ -6,13 +6,13 @@ Raft consensus as an internal service.
 
 ** Distinctions from other python Raft libraries
 
-1. It allows you to supply your own message transport, so you can integrate it with
-your own message transport needs and management.
-2. It allows you to supply your own Raft Log implementation, so you can integrate
-it with your own persistent storage needs and management.
-3. It does not require that the transport mechanism be RPC
-as it deals with messages and responses asynchrously, meaning
-you can use an asynchronous transport such as a message queue.
+1. It allows you to supply your own message transport, so you can integrate
+   it with your own message transport needs and management.
+2. It allows you to supply your own Raft Log implementation,
+   so you can integrate it with your own persistent storage needs and management.
+3. It does not require that the transport mechanism be RPC as it deals
+   with messages and responses asynchrously, meaning you can use an
+   asynchronous transport such as a message queue.
 
 ** Why the distictions might matter
 
