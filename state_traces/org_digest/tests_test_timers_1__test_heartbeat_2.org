@@ -1,7 +1,20 @@
+* Test test_heartbeat_2 from file tests/test_timers_1.py
+
+
+    Tests to make sure that correct heartbeat timer and election timeout
+    values do not result in an election if everything is allowed to run
+    for more than the election timeout value.
+
+    Test starts with a normal election with timers on, then the
+    auto transport is enabled and a time period equal to twice the
+    election_timeout max value is allowed to pass. If the leader
+    is still the leader and the term is still the term, then party.
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_heartbeat_2
+** Initial election with timers enabled
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
@@ -24,407 +37,100 @@
 |  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   | lt=1 li=1 | LEAD  |                              |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1      | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1      | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   |           | FLWR  |                              |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   |           | LEAD  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   |           |
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 3 is leader, starting auto comms and waiting for 0.22
+-----------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3   |
+|  Role  | Op                           | Delta | Role  | Op                           | Delta | Role  | Op                           | Delta |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1  | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1  | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   |       | FLWR  |                              |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-1->ae_reply ok=True mi=1   |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   |       | LEAD  |                              |       |
+|  FLWR  |                              |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=1   |       |
+-----------------------------------------------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

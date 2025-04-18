@@ -15,6 +15,10 @@ setup_logging()
 logger = logging.getLogger("test_code")
 
 async def test_bogus_pilot(cluster_maker):
+    """
+    Ensures that Hull constructor rejects Pilot class that does
+    not implement PilotAPI
+    """
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -26,6 +30,12 @@ async def test_bogus_pilot(cluster_maker):
         Hull(ts_1.cluster_config, ts_1.local_config, BadPilot())
 
 async def test_str_methods():
+    """
+    Ensures that __str__ methods of internal classes don't blow
+    up when called, and that the result contains at least something
+    of the expected information. Not much of a test, but the
+    doesn't-blow-up part is useful.
+    """
     assert str(RoleName.leader) == 'LEADER'
     assert str(SubstateCode.starting) == 'STARTING'
     assert "request_vote" in str(RequestVoteMessage('a','b', 0, 0, 0))

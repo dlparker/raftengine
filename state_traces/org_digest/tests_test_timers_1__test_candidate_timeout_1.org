@@ -1,7 +1,27 @@
+* Test test_candidate_timeout_1 from file tests/test_timers_1.py
+
+
+    Test to ensure that a candidate will give up on campaign if no resolution happens
+    by election timeout time, and then start a new election.
+
+    Test begins with a normal election with test-like timer values but timers disabled.
+
+    Then node1 and node3 have their networks switch to blocked mode so they won't process
+    any messages. Node 1, the leader is also forced to retire. So now there are two
+    followers but node 2 can't reach them.
+
+    Next auto transport is enabled and node2 has its timers enabled. Things are allowed
+    to run long enough that node 2 should timeout and try again. The value of
+    node2 term will indicate when that has happend.
+
+    When that works, the other nodes are unblocked and the election is allowed to proceed.
+    
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_normal_command_sequence_1
+** Initial election, normal
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
@@ -24,34 +44,51 @@
 |  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 |
 |  LEAD  | N-2->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | CMD START                    |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1 | li=2      | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1 |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   | li=2      | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 |           |
-|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   | li=2      |
-|  LEAD  | N-2->ae_reply ok=True mi=2   |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | N-3->ae_reply ok=True mi=2   | ci=2      | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              | ci=2      | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |           |
-|  LEAD  | CMD DONE                     |           | FLWR  |                              |           | FLWR  |                              | ci=2      |
-|  LEAD  | CMD START                    |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=1 c=2 | li=3      | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | ae->N-3 t=1 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=3   | li=3      | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           |
-|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | N-1->ae t=1 i=2 lt=1 e=1 c=2 |           |
-|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=3   | li=3      |
-|  LEAD  | N-2->ae_reply ok=True mi=2   |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | N-2->ae_reply ok=True mi=3   |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | N-3->ae_reply ok=True mi=2   | ci=3      | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  | N-3->ae_reply ok=True mi=3   |           | FLWR  |                              |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=3 lt=1 e=0 c=3 |           | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              | ci=3      | FLWR  | N-1->ae t=1 i=3 lt=1 e=0 c=3 |           |
-|  LEAD  | CMD DONE                     |           | FLWR  |                              |           | FLWR  |                              | ci=3      |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower
+--------------------------------------------------------------------------
+|  N-1   | N-1       | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   |
+|  Role  | Op        | Delta | Role  | Op  | Delta | Role  | Op  | Delta |
+|  FLWR  | NEW ROLE  |       | FLWR  |     |       | FLWR  |     |       |
+--------------------------------------------------------------------------
+** Node 2 started election, waiting for it to timeout
+----------------------------------------------------------------------------------------
+|  N-1   | N-1 | N-1   | N-2   | N-2                     | N-2   | N-3   | N-3 | N-3   |
+|  Role  | Op  | Delta | Role  | Op                      | Delta | Role  | Op  | Delta |
+|  FLWR  |     |       | CNDI  | poll->N-1 t=2 li=1 lt=2 |       | FLWR  |     |       |
+|  FLWR  |     |       | CNDI  | poll->N-3 t=2 li=1 lt=2 |       | FLWR  |     |       |
+|  FLWR  |     |       | CNDI  | poll->N-1 t=3 li=1 lt=3 | t=3   | FLWR  |     |       |
+|  FLWR  |     |       | CNDI  | poll->N-3 t=3 li=1 lt=3 |       | FLWR  |     |       |
+----------------------------------------------------------------------------------------
+** Node 2 election timeout detected, enabling other nodes to let election finish
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  FLWR  |                              |           | CNDI  | poll->N-1 t=4 li=1 lt=4      |           | FLWR  |                              |           |
+|  FLWR  | N-2->poll t=4 li=1 lt=4      |           | CNDI  |                              |           | FLWR  |                              |           |
+|  FLWR  | vote->N-2 yes=True           | t=4       | CNDI  |                              |           | FLWR  |                              |           |
+|  FLWR  |                              |           | CNDI  | N-1->vote yes=True           |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | NEW ROLE                     | lt=4 li=2 | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | poll->N-3 t=4 li=1 lt=4      |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | N-2->poll t=4 li=1 lt=4      |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | vote->N-2 yes=True           | t=4       |
+|  FLWR  |                              |           | LEAD  | N-3->vote yes=True           |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | ae->N-1 t=4 i=1 lt=1 e=1 c=0 |           | FLWR  |                              |           |
+|  FLWR  | N-2->ae t=4 i=1 lt=1 e=1 c=0 |           | LEAD  |                              |           | FLWR  |                              |           |
+|  FLWR  | ae_reply->N-2 ok=True mi=2   | lt=4 li=2 | LEAD  |                              |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=2   |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | ae->N-3 t=4 i=1 lt=1 e=1 c=0 | ci=2      | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | N-2->ae t=4 i=1 lt=1 e=1 c=0 |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | ae_reply->N-2 ok=True mi=2   | lt=4 li=2 |
+|  FLWR  |                              |           | LEAD  | N-3->ae_reply ok=True mi=2   |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | ae->N-1 t=4 i=2 lt=4 e=0 c=2 |           | FLWR  |                              |           |
+|  FLWR  | N-2->ae t=4 i=2 lt=4 e=0 c=2 |           | LEAD  |                              |           | FLWR  |                              |           |
+|  FLWR  | ae_reply->N-2 ok=True mi=2   | ci=2      | LEAD  |                              |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=2   |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  | ae->N-3 t=4 i=2 lt=4 e=0 c=2 |           | FLWR  |                              |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | N-2->ae t=4 i=2 lt=4 e=0 c=2 |           |
+|  FLWR  |                              |           | LEAD  |                              |           | FLWR  | ae_reply->N-2 ok=True mi=2   | ci=2      |
+|  FLWR  |                              |           | LEAD  | N-3->ae_reply ok=True mi=2   |           | FLWR  |                              |           |
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 

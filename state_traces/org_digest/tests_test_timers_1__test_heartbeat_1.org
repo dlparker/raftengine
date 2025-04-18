@@ -1,7 +1,17 @@
+* Test test_heartbeat_1 from file tests/test_timers_1.py
+
+
+    Simple test that heartbeat timer causes heartbeat messages.
+
+    Starts with a normal election but with timers enabled, then just loops
+    waiting for append entry messages to be sent to followers. 
+
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_heartbeat_1
+** Initial election with timers on, then waiting for followers to get append entry messages
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
