@@ -25,9 +25,9 @@ from dev_tools.sqlite_log import SqliteLog
 from raftengine.api.pilot_api import PilotAPI
 log_config = None
 
-trace_to_csv = False
+trace_to_csv = True
 digest_org = True
-digest_csv = False
+digest_csv = True
 
 def get_current_test():
     full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]

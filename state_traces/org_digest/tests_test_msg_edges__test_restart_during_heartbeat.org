@@ -1,7 +1,31 @@
+* Test test_restart_during_heartbeat from file tests/test_msg_edges.py
+
+
+    This tests that the message problem logging mechanism works.
+
+    The test begins with a normal election. After it is complete, the leader sends out
+    heartbeat messages, but we delay delivery and then force the leader to resign.
+
+    We resume delivery, which results in the ex-leader receiving append response messages. Since
+    it is now a follower, these messages are rejected, and the fact is logged in the message
+    problem log. We check the log to make sure we have two entries, one for each follower.
+
+    Next we trigger the leader to start a new election, which it will win.
+
+    When the election is complete, we insert a generated vote response message into the
+    leader's input queue. It does not expect this so it rejects it and logs it. We check
+    to see that it is logged.
+
+    Note that both of these scenarios are common occurances. The purpose of this test is
+    to ensure that they are logged.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_restart_during_heartbeat
+** Initial election, normal
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
@@ -24,16 +48,31 @@
 |  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   | lt=1 li=1 | LEAD  |                              |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=1   |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           |
-|  FLWR  |                              |           | FLWR  |                              |           | FLWR  | NEW ROLE                     |           |
-|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           | FLWR  |                              |           |
-|  FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
-|  FLWR  |                              |           | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |           |
-|  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1      | FLWR  |                              |           |
-|  FLWR  |                              |           | FLWR  |                              |           | FLWR  | N-1->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | FLWR  | N-2->ae_reply ok=True mi=1   |           |
-|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | NEW ROLE                     | t=2       |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 3 is leader, getting it to sent heartbeats but not allowing delivery, then demoting leader
+---------------------------------------------------------------------------------------------
+|  N-1   | N-1 | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                          | N-3   |
+|  Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                           | Delta |
+|  FLWR  |     |       | FLWR  |     |       | LEAD  | ae->N-1 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |     |       | FLWR  |     |       | LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       |
+|  FLWR  |     |       | FLWR  |     |       | FLWR  | NEW ROLE                     |       |
+---------------------------------------------------------------------------------------------
+** Node 3 is demoted, now delivering pending messages and checking that the replies are reported as issuesw
+---------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                        | N-3   |
+|  Role  | Op                           | Delta | Role  | Op                           | Delta | Role  | Op                         | Delta |
+|  FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | FLWR  |                            |       |
+|  FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1  | FLWR  |                              |       | FLWR  |                            |       |
+|  FLWR  |                              |       | FLWR  | N-3->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                            |       |
+|  FLWR  |                              |       | FLWR  | ae_reply->N-3 ok=True mi=1   | ci=1  | FLWR  |                            |       |
+|  FLWR  |                              |       | FLWR  |                              |       | FLWR  | N-1->ae_reply ok=True mi=1 |       |
+|  FLWR  |                              |       | FLWR  |                              |       | FLWR  | N-2->ae_reply ok=True mi=1 |       |
+---------------------------------------------------------------------------------------------------------------------------------------------
+** Node 3 starting a new election
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | NEW ROLE                     |           |
 |  FLWR  |                              |           | FLWR  |                              |           | CNDI  | poll->N-1 t=2 li=1 lt=2      |           |
 |  FLWR  |                              |           | FLWR  |                              |           | CNDI  | poll->N-2 t=2 li=1 lt=2      |           |
 |  FLWR  | N-3->poll t=2 li=1 lt=2      |           | FLWR  |                              |           | CNDI  |                              |           |
@@ -51,8 +90,13 @@
 |  FLWR  |                              |           | FLWR  | ae_reply->N-3 ok=True mi=2   | lt=2 li=2 | LEAD  |                              |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-1->ae_reply ok=True mi=2   |           |
 |  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->ae_reply ok=True mi=2   | ci=2      |
-|  FLWR  |                              |           | FLWR  |                              |           | LEAD  | N-2->vote yes=False          |           |
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Generating extra vote repsonse message for Node 3 and checking that it is reported
+-------------------------------------------------------------------------------------
+|  N-1   | N-1 | N-1   | N-2   | N-2 | N-2   | N-3   | N-3                  | N-3   |
+|  Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                   | Delta |
+|  FLWR  |     |       | FLWR  |     |       | LEAD  | N-2->vote yes=False  |       |
+-------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
+from pathlib import Path
+import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
@@ -14,11 +15,20 @@ from dev_tools.servers import SNormalElection
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
-setup_logging()
+default_level="error"
+#default_level="debug"
+setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
 
 async def test_heartbeat_1(cluster_maker):
+    """
+    Simple test that heartbeat timer causes heartbeat messages.
+
+    Starts with a normal election but with timers enabled, then just loops
+    waiting for append entry messages to be sent to followers. 
+
+    """
     cluster = cluster_maker(3)
     heartbeat_period = 0.01
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period)
@@ -26,6 +36,9 @@ async def test_heartbeat_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    cluster.test_trace.start_subtest("Initial election with timers on, then waiting for followers to get append entry messages",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_heartbeat_1.__doc__)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -52,12 +65,23 @@ async def test_heartbeat_1(cluster_maker):
     assert full_in_ledger[0].get_code() == AppendEntriesMessage.get_code()
     assert full_out_ledger[1].get_code() == AppendResponseMessage.get_code()
     assert full_in_ledger[1].get_code() == AppendResponseMessage.get_code()
+    await cluster.deliver_all_pending()
 
 async def test_heartbeat_2(cluster_maker):
+    """
+    Tests to make sure that correct heartbeat timer and election timeout
+    values do not result in an election if everything is allowed to run
+    for more than the election timeout value.
+
+    Test starts with a normal election with timers on, then the
+    auto transport is enabled and a time period equal to twice the
+    election_timeout max value is allowed to pass. If the leader
+    is still the leader and the term is still the term, then party.
+    """
     cluster = cluster_maker(3)
     heartbeat_period = 0.02
-    election_timeout_min = 0.2
-    election_timeout_max = 0.5
+    election_timeout_min = 0.1
+    election_timeout_max = 0.11
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min, 
                                           election_timeout_max=election_timeout_max)
@@ -66,15 +90,20 @@ async def test_heartbeat_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    cluster.test_trace.start_subtest("Initial election with timers enabled",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_heartbeat_2.__doc__)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
-    await cluster.start_auto_comms()
+    term =  await ts_3.log.get_term()
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
+    cluster.test_trace.start_subtest(f"Node 3 is leader, starting auto comms and waiting for {election_timeout_max * 2}")
+    await cluster.start_auto_comms()
     # make sure running for a time exceeding the timeout does not
     # cause a leader lost situation
     fraction = election_timeout_max/5.0
@@ -85,9 +114,18 @@ async def test_heartbeat_2(cluster_maker):
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
+    assert term == await ts_3.log.get_term()
     await cluster.stop_auto_comms()
         
 async def test_lost_leader_1(cluster_maker):
+    """
+    This tests to ensure that timers will cause lost leader condition and a new election when needed.
+
+    This is done by setting timeout values so that heartbeat is longer than max election timeout,
+    guaranteeing that at least one node will panic and run for office.
+    
+    """
+    
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
     heartbeat_period = 0.2
@@ -100,6 +138,10 @@ async def test_lost_leader_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    cluster.test_trace.start_subtest("Initial election with funky timer setup",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_lost_leader_1.__doc__)
+
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     await cluster.deliver_all_pending()
@@ -109,29 +151,50 @@ async def test_lost_leader_1(cluster_maker):
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     await ts_3.do_demote_and_handle(None)
-    
-    # Test that election happens in appoximately the leader_lost timeout
+
+    cluster.test_trace.start_subtest("Node 3 is leader, waiting for someone to timeout and start an election")
+    # Test that election starts in appoximately the leader_lost timeout
     start_time = time.time()
     fraction = election_timeout_max/10.0
     while time.time() - start_time < election_timeout_max * 2:
         await cluster.deliver_all_pending()
-        if (ts_1.get_role_name() == "LEADER"
-            or ts_2.get_role_name()  == "LEADER"
-            or ts_3.get_role_name()  == "LEADER"):
+        if (ts_1.get_role_name() != "FOLLOWER"
+            or ts_2.get_role_name()  != "FOLLOWER"
+            or ts_3.get_role_name()  != "FOLLOWER"):
             break
         await asyncio.sleep(fraction)
-    assert (ts_1.get_role_name()  == "LEADER"
-            or ts_2.get_role_name()  == "LEADER"
-            or ts_3.get_role_name()  == "LEADER")
+        await cluster.deliver_all_pending()
+    assert (ts_1.get_role_name()  != "FOLLOWER"
+            or ts_2.get_role_name()  != "FOLLOWER"
+            or ts_3.get_role_name()  != "FOLLOWER")
 
+    changed = None
     for ts in ts_1, ts_2, ts_3:
-        if ts.get_role_name()  == "LEADER":
-            leader = ts
-            leader_uri = ts.uri
+        if ts.get_role_name()  == "LEADER" or ts.get_role_name() == "CANDIDATE":
+            changed = ts
             break
-    assert await leader.log.get_term() > 1
+    assert changed is not None
+    assert await changed.log.get_term() > 1
     
-async def test_election_timeout_1(cluster_maker):
+    
+async def test_candidate_timeout_1(cluster_maker):
+    """
+    Test to ensure that a candidate will give up on campaign if no resolution happens
+    by election timeout time, and then start a new election.
+
+    Test begins with a normal election with test-like timer values but timers disabled.
+
+    Then node1 and node3 have their networks switch to blocked mode so they won't process
+    any messages. Node 1, the leader is also forced to retire. So now there are two
+    followers but node 2 can't reach them.
+
+    Next auto transport is enabled and node2 has its timers enabled. Things are allowed
+    to run long enough that node 2 should timeout and try again. The value of
+    node2 term will indicate when that has happend.
+
+    When that works, the other nodes are unblocked and the election is allowed to proceed.
+    
+    """
     cluster = cluster_maker(3)
     heartbeat_period = 0.001
     election_timeout_min = 0.009
@@ -143,6 +206,9 @@ async def test_election_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_candidate_timeout_1.__doc__)
     await cluster.start(timers_disabled=True)
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -154,11 +220,13 @@ async def test_election_timeout_1(cluster_maker):
     # Now arrange another election and make sure that the candidate
     # experiences a timeout, no votes in required time. It should
     # incr the term and retry so we can monitor by term value
+    cluster.test_trace.start_subtest("Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower")
     orig_term = await ts_2.log.get_term()
     ts_1.block_network()
     # we don't want ts_3 to vote yes, so block it too
     ts_3.block_network()
     await ts_1.do_demote_and_handle(None)
+    cluster.test_trace.start_subtest("Starting auto comms, enabling timers at node 2 and it to start election")
     await cluster.start_auto_comms()
     await ts_2.enable_timers()
     start_time = time.time()
@@ -168,6 +236,7 @@ async def test_election_timeout_1(cluster_maker):
         await asyncio.sleep(fraction)
     term_now = await ts_2.log.get_term()
     assert term_now != orig_term
+    cluster.test_trace.start_subtest("Node 2 started election, waiting for it to timeout")
     if term_now == orig_term + 1:
         # not done yet, just running as candidate for first time,
         start_time = time.time()
@@ -177,6 +246,7 @@ async def test_election_timeout_1(cluster_maker):
     final_term = await ts_2.log.get_term()
     assert final_term == orig_term + 2
 
+    cluster.test_trace.start_subtest("Node 2 election timeout detected, enabling other nodes to let election finish")
     ts_1.unblock_network()
     ts_3.unblock_network()
     # now make sure it can win

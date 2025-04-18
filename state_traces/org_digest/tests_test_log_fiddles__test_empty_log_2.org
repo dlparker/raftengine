@@ -1,44 +1,66 @@
+* Test test_empty_log_2 from file tests/test_log_fiddles.py
+
+
+    Tests that a follower crash and recovery with an empty log eventually leads to a successful
+    sync with the rest of the cluster.
+
+    Test starts with normal election, then a foller is crashed and restarted with
+    an empty log. The timer driven operations are then allowe to proceed
+    until the follower is caught up and in sync.
+    
+    Timers are disabled during the first election, so during that phase
+    all timer driven operations such as heartbeats are manually triggered.
+    After the leader is crashed, timers are enabled and remain enabled for the rest
+    of the test.
+    
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_empty_log_2
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2            | N-3   | N-3                          | N-3       |
-|  Role  | Op                           | Delta     | Role  | Op                           | Delta          | Role  | Op                           | Delta     |
-|  FLWR  | STARTED                      |           | FLWR  | STARTED                      |                | FLWR  | STARTED                      |           |
-|  CNDI  | NEW ROLE                     | t=1       | FLWR  |                              |                | FLWR  |                              |           |
-|  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |                | FLWR  |                              |           |
-|  CNDI  | poll->N-3 t=1 li=0 lt=1      |           | FLWR  |                              |                | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      |                | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | vote->N-1 yes=True           | t=1            | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  |                              |                | FLWR  | N-1->poll t=1 li=0 lt=1      |           |
-|  CNDI  |                              |           | FLWR  |                              |                | FLWR  | vote->N-1 yes=True           | t=1       |
-|  CNDI  | N-2->vote yes=True           |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | NEW ROLE                     | lt=1 li=1 | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | ae->N-3 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | N-3->vote yes=True           |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1      | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              |                | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |           |
-|  LEAD  |                              |           | FLWR  |                              |                | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 |
-|  LEAD  | N-2->ae_reply ok=True mi=1   |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | N-3->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | CRASH                        |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | RESTART                      | t=0 lt=0 li=0  | FLWR  |                              |           |
-|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=False mi=0  | t=1            | FLWR  |                              |           |
-|  LEAD  | N-2->ae_reply ok=False mi=0  |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=0 c=1 |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  |                              |                | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |           |
-|  LEAD  |                              |           | FLWR  |                              |                | FLWR  | ae_reply->N-1 ok=True mi=1   | ci=1      |
-|  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=1 |           | FLWR  |                              |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=1 |                | FLWR  |                              |           |
-|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 ci=1 | FLWR  |                              |           |
-|  LEAD  | N-2->ae_reply ok=True mi=1   |           | FLWR  |                              |                | FLWR  |                              |           |
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+** Initial election, normal with timers disabled
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
+|  CNDI  | NEW ROLE                     | t=1       | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | poll->N-3 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | vote->N-1 yes=True           | t=1       | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | vote->N-1 yes=True           | t=1       |
+|  CNDI  | N-2->vote yes=True           |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | NEW ROLE                     | lt=1 li=1 | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | ae->N-3 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | N-3->vote yes=True           |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |           |
+|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 |
+|  LEAD  | N-2->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | N-3->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 1 is leader, crashing and recovering node 2 with an empty log then waiting for it to catch up
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1   | N-2   | N-2                          | N-2            | N-3   | N-3                          | N-3   |
+|  Role  | Op                           | Delta | Role  | Op                           | Delta          | Role  | Op                           | Delta |
+|  LEAD  |                              |       | FLWR  | CRASH                        |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | RESTART                      | t=0 lt=0 li=0  | FLWR  |                              |       |
+|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=False mi=0  | t=1            | FLWR  |                              |       |
+|  LEAD  | N-2->ae_reply ok=False mi=0  |       | FLWR  |                              |                | FLWR  |                              |       |
+|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  |                              |                | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |       |
+|  LEAD  |                              |       | FLWR  |                              |                | FLWR  | ae_reply->N-1 ok=True mi=1   | ci=1  |
+|  LEAD  | N-3->ae_reply ok=True mi=1   |       | FLWR  |                              |                | FLWR  |                              |       |
+|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=1 |       | FLWR  |                              |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=1 |                | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 ci=1 | FLWR  |                              |       |
+|  LEAD  | N-2->ae_reply ok=True mi=1   |       | FLWR  |                              |                | FLWR  |                              |       |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

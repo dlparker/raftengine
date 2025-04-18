@@ -1,7 +1,20 @@
+* Test test_message_errors from file tests/test_msg_edges.py
+
+
+    This test uses error insertion to make things that normally don't blow up do so. Code that
+    gets run a million times with no problem, but that has the potential to blow up if something
+    funky like memory corruption happens. We have code to catch these cases, so there needs
+    to be code to test that the catches work.
+
+    Starts with a normal election, then inserts two errors into the message processing code.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
-** test_message_errors
+** Initial election, normal, then a couple of message processing error are inserted
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
