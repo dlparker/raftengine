@@ -43,71 +43,101 @@
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
 ** Initial election, normal
-------------------------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1                              | N-1       | N-2   | N-2      | N-2       | N-3   | N-3      | N-3       |
-| node  | Role  | Op                               | Delta     | Role  | Op       | Delta     | Role  | Op       | Delta     |
-|  N-1  | FLWR  | STARTED                          |           | FLWR  | STARTED  |           | FLWR  | STARTED  |           |
-|  N-1  | CNDI  | NEW ROLE                         | t=1       | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | CNDI  | give_vote->N-2 term=1 li=0 lt=1  |           | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | CNDI  | give_vote->N-3 term=1 li=0 lt=1  |           | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | CNDI  | N-2->vote-> yes=True             |           | FLWR  |          | t=1       | FLWR  |          | t=1       |
-|  N-1  | LEAD  | NEW ROLE                         | lt=1 li=1 | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | LEAD  | entries->N-2 li=0 lt=0 ec=1 ci=0 |           | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | LEAD  | entries->N-3 li=0 lt=0 ec=1 ci=0 |           | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | LEAD  | N-3->vote-> yes=True             |           | FLWR  |          |           | FLWR  |          |           |
-|  N-1  | LEAD  | N-2->ent_reply-> ok=True mi=1    |           | FLWR  |          | lt=1 li=1 | FLWR  |          | lt=1 li=1 |
-|  N-1  | LEAD  | N-3->ent_reply-> ok=True mi=1    | ci=1      | FLWR  |          |           | FLWR  |          |           |
-------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
+|  CNDI  | NEW ROLE                     | t=1       | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | poll->N-3 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | vote->N-1 yes=True           | t=1       | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | vote->N-1 yes=True           | t=1       |
+|  CNDI  | N-2->vote yes=True           |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | NEW ROLE                     | lt=1 li=1 | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | ae->N-3 t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | N-3->vote yes=True           |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |           | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 | FLWR  |                              |           |
+|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |           |
+|  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   | lt=1 li=1 |
+|  LEAD  | N-2->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
+|  LEAD  | N-3->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
 ** Running command normally
---------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1                              | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   |
-| node  | Role  | Op                               | Delta | Role  | Op  | Delta | Role  | Op  | Delta |
-|  N-1  | LEAD  | CMD START                        |       | FLWR  |     |       | FLWR  |     |       |
-|  N-1  | LEAD  | entries->N-2 li=1 lt=1 ec=1 ci=1 | li=2  | FLWR  |     |       | FLWR  |     |       |
-|  N-1  | LEAD  | entries->N-3 li=1 lt=1 ec=1 ci=1 |       | FLWR  |     |       | FLWR  |     |       |
-|  N-1  | LEAD  | N-2->ent_reply-> ok=True mi=2    |       | FLWR  |     | li=2  | FLWR  |     | li=2  |
-|  N-1  | LEAD  | N-3->ent_reply-> ok=True mi=2    |       | FLWR  |     |       | FLWR  |     |       |
-|  N-1  | LEAD  | CMD DONE                         | ci=2  | FLWR  |     | ci=2  | FLWR  |     | ci=2  |
---------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3   |
+|  Role  | Op                           | Delta | Role  | Op                           | Delta | Role  | Op                           | Delta |
+|  LEAD  | CMD START                    |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1 | li=2  | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1 |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2   | li=2  | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 |       |
+|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2   | li=2  |
+|  LEAD  | N-2->ae_reply ok=True mi=2   |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | N-3->ae_reply ok=True mi=2   | ci=2  | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  |                              | ci=2  | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       |
+|  LEAD  | CMD DONE                     |       | FLWR  |                              |       | FLWR  |                              | ci=2  |
+-----------------------------------------------------------------------------------------------------------------------------------------------
 ** Simlating network/speed problems for leader and starting election at node 2 
-----------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1 | N-1   | N-2   | N-2                              | N-2       | N-3   | N-3 | N-3       |
-| node  | Role  | Op  | Delta | Role  | Op                               | Delta     | Role  | Op  | Delta     |
-|  N-2  | LEAD  |     |       | CNDI  | NEW ROLE                         |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | CNDI  | ent_reply->N-1 ok=True mi=2      |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | CNDI  | give_vote->N-1 term=2 li=2 lt=2  |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | CNDI  | give_vote->N-3 term=2 li=2 lt=2  |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | CNDI  | N-3->vote-> yes=True             |           | FLWR  |     | t=2       |
-|  N-2  | LEAD  |     |       | LEAD  | NEW ROLE                         | lt=2 li=3 | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=2 |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | LEAD  | entries->N-3 li=2 lt=1 ec=1 ci=2 |           | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | LEAD  | N-3->ent_reply-> ok=True mi=3    |           | FLWR  |     | lt=2 li=3 |
-|  N-2  | LEAD  |     |       | LEAD  | CMD START                        | ci=3      | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | LEAD  | entries->N-3 li=3 lt=2 ec=1 ci=3 | li=4      | FLWR  |     |           |
-|  N-2  | LEAD  |     |       | LEAD  | N-3->ent_reply-> ok=True mi=4    |           | FLWR  |     | li=4      |
-|  N-2  | LEAD  |     |       | LEAD  | CMD DONE                         | ci=4      | FLWR  |     | ci=4      |
-----------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1 | N-1   | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op  | Delta | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  LEAD  |     |       | CNDI  | NEW ROLE                     |           | FLWR  |                              |           |
+|  LEAD  |     |       | CNDI  | ae_reply->N-1 ok=True mi=2   |           | FLWR  |                              |           |
+|  LEAD  |     |       | CNDI  | poll->N-1 t=2 li=2 lt=2      |           | FLWR  |                              |           |
+|  LEAD  |     |       | CNDI  | poll->N-3 t=2 li=2 lt=2      |           | FLWR  |                              |           |
+|  LEAD  |     |       | CNDI  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           |
+|  LEAD  |     |       | CNDI  |                              |           | FLWR  | N-2->poll t=2 li=2 lt=2      |           |
+|  LEAD  |     |       | CNDI  |                              |           | FLWR  | vote->N-2 yes=True           | t=2       |
+|  LEAD  |     |       | CNDI  | N-3->vote yes=True           |           | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  | NEW ROLE                     | lt=2 li=3 | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  | ae->N-1 t=2 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  | ae->N-3 t=2 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  |                              |           | FLWR  | N-2->ae t=2 i=2 lt=1 e=1 c=2 |           |
+|  LEAD  |     |       | LEAD  |                              |           | FLWR  | ae_reply->N-2 ok=True mi=3   | lt=2 li=3 |
+|  LEAD  |     |       | LEAD  | N-3->ae_reply ok=True mi=3   |           | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  | CMD START                    | ci=3      | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  | ae->N-3 t=2 i=3 lt=2 e=1 c=3 | li=4      | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  |                              |           | FLWR  | N-2->ae t=2 i=3 lt=2 e=1 c=3 |           |
+|  LEAD  |     |       | LEAD  |                              |           | FLWR  | ae_reply->N-2 ok=True mi=4   | li=4      |
+|  LEAD  |     |       | LEAD  | N-3->ae_reply ok=True mi=4   |           | FLWR  |                              |           |
+|  LEAD  |     |       | LEAD  |                              | ci=4      | FLWR  | N-2->ae t=2 i=4 lt=2 e=0 c=4 |           |
+|  LEAD  |     |       | LEAD  | CMD DONE                     |           | FLWR  |                              | ci=4      |
+------------------------------------------------------------------------------------------------------------------------------
 ** Letting old leader rejoin network, but losing any messages sent during problem period
------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1 | N-1   | N-2   | N-2                           | N-2   | N-3   | N-3 | N-3   |
-| node  | Role  | Op  | Delta | Role  | Op                            | Delta | Role  | Op  | Delta |
-|  N-2  | LEAD  |     |       | LEAD  | N-3->ent_reply-> ok=True mi=4 |       | FLWR  |     |       |
------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1 | N-1   | N-2   | N-2                        | N-2   | N-3   | N-3                        | N-3   |
+|  Role  | Op  | Delta | Role  | Op                         | Delta | Role  | Op                         | Delta |
+|  LEAD  |     |       | LEAD  |                            |       | FLWR  | ae_reply->N-2 ok=True mi=4 |       |
+|  LEAD  |     |       | LEAD  | N-3->ae_reply ok=True mi=4 |       | FLWR  |                            |       |
+------------------------------------------------------------------------------------------------------------------
 ** New leader sending heartbeats
-------------------------------------------------------------------------------------------------------------------------------------------------
-| event | N-1   | N-1                                | N-1            | N-2   | N-2                              | N-2   | N-3   | N-3 | N-3   |
-| node  | Role  | Op                                 | Delta          | Role  | Op                               | Delta | Role  | Op  | Delta |
-|  N-2  | LEAD  |                                    |                | LEAD  | entries->N-1 li=4 lt=2 ec=0 ci=4 |       | FLWR  |     |       |
-|  N-1  | LEAD  | N-2->entries-> li=4 lt=2 ec=0 ci=4 |                | LEAD  |                                  |       | FLWR  |     |       |
-|  N-1  | FLWR  | NEW ROLE                           | t=2            | LEAD  |                                  |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    |                | LEAD  | N-1->ent_reply-> ok=False mi=2   |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    |                | LEAD  | entries->N-3 li=4 lt=2 ec=0 ci=4 |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    |                | LEAD  | N-3->ent_reply-> ok=True mi=4    |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    |                | LEAD  | entries->N-1 li=2 lt=1 ec=1 ci=4 |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    | lt=2 li=3 ci=3 | LEAD  | N-1->ent_reply-> ok=True mi=3    |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    |                | LEAD  | entries->N-1 li=3 lt=2 ec=1 ci=4 |       | FLWR  |     |       |
-|  N-2  | FLWR  |                                    | li=4 ci=4      | LEAD  | N-1->ent_reply-> ok=True mi=4    |       | FLWR  |     |       |
-------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1            | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3   |
+|  Role  | Op                           | Delta          | Role  | Op                           | Delta | Role  | Op                           | Delta |
+|  LEAD  |                              |                | LEAD  | ae->N-1 t=2 i=4 lt=2 e=0 c=4 |       | FLWR  |                              |       |
+|  LEAD  | N-2->ae t=2 i=4 lt=2 e=0 c=4 |                | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  | NEW ROLE                     | t=2            | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  | ae_reply->N-2 ok=False mi=2  |                | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | N-1->ae_reply ok=False mi=2  |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | ae->N-3 t=2 i=4 lt=2 e=0 c=4 |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  |                              |       | FLWR  | N-2->ae t=2 i=4 lt=2 e=0 c=4 |       |
+|  FLWR  |                              |                | LEAD  |                              |       | FLWR  | ae_reply->N-2 ok=True mi=4   |       |
+|  FLWR  |                              |                | LEAD  | N-3->ae_reply ok=True mi=4   |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | ae->N-1 t=2 i=2 lt=1 e=1 c=4 |       | FLWR  |                              |       |
+|  FLWR  | N-2->ae t=2 i=2 lt=1 e=1 c=4 |                | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  | ae_reply->N-2 ok=True mi=3   | lt=2 li=3 ci=3 | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | N-1->ae_reply ok=True mi=3   |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | ae->N-1 t=2 i=3 lt=2 e=1 c=4 |       | FLWR  |                              |       |
+|  FLWR  | N-2->ae t=2 i=3 lt=2 e=1 c=4 |                | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  | ae_reply->N-2 ok=True mi=4   | li=4 ci=4      | LEAD  |                              |       | FLWR  |                              |       |
+|  FLWR  |                              |                | LEAD  | N-1->ae_reply ok=True mi=4   |       | FLWR  |                              |       |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend
@@ -115,31 +145,30 @@ All the items in these legends labeled N-X are placeholders for actual node id v
 actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the cluster. Yes, One based, not zero.
 
 | Column Label | Description     | Details                                                                                        |
-| Event Node   | Triggering node | The id value of the node that experienced the event that triggered this trace row              |
 | N-X Role     | Raft Role       | FLWR = Follower CNDI = Candidate LEAD = Leader                                                 |
 | N-X Op       | Activity        | Describes a traceable event at this node, see separate table below                             |
 | N-X Delta    | State change    | Describes any change in state since previous trace, see separate table below                   |
 
 
 ** "Op" Column detail legend
-| Value          | Meaning                                                                                      |
-| STARTED        | Simulated node starting with empty log, term=0                                               |
-| CMD START      | Simulated client requested that a node (usually leader, but not for all tests) run a command |
-| CMD DONE       | The previous requested command is finished, whether complete, rejected, failed, whatever     |
-| CRASH          | Simulating node has simulated a crash                                                        |
-| RESTART        | Previously crashed node has restarted. Look at delta column to see effects on log, if any    |
-| NEW ROLE       | The node has changed Raft role since last trace line                                         |
-| NETSPLIT       | The node has been partitioned away from the majority network                                 |
-| NETJOIN        | The node has rejoined the majority network                                                   |
-| endtries->N-X  | Node has sent append_entries message to N-X, next line in this table explains details        |
-| (continued)    | li=1 means prevLogIndex=1, lt=1 means prevLogTerm=1, ci means sender's commitInde            |
-| (continued)    | ec=2 means that the entries list in the is 2 items long. ec=0 is a heartbeat                 |
-| N-X->ent_reply | Node has received the response to an append_entries message, details in continued lines      |
-| (continued)    | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
-| give_vote->N-X | Node has sent request_vote to N-X, term=1 means current term is 1 (continued next line)      |
-| (continued)    | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
-| N-X->vote      | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
-
+| Value         | Meaning                                                                                      |
+| STARTED       | Simulated node starting with empty log, term=0                                               |
+| CMD START     | Simulated client requested that a node (usually leader, but not for all tests) run a command |
+| CMD DONE      | The previous requested command is finished, whether complete, rejected, failed, whatever     |
+| CRASH         | Simulating node has simulated a crash                                                        |
+| RESTART       | Previously crashed node has restarted. Look at delta column to see effects on log, if any    |
+| NEW ROLE      | The node has changed Raft role since last trace line                                         |
+| NETSPLIT      | The node has been partitioned away from the majority network                                 |
+| NETJOIN       | The node has rejoined the majority network                                                   |
+| ae->N-X       | Node has sent append_entries message to N-X, next line in this table explains                |
+| (continued)   | t=1 means current term is 1, i=1 means prevLogIndex=1, lt=1 means prevLogTerm=1              |
+| (continued)   | c=1 means sender's commitIndex is 1,                                                         |
+| (continued)   | e=2 means that the entries list in the message is 2 items long. eXo=0 is a heartbeat         |
+| N-X->ae_reply | Node has received the response to an append_entries message, details in continued lines      |
+| (continued)   | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
+| do_vote->N-X  | Node has sent request_vote to N-X, t=1 means current term is 1 (continued next line)         |
+| (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
+| N-X->vote     | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line

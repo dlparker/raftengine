@@ -3,7 +3,16 @@
 
     Tests to make sure that followers only vote once in a single term.
 
-    Test begins with a regular election.
+    Test begins with a regular election. Next the leader and one other node are forced
+    to start an election.
+
+    The message flow is manipulated to ensure that the only follower node gets a request vote
+    from only one candidate, and will vote yes.
+
+    The message flow is again manipulated to allow the follower to get the other vote request,
+    and it should reply with a no vote because it has already voted in this term.
+
+    Finally the election is allowed to complete normally.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     

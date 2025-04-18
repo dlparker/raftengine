@@ -33,6 +33,7 @@ class LogRec:
     serial: int = field(default = None, repr=False)
     leader_id: str = field(default = None, repr=False)
     committed: bool = field(default = False)
+    applied: bool =  field(default = False)
 
     @classmethod
     def from_dict(cls, data):
@@ -95,6 +96,10 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    async def get_applied_index(self) -> int:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
     async def append_multi(self, entries: List[LogRec]):  # pragma: no cover abstract
         raise NotImplementedError
 
@@ -108,6 +113,10 @@ class LogAPI(abc.ABC):
 
     @abc.abstractmethod
     def update_and_commit(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def update_and_apply(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

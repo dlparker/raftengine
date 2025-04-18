@@ -1,8 +1,9 @@
-
+   
+   
 
 * Protocol
 
-1. Need to implement lastApplied, and make sure that commit index is set before command is run. Currently
+1. [X] Need to implement lastApplied, and make sure that commit index is set before command is run. Currently
    I am using commitIndex as though it were last applied. The idea that commit comes before apply is strange
    to me, but that is what it says. Prolly need some tests for failure between commit index incr and
    last applied incr.
@@ -23,6 +24,11 @@
    applying timeout function. Think about the python test controllers doing this with a different language.
    Maybe test it by adding actual node processes?
 4. [] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
+   Maybe build an event dispatch dictionary so tracing points can be efficient. If there is a dict, then call
+   a function dispatches to traces, maybe passing locals() for context. That function can collect log data, message
+   data, etc. Replace substate calls with this. Do the traces as JSON with class names in them so that it can
+   be stored and reconstituted. Maybe make this an option, if the system works kind of like python logging, collection,
+   filters, handlers, etc. 
    Earlier note with same intent:  Find all places where servers.py and tests open the white box and replace them with event
    generation and delivery to the pilot interface.
 5. Think about building an example mangement interface for doing cluster ops such as config, snapshots.

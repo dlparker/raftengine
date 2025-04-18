@@ -68,7 +68,8 @@ class Follower(BaseRole):
             await self.send_append_entries_response(message)
             await self.hull.record_substate(SubstateCode.got_heartbeat)
             if message.commitIndex >= await self.log.get_last_index():
-                if message.commitIndex > await self.log.get_commit_index():
+                if (message.commitIndex > await self.log.get_commit_index()
+                    or message.commitIndex > await self.log.get_applied_index()):
                     await self.new_leader_commit_index(message.commitIndex)
             return
         await self.hull.record_substate(SubstateCode.appending)
@@ -76,6 +77,8 @@ class Follower(BaseRole):
         for log_rec in message.entries:
             self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
+            # ensure we don't copy the items that reflect local state
+            log_rec.committed = log_rec.applied = False
             recs.append(await self.log.append(log_rec))
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)
@@ -98,22 +101,27 @@ class Follower(BaseRole):
 
     async def new_leader_commit_index(self, leader_commit_index):
         commit = await self.log.get_commit_index()
-        self.logger.info("%s Leader commit index %d higher than ours %d ",
-                            self.my_uri(), leader_commit_index, commit)
+        commit = min(commit, await self.log.get_applied_index())
         if commit == 0:
             min_index = 1
         else:
             min_index = commit
+
         last_index = await self.log.get_last_index()
         max_index = min(leader_commit_index + 1, last_index + 1)
+        self.logger.info("%s Leader commit index %d higher than ours %d, committing and applying from %d through %d ",
+                            self.my_uri(), leader_commit_index, commit, min_index, max_index-1)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if not log_rec.committed:
-                if log_rec.code == RecordCode.client_command:
+                await self.log.update_and_commit(log_rec)
+                self.logger.debug("%s committing %d ", self.my_uri(), log_rec.index)
+        for index in range(min_index, max_index):
+            log_rec = await self.log.read(index)
+            if log_rec.code == RecordCode.client_command:
+                if not log_rec.applied:
+                    self.logger.debug("%s applying %d ", self.my_uri(), log_rec.index)
                     await self.process_command_record(log_rec)
-                else:
-                    log_rec.committed = True
-                    await self.log.replace(log_rec)
                 
     async def process_command_record(self, log_record):
         result = None
@@ -123,12 +131,6 @@ class Follower(BaseRole):
             command = log_record.command
             processor = self.hull.get_processor()
             result, error_data = await processor.process_command(command, log_record.serial)
-            if error_data is None:
-                self.logger.debug("processor ran no error")
-                await self.hull.record_substate(SubstateCode.command_done)
-            else:
-                self.logger.warning("processor ran but had an error %s", error_data)
-                await self.hull.record_substate(SubstateCode.command_error)
         except Exception as e:
             trace = traceback.format_exc()
             msg = f"supplied process_command caused exception {trace}"
@@ -143,9 +145,13 @@ class Follower(BaseRole):
         log_record.result = result
         log_record.error = error_flag
         if not error_flag:
-            new_rec = await self.log.update_and_commit(log_record)
+            await self.log.update_and_apply(log_record)
+            self.logger.debug("%s processor ran no error on log record %d", self.my_uri(), log_record.index)
+            await self.hull.record_substate(SubstateCode.command_done)
         else:
-            new_rec = await self.log.replace(log_record)
+            await self.log.replace(log_record)
+            self.logger.warning("processor ran but had an error %s", error_data)
+            await self.hull.record_substate(SubstateCode.command_error)
     
     async def on_vote_request(self, message):
         last_vote = await self.log.get_voted_for()

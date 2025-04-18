@@ -46,6 +46,12 @@ class Records:
                 return entry.index
         return 0
 
+    def get_applied_index(self):
+        for entry in self.entries[::-1]:
+            if entry.applied:
+                return entry.index
+        return 0
+
     def delete_all_from(self, index: int):
         if index == 0:
             self.entries = []
@@ -117,6 +123,10 @@ class MemoryLog(LogAPI):
         entry.committed = True
         return await self.replace(entry)
     
+    async def update_and_apply(self, entry:LogRec) -> LogRec:
+        entry.applied = True
+        return await self.replace(entry)
+    
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
             rec = self.records.get_last_entry()
@@ -141,6 +151,9 @@ class MemoryLog(LogAPI):
     
     async def get_commit_index(self):
         return self.records.get_commit_index()
+
+    async def get_applied_index(self):
+        return self.records.get_applied_index()
 
     async def delete_all_from(self, index: int):
         return self.records.delete_all_from(index)
