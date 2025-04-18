@@ -115,8 +115,11 @@ class Leader(BaseRole):
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()
         self.command_waiters = dict()
-        self.max_entries_per_message = 9 # should this be configurable?
-                
+
+    @property
+    def max_entries_per_message(self):
+        return self.hull.get_max_entries_per_message()
+        
     async def start(self):
         await super().start()
         for uri in self.hull.get_cluster_node_ids():

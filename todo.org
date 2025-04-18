@@ -1,5 +1,4 @@
    
-   
 
 * Protocol
 
@@ -16,14 +15,12 @@
 
 * Test questions and issues and Demo issues
 
-1. [] Is there a test where leader crashes after local commit but before sending append_entries? This checks the
-   implied commit logic that should happen when TERM_START arrives after election of a new leader.
-2. [] Need to change all direct refrences to hull to go through the PausingServer
-3. [] Draft a plan for making test controls such as timers not dependent on internal features of the real code,
+1. [X] Need to change all direct refrences to hull to go through the PausingServer, except those that do insertion
+2. [] Draft a plan for making test controls such as timers not dependent on internal features of the real code,
    so maybe defined a timer_gate function that is not used in normal ops but that the real code calls before
    applying timeout function. Think about the python test controllers doing this with a different language.
    Maybe test it by adding actual node processes?
-4. [] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
+3. [] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
    Maybe build an event dispatch dictionary so tracing points can be efficient. If there is a dict, then call
    a function dispatches to traces, maybe passing locals() for context. That function can collect log data, message
    data, etc. Replace substate calls with this. Do the traces as JSON with class names in them so that it can
@@ -31,7 +28,7 @@
    filters, handlers, etc. 
    Earlier note with same intent:  Find all places where servers.py and tests open the white box and replace them with event
    generation and delivery to the pilot interface.
-5. Think about building an example mangement interface for doing cluster ops such as config, snapshots.
+4. Think about building an example mangement interface for doing cluster ops such as config, snapshots.
  
 
 
