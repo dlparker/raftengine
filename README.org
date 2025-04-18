@@ -35,8 +35,9 @@ server program makes sense.
 
 *** Message transport management
 
-However, a Raft library with its own transport mechanism is unlikely
-to provide all the message transport needs for your cluster. If it is,
+There are plenty of other implementations of Raft, even if you want
+it in python. However, a Raft library with its own transport mechanism may 
+not provide all or your message transport needs for your cluster. If it does,
 then there is no particular reason to prefer this implementation over
 others.
 
@@ -86,7 +87,7 @@ transaction on commit, the run the command and do what ever database
 updates that requires, then commit the Raft Log update and your own
 updates transactionally. 
 
-* TBD
+** TBD
 An optional part of the library provides implementations of these
 services for the user to use, or to modify and use. These are
 referred to as transport and log "assists".

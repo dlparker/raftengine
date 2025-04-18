@@ -68,7 +68,8 @@ class Records:
         schema += "error BOOLEAN, " 
         schema += "leader_id TEXT, "
         schema += "serial TEXT, "
-        schema += "committed BOOLEAN)" 
+        schema += "committed BOOLEAN," 
+        schema += "applied BOOLEAN)" 
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER," \
@@ -90,8 +91,8 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, result, error, term, serial, leader_id, committed) values "
-        values += "?,?,?,?,?,?,?,?)"
+        sql += "code, command, result, error, term, serial, leader_id, committed, applied) values "
+        values += "?,?,?,?,?,?,?,?,?)"
         sql += values
         # at one time I thought this was necessary, now I don't know why
         #if isinstance(entry, RecordCode):
@@ -109,6 +110,7 @@ class Records:
             params.append(entry.serial)
         params.append(entry.leader_id)
         params.append(entry.committed)
+        params.append(entry.applied)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
@@ -183,6 +185,19 @@ class Records:
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         sql = "select rec_index from records where committed = 1 order by rec_index desc"
+        cursor.execute(sql)
+        rec_data = cursor.fetchone()
+        if rec_data is None:
+            cursor.close()
+            return 0
+        cursor.close()
+        return rec_data['rec_index']
+
+    def get_applied_index(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        cursor = self.db.cursor()
+        sql = "select rec_index from records where applied = 1 order by rec_index desc"
         cursor.execute(sql)
         rec_data = cursor.fetchone()
         if rec_data is None:
@@ -308,10 +323,20 @@ class SqliteLog(LogAPI):
         save_rec = self.records.insert_entry(entry)
         return save_rec
     
+    async def update_and_apply(self, entry:LogRec) -> LogRec:
+        entry.applied = True
+        save_rec = self.records.insert_entry(entry)
+        return save_rec
+    
     async def get_commit_index(self):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         return self.records.get_commit_index()
+
+    async def get_applied_index(self):
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return self.records.get_applied_index()
 
     async def delete_all_from(self, index: int):
         if not self.records.is_open(): # pragma: no cover

@@ -12,7 +12,6 @@ from dev_tools.memory_log import MemoryLog
 
 from dev_tools.servers import WhenMessageOut, WhenMessageIn
 from dev_tools.servers import WhenHasLogIndex
-from dev_tools.servers import WhenHasCommitIndex
 from dev_tools.servers import WhenInMessageCount, WhenElectionDone
 from dev_tools.servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from dev_tools.servers import PausingCluster, cluster_maker
@@ -22,8 +21,8 @@ from dev_tools.servers import setup_logging, log_config
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
 #log_config = setup_logging(extra_logging, default_level="debug")
-default_level="debug"
-#default_level="warn"
+#default_level="debug"
+default_level="error"
 log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -263,7 +262,10 @@ async def double_leader_inner(cluster, discard):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    
+
+    #ts_1.operations.dump_state = True
+    #ts_2.operations.dump_state = True
+    #ts_3.operations.dump_state = True
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=double_leader_inner.__doc__)
@@ -282,18 +284,18 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
-
-    logger.info('---------!!!!!!! stopping comms')
+    logger.info('---------!!!!!!! stopping auto comms')
     await cluster.stop_auto_comms()
     cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
-    logger.info('------------------ isolated leader, starting new election')
+    logger.info('------------------ isolated leader, starting new election at node 2')
     await ts_2.start_campaign()
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
 
+    logger.info('------------------ 2 leaders, telling actual leader to run command')
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 2
@@ -304,6 +306,7 @@ async def double_leader_inner(cluster, discard):
         # so it looks like the network was broken
         # during that time.
         cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period")
+        logger.info('------------------ Telling old leader to rejoin network with messages lost')
         ts_1.unblock_network()
         logger.info('---------!!!!!!! starting comms')
         await cluster.start_auto_comms()
@@ -321,7 +324,7 @@ async def double_leader_inner(cluster, discard):
         # These are the sort of timing and network problem
         # that Raft is meant to handle. They might be unlikely,
         # but they are possible.
-        logger.info('------------------ unblocking and delivering ')
+        logger.info('------------------ Telling old leader to rejoin network with messages still in queues')
         cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages")
 
         ts_1.unblock_network(deliver=True)
@@ -331,9 +334,12 @@ async def double_leader_inner(cluster, discard):
 
     
     cluster.test_trace.start_subtest("New leader sending heartbeats")
-    logger.info('\n\n sending heartbeat, but old leader should already be up to date\n\n')
+    logger.info('\n\n sending heartbeat, so old leader can catch up date\n\n')
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and ts_1.operations.total < ts_2.operations.total:
+        await asyncio.sleep(0.01)
     assert ts_1.operations.total == ts_2.operations.total
     await cluster.stop_auto_comms()
     

@@ -406,7 +406,6 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_election_candidate_too_slow_1.__doc__)

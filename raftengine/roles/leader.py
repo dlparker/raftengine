@@ -99,9 +99,9 @@ class CommandWaiter:
             await self.leader.hull.record_substate(SubstateCode.failed_command)
         else:
             await self.leader.hull.record_substate(SubstateCode.committing_command)
-            self.orig_log_record.committed = True
-            self.orig_log_record.result = command_result
-            new_rec = await self.log.replace(self.orig_log_record)
+            log_record = await self.log.read(self.orig_log_record.index)
+            log_record.result = command_result
+            new_rec = await self.log.replace(log_record)
         self.result = result
         async with self.done_condition:
             self.done_condition.notify()
@@ -229,7 +229,8 @@ class Leader(BaseRole):
         if tracker.nextIndex > await self.log.get_last_index():
             self.logger.debug('After success to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
-            if tracker.matchIndex > await self.log.get_commit_index():
+            if (tracker.matchIndex > await self.log.get_commit_index()
+                or tracker.matchIndex > await self.log.get_applied_index()):
                 # see if this message completes the majority saved requirement
                 # that defines commit at the cluster level, and apply it
                 # if so.
@@ -268,6 +269,7 @@ class Leader(BaseRole):
         tracker.lastSentIndex = send_index
         rec = await self.log.read(send_index)
         rec.committed = False
+        rec.applied = False
         entries = [rec,]
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,
@@ -336,16 +338,21 @@ class Leader(BaseRole):
             if tracker.matchIndex >= log_record.index:
                 ayes += 1
         if ayes > len(self.hull.get_cluster_node_ids()) / 2:
-            if log_record.code == RecordCode.client_command:
-                asyncio.create_task(self.run_command_locally(log_record))
-            else:
-                log_record.committed = True
-                await self.log.replace(log_record)
+            # update the log record, just in case
+            rec = await self.log.read(log_record.index)
+            # We might be hear because the record is committed but
+            # not applied, but saving the commit state anyway
+            # is harmless and simplifies the code. It is
+            # an extra log write, but it is a very rare event.
+            rec.committed = True
+            await self.log.replace(rec)
+            if rec.code == RecordCode.client_command:
+                asyncio.create_task(self.run_command_locally(rec))
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
         log_rec = await self.log.read(log_record.index)
-        if log_rec.committed:
+        if log_rec.applied:
             return
         result = None
         error_data = None
@@ -361,8 +368,9 @@ class Leader(BaseRole):
             self.logger.debug("%s running command produced error %s", self.my_uri(), error_data)
         else:
             log_rec.result = result
-            log_rec.committed = True
+            log_rec.applied = True
             await self.log.replace(log_rec)
+            self.logger.debug("%s running command produced no error, apply_index is now %s", self.my_uri(), await self.log.get_applied_index())
         waiter = self.command_waiters[log_rec.index]
         if waiter:
             await waiter.handle_run_result(result, error_data)

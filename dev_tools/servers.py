@@ -178,12 +178,17 @@ async def cluster_maker():
         
         await the_cluster.cleanup()
     
-class SimpleOps(): # pragma: no cover
-    total = 0
-    explode = False
-    exploded = False
-    return_error = False
-    reported_error = False
+class SimpleOps: # pragma: no cover
+
+    def __init__(self, server):
+        self.server = server
+        self.total = 0
+        self.explode = False
+        self.exploded = False
+        self.return_error = False
+        self.reported_error = False
+        self.dump_state = False
+        
     async def process_command(self, command, serial):
         logger = logging.getLogger("SimpleOps")
         error = None
@@ -201,6 +206,9 @@ class SimpleOps(): # pragma: no cover
             error = "invalid command"
             logger.error("invalid command %s provided", op)
             return None, error
+        if self.dump_state:
+            await self.server.dump_log(0, -1)
+            print(f'op {op} {operand} on total {self.total}')
         if op == "add":
             self.total += int(operand)
         elif op == "sub":
@@ -424,6 +432,20 @@ class WhenHasCommitIndex(PauseTrigger):
         
     async def is_tripped(self, server):
         if await server.hull.log.get_commit_index() >= self.index:
+            return True
+        return False
+    
+class WhenHasAppliedIndex(PauseTrigger):
+    # When the server has applied record with provided index
+    def __init__(self, index):
+        self.index = index
+
+    def __repr__(self):
+        msg = f"{self.__class__.__name__} index={self.index}"
+        return msg
+        
+    async def is_tripped(self, server):
+        if await server.hull.log.get_applied_index() >= self.index:
             return True
         return False
     
@@ -828,7 +850,7 @@ class PausingServer(PilotAPI):
         self.cluster_config = cluster_config
         self.local_config = local_config
         self.hull = TestHull(self.cluster_config, self.local_config, self)
-        self.operations = SimpleOps()
+        self.operations = SimpleOps(self)
     
     async def simulate_crash(self):
         await self.hull.stop()
@@ -846,7 +868,7 @@ class PausingServer(PilotAPI):
             else:
                 self.log = setup_sqlite_log(self.uri)
         if not save_ops:
-            self.operations = SimpleOps()
+            self.operations = SimpleOps(self)
         self.am_crashed = False
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         await self.hull.start()
@@ -1100,6 +1122,22 @@ class PausingServer(PilotAPI):
 
         return # all triggers tripped as required by mode flags, so pause ops
     
+    async def fetch_log(self, start_rec, end_rec):
+        if start_rec == 0:
+            start_rec = 1
+        if end_rec == -1:
+            end_rec = await self.log.get_last_index()
+        data = []
+        for i in range(start_rec, end_rec + 1):
+            data.append(await self.log.read(i))
+        return data
+        
+    async def dump_log(self, start_rec=1, end_rec=-1):
+        data = await self.fetch_log(start_rec, end_rec)
+        for rec in data:
+            jdata = json.dumps(rec, default=lambda o: o.__dict__, indent=4)
+            print(jdata)
+        
     async def dump_stats(self):
         if self.hull.role.role_name == "FOLLOWER":
             leaderId=self.hull.role.leader_uri
@@ -1929,7 +1967,7 @@ class SNormalCommand(StdSequence):
                 self.target_index = orig_index + 1
                 break
         for uri,node in self.network.nodes.items():
-            trigger = WhenHasCommitIndex(self.target_index)
+            trigger = WhenHasAppliedIndex(self.target_index)
             self.logger.debug("set %s trigger for node %s", trigger, node)
             node.set_trigger(trigger)
             self.expected_count += 1
@@ -2057,7 +2095,7 @@ class SPartialCommand(StdSequence):
                 break
         for uri in self.voters:
             node = self.network.nodes[uri]
-            trigger = WhenHasCommitIndex(self.target_index)
+            trigger = WhenHasAppliedIndex(self.target_index)
             self.logger.debug("set %s trigger for node %s", trigger, node)
             node.set_trigger(trigger)
             self.expected_count += 1
