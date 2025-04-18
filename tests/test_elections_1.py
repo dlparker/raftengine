@@ -259,12 +259,16 @@ async def test_reelection_3(cluster_maker):
     # things to happend that way
 
     # ensure that ts_3 wins first election
-    ts_1.hull.cluster_config.election_timeout_min = 0.90
-    ts_1.hull.cluster_config.election_timeout_max = 1.0
-    ts_2.hull.cluster_config.election_timeout_min = 0.90
-    ts_2.hull.cluster_config.election_timeout_max = 1.0
-    ts_3.hull.cluster_config.election_timeout_min = 0.01
-    ts_3.hull.cluster_config.election_timeout_max = 0.011
+
+    cfg = ts_1.cluster_config
+    cfg.election_timeout_min = 0.90
+    cfg.election_timeout_max = 1.0
+    ts_1.change_cluster_config(cfg)
+    ts_2.change_cluster_config(cfg)
+    # okay to do this, PausingServer makes a copy on change call
+    cfg.election_timeout_min = 0.01
+    cfg.election_timeout_max = 0.011
+    ts_3.change_cluster_config(cfg)
 
 
     cluster.test_trace.start_subtest("Starting cluster with election timeout timers active, biased for node 3 to win",
@@ -291,12 +295,20 @@ async def test_reelection_3(cluster_maker):
     # tell leader to resign and manually trigger elections on all the
     # servers, ts_2 should win because of timeout
     # ensure that ts_2 wins re-election
-    ts_1.hull.cluster_config.election_timeout_min = 1
-    ts_1.hull.cluster_config.election_timeout_max = 1.2
-    ts_2.hull.cluster_config.election_timeout_min = 0.001
-    ts_2.hull.cluster_config.election_timeout_max = 0.0011
-    ts_3.hull.cluster_config.election_timeout_min = 1
-    ts_3.hull.cluster_config.election_timeout_max = 1.2
+
+    cfg = ts_1.cluster_config
+    cfg.election_timeout_min = 1
+    cfg.election_timeout_max = 1.2
+    ts_1.change_cluster_config(cfg)
+    # okay to do this, PausingServer makes a copy on change call
+    cfg.election_timeout_min = 0.001
+    cfg.election_timeout_max = 0.0011
+    ts_2.change_cluster_config(cfg)
+    # okay to do this, PausingServer makes a copy on change call
+    cfg.election_timeout_min = 1
+    cfg.election_timeout_max = 1.2
+    ts_3.change_cluster_config(cfg)
+
     await ts_3.do_demote_and_handle(None)
     await ts_3.start_campaign()
     logger.warning('leader ts_3 demoted and campaign started')

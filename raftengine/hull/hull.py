@@ -35,6 +35,10 @@ class Hull(HullAPI):
         self.log_substates = logging.getLogger("Substates")
 
     # Part of API
+    def change_cluster_config(self, cluster_config: ClusterConfig):
+        self.cluster_config = cluster_config
+        
+    # Part of API
     async def start(self):
         await self.role.start()
 
@@ -118,6 +122,10 @@ class Hull(HullAPI):
         res = random.uniform(self.cluster_config.election_timeout_min,
                              self.cluster_config.election_timeout_max)
         return res
+
+    # Called by Role
+    def get_max_entries_per_message(self):
+        return self.cluster_config.max_entries_per_message
 
     # Part of API 
     async def stop(self):
@@ -211,4 +219,10 @@ class Hull(HullAPI):
         rec = dict(role=str(self.role), substate=substate, time=time.time())
         if self.log_substates:
             self.log_substates.debug("%s %s %s %s", self.get_my_uri(), rec['role'], rec['substate'], rec['time'])
+
+    def get_message_problem_history(self, clear=False):
+        res =  self.message_problem_history
+        if clear:
+            self.message_problem_history = []
+        return res
 

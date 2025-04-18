@@ -75,10 +75,10 @@ class Follower(BaseRole):
         await self.hull.record_substate(SubstateCode.appending)
         recs = []
         for log_rec in message.entries:
-            self.logger.info("%s Added record from leader at index %s",
-                                self.my_uri(), log_rec.index)
             # ensure we don't copy the items that reflect local state
             log_rec.committed = log_rec.applied = False
+            self.logger.info("%s Added record from leader at index %s",
+                                self.my_uri(), log_rec.index)
             recs.append(await self.log.append(log_rec))
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)

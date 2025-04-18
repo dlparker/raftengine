@@ -117,18 +117,18 @@
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=2 lt=1 e=1 c=2 |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   | li=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=3   |       |
-|  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     | ci=3  |
-|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 |       | LEAD  |                              |       |
-|  FLWR  |        |       | FLWR  |                              | ci=3  | LEAD  | CMD START                    |       |
+|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 |       | LEAD  |                              | ci=3  |
+|  FLWR  |        |       | FLWR  |                              | ci=3  | LEAD  | CMD DONE                     |       |
+|  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD START                    |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   |       | LEAD  |                              | li=4  |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=3 lt=1 e=1 c=3 |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=3   |       |
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=1 c=3 |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   | li=4  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   |       |
-|  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     | ci=4  |
-|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=4 lt=1 e=0 c=4 |       | LEAD  |                              |       |
-|  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   | ci=4  | LEAD  |                              |       |
+|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=4 lt=1 e=0 c=4 |       | LEAD  |                              | ci=4  |
+|  FLWR  |        |       | FLWR  |                              | ci=4  | LEAD  | CMD DONE                     |       |
+|  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=4 lt=1 e=0 c=4 |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=4 lt=1 e=0 c=4 |       |

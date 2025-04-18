@@ -680,8 +680,10 @@ async def test_long_catchup(cluster_maker):
 
     # Make sure that the number of commands we send
     # now will require a couple of catchup messages, so
-    # use the leader's runtime value 
-    loop_limit = ts_1.hull.role.max_entries_per_message * 2 + 2
+    # use the leader's runtime value
+
+    cfg = ts_1.cluster_config
+    loop_limit = cfg.max_entries_per_message * 2 + 2
     cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
     
     part1 = {uri_3: ts_3}

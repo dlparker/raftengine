@@ -852,6 +852,11 @@ class PausingServer(PilotAPI):
         self.hull = TestHull(self.cluster_config, self.local_config, self)
         self.operations = SimpleOps(self)
     
+    def change_cluster_config(self, cluster_config):
+        # in case test reuses one improperly, which is convenient
+        self.cluster_config = deepcopy(cluster_config)
+        self.hull.change_cluster_config(self.cluster_config)
+        
     async def simulate_crash(self):
         await self.hull.stop()
         self.am_crashed = True
@@ -880,6 +885,11 @@ class PausingServer(PilotAPI):
         if self.hull is None:
             return None
         return self.hull.get_role_name()
+    
+    def get_message_problem_history(self, clear=False):
+        if self.hull is None:
+            return None
+        return self.hull.get_message_problem_history(clear)
     
     def get_role(self):
         if self.hull is None:
@@ -1724,7 +1734,8 @@ class PausingCluster:
             cc = ClusterConfig(node_uris=self.node_uris,
                                heartbeat_period=heartbeat_period,
                                election_timeout_min=election_timeout_min,
-                               election_timeout_max=election_timeout_max,)
+                               election_timeout_max=election_timeout_max,
+                               max_entries_per_message=10,)
             return cc
 
     def set_configs(self, cluster_config=None):

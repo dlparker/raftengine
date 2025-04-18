@@ -51,7 +51,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     # The leader, now a follower should get a couple
     # of reply messages that it doesn't expect, and
     # should show up in hull log
-    ts_3.hull.message_problem_history = []
+    ts_3.get_message_problem_history(clear=True)
     await ts_3.send_heartbeats()
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_1.in_messages) == 1
@@ -59,7 +59,8 @@ async def test_restart_during_heartbeat(cluster_maker):
     logger.debug("about to demote %s %s", uri_3, ts_3.get_role())
     await ts_3.do_demote_and_handle()
     await cluster.deliver_all_pending()
-    assert len(ts_3.hull.message_problem_history) == 2
+    hist = ts_3.get_message_problem_history()
+    assert len(hist) == 2
 
     await ts_3.start_campaign()
     ts_1.set_trigger(WhenElectionDone())
@@ -84,10 +85,11 @@ async def test_restart_during_heartbeat(cluster_maker):
     msg = RequestVoteResponseMessage(sender=uri_2, receiver=uri_3,
                                      term=0, prevLogIndex=0, prevLogTerm=0, vote=False)
     ts_3.in_messages.append(msg)
-    ts_3.hull.message_problem_history = []
+    ts_3.get_message_problem_history(clear=True)
     await ts_3.do_next_in_msg()
-    assert len(ts_3.hull.message_problem_history) == 1
-    rep = ts_3.hull.message_problem_history[0]
+    hist = ts_3.get_message_problem_history(clear=True)
+    assert len(hist) == 1
+    rep = hist[0]
     assert json.dumps(rep['message'], default=lambda o:o.__dict__) == json.dumps(msg, default=lambda o:o.__dict__)
 
 
@@ -211,20 +213,22 @@ async def test_message_errors(cluster_maker):
     
     ts_1.hull.explode_on_message_code = AppendEntriesMessage.get_code()
     
-    ts_1.hull.message_problem_history = []
+    hist = ts_1.get_message_problem_history(clear=True)
     await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()
-    assert len(ts_1.hull.message_problem_history) == 1
+    
+    hist = ts_1.get_message_problem_history(clear=True)
+    assert len(hist) == 1
     
     ts_1.hull.explode_on_message_code = None
 
     ts_1.hull.corrupt_message_with_code = AppendEntriesMessage.get_code()
-    ts_1.hull.message_problem_history = []
     await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()
-    assert len(ts_1.hull.message_problem_history) == 1
+    hist = ts_1.get_message_problem_history(clear=True)
+    assert len(hist) == 1
     

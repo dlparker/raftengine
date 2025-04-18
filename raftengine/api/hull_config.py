@@ -48,10 +48,14 @@ class ClusterConfig:
             amount of time bounded by election_timeout_min and election_timeout_max,
             raft paper suggests range of 150 to 350 milliseconds
             if no leader messages in longer than this time, start an election
+        max_entries_per_message:
+            the maximum number of log entries that will be sent in a single
+            append entries message
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
     election_timeout_min: float
     election_timeout_max: float
+    max_entries_per_message: int
 
     

@@ -33,15 +33,28 @@ class HullAPI(abc.ABC):
     
     @abc.abstractmethod
     def __init__(self, cluster_config: ClusterConfig, local_config: LocalConfig, pilot: PilotAPI):
-        """ Initialize the RaftLibrary from the LocalConfig data and possibly the ClusterConfig
+        """
+        Initialize the RaftLibrary from the LocalConfig data and possibly the ClusterConfig
         data in the case that this is the first time this server instance has joined the cluster.
         Install the PilotAPI impementation as the other side of the API interface with the
-        RaftEngine libary."""
+        RaftEngine libary.
+        """
         raise NotImplementedError
     
     @abc.abstractmethod
+    def change_cluster_config(self, cluster_config: ClusterConfig):
+        """
+        Replace the existing cluster_config with the supplied version. Note that this
+        assumes that the configuration has already been propogated via Raft memebership
+        change operations if there are membership differences. If the only changes are
+        in timeouts, then it is just applied.
+        """
+        raise NotImplementedError
+        
+    @abc.abstractmethod
     async def start(self):
-        """ Begin processing RaftState. Note that much of the Raft behavior is timeout based, so
+        """
+        Begin processing RaftState. Note that much of the Raft behavior is timeout based, so
         the caller must ensure that it does not block the library for long. If the caller program
         is written as async then this should be an ordinary requirement for the rest of the code,
         and the timeouts are typically in milliseconds so it is not very hard to avoid blocking
@@ -52,14 +65,16 @@ class HullAPI(abc.ABC):
     
     @abc.abstractmethod
     async def on_message(self, in_message:str) -> None:
-        """ When the server receives a message for the RaftLibrary, it should pass it to this
+        """
+        When the server receives a message for the RaftLibrary, it should pass it to this
         method. 
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     async def run_command(self, command:str, timeout:float = 2.0) -> CommandResult:
-        """ Call this method to run a command through the Raft consensus process.
+        """
+        Call this method to run a command through the Raft consensus process.
         Once consesus has been achieved on the associated log update, the command will
         be executed locally and by at least cluster_node_count/2 number of other nodes. Execution
         will call the process_command method of the provided PilotAPI instance. Once this
@@ -69,7 +84,8 @@ class HullAPI(abc.ABC):
 
     @abc.abstractmethod
     async def stop(self) -> None:
-        """ Stop processing RaftState. This node will no longer participate in the
+        """
+        Stop processing RaftState. This node will no longer participate in the
         consensus process. If you call this you should be aware of the impact
         that it has on the cluster, obviously.
         """
