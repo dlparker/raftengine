@@ -112,6 +112,7 @@ async def event_perf_inner(cluster_maker, events=None):
                     
                 async def on_event(self, event):
                     print(f"{event.event_type} {event.msg_type}")
+                    print(f"{event.to_json()}")
                     
             ts_1.hull.event_control.enable_message_events()
             ts_1.hull.event_control.add_handler(HandledMsgHandler())
