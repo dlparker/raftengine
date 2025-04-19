@@ -36,6 +36,7 @@ class Follower(BaseRole):
 
         if message.term == await self.log.get_term() and self.leader_uri != message.sender:
             self.leader_uri = message.sender
+            await self.hull.set_leader_uri(self.leader_uri)
             self.logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
             await self.hull.record_substate(SubstateCode.joined_leader)
@@ -189,7 +190,7 @@ class Follower(BaseRole):
         # happened and we are in the new term.
         # Followers never decide that a higher term is not valid
         await self.hull.record_substate(SubstateCode.newer_term)
-        await self.log.set_term(message.term)
+        await self.hull.set_term(message.term)
         await self.log.set_voted_for(None) # in case we voted during the now expired term
         # Tell the base class method to route the message back to us as normal
         return message

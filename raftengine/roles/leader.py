@@ -379,7 +379,7 @@ class Leader(BaseRole):
             await waiter.handle_run_result(result, error_data)
 
     async def term_expired(self, message):
-        await self.log.set_term(message.term)
+        await self.hull.set_term(message.term)
         await self.hull.demote_and_handle(message)
         return None
 

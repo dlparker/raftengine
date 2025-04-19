@@ -22,7 +22,7 @@ class Candidate(BaseRole):
     async def start_campaign(self):
         await self.hull.record_substate(SubstateCode.start_election)
         self.term += 1
-        await self.log.set_term(self.term)
+        await self.hull.set_term(self.term)
         self.reply_count = 0
         for node_id in self.hull.get_cluster_node_ids():
             if node_id == self.hull.get_my_uri():
@@ -69,7 +69,7 @@ class Candidate(BaseRole):
 
     async def term_expired(self, message):
         await self.hull.record_substate(SubstateCode.newer_term)
-        await self.log.set_term(message.term)
+        await self.hull.set_term(message.term)
         await self.hull.demote_and_handle(message)
         return None
 
