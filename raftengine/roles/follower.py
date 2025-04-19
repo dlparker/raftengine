@@ -169,7 +169,7 @@ class Follower(BaseRole):
             # If the messages claim for last committed log index or term are not at least as high
             # as our local values, then vote no.
             rec = await self.log.read(commit_index)
-            if message.prevLogIndex < commit_index or message.term < rec.term:
+            if message.prevLogIndex < commit_index or message.prevLogTerm < rec.term:
                 self.logger.info("%s voting false on %s", self.my_uri(),
                                  message.sender)
                 vote = False
