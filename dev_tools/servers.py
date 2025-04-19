@@ -657,9 +657,12 @@ class Network:
             node.blocked_in_messages.append(msg)
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
-        await self.test_trace.note_message_handled(node, msg)
+        stime = time.perf_counter()
         start_state = node.hull.role.role_name
+        stime = time.perf_counter()
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
+        etime = time.perf_counter() - stime
+        await self.test_trace.note_message_handled(node, msg, etime)
         if start_state != node.hull.role.role_name:
             await self.test_trace.note_role_changed(node)
         return msg
@@ -1191,6 +1194,7 @@ class NodeState:
     voted_for: Optional[str] = None
     message_action: Optional[str] = None
     message: Optional[str] = None
+    elapsed_time: Optional[float] = None  # only valid for message handled
     
     
 @dataclass
@@ -1340,7 +1344,7 @@ class TestTrace:
         ns.message = None
         ns.message_action = None
 
-    async def note_message_handled(self, target, message):
+    async def note_message_handled(self, target, message, elapsed_time):
         ns = self.node_states[target.uri]
         ns.save_event = SaveEvent.message_op
         ns.message = message
@@ -1349,6 +1353,7 @@ class TestTrace:
         ns.save_event = None
         ns.message = None
         ns.message_action = None
+        ns.elapsed_time = elapsed_time
 
     async def note_blocked_send(self, sender, message):
         ns = self.node_states[sender.uri]
@@ -1447,6 +1452,7 @@ class TestTrace:
         cols.append('commit_index')
         cols.append('reply_entries_ok')
         cols.append('reply_max_index')
+        cols.append('elapsed_time')
         for i in range(1, len(self.cluster.nodes) + 1):
             cols.append(f'n{i}-uri')
             cols.append(f'n{i}-role')
@@ -1475,17 +1481,27 @@ class TestTrace:
                             cols.append(f'{ns.message.commitIndex}')
                             cols.append('')
                             cols.append('')
+                            if ns.elapsed_time:
+                                cols.append(f'{ns.elapsed_time:8.8f}')
+                            else:
+                                cols.append('')
                         elif ns.message.code == "append_response":
                             cols.append('')
                             cols.append('')
                             cols.append(f'{ns.message.success}')
                             cols.append(f'{ns.message.maxIndex}')
+                            if ns.elapsed_time:
+                                cols.append(f'{ns.elapsed_time:8.8f}')
+                            else:
+                                cols.append('')
                         else:
                             cols.append('')
                             cols.append('')
                             cols.append('')
                             cols.append('')
+                            cols.append('')
                     else:
+                        cols.append('')
                         cols.append('')
                         cols.append('')
                         cols.append('')

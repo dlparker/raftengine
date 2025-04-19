@@ -4,8 +4,12 @@ import logging
 import random
 import time
 import json
+from typing import Optional
+from collections import defaultdict
+    
 
 from raftengine.api.types import RoleName, SubstateCode
+from raftengine.api.events import EventType, EventHandler, RoleChangeEvent, HandledMessageEvent
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
@@ -15,8 +19,113 @@ from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
+from raftengine.api.events import EventType, EventHandler
 from raftengine.api.hull_config import ClusterConfig, LocalConfig
 
+class EventControl:
+
+    def __init__(self):
+        self.error_events = [EventType.error,]
+        self.message_events = [EventType.msg_sent, EventType.msg_recv,
+                               EventType.msg_handled]
+        self.major_events = [EventType.role_change, EventType.term_change,
+                             EventType.leader_change]
+        self.common_events = [EventType.log_update,]
+
+        self.active_events = []
+        self.active_events.extend(self.error_events)
+        self.active_tracker = [self.active_events]
+        self.handlers = []
+        self.handler_map = defaultdict(list)
+
+    def add_handler(self, handler: EventHandler) -> None:
+        if not handler in self.handlers:
+            self.handlers.append(handler)
+            for event_type in handler.events_handled():
+                if handler not in self.handler_map[event_type]:
+                    self.handler_map[event_type].append(handler)
+
+    def remove_handler(self, handler: EventHandler) -> None:
+        if handler in self.handlers:
+            try:
+                self.handlers.remove(handler)
+            except ValueError:
+                return
+            for event_type in handler.events_handled():
+                try:
+                    self.handler_map[event_type].remove(handler)
+                except ValueError:
+                    pass
+
+    def enable_major_events(self) -> None:
+        if self.major_events not in self.active_tracker:
+            self.active_events.extend(self.major_events)
+            self.active_tracker = [self.major_events]
+
+    def disable_major_events(self) -> None:
+        if self.mojor_events in self.active_tracker:
+            self.active_tracker.remove(self.major_events)
+            self.active_events = {}
+            for active in self.active_tracker:
+                self.active_events.extend(active)
+
+    def enable_message_events(self) -> None:
+        if self.message_events not in self.active_tracker:
+            self.active_events.extend(self.message_events)
+            self.active_tracker = [self.message_events]
+
+    def disable_message_events(self) -> None:
+        if self.mojor_events in self.active_tracker:
+            self.active_tracker.remove(self.message_events)            
+            self.active_events = {}
+            for active in self.active_tracker:
+                self.active_events.extend(active)
+
+    async def emit_error(self, error_text:str, context:dict) -> None:
+        my_type = EventType.error
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(error=error_text))
+        
+    async def emit_sent_msg(self, msg:BaseMessage, context: dict) -> None:
+        my_type = EventType.msg_sent
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(msg_type=msg.code))
+        
+    async def emit_recv_msg(self, msg:BaseMessage, context: dict) -> None:
+        my_type = EventType.msg_recv
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(msg_type=msg.code))
+
+    async def emit_handled_msg(self, msg:BaseMessage, result: Optional[str] = None,
+                               error: Optional[str] = None) -> None:
+        my_type = EventType.msg_handled
+        event = HandledMessageEvent(msg, result, error)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+        
+    async def emit_role_change(self, new_role: str, context: dict) -> None:
+        my_type = EventType.role_change
+        event = RoleChangeEvent(new_role)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+
+    async def emit_term_change(self, new_term:int, context: dict) -> None:
+        my_type = EventType.term_change
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(new_term=new_term))
+        
+    async def emit_leader_change(self, new_leader:str, context: dict) -> None:
+        my_type = EventType.leader_change
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(new_leader=new_role))
+        
+    async def emit_log_update(self, update_text:str, context: dict) -> None:
+        my_type = EventType.log_update
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(my_type, dict(log_data=update_text))
+        
+        
+        
 class Hull(HullAPI):
 
     # Part of API
@@ -33,6 +142,7 @@ class Hull(HullAPI):
         self.role_run_after_target = None
         self.message_problem_history = []
         self.log_substates = logging.getLogger("Substates")
+        self.event_control = EventControl()
 
     # Part of API
     def change_cluster_config(self, cluster_config: ClusterConfig):
@@ -41,6 +151,8 @@ class Hull(HullAPI):
     # Part of API
     async def start(self):
         await self.role.start()
+        if EventType.role_change in self.event_control.active_events:
+            await self.event_control.emit_role_change(self.get_role_name(), {})
 
     # Part of API
     def decode_message(self, in_message):
@@ -65,6 +177,8 @@ class Hull(HullAPI):
             await self.record_message_problem(in_message, error)
             return None
         res = await self.inner_on_message(message)
+        if "handled" in self.event_control.active_events:
+            await self.event_control.active_events['hange']("follower", locals())
         return res
         
     async def inner_on_message(self, message):
@@ -76,6 +190,8 @@ class Hull(HullAPI):
         except Exception as e:
             error = traceback.format_exc()
             self.logger.error(error)
+        if EventType.msg_handled in self.event_control.active_events:
+            await self.event_control.emit_handled_msg(message, result=res, error=error)
         if error:
             await self.record_message_problem(message, error)
         return res
@@ -88,7 +204,8 @@ class Hull(HullAPI):
             return CommandResult(command, redirect=self.role.leader_uri)
         elif self.role.role_name == RoleName.candidate:
             return CommandResult(command, retry=1)
-    
+
+        
     # Called by Role
     def get_log(self):
         return self.log
@@ -143,6 +260,8 @@ class Hull(HullAPI):
         await self.stop_role()
         self.role = Candidate(self)
         await self.role.start()
+        if EventType.role_change in self.event_control.active_events:
+            await self.event_control.emit_role_change(self.get_role_name(), {})
         self.logger.warning("%s started campaign term = %s", self.get_my_uri(), await self.log.get_term())
 
     # Called by Role
@@ -151,6 +270,8 @@ class Hull(HullAPI):
         self.role = Leader(self, new_term)
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
         await self.role.start()
+        if EventType.role_change in self.event_control.active_events:
+            await self.event_control.emit_role_change(self.get_role_name(), {})
 
     # Called by Role
     async def demote_and_handle(self, message=None):
@@ -158,6 +279,8 @@ class Hull(HullAPI):
         await self.stop_role()
         self.role = Follower(self)
         await self.role.start()
+        if EventType.role_change in self.event_control.active_events:
+            await self.event_control.emit_role_change(self.get_role_name(), {})
         if message and hasattr(message, 'leaderId'):
             self.logger.debug('%s message says leader is %s, adopting', self.get_my_uri(), message.leaderId)
             self.role.leader_uri = message.leaderId
