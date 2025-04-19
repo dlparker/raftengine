@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Optional
+import json
 from raftengine.messages.base_message import BaseMessage
 
 class EventType(str, Enum):
@@ -20,13 +21,19 @@ class Event:
     def __init__(self, event_type):
         self.event_type = event_type
 
+    def as_json(self):
+        return json.dumps(self, default=lambda o:o.__dict__)
+
+    @classmethod
+    def from_json(cls, json_data):
+        pass
+    
 class RoleChangeEvent(Event):
 
     def __init__(self, new_role):
         self.event_type = EventType.role_change
         self.new_role = new_role
 
-        
 class MsgEvent(Event):
 
     def __init__(self, msg:BaseMessage, event_type:EventType):
