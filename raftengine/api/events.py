@@ -11,33 +11,51 @@ class EventType(str, Enum):
     role_change = "ROLE_CHANGE"
     term_change = "TERM_CHANGE"
     leader_change = "LEADER_CHANGE"
-    log_update = "LOG_UPDATE"
+    index_change = "INDEX_CHANGE"
+    commit_change = "COMMIT_CHANGE"
 
     def __str__(self):
         return self.value
 
 class Event:
 
-    def __init__(self, event_type):
-        self.event_type = event_type
-
-    def as_json(self):
+    event_type = None
+    
+    def to_json(self):
         return json.dumps(self, default=lambda o:o.__dict__)
 
-    @classmethod
-    def from_json(cls, json_data):
-        pass
-    
+class ErrorEvent(Event):
+
+    event_type = EventType.error
+
+    def __init__(self, error):
+        self.error = error
+
 class RoleChangeEvent(Event):
 
-    def __init__(self, new_role):
-        self.event_type = EventType.role_change
+    event_type = EventType.role_change
+
+    def __init__(self, new_role:str):
         self.new_role = new_role
+
+class TermChangeEvent(Event):
+
+    event_type = EventType.term_change
+
+    def __init__(self, new_term:int):
+        self.new_term = new_term
+
+class LeaderChangeEvent(Event):
+
+    event_type = EventType.leader_change
+
+    def __init__(self, new_leader:str):
+        self.new_leader = new_leader
 
 class MsgEvent(Event):
 
     def __init__(self, msg:BaseMessage, event_type:EventType):
-        self.event_type = EventType.msg_handled
+        self.event_type = event_type
         self.msg_type = msg.code
         self.term = msg.term
         self.sender = msg.sender
@@ -45,12 +63,42 @@ class MsgEvent(Event):
         self.prevLogIndex = msg.prevLogIndex
         self.prevLogTerm = msg.prevLogTerm
         
-class HandledMessageEvent(MsgEvent):
+class MsgHandledEvent(MsgEvent):
 
+    event_type = EventType.msg_handled
+    
     def __init__(self, msg:BaseMessage, result: Optional[str] = None, error: Optional[str] = None):
-        super().__init__(msg, EventType.msg_handled)
+        super().__init__(msg, self.event_type)
         self.result = result
         self.error = error
+
+class MsgRecvEvent(MsgEvent):
+
+    event_type = EventType.msg_recv
+    
+    def __init__(self, msg:BaseMessage):
+        super().__init__(msg, self.event_type)
+
+class MsgSentEvent(MsgEvent):
+
+    event_type = EventType.msg_sent
+    
+    def __init__(self, msg:BaseMessage):
+        super().__init__(msg, self.event_type)
+
+class IndexChangeEvent(Event):
+
+    event_type = EventType.index_change
+    
+    def __init__(self, new_index):
+        self.new_index = new_index
+
+class CommitChangeEvent(Event):
+
+    event_type = EventType.commit_change
+    
+    def __init__(self, new_commit):
+        self.new_commit = new_commit
 
 class EventHandler:
 
@@ -60,17 +108,7 @@ class EventHandler:
     def events_handled(self) -> list[EventType]:
         return self.event_types
     
-    def handles(self, event_type: EventType) -> bool:
-        if event_type in self.event_types:
-            return True
-        return False
-
-    async def do_on_event(self, event_type: EventType, data: dict) -> None:
-        if not event_type in self.event_types:
-            return 
-        await self.on_event(event_type, data)
-
     # override this
-    async def on_event(self, event: Event) -> None:
-        pass
+    async def on_event(self, event: Event) -> None: # pragma: no cover
+        raise NotImplementedError('you must supply on_event method')
 

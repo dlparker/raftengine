@@ -80,6 +80,7 @@ class BaseRole:
                 if message.term == await self.log.get_term() and self.leader_uri is None:
                     self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
                     self.leader_uri = message.leaderId
+                    await self.hull.set_leader_uri(self.leader_uri)
                     problem += f" except adopting leader {self.leader_uri}"
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
