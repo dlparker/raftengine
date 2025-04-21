@@ -21,7 +21,9 @@ from dev_tools.servers import setup_logging
 #extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name=__name__, level="debug"),]
 #log_config = setup_logging(extra_logging)
-setup_logging()
+default_level='error'
+#default_level='debug'
+setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
 async def test_empty_log_1(cluster_maker):
@@ -66,9 +68,11 @@ async def test_empty_log_1(cluster_maker):
     cfg = ts_1.cluster_config
     # enough to get two full and one partial append_entries catchups.
     loop_limit = cfg.max_entries_per_message * 2 + 2
+    await cluster.start_auto_comms()
     cluster.test_trace.start_subtest(f"Node 1 is leader, running {loop_limit} commands to fill log")
     for i in range(loop_limit):
         command_result = await cluster.run_command("add 1", 1)
+    await cluster.stop_auto_comms()
 
     assert ts_1.operations.total == loop_limit
     # Now "crash" the leader, run an election, then have

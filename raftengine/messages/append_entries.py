@@ -41,7 +41,7 @@ class AppendResponseMessage(BaseMessage):
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,  maxIndex: int,
                  success: bool, leaderId: str):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage)
         self.leaderId = leaderId
         self.success = success
         self.maxIndex = maxIndex

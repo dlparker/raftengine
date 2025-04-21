@@ -3,16 +3,17 @@ from .base_message import BaseMessage
 
 class PreVoteMessage(BaseMessage):
 
+    code = "pre_vote"
+
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
-    code = "pre_vote"
 
 class PreVoteResponseMessage(BaseMessage):
 
     code = "pre_vote_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=PreVoteMessage)
         self.vote = vote
 
     @classmethod

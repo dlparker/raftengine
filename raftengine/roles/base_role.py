@@ -114,9 +114,16 @@ class BaseRole:
         if self.last_pre_vote is not None:
             self.logger.info("%s pre voting false on %s, already pre voted for %s", self.my_uri(),
                              message.sender, self.last_pre_vote)
+            await self.send_pre_vote_response_message(message, vote_yes=False)
+            return
+        # if we are a follower, then we haven't timed out on leader contact,
+        # so we should say no, we have a leader.
+        if self.role_name == "follower":
+            self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(),
+                             message.sender, self.last_pre_vote)
             await self.send_vote_response_message(message, vote_yes=False)
             return
-
+        
         commit_index = await self.log.get_commit_index()
         if message.term < await self.log.get_term():
             vote = False

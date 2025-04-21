@@ -8,13 +8,13 @@ from raftengine.messages.pre_vote import PreVoteMessage
 
 class Candidate(BaseRole):
 
-    def __init__(self, hull, extended_protocol=False):
+    def __init__(self, hull, use_pre_vote=False):
         super().__init__(hull, RoleName.candidate)
         self.term = None
         self.votes = dict()
         self.pre_votes = dict()
         self.reply_count = 0
-        self.extended = extended_protocol
+        self.use_pre_vote = use_pre_vote
         self.logger = logging.getLogger("Candidate")
 
     async def start(self):
@@ -23,7 +23,7 @@ class Candidate(BaseRole):
         await self.start_campaign()
         
     async def start_campaign(self):
-        if self.extended:
+        if self.use_pre_vote:
             return await self.start_campaign_pre()
         else:
             return await self.start_campaign_base()

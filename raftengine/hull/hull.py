@@ -257,6 +257,10 @@ class Hull(HullAPI):
                              self.cluster_config.election_timeout_max)
         return res
 
+    # Called by Role 
+    def get_election_timeout_range(self):
+        return self.cluster_config.election_timeout_min, self.cluster_config.election_timeout_max
+
     # Called by Role
     def get_max_entries_per_message(self):
         return self.cluster_config.max_entries_per_message
@@ -275,7 +279,7 @@ class Hull(HullAPI):
     # Called by Role
     async def start_campaign(self):
         await self.stop_role()
-        self.role = Candidate(self, extended_protocol=self.cluster_config.use_pre_vote)
+        self.role = Candidate(self, use_pre_vote=self.cluster_config.use_pre_vote)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
@@ -285,7 +289,7 @@ class Hull(HullAPI):
     # Called by Role
     async def win_vote(self, new_term):
         await self.stop_role()
-        self.role = Leader(self, new_term)
+        self.role = Leader(self, new_term, use_check_quorum=self.cluster_config.use_check_quorum)
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:

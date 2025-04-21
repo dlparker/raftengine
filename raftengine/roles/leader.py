@@ -109,12 +109,14 @@ class CommandWaiter:
         
 class Leader(BaseRole):
 
-    def __init__(self, hull, term):
+    def __init__(self, hull, term, use_check_quorum):
         super().__init__(hull, RoleName.leader)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()
         self.command_waiters = dict()
+        self.bcast_pendings = []
+        self.use_check_quorum = use_check_quorum
 
     @property
     def max_entries_per_message(self):
@@ -151,6 +153,7 @@ class Leader(BaseRole):
     async def broadcast_log_record(self, log_record):
         prevLogIndex = 0
         prevLogTerm = 0
+        msgs = []
         if log_record.index > 1:
             prev_rec = await self.log.read(log_record.index - 1)
             prevLogIndex = prev_rec.index
@@ -182,14 +185,19 @@ class Leader(BaseRole):
             message.receiver = uri
             self.logger.info("broadcast command sending %s", message)
             await self.hull.send_message(message)
+            msgs.append(message)
             await self.record_sent_message(message)
-
+        self.bcast_pendings.append(dict(time=time.time(), messages=msgs))
+        
     async def scheduled_send_heartbeats(self):
         await self.send_heartbeats()
         await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
         
     async def send_heartbeats(self):
         entries = []
+        if self.use_check_quorum:
+            if not await self.check_quorum():
+                return
         term = await self.log.get_term()
         my_uri = self.my_uri()
         last_term = await self.log.get_last_term()
@@ -392,7 +400,40 @@ class Leader(BaseRole):
         tracker = await self.tracker_for_follower(message.sender)
         tracker.reply_count += 1
         tracker.last_reply_time = time.time()
-                                
+        pop_bcasts = []
+        for b_index, pending in enumerate(self.bcast_pendings):
+            targ = None
+            for m_index, msg in enumerate(pending['messages']):
+                if message.is_reply_to(msg):
+                    targ = m_index
+                    break
+            if targ:
+                pending['messages'].pop(targ)
+                if len(pending['messages']):
+                    pop_bcasts.append(b_index)
+
+        for pop_b in pop_bcasts:
+            self.bcast_pendings.pop(pop_b)
+                
+    async def check_quorum(self):
+        et_min, et_max = self.hull.get_election_timeout_range()
+        node_count = len(self.hull.get_cluster_node_ids())
+        quorum = node_count/2
+        pop_bcasts = []
+        for b_index,pending in enumerate(self.bcast_pendings):
+            if time.time() - pending['time'] > et_max:
+                reply_count = node_count - len(pending['messages'])
+                if reply_count >= quorum:
+                   pop_bcasts.append(b_index)
+                else:
+                    self.logger.warning("%s failed quorum check, resigning ", self.my_uri())
+                    breakpoint()
+                    await self.hull.demote_and_handle()
+                    return False
+        for p_b in pop_bcasts:
+            self.bcast_pendings.pop(p_b)
+        return True
+        
     async def tracker_for_follower(self, uri):
         tracker = self.follower_trackers.get(uri, None)
         last_index = await self.log.get_last_index()

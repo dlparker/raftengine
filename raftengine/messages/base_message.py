@@ -7,17 +7,32 @@ for the class variable "code".
 """
 from typing import Type
 
+pair_mapping = {}
 class BaseMessage:
 
     code = "invalid"
     
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int):
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, reply_to_type=None):
         self.sender = sender
         self.receiver = receiver
         self.term = term
         self.prevLogIndex = prevLogIndex
         self.prevLogTerm = prevLogTerm
         self.code = self.__class__.code
+        if reply_to_type:
+            pair_mapping[self.__class__] = reply_to_type
+
+    def is_reply_to(self, other):
+        global pair_mapping
+        paired = pair_mapping.get(self.__class__, None)
+        if paired and paired == other.__class__:
+            if (other.sender == self.receiver
+                and other.receiver == self.sender
+                and other.term == self.term
+                and other.prevLogTerm == self.prevLogTerm
+                and other.prevLogIndex == self.prevLogIndex):
+                return True
+        return False
 
     @classmethod
     def from_dict(cls, data):

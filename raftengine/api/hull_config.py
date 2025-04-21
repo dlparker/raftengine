@@ -53,6 +53,8 @@ class ClusterConfig:
             append entries message
         use_pre_vote:
             Use the prevote extension for elections, defaults to True
+        use_check_quorum:
+            Use the check quorum extension to make leaders proactively resign, defaults to True
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
@@ -60,5 +62,6 @@ class ClusterConfig:
     election_timeout_max: float
     max_entries_per_message: int
     use_pre_vote: bool = True
+    use_check_quorum: bool = True
 
     
