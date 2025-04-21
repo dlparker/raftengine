@@ -495,6 +495,12 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
     
 async def test_election_candidate_log_too_old_1(cluster_maker):
+    await inner_candidate_log_too_old(cluster_maker, use_pre_vote=False)
+    
+async def test_election_candidate_log_too_old_2(cluster_maker):
+    await inner_candidate_log_too_old(cluster_maker, use_pre_vote=True)
+    
+async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     # It is possible for a candidate to have a log state that
     # is older than the state of other servers during an
     # election. The follower election code should detect that and
@@ -506,7 +512,8 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     election_timeout_max = 0.05
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min, 
-                                          election_timeout_max=election_timeout_max)
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=use_pre_vote)
     cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -546,9 +553,15 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     ts3_out_2 = await ts_3.do_next_out_msg()
     logger.info("-------- Target code should run on next message to ts_1,  should vote no")
     ts_1_in_1 = await ts_1.do_next_in_msg()
-    assert ts_1_in_1.get_code() == PreVoteMessage.get_code()
+    if not use_pre_vote:
+        assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
+    else:
+        assert ts_1_in_1.get_code() == PreVoteMessage.get_code()
     ts_1_out_1 = await ts_1.do_next_out_msg()
-    assert ts_1_out_1.get_code() == PreVoteResponseMessage.get_code()
+    if not use_pre_vote:
+        assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
+    else:
+        assert ts_1_in_1.get_code() == PreVoteMessage.get_code()
     assert ts_1_out_1.vote is False
 
     logger.info("-------- Vote as expected letting election finish ----")
@@ -561,6 +574,13 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     logger.info("-------- Re-election of ts_1 finished ----")
     
 async def test_failed_first_election_1(cluster_maker):
+    await inner_failed_first_election(cluster_maker, use_pre_vote=False)
+
+async def test_failed_first_election_2(cluster_maker):
+    await inner_failed_first_election(cluster_maker, use_pre_vote=True)
+    
+async def inner_failed_first_election(cluster_maker, use_pre_vote):
+
     """ Let a leader win, but before the followers get his
         term_start log message, make him die (simuated). 
         Have a new election, then re-start the ex leader.
@@ -569,27 +589,29 @@ async def test_failed_first_election_1(cluster_maker):
         hits a special case in follower code.
     """
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.start()
     await ts_3.start_campaign()
 
-    out1 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
-    ts_3.add_trigger(out1)
-    out2 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
-    ts_3.add_trigger(out2)
-    ts_1.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
-    ts_2.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
-
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
-
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
+    if use_pre_vote:
+        out1 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
+        ts_3.add_trigger(out1)
+        out2 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
+        ts_3.add_trigger(out2)
+        ts_1.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
+        ts_2.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
+        
+        await asyncio.gather(ts_1.run_till_triggers(),
+                             ts_2.run_till_triggers(),
+                             ts_3.run_till_triggers())
+        
+        ts_1.clear_triggers()
+        ts_2.clear_triggers()
+        ts_3.clear_triggers()
 
     out1 = WhenMessageOut(RequestVoteMessage.get_code(),
                           message_target=uri_1, flush_when_done=False)

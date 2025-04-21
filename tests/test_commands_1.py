@@ -439,6 +439,12 @@ async def test_command_2_leaders_3(cluster_maker):
     assert command_result.redirect == uri_2
     
 async def test_command_after_heal_1(cluster_maker):
+    await inner_command_after_heal(cluster_maker, True)
+    
+async def test_command_after_heal_2(cluster_maker):
+    await inner_command_after_heal(cluster_maker, False)
+    
+async def inner_command_after_heal(cluster_maker, use_pre_vote):
     """
     The goal for this test is for a candidate to receive an append entries message from a leader of a lower term.
     This can happen when a network partition resolves before a new election has completed and the 
@@ -451,7 +457,8 @@ async def test_command_after_heal_1(cluster_maker):
 
 
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
+    cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -875,7 +882,6 @@ async def test_follower_rewrite_1(cluster_maker):
 
     Sheesh.
     
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     """
     cluster = cluster_maker(3)
     cluster.set_configs()

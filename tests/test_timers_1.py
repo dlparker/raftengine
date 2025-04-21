@@ -201,16 +201,11 @@ async def test_candidate_timeout_1(cluster_maker):
     election_timeout_max = 0.011
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min, 
-                                          election_timeout_max=election_timeout_max)
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=False)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-
-    cfg = ts_1.cluster_config
-    cfg.use_pre_vote = False
-    ts_1.change_cluster_config(cfg)
-    ts_2.change_cluster_config(cfg)
-    ts_3.change_cluster_config(cfg)
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),

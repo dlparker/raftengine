@@ -1749,13 +1749,15 @@ class PausingCluster:
 
     def build_cluster_config(self, heartbeat_period=1000,
                              election_timeout_min=10000,
-                             election_timeout_max=20000):
+                             election_timeout_max=20000,
+                             use_pre_vote=True):
         
             cc = ClusterConfig(node_uris=self.node_uris,
                                heartbeat_period=heartbeat_period,
                                election_timeout_min=election_timeout_min,
                                election_timeout_max=election_timeout_max,
-                               max_entries_per_message=10,)
+                               max_entries_per_message=10,
+                               use_pre_vote=use_pre_vote)
             return cc
 
     def set_configs(self, cluster_config=None):

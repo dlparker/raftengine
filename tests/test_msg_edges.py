@@ -129,7 +129,7 @@ async def test_slow_voter(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config()
+    config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     uri_1 = cluster.node_uris[0]
     uri_2 = cluster.node_uris[1]
@@ -138,12 +138,6 @@ async def test_slow_voter(cluster_maker):
     ts_1 = cluster.nodes[uri_1]
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
-
-    cfg = ts_1.cluster_config
-    cfg.use_pre_vote = False
-    ts_1.change_cluster_config(cfg)
-    ts_2.change_cluster_config(cfg)
-    ts_3.change_cluster_config(cfg)
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
