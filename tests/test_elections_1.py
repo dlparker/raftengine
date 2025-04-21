@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
 from dev_tools.servers import PausingCluster, cluster_maker
@@ -14,7 +15,7 @@ from dev_tools.servers import setup_logging
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 #default_level="debug"
-default_level="warn"
+default_level="error"
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -37,13 +38,18 @@ async def test_election_1(cluster_maker):
 
     cluster = cluster_maker(3)
     cluster.set_configs()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    cfg = ts_1.cluster_config
+    cfg.use_pre_vote = False
+    ts_1.change_cluster_config(cfg)
+    ts_2.change_cluster_config(cfg)
+    ts_3.change_cluster_config(cfg)
 
     cluster.test_trace.start_subtest("Node 1 starts campaign, nodes 2 and 3 should get and reply 'yes' to request vote messages",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_election_1.__doc__)
     await cluster.start()
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     # tell first one to start election, should send request vote messages to other two
     await ts_1.start_campaign()
@@ -309,15 +315,16 @@ async def test_reelection_3(cluster_maker):
     cfg.election_timeout_max = 1.2
     ts_3.change_cluster_config(cfg)
 
+    logger.warning('\n\n----------- ts_3 starting campaign\n\n')
     await ts_3.do_demote_and_handle(None)
     await ts_3.start_campaign()
     logger.warning('leader ts_3 demoted and campaign started')
     # ts_2 started last, but should win and raise term to 3 because of timeout
     
+    logger.warning('\n\n----------- ts_1 starting campaign\n\n')
     await ts_1.start_campaign()
-    logger.warning('ts_1 starting campaign')
+    logger.warning('\n\n----------- ts_2 starting campaign, delivering messages\n\n')
     await ts_2.start_campaign()
-    logger.warning('ts_2 starting campaign, delivering messages')
     await cluster.deliver_all_pending()
     logger.warning('waiting for re-election to happend')
     start_time = time.time()
@@ -331,9 +338,100 @@ async def test_reelection_3(cluster_maker):
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
     await cluster.deliver_all_pending()
-    
-    
 
     
+async def test_pre_election_1(cluster_maker):
+    """
+
+    This runs the election happy path, with prevote enabled
+    everybody has same state, only one server
+    runs for leader, everybody responds correctly. It is written
+    using the most granular control provided by the PausingServer
+    class, controlling the message movement steps directly (for
+    the most part). The cluster is three nodes.
+
+    If some basid error is introduced in the election related code, it will
+    show up here with the most detail.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+
+    cluster.test_trace.start_subtest("Node 1 starts campaign, nodes 2 and 3 should get and reply 'yes' to request vote messages",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_election_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    # tell first one to start election, should send request vote messages to other two
+    await ts_1.start_campaign()
+    await cluster.deliver_all_pending(out_only=True)
+    assert len(ts_2.in_messages) == 1
+    assert len(ts_3.in_messages) == 1
+    assert ts_2.in_messages[0].get_code() == PreVoteMessage.get_code()
+    assert ts_3.in_messages[0].get_code() == PreVoteMessage.get_code()
+
+    # now deliver those, we should get two replies at first one, both with yes
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    assert len(ts_1.in_messages) == 1
+    await ts_3.do_next_in_msg()
+    await ts_3.do_next_out_msg()
+    assert len(ts_1.in_messages) == 2
+    assert ts_1.in_messages[0].get_code() == PreVoteResponseMessage.get_code()
+    assert ts_1.in_messages[1].get_code() == PreVoteResponseMessage.get_code()
+    assert "v=True" in str(ts_1.in_messages[0])
+    assert "v=True" in str(ts_1.in_messages[1])
+    await ts_1.do_next_in_msg()
+    await ts_1.do_next_in_msg()
+    
+    await cluster.deliver_all_pending(out_only=True)
+    assert len(ts_2.in_messages) == 1
+    assert len(ts_3.in_messages) == 1
+    assert ts_2.in_messages[0].get_code() == RequestVoteMessage.get_code()
+    assert ts_3.in_messages[0].get_code() == RequestVoteMessage.get_code()
+
+    # now deliver those, we should get two replies at first one, both with yes
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    assert len(ts_1.in_messages) == 1
+    await ts_3.do_next_in_msg()
+    await ts_3.do_next_out_msg()
+    assert len(ts_1.in_messages) == 2
+    assert ts_1.in_messages[0].get_code() == RequestVoteResponseMessage.get_code()
+    assert ts_1.in_messages[1].get_code() == RequestVoteResponseMessage.get_code()
+    
+    # now let candidate process votes, should then promote itself
+    await ts_1.do_next_in_msg()
+    await ts_1.do_next_in_msg()
+    assert ts_1.get_role_name() == "LEADER"
+
+    cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
+
+    # leader should send append_entries to everyone else in cluster,
+    # check for delivery pending
+    await ts_1.do_next_out_msg()
+    await ts_1.do_next_out_msg()
+    assert len(ts_2.in_messages) == 1
+    assert len(ts_3.in_messages) == 1
+    assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
+    assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
+    
+    cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
+    # now deliver those, we should get two replies at first one,
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    assert len(ts_1.in_messages) == 1
+    await ts_3.do_next_in_msg()
+    await ts_3.do_next_out_msg()
+    assert len(ts_1.in_messages) == 2
+    assert ts_1.in_messages[0].get_code() == AppendResponseMessage.get_code()
+    assert ts_1.in_messages[1].get_code() == AppendResponseMessage.get_code()
+    await ts_1.do_next_in_msg()
+    await ts_1.do_next_in_msg()
+
     
     

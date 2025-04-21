@@ -6,6 +6,7 @@ from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import RoleName, SubstateCode
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
+from raftengine.messages.pre_vote import PreVoteResponseMessage
 from raftengine.roles.base_role import BaseRole
 
 class Follower(BaseRole):
@@ -183,6 +184,7 @@ class Follower(BaseRole):
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
+            
             
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term

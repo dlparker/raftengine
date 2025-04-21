@@ -34,14 +34,17 @@ class SubstateCode(str, Enum):
     """ Follower has not received timely leader contact """
     leader_lost = "LEADER_LOST"
 
-    """ received vote request, examining """
-    planning_vote = "PLANNING_VOTE"
-
     """ cast vote """
     voting_yes = "VOTING_YES"
 
     """ cast vote """
     voting_no = "VOTING_NO"
+
+    """ cast pre vote """
+    pre_voting_yes = "PRE_VOTING_YES"
+
+    """ cast pre vote """
+    pre_voting_no = "PRE_VOTING_NO"
 
     """ Follower, leader has called us at least once """
     joined_leader = "JOINED_LEADER"                  
@@ -110,6 +113,21 @@ class SubstateCode(str, Enum):
 
     """ Candidate starting new election """
     start_new_election = "START_NEW_ELECTION"
+
+    """ Candidate starting election pre-vote"""
+    start_pre_election = "START_PRE_ELECTION"
+
+    """ no pre-votes in yet """
+    no_pre_votes_in = "NO_PRE_VOTES_IN"
+
+    """ at least one pre-vote in """
+    some_pre_votes_in = "SOME_PRE_VOTES_IN"
+
+    """ enough pre-votes in, election won """
+    pre_won = "PRE_WON"
+
+    """ enough pre-votes in, election lost """
+    pre_lost = "PRE_LOST"
     
     # --- end expect from Candidate roles
 

@@ -16,6 +16,7 @@ from raftengine.api.events import IndexChangeEvent, CommitChangeEvent
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
@@ -145,7 +146,8 @@ class Hull(HullAPI):
     def decode_message(self, in_message):
         mdict = json.loads(in_message)
         mtypes = [AppendEntriesMessage,AppendResponseMessage,
-                  RequestVoteMessage,RequestVoteResponseMessage]
+                  RequestVoteMessage,RequestVoteResponseMessage,
+                  PreVoteMessage,PreVoteResponseMessage]
         message = None
         for mtype in mtypes:
             if mdict['code'] == mtype.get_code():
@@ -273,11 +275,12 @@ class Hull(HullAPI):
     # Called by Role
     async def start_campaign(self):
         await self.stop_role()
-        self.role = Candidate(self)
+        self.role = Candidate(self, extended_protocol=self.cluster_config.use_pre_vote)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
-        self.logger.warning("%s started campaign term = %s", self.get_my_uri(), await self.log.get_term())
+        self.logger.warning("%s started campaign term = %s pre_vote=%s", self.get_my_uri(),
+                            await self.log.get_term(), self.cluster_config.use_pre_vote)
 
     # Called by Role
     async def win_vote(self, new_term):

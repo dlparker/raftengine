@@ -51,11 +51,14 @@ class ClusterConfig:
         max_entries_per_message:
             the maximum number of log entries that will be sent in a single
             append entries message
+        use_pre_vote:
+            Use the prevote extension for elections, defaults to True
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
     election_timeout_min: float
     election_timeout_max: float
     max_entries_per_message: int
+    use_pre_vote: bool = True
 
     

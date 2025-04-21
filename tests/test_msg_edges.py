@@ -122,7 +122,9 @@ async def test_slow_voter(cluster_maker):
     5. The messages are processed enough to see that the candidate gets the stale once, and
        then the new voting cycle works and yes votes for the new term arrive.
     6. The rest of the messages are delivered to complete the election
-    
+
+    The test is run with pre_vote disabled. The relavant part is when the actual votes happen,
+    and the test would be much more complicated if we had to handle pre vote messages too.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
@@ -136,6 +138,12 @@ async def test_slow_voter(cluster_maker):
     ts_1 = cluster.nodes[uri_1]
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
+
+    cfg = ts_1.cluster_config
+    cfg.use_pre_vote = False
+    ts_1.change_cluster_config(cfg)
+    ts_2.change_cluster_config(cfg)
+    ts_3.change_cluster_config(cfg)
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),

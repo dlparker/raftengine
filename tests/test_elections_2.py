@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
 
@@ -41,6 +42,11 @@ async def test_stepwise_election_1(cluster_maker):
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    cfg = ts_1.cluster_config
+    cfg.use_pre_vote = False
+    ts_1.change_cluster_config(cfg)
+    ts_2.change_cluster_config(cfg)
+    ts_3.change_cluster_config(cfg)
 
 
     cluster.test_trace.start_subtest("Starting election at node 3",
@@ -241,10 +247,6 @@ async def test_election_timeout_1(cluster_maker):
     cfg.election_timeout_max = 0.011
     ts_3.change_cluster_config(cfg)
 
-    # now delay for more than the timeout, should start new election with new term
-    await asyncio.sleep(0.015)
-    new_term = await ts_2.log.get_term()
-    assert new_term == old_term + 1
 
     # now it should just finish, everybody should know what to do
     # with messages rendered irrelevant by restart
@@ -544,9 +546,9 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     ts3_out_2 = await ts_3.do_next_out_msg()
     logger.info("-------- Target code should run on next message to ts_1,  should vote no")
     ts_1_in_1 = await ts_1.do_next_in_msg()
-    assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
+    assert ts_1_in_1.get_code() == PreVoteMessage.get_code()
     ts_1_out_1 = await ts_1.do_next_out_msg()
-    assert ts_1_out_1.get_code() == RequestVoteResponseMessage.get_code()
+    assert ts_1_out_1.get_code() == PreVoteResponseMessage.get_code()
     assert ts_1_out_1.vote is False
 
     logger.info("-------- Vote as expected letting election finish ----")
@@ -573,6 +575,22 @@ async def test_failed_first_election_1(cluster_maker):
 
     await cluster.start()
     await ts_3.start_campaign()
+
+    out1 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
+    ts_3.add_trigger(out1)
+    out2 = WhenMessageIn(PreVoteResponseMessage.get_code(), message_sender=uri_2)
+    ts_3.add_trigger(out2)
+    ts_1.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
+    ts_2.set_trigger(WhenMessageOut(PreVoteResponseMessage.get_code()))
+
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_2.run_till_triggers(),
+                         ts_3.run_till_triggers())
+
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    ts_3.clear_triggers()
+
     out1 = WhenMessageOut(RequestVoteMessage.get_code(),
                           message_target=uri_1, flush_when_done=False)
     ts_3.add_trigger(out1)

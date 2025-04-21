@@ -1596,6 +1596,10 @@ class TestTrace:
                 short_code = "poll"
             elif message.code == "request_vote_response":
                 short_code = "vote"
+            elif message.code == "pre_vote":
+                short_code = "p_v_r"
+            elif message.code == "pre_vote_response":
+                short_code = "p_v"
             target = message.receiver.split("/")[-1]
             sender = message.sender.split("/")[-1]
             if message.sender == ns.uri:
@@ -1605,11 +1609,11 @@ class TestTrace:
             if message.code == "append_entries":
                 value += f" t={message.term} i={message.prevLogIndex} lt={message.prevLogTerm}"
                 value += f" e={len(message.entries)} c={message.commitIndex}"
-            elif message.code == "request_vote":
+            elif message.code in ("request_vote", "pre_vote"):
                 value += f" t={message.term} li={message.prevLogIndex} lt={message.prevLogTerm}"
             elif message.code == "append_response":
                 value += f" ok={message.success} mi={message.maxIndex}"
-            elif message.code == "request_vote_response":
+            elif message.code in ("request_vote_response", "pre_vote_response"):
                 value += f" yes={message.vote} "
             else:
                 raise Exception('no code for message type')
