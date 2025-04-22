@@ -18,6 +18,7 @@ from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
@@ -39,6 +40,7 @@ class EventControl:
         self.active_events = []
         self.handlers = []
         self.handler_map = defaultdict(list)
+
 
     def add_handler(self, handler: EventHandler) -> None:
         if not handler in self.handlers:
@@ -147,7 +149,9 @@ class Hull(HullAPI):
         mdict = json.loads(in_message)
         mtypes = [AppendEntriesMessage,AppendResponseMessage,
                   RequestVoteMessage,RequestVoteResponseMessage,
-                  PreVoteMessage,PreVoteResponseMessage]
+                  PreVoteMessage,PreVoteResponseMessage,
+                  TransferPowerMessage,TransferPowerResponseMessage,]
+                  
         message = None
         for mtype in mtypes:
             if mdict['code'] == mtype.get_code():
@@ -277,9 +281,16 @@ class Hull(HullAPI):
             self.role_async_handle = None
 
     # Called by Role
-    async def start_campaign(self):
+    async def transfer_power(self, other_uri):
+        if self.role.role_name == "LEADER":
+            return await self.role.transfer_power(other_uri)
+        self.logger.error("%s got call to transfer power but not leader", self.get_my_uri())
+        raise Exception(f"got call to transfer power but not leader")
+
+    # Called by Role
+    async def start_campaign(self, authorized=False):
         await self.stop_role()
-        self.role = Candidate(self, use_pre_vote=self.cluster_config.use_pre_vote)
+        self.role = Candidate(self, use_pre_vote=self.cluster_config.use_pre_vote, authorized=authorized)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())

@@ -917,6 +917,10 @@ class PausingServer(PilotAPI):
         await test_trace.note_role_changed(self)
         return res
     
+    async def transfer_power(self, other_uri):
+        res =  await self.hull.transfer_power(other_uri)
+        return res
+    
     async def send_heartbeats(self):
         return await self.hull.role.send_heartbeats()
     

@@ -8,7 +8,7 @@ from raftengine.messages.pre_vote import PreVoteMessage
 
 class Candidate(BaseRole):
 
-    def __init__(self, hull, use_pre_vote=False):
+    def __init__(self, hull, use_pre_vote=False, authorized=False):
         super().__init__(hull, RoleName.candidate)
         self.term = None
         self.votes = dict()
@@ -16,7 +16,8 @@ class Candidate(BaseRole):
         self.reply_count = 0
         self.use_pre_vote = use_pre_vote
         self.logger = logging.getLogger("Candidate")
-
+        self.authorized = authorized
+        
     async def start(self):
         self.term = await self.log.get_term()
         await super().start()
@@ -61,7 +62,8 @@ class Candidate(BaseRole):
                                              receiver=node_id,
                                              term=self.term + 1,
                                              prevLogTerm=await self.log.get_term(),
-                                             prevLogIndex=await self.log.get_last_index())
+                                             prevLogIndex=await self.log.get_last_index(),
+                                             authorized=self.authorized)
                 await self.hull.send_message(message)
         timeout = self.hull.get_election_timeout()
         self.logger.debug("%s setting pre vote election timeout to %f", self.hull.get_my_uri(), timeout)

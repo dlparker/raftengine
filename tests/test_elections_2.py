@@ -562,6 +562,8 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
         assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
     else:
         assert ts_1_in_1.get_code() == PreVoteMessage.get_code()
+        assert not ts_1_in_1.authorized
+        assert "auth=False" in str(ts_1_in_1)
     ts_1_out_1 = await ts_1.do_next_out_msg()
     if not use_pre_vote:
         assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
@@ -793,3 +795,181 @@ async def inner_failed_first_election(cluster_maker, use_pre_vote):
     
     logger.info("-------- Old leader has new first log rec, test passed ------")
 
+async def test_power_transfer_1(cluster_maker):
+    """
+    Tests to check function of transfer of power.
+
+    Test begins with a regular election. Next the leader transfers power to another node.
+    That election is allowed to complete normally. That's it.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+    cluster.set_configs(config)
+
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_power_transfer_1.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+    logger.info("-------- Initial election completion, doing power transfer")
+
+    cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election")
+
+    await ts_1.transfer_power(ts_2.uri)
+    await asyncio.sleep(0.0001)
+    await cluster.deliver_all_pending()
+    assert ts_2.get_role_name() != "FOLLOWER"
+    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    logger.info("-------- allowing election to continue ---")
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_2
+    assert ts_3.get_leader_uri() == uri_2
+    logger.info("-------- Re-election vote once test complete ---")
+
+
+async def test_power_transfer_2(cluster_maker):
+    """
+    Tests to check function of transfer of power when the target node is not yet up to
+    date with the leader. We arrange that by crashing the node, then running a bunch of commands,
+    then recovering the node but before anything else happens start the power transfer.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+    cluster.set_configs(config)
+
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_power_transfer_2.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+    logger.info("-------- Initial election completion, crashing node 2 and running some commands")
+
+    # make sure calling transfer on something that is not  a leader doesn't work
+    with pytest.raises(Exception):
+        await ts_3.hull.transfer_power(ts_1.uri)
+    # make sure calling transfer on invalid node doesn' work
+    with pytest.raises(Exception):
+        await ts_1.hull.transfer_power('foo')
+    await ts_2.simulate_crash()
+    await cluster.start_auto_comms()
+    for i in range(0, 3):
+        command_result = await ts_1.run_command("add 1")
+
+    cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer")
+
+    logger.info("-------- Buncho commands run, doing recover")
+    await ts_2.recover_from_crash()
+    await ts_1.transfer_power(ts_2.uri)
+    start_time = time.time()
+    while time.time() - start_time < 1.0 and ts_2.get_role_name() == "FOLLOWER":
+        await asyncio.sleep(0.0001)
+    assert ts_2.get_role_name() != "FOLLOWER"
+    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    logger.info("-------- allowing election to continue ---")
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_2
+    assert ts_3.get_leader_uri() == uri_2
+    logger.info("-------- Re-election vote once test complete ---")
+
+async def test_power_transfer_fails_1(cluster_maker):
+    """
+    Tests to see that leader goes back to accepting commands if attempt to
+    update power transfer target node does not complete by election_timeout delay.
+
+    We arrange that by crashing the targe node, then running a bunch of commands,
+    then recovering the node but before anything else happens start the power transfer
+    and then block the messages into the recovered node.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+  
+   """
+    
+    cluster = cluster_maker(3)
+    heartbeat_period = 0.001
+    election_timeout_min = 0.02
+    election_timeout_max = 0.03
+    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=False)
+    cluster.set_configs(config)
+
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_power_transfer_2.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+    logger.info("-------- Initial election completion, crashing node 2 and running some commands")
+
+    await ts_2.simulate_crash()
+    await cluster.start_auto_comms()
+    for i in range(0, 3):
+        command_result = await ts_1.run_command("add 1")
+    await cluster.stop_auto_comms()
+
+    cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and blocking it and trying doing power transfer")
+
+    logger.info("-------- Buncho commands run, doing recover")
+    await ts_2.recover_from_crash()
+    ts_2.block_network()
+    await ts_2.disable_timers()
+    expire_time = await ts_1.transfer_power(ts_2.uri)
+    assert expire_time is not None
+    start_time = time.time()
+    command_result = await ts_1.hull.run_command("add 1")
+    assert command_result.retry 
+    while time.time()  < expire_time + 0.1 and not ts_1.hull.role.accepting_commands:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    assert ts_1.hull.role.accepting_commands
+    cluster.test_trace.start_subtest("Allowing full election run to complete")
+
+    ts_2.unblock_network()
+    await cluster.start_auto_comms()
+    command_result = await ts_1.run_command("add 1")
+    assert command_result.result is not None

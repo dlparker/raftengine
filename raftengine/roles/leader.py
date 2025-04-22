@@ -10,6 +10,7 @@ from raftengine.api.types import RoleName, SubstateCode
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
+from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.base_message import BaseMessage
 from raftengine.roles.base_role import BaseRole
 
@@ -117,6 +118,7 @@ class Leader(BaseRole):
         self.command_waiters = dict()
         self.bcast_pendings = []
         self.use_check_quorum = use_check_quorum
+        self.accepting_commands = True
 
     @property
     def max_entries_per_message(self):
@@ -133,7 +135,60 @@ class Leader(BaseRole):
         the_record = await self.log.append(start_record)
         await self.broadcast_log_record(the_record)
 
+    async def transfer_power(self, target_node):
+        if target_node not in self.hull.get_cluster_node_ids():
+            raise Exception(f"{target_node} is not in cluster node list")
+        asyncio.get_event_loop().call_soon(lambda target_node=target_node:
+                                         asyncio.create_task(self.transfer_runner(target_node)))
+        etime_min, etime_max = self.hull.get_election_timeout_range()
+        self.accepting_commands = False
+        return time.time() + etime_max
+        
+    async def transfer_runner(self, target_node):
+        self.logger.info("%s checking readiness for power transfer to %s", self.my_uri(), target_node)
+        tracker = self.follower_trackers[target_node]
+        start_time = time.time()
+        etime_min, etime_max = self.hull.get_election_timeout_range()
+        time_limit = time.time() + etime_max
+        while tracker.matchIndex < await self.log.get_commit_index() and time.time() < time_limit:
+            await self.send_heartbeats()
+            last_pending = self.bcast_pendings[-1]
+            while time.time() < time_limit:
+                still_pending = False
+                for msg in last_pending['messages']:
+                    if msg.receiver == target_node:
+                        still_pending = True
+                        break
+                if not still_pending:
+                    break
+                await asyncio.sleep(0.001)
+            await asyncio.sleep(0.01)
+        if tracker.matchIndex < await self.log.get_commit_index():
+            # we couldn't bring target up to date, have to give up
+            self.logger.error("%s checking readiness for power transfe to %s timeout", self.my_uri(), target_node)
+            self.accepting_commands = True
+            return
+        # now it is up to date, so we can proceed
+        prevLogIndex = 0
+        prevLogTerm = 0
+        msgs = []
+        prev_rec = await self.log.read()
+        if prev_rec is not None:
+            prevLogIndex = prev_rec.index
+            prevLogTerm = prev_rec.term
+        term = await self.log.get_term()
+        message = TransferPowerMessage(sender=self.my_uri(),
+                                       receiver=target_node,
+                                       term=term,
+                                       prevLogTerm=prevLogTerm,
+                                       prevLogIndex=prevLogIndex)
+        self.logger.info("%s sending transfer power to %s", self.my_uri(), target_node)
+        await self.hull.send_message(message)
+        return
+    
     async def run_command(self, command, timeout=1.0, serial=None):
+        if not self.accepting_commands:
+            return CommandResult(command=command,retry=True)
         # first save it in the log
         if serial is None:
             serial = await self.log.get_last_index() + 1
@@ -237,9 +292,9 @@ class Leader(BaseRole):
             self.logger.debug('After backdown to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
             return
+        tracker.matchIndex = message.maxIndex
         if message.maxIndex == tracker.nextIndex:
             tracker.nextIndex += 1
-            tracker.matchIndex = message.maxIndex
             self.logger.debug('Success to %s upped tracker.nextIndex to %d',
                               message.sender, tracker.nextIndex)
         if tracker.nextIndex > await self.log.get_last_index():

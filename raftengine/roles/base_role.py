@@ -3,6 +3,7 @@ import logging
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
+from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.api.types import RoleName, SubstateCode
     
 class BaseRole:
@@ -38,6 +39,13 @@ class BaseRole:
         self.routes[code] = route
         code = PreVoteResponseMessage.get_code()
         route = self.on_pre_vote_response
+        self.routes[code] = route
+
+        code = TransferPowerMessage.get_code()
+        route = self.on_transfer_power_message
+        self.routes[code] = route
+        code = TransferPowerResponseMessage.get_code()
+        route = self.on_transfer_power_response
         self.routes[code] = route
 
     async def start(self):
@@ -110,14 +118,14 @@ class BaseRole:
         await self.hull.record_message_problem(message, problem)
         
     async def on_pre_vote_request(self, message):
-        if self.role_name == "LEADER":
+        if self.role_name == "LEADER" and not message.authorized:
             self.logger.info("%s pre voting false on %s, am leader and last check quorum succeeded", self.my_uri(),
                              message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
         # if we are a follower, then we haven't timed out on leader contact,
         # so we should say no, we have a leader.
-        if self.role_name == "FOLLOWER" and self.leader_uri is not None:
+        if self.role_name == "FOLLOWER" and self.leader_uri is not None and not message.authorized:
             self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(), message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
@@ -147,6 +155,20 @@ class BaseRole:
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
+        
+
+    async def on_transfer_power_response(self, message):
+        self.logger.info('%s transfer_power response requires no action, ignoring %s', self.my_uri(), str(message))
+        
+    async def on_transfer_power_message(self, message):
+        if self.role_name != "LEADER":
+            term =  await self.log.get_term()
+            index = await self.log.get_last_index()
+            last_term = await self.log.get_last_term()
+            if message.term == term and message.prevLogIndex == index and message.prevLogTerm == last_term:
+                self.logger.warning("%s recieved valid transfer of power messages, starting election", self.my_uri())
+                await self.send_transfer_power_response_message(message, success=True)
+                await self.hull.start_campaign(authorized=True)
         
     async def send_reject_append_response(self, message):
         leaderId = self.leader_uri
@@ -182,6 +204,15 @@ class BaseRole:
             await self.hull.record_substate(SubstateCode.pre_voting_yes)
         else:
             await self.hull.record_substate(SubstateCode.pre_voting_no)
+        
+    async def send_transfer_power_response_message(self, message, success=True):
+        xfer_power_response = TransferPowerResponseMessage(sender=self.my_uri(),
+                                                         receiver=message.sender,
+                                                         term=message.term,
+                                                         prevLogIndex=await self.log.get_last_index(),
+                                                         prevLogTerm=await self.log.get_last_term(),
+                                                         success=success)
+        await self.hull.send_response(message, xfer_power_response)
         
     def my_uri(self):
         return self.hull.get_my_uri()

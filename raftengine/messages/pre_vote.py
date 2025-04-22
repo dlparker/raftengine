@@ -5,8 +5,14 @@ class PreVoteMessage(BaseMessage):
 
     code = "pre_vote"
 
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int):
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, authorized:bool = False):
         BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        self.authorized = authorized
+
+    def __repr__(self):
+        msg = super().__repr__()
+        msg += f" auth={self.authorized}"
+        return msg
 
 class PreVoteResponseMessage(BaseMessage):
 
