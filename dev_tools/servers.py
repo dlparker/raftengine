@@ -911,8 +911,8 @@ class PausingServer(PilotAPI):
             return self.uri
         return self.hull.role.leader_uri
         
-    async def start_campaign(self):
-        res =  await self.hull.start_campaign()
+    async def start_campaign(self, authorized=False):
+        res =  await self.hull.start_campaign(authorized=authorized)
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
         return res
@@ -1074,7 +1074,7 @@ class PausingServer(PilotAPI):
         
     async def cleanup(self):
         hull = self.hull
-        if hull.role:
+        if hull and hull.role:
             self.logger.debug('cleanup stopping %s %s', hull.role, hull.get_my_uri())
             handle =  hull.role_async_handle
             await hull.role.stop()
@@ -1732,6 +1732,7 @@ class TestTrace:
 class PausingCluster:
 
     def __init__(self, node_count, use_log=MemoryLog):
+        self.use_log = use_log
         self.node_uris = []
         self.nodes = dict()
         self.logger = logging.getLogger("PausingCluster")
@@ -1754,15 +1755,20 @@ class PausingCluster:
     def build_cluster_config(self, heartbeat_period=1000,
                              election_timeout_min=10000,
                              election_timeout_max=20000,
-                             use_pre_vote=True):
-        
-            cc = ClusterConfig(node_uris=self.node_uris,
-                               heartbeat_period=heartbeat_period,
-                               election_timeout_min=election_timeout_min,
-                               election_timeout_max=election_timeout_max,
-                               max_entries_per_message=10,
-                               use_pre_vote=use_pre_vote)
-            return cc
+                             use_pre_vote=True,
+                             use_check_quorum=True,
+                             use_dynamic_config=False):
+
+        c_list = self.node_uris[::]
+        cc = ClusterConfig(node_uris=c_list,
+                           heartbeat_period=heartbeat_period,
+                           election_timeout_min=election_timeout_min,
+                           election_timeout_max=election_timeout_max,
+                           max_entries_per_message=10,
+                           use_pre_vote=use_pre_vote,
+                           use_dynamic_config=use_dynamic_config)
+                           
+        return cc
 
     def set_configs(self, cluster_config=None):
         if cluster_config is None:
@@ -1780,6 +1786,19 @@ class PausingCluster:
                                        )
             node.set_configs(local_config, cc)
 
+    def add_node(self):
+        nid = len(self.nodes) + 1 # one offset
+        uri = f"mcpy://{nid}"
+        self.node_uris.append(uri)
+        ps = PausingServer(uri, self, use_log=self.use_log)
+        self.nodes[uri] = ps
+        node_uris=self.node_uris,
+        return ps
+        
+    async def remove_node(self, node_uri):
+        node = self.nodes[node_uri]
+        await node.cleanup()
+        
     async def start(self, only_these=None, timers_disabled=True):
         await self.test_trace.start()
         for uri, node in self.nodes.items():

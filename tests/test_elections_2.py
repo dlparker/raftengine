@@ -504,7 +504,6 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     
 async def test_election_candidate_log_too_old_2(cluster_maker):
     await inner_candidate_log_too_old(cluster_maker, use_pre_vote=True)
-    
 
 async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     """
@@ -611,31 +610,15 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election")
     await ts_1.simulate_crash()
 
-    # Followers are going to say no on pre vote because they are
-    # in active contact with leader. If a node has notice
-    # that the leader is not in contact, it will start and election,
-    # so any node that is in follower role will automatically reject
-    # a prevote.
-    # There is one exception to this, and that is when the follower
-    # has just started and has not yet heard from the leader. In
-    # that case it does not have a leader id (leader_uri), so
-    # it will say yes.
-    # So, to get it to say yes, we have to twiddle it directly.
-    # I using this kind of trick, but I can't think of anything else
-    # to do that is not overly complex. I could partition the
-    # network so the follower is isolated, and then send a command
-    # and do all this before crashing node 3, but then heal the
-    # network, but that a lot of monkeying.
-    logger.debug("Forcing node 2 to think it doesn't have a healthy leader")
-    ts_2.hull.role.leader_uri = None
-    await ts_3.start_campaign()
+    await ts_3.start_campaign(authorized=True)
     await cluster.run_election()
     # demote leader to follower
     assert ts_3.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_3
     cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term")
     await ts_1.recover_from_crash()
-    await ts_1.start_campaign()
+    assert await ts_1.get_term() < await ts_3.get_term()
+    await ts_1.start_campaign(authorized=True)
     ts_1_out_1 = await ts_1.do_next_out_msg()
     ts_1_out_2 = await ts_1.do_next_out_msg()
     assert ts_1_out_1.get_code() == PreVoteMessage.get_code()
@@ -757,25 +740,7 @@ async def inner_failed_first_election(cluster_maker, use_pre_vote):
     logger.debug("Node 3 is now leader, crashing it and starting node 1 campaign")
     # Now block the leader and trigger an election
     await ts_3.simulate_crash()
-    if use_pre_vote:
-        # Node 2 is going to say no on pre vote because it is
-        # in active contact with leader. If a node has notice
-        # that the leader is not in contact, it will start and election,
-        # so any node that is in follower role will automatically reject
-        # a prevote.
-        # There is one exception to this, and that is when the follower
-        # has just started and has not yet heard from the leader. In
-        # that case it does not have a leader id (leader_uri), so
-        # it will say yes.
-        # So, to get it to say yes, we have to twiddle it directly.
-        # I using this kind of trick, but I can't think of anything else
-        # to do that is not overly complex. I could partition the
-        # network so the follower is isolated, and then send a command
-        # and do all this before crashing node 3, but then heal the
-        # network, but that a lot of monkeying.
-        logger.debug("Forcing node 2 to think it doesn't have a healthy leader")
-        ts_2.hull.role.leader_uri = None
-    await ts_1.start_campaign()
+    await ts_1.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert await ts_3.log.get_last_term() == 1

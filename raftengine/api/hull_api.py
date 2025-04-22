@@ -17,6 +17,7 @@ class CommandResult:
     error: Optional[str] = None
     timeout_expired: Optional[bool] = False
 
+    
 class HullAPI(abc.ABC):
     """ Main entry and control point for RaftEngine library. Caller supplies a PilotAPI implementation
     and both local and cluster config data to configure the raft library, then calls start when ready

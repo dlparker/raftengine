@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
+import json
 from pathlib import Path
+from pprint import pprint
+import pytest
 from raftengine.hull.hull import EventType, EventHandler
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.api.log_api import LogRec, RecordCode
+from raftengine.api.hull_config import ClusterConfig
+from dev_tools.memory_log import MemoryLog
 from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.servers import setup_logging
-from dev_tools.servers import WhenElectionDone
 from dev_tools.servers import PausingCluster, cluster_maker
 
 #extra_logging = [dict(name=__name__, level="debug"),]
@@ -26,6 +28,51 @@ logger = logging.getLogger("test_code")
 # I might keep old code around for a while by renaming the test so
 # it won't be gathered, then remove it when I am sure there is no
 # more need for it.
+
+async def save_cluster_op(log, op, config, operand=None):
+    command = dict(op=op, config=config, operand=operand)
+    encoded = json.dumps(command, default=lambda o:o.__dict__)
+    rec = LogRec(code=RecordCode.cluster_config, command=encoded)
+    rec_back = await log.append(rec)
+    return rec_back
+
+async def get_cluster_op(log, rec_id):
+    rec = await log.read(rec_id)
+    command = json.loads(rec.command)
+    op = command['op']
+    jconfig = command['config']
+    config = ClusterConfig.from_dict(jconfig)
+    operand = command['operand']
+    return op, config, operand
+
+async def test_log_config(cluster_maker):
+    log = MemoryLog()
+    log.start()
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(election_timeout_min=0.01,
+                                          election_timeout_max=0.011)
+    rec_ids = []
+    rec_1 = await save_cluster_op(log, "save", config)
+    rec_ids.append(rec_1.index)
+    new_node = cluster.add_node()
+    rec_2 = await save_cluster_op(log, "add_node", config, new_node.uri)
+    rec_ids.append(rec_2.index)
+    config.node_uris.append(new_node.uri)
+    rec_3 = await save_cluster_op(log, "apply", config)
+    rec_ids.append(rec_3.index)
+    rec_4 = await save_cluster_op(log, "remove_node", config, new_node.uri)
+    rec_ids.append(rec_4.index)
+    config.node_uris.remove(new_node.uri)
+    await cluster.remove_node(new_node.uri)
+    rec_5 = await save_cluster_op(log, "apply", config)
+    rec_ids.append(rec_5.index)
+    
+    print('')
+    for rec_id in rec_ids:
+        op, config, operand = await get_cluster_op(log, rec_id)
+        pprint(f"op='{op}', operand='{operand}', config={config}")
+
+    
 
 async def not_a_test_event_perf(cluster_maker):
     if False:

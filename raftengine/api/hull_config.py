@@ -4,6 +4,7 @@ Configuration classes for setting up an instance of the class::`Server` class.
 from dataclasses import dataclass
 from typing import Any, Type, Callable, Awaitable
 import os
+import json
 from raftengine.api.log_api import LogAPI
 from raftengine.messages.base_message import BaseMessage
 
@@ -55,6 +56,8 @@ class ClusterConfig:
             Use the prevote extension for elections, defaults to True
         use_check_quorum:
             Use the check quorum extension to make leaders proactively resign, defaults to True
+        use_dynamic_config:
+            Cluster config can change while running, stored in log with usual raft replication, defaults to True
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
@@ -63,5 +66,11 @@ class ClusterConfig:
     max_entries_per_message: int
     use_pre_vote: bool = True
     use_check_quorum: bool = True
+    use_dynamic_config: bool = True
 
+    @classmethod
+    def from_dict(cls, data):
+        copy_of = dict(data)
+        msg = cls(**copy_of)
+        return msg
     
