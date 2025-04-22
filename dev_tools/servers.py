@@ -678,7 +678,7 @@ class Network:
             return None
         target = self.get_node_by_uri(msg.receiver)
         if not target:
-            self.logger.info("%s target is not on this network, loosing message %s", node.uri, msg)
+            self.logger.info("%s target is not on this network, losing message %s", node.uri, msg)
             node.lost_out_messages.append(msg)
             await self.test_trace.note_lost_send(node, msg)
             return

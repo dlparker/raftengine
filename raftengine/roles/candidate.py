@@ -59,7 +59,7 @@ class Candidate(BaseRole):
                 self.pre_votes[node_id] = None
                 message = PreVoteMessage(sender=self.hull.get_my_uri(),
                                              receiver=node_id,
-                                             term=self.term,
+                                             term=self.term + 1,
                                              prevLogTerm=await self.log.get_term(),
                                              prevLogIndex=await self.log.get_last_index())
                 await self.hull.send_message(message)
@@ -96,7 +96,7 @@ class Candidate(BaseRole):
         await self.hull.record_substate(SubstateCode.some_votes_in)
 
     async def on_pre_vote_response(self, message):
-        if message.term < self.term:
+        if message.term <= self.term:
             self.logger.info("candidate %s ignoring out of date pre vote", self.hull.get_my_uri())
             return
         self.pre_votes[message.sender] = message.vote

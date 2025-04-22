@@ -18,7 +18,6 @@ class BaseRole:
         self.routes = None
         self.build_routes()
         self.leader_uri = None
-        self.last_pre_vote = None
 
     def build_routes(self):
         self.routes = dict()
@@ -60,10 +59,10 @@ class BaseRole:
         await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
-        if message.term > await self.log.get_term():
+        if (message.term > await self.log.get_term()
+            and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
             self.logger.debug('%s received message from higher term, calling self.term_expired',
                               self.my_uri())
-            self.last_pre_vote = None
             res = await self.term_expired(message)
             if not res:
                 self.logger.debug('%s self.term_expired said no further processing required',
@@ -111,27 +110,25 @@ class BaseRole:
         await self.hull.record_message_problem(message, problem)
         
     async def on_pre_vote_request(self, message):
-        if self.last_pre_vote is not None:
-            self.logger.info("%s pre voting false on %s, already pre voted for %s", self.my_uri(),
-                             message.sender, self.last_pre_vote)
+        if self.role_name == "LEADER":
+            self.logger.info("%s pre voting false on %s, am leader and last check quorum succeeded", self.my_uri(),
+                             message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
         # if we are a follower, then we haven't timed out on leader contact,
         # so we should say no, we have a leader.
-        if self.role_name == "follower":
-            self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(),
-                             message.sender, self.last_pre_vote)
-            await self.send_vote_response_message(message, vote_yes=False)
+        if self.role_name == "FOLLOWER" and self.leader_uri is not None:
+            self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(), message.sender)
+            await self.send_pre_vote_response_message(message, vote_yes=False)
             return
         
         commit_index = await self.log.get_commit_index()
-        if message.term < await self.log.get_term():
+        if message.term <= await self.log.get_term():
             vote = False
             self.logger.info("%s pre voting false on %s on low term", self.my_uri(),
                              message.sender, message.term)
         elif commit_index == 0:
             # we don't have any committed entries, so anybody wins
-            self.last_pre_vote = message.sender
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         else:
@@ -141,7 +138,6 @@ class BaseRole:
                                  message.sender)
                 vote = False
             else: # both term and index proposals are acceptable, so vote yes
-                self.last_pre_vote = message.sender
                 self.logger.info("%s pre voting true for candidate %s", self.my_uri(), message.sender)
                 vote = True
         await self.send_pre_vote_response_message(message, vote_yes=vote)

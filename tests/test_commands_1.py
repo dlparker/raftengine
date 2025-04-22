@@ -254,11 +254,14 @@ async def double_leader_inner(cluster, discard):
     Regardless of how the affected messages are handled, the rejoin should deliver the same
     result, the new leader's state being replicated to the old leader.
 
+    Prevote is disabled for this test as it makes it harder to force elections.
+
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
 
     """
     
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -369,11 +372,14 @@ async def test_command_2_leaders_3(cluster_maker):
     but before any other message pass to update it, it gets sent a command request.
     The results should be a rediect to the new leader.
 
+    Prevote is disabled for this test as it makes it harder to force elections.
+    
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -881,10 +887,13 @@ async def test_follower_rewrite_1(cluster_maker):
     messages from the new leader.
 
     Sheesh.
-    
+
+    Prevote is disabled for this test as it makes it harder to force elections.
+
     """
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")

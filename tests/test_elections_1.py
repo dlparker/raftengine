@@ -8,14 +8,15 @@ import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from dev_tools.servers import SNormalElection
 
 from dev_tools.servers import PausingCluster, cluster_maker
 from dev_tools.servers import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
-#default_level="debug"
 default_level="error"
+#default_level="debug"
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -28,7 +29,7 @@ async def test_election_1(cluster_maker):
     runs for leader, everybody responds correctly. It is written
     using the most granular control provided by the PausingServer
     class, controlling the message movement steps directly (for
-    the most part). The cluster is three nodes.
+    the most part). The cluster is three nodes. Prevote is disabled for this test.
 
     If some basid error is introduced in the election related code, it will
     show up here with the most detail.
@@ -100,12 +101,14 @@ async def test_election_2(cluster_maker):
     Just a simple test of first election with 5 servers, to ensure it
     works as well as 3 servers. Mostly pointless, but might catch an
     assumption in test support code that only three servers are used.
+    Prevote is disabled for this test.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(5)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 5",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
@@ -133,12 +136,13 @@ async def test_reelection_1(cluster_maker):
     """
     Test of a hard triggered re-election, caused by using testing controls to directly
     demote the leader and directly trigger promotion to candidate on a different server.
-    This is the simplest case of electing a new leader.
+    This is the simplest case of electing a new leader. Prevote is disabled for this test.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
@@ -171,14 +175,15 @@ async def test_reelection_2(cluster_maker):
     Test of a hard triggered re-election, caused by directly
     demoting the leader and directly triggering a promotion to candidate
     on a different server. Identical to test_reelection_1 except it 
-    uses 5 servers instead of three.
+    uses 5 servers instead of three. Prevote is disabled for this test
     Just a guard against threshold or timing bugs that might trigger 
-    on cluster size
+    on cluster size.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(5)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
@@ -200,6 +205,7 @@ async def test_reelection_2(cluster_maker):
     assert ts_5.get_leader_uri() == uri_1
 
     cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
+    logger.debug("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
     assert ts_1.get_role_name() == "FOLLOWER"
@@ -357,7 +363,7 @@ async def test_pre_election_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Node 1 starts campaign, nodes 2 and 3 should get and reply 'yes' to request vote messages",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_election_1.__doc__)
+                                     test_doc_string=test_pre_election_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -428,6 +434,62 @@ async def test_pre_election_1(cluster_maker):
     assert ts_1.in_messages[1].get_code() == AppendResponseMessage.get_code()
     await ts_1.do_next_in_msg()
     await ts_1.do_next_in_msg()
+    
+    
+async def test_pre_vote_reject_1(cluster_maker):
+    """
+
+    This runs a regular election, then tells one node to start a campain. It should get
+    no votes from both leader and follower.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+
+    cluster.test_trace.start_subtest("Node 1 starts campaign and normal election is run",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_pre_vote_reject_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    # tell first one to start election, should send request vote messages to other two
+    await ts_1.start_campaign()
+
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    
+
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+
+    cluster.test_trace.start_subtest("Node 3 starting campaign, should get no votes only")
+    await ts_3.start_campaign()
+    await cluster.deliver_all_pending(out_only=True)
+    assert len(ts_1.in_messages) == 1
+    assert len(ts_2.in_messages) == 1
+    assert ts_1.in_messages[0].get_code() == PreVoteMessage.get_code()
+    assert ts_2.in_messages[0].get_code() == PreVoteMessage.get_code()
+    # now deliver those, we should get two replies at first one, both with yes
+    await ts_1.do_next_in_msg()
+    await ts_1.do_next_out_msg()
+    assert len(ts_3.in_messages) == 1
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    assert len(ts_3.in_messages) == 2
+    assert ts_3.in_messages[0].get_code() == PreVoteResponseMessage.get_code()
+    assert ts_3.in_messages[1].get_code() == PreVoteResponseMessage.get_code()
+    assert "v=False" in str(ts_3.in_messages[0])
+    assert "v=False" in str(ts_3.in_messages[1])
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_3.get_role_name() == "FOLLOWER"
+    assert ts_3.get_leader_uri() == uri_1
+    
 
     
     

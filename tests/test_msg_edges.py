@@ -36,11 +36,13 @@ async def test_restart_during_heartbeat(cluster_maker):
 
     Note that both of these scenarios are common occurances. The purpose of this test is
     to ensure that they are logged.
+
+    Prevote is disabled for this test as it makes it harder to force elections.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config()
+    config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     uri_1 = cluster.node_uris[0]
     uri_2 = cluster.node_uris[1]

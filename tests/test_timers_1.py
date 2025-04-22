@@ -156,7 +156,7 @@ async def test_lost_leader_1(cluster_maker):
     # Test that election starts in appoximately the leader_lost timeout
     start_time = time.time()
     fraction = election_timeout_max/10.0
-    while time.time() - start_time < election_timeout_max * 2:
+    while time.time() - start_time < election_timeout_max * 3:
         await cluster.deliver_all_pending()
         if (ts_1.get_role_name() != "FOLLOWER"
             or ts_2.get_role_name()  != "FOLLOWER"

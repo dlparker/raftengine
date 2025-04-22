@@ -14,7 +14,9 @@ from dev_tools.servers import setup_logging
 
 extra_logging = [dict(name="test_code", level="debug"), ]
 #setup_logging(extra_logging, default_level="debug")
-setup_logging()
+default_level="error"
+#default_level="debug"
+setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
 async def test_partition_1(cluster_maker):
@@ -220,12 +222,15 @@ async def test_partition_2_leader(cluster_maker):
 
     When all that is done, the state machine state at the old leader should match the replicated
     state in the other nodes.
+
+    Prevote is disabled for this test as it makes it harder to force elections.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
@@ -288,3 +293,147 @@ async def test_partition_2_leader(cluster_maker):
     assert ts_1.operations.total == 2
     cluster.test_trace.end_subtest()
     logger.info('------------------------ Leadership change correctly detected')
+
+
+async def test_partition_3_leader(cluster_maker):
+    """
+    Tests that the correct state results when a network partitions and leaves the leader
+    isolated from the majority of the cluster nodes and the leader detects isolation
+    via check quorum logic..
+
+    This is verified by completing an election, and running a state machine command to
+    establish replicated state.
+
+    Then the leader is partitioned, a new election is run.
+
+    Next the timers are enabled on the old leader, then a period of time longer than the election
+    timeout max value is allowed to pass, then the old leader's state is
+    checked to ensure that it has resigned.
+
+    Then, just for completeness, the partion is healed and the leader is checked
+    to see if it is up to date. It should have the term start record for the new term in the log.
+    Prevote is disabled for this test as it makes it harder to force elections.
+    
+    """
+    
+    cluster = cluster_maker(3)
+    heartbeat_period = 0.001
+    election_timeout_min = 0.009
+    election_timeout_max = 0.011
+    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=False)
+    cluster.set_configs(config)
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_partition_3_leader.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Election complete, partitioning leader")
+    logger.info('------------------------ Election done, partitioning')
+
+    part1 = {uri_1: ts_1}
+    part2 = {uri_2: ts_2,
+             uri_3: ts_3}
+    await cluster.split_network([part1, part2])
+
+    cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
+    await ts_2.start_campaign()
+    await cluster.run_election()
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_3.get_leader_uri() == uri_2
+    cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ")
+
+    await ts_1.enable_timers() # resets
+    wait_time = (election_timeout_max + heartbeat_period) * 2.0
+    start_time = time.time()
+    while time.time() - start_time < wait_time and ts_1.get_role_name() == "LEADER":
+        await asyncio.sleep(heartbeat_period/4.0)
+    assert ts_1.get_role_name() != "LEADER"
+    
+    cluster.test_trace.start_subtest("Old leader resigned on check quorum, healing network and waiting for it to rejoin")
+    await ts_2.enable_timers() # resets
+    await ts_3.enable_timers() # resets
+    await cluster.unsplit()
+    await cluster.start_auto_comms()
+    wait_time = (election_timeout_max + heartbeat_period) * 2.0
+    expected_index = await ts_2.log.get_last_index()
+    start_time = time.time()
+    while time.time() - start_time < wait_time and await ts_1.log.get_last_index() != expected_index:
+        await asyncio.sleep(heartbeat_period/4.0)
+        
+    assert await ts_1.log.get_last_index() == expected_index
+    assert ts_1.get_leader_uri() == uri_2
+    cluster.test_trace.end_subtest()
+    logger.info('------------------------ Leadership change correctly detected')
+    
+async def test_partition_3_follower(cluster_maker):
+    """
+    Tests that the correct state results when a network partitions and leaves a follower
+    isolated from the majority of the cluster nodes and the leader runs check quorum logic.
+    The leader should continue and not resign.
+
+    This is verified by completing an election, and running a state machine command to
+    establish replicated state.
+
+    Then the follower is partitioned.
+
+    Next the timers are enabled on the all the nodes and a period greater than the
+    timeout max value is allowed to pass. The leader is checked to see that it hasn't
+    resigned.
+
+    """
+    
+    cluster = cluster_maker(3)
+    heartbeat_period = 0.001
+    election_timeout_min = 0.009
+    election_timeout_max = 0.011
+    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
+                                          election_timeout_min=election_timeout_min, 
+                                          election_timeout_max=election_timeout_max)
+    cluster.set_configs(config)
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_partition_3_follower.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    logger = logging.getLogger(__name__)
+    cluster.test_trace.start_subtest("Election complete, partitioning one follower")
+    logger.info('------------------------ Election done, partitioning one follower')
+
+    part1 = {uri_1: ts_1, uri_2: ts_2}
+    part2 = {uri_3: ts_3}
+    await cluster.split_network([part1, part2])
+
+    cluster.test_trace.start_subtest("Leader has quorum, enabling timers and waiting long enough ")
+
+    await ts_1.enable_timers() # resets
+    await ts_2.enable_timers() # resets
+    await cluster.start_auto_comms()
+    wait_time = (election_timeout_max + heartbeat_period) * 2.0
+    start_time = time.time()
+    while time.time() - start_time < wait_time:
+        await asyncio.sleep(heartbeat_period/4.0)
+    assert ts_1.get_role_name() == "LEADER"
+    
+    cluster.test_trace.end_subtest()
+    

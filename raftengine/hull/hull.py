@@ -340,7 +340,7 @@ class Hull(HullAPI):
             self.logger.debug('%s cancelling after target to %s', self.local_config.uri,
                         self.role_run_after_target)
             self.role_async_handle.cancel()
-        self.logger.debug('%s setting run after target to %s', self.local_config.uri, target)
+        self.logger.debug('%s setting run after target to %s after %0.8f', self.local_config.uri, target, delay)
         self.role_run_after_target = target
         self.role_async_handle = loop.call_later(delay,
                                                   lambda target=target:

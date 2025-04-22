@@ -313,11 +313,14 @@ async def test_election_vote_once_1(cluster_maker):
 
     Finally the election is allowed to complete normally.
     
+    Prevote is disabled for this test as it makes it harder to force elections.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -412,11 +415,13 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     As a bonus test we push the earlier yes vote from node 1 back on the input queue and allow
     node 2 to process it. It should just ignore it. This is probably notthe only test that hits that code.
 
+    Prevote is disabled for this test as it makes it harder to force elections.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -500,24 +505,29 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
 async def test_election_candidate_log_too_old_2(cluster_maker):
     await inner_candidate_log_too_old(cluster_maker, use_pre_vote=True)
     
+
 async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
-    # It is possible for a candidate to have a log state that
-    # is older than the state of other servers during an
-    # election. The follower election code should detect that and
-    # vote no on the candidate
+    """
+    It is possible for a candidate to have a log state that
+    is older than the state of other servers during an
+     election. The follower election code should detect that and
+     vote no on the candidate
+    """
     
     cluster = cluster_maker(3)
-    heartbeat_period = 0.2
-    election_timeout_min = 0.02
-    election_timeout_max = 0.05
-    config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
-                                          election_timeout_min=election_timeout_min, 
-                                          election_timeout_max=election_timeout_max,
-                                          use_pre_vote=use_pre_vote)
+    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
     cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    if use_pre_vote:
+        the_test = test_election_candidate_log_too_old_2
+    else:
+        the_test = test_election_candidate_log_too_old_1
+        
+    cluster.test_trace.start_subtest("Starting normal election",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=the_test.__doc__)
 
     await cluster.start()
     await ts_1.start_campaign()
@@ -529,22 +539,17 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
 
     logger.info("-------- Initial election completion, crashing follower and running command ")
 
+    cluster.test_trace.start_subtest("Election done, Node 1 is leader, crashing node 3 and then running a command")
     await ts_3.simulate_crash()
 
     # now advance the commit index
     await cluster.run_command('add 1', 1)
+
     # now ts_3 should have a lower prevLogIndex and so it will lose the vote
     # once we arrange the election the right way
-
-    # just to make the logging messages clearer during debug, make sure
-    # all the messages have been processed since the run_command method only
-    # checks to see if a majority reported saving the log, there are also
-    # commit messages that should go on next heartbeat
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-
     logger.info("-------- Command complete,  starting messed up re-election")
     # demote leader to follower
+    cluster.test_trace.start_subtest("Forcing leader to resign, restarting crashed node and forcing it into election")
     await ts_1.do_demote_and_handle(None)
     # restart the crashed server, which now has out of date log
     await ts_3.recover_from_crash()
@@ -573,7 +578,83 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     assert ts_1.get_role_name() == "LEADER"
     logger.info("-------- Re-election of ts_1 finished ----")
     
+async def test_election_candidate_term_too_old_1(cluster_maker):
+    """
+    It is possible for a candidate to have a term that is older than the term of other servers during an
+    election. The follower election code should detect that and vote no on the candidate. Another test
+    ensures this bahavior when pre_vote is disabled, this one tests with pre_vote enabled.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    cluster.set_configs()
+
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_election_candidate_term_too_old_1.__doc__)
+    await cluster.start()
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+    logger.info("-------- Initial election completion, crashing follower and running command ")
+
+    cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election")
+    await ts_1.simulate_crash()
+
+    # Followers are going to say no on pre vote because they are
+    # in active contact with leader. If a node has notice
+    # that the leader is not in contact, it will start and election,
+    # so any node that is in follower role will automatically reject
+    # a prevote.
+    # There is one exception to this, and that is when the follower
+    # has just started and has not yet heard from the leader. In
+    # that case it does not have a leader id (leader_uri), so
+    # it will say yes.
+    # So, to get it to say yes, we have to twiddle it directly.
+    # I using this kind of trick, but I can't think of anything else
+    # to do that is not overly complex. I could partition the
+    # network so the follower is isolated, and then send a command
+    # and do all this before crashing node 3, but then heal the
+    # network, but that a lot of monkeying.
+    logger.debug("Forcing node 2 to think it doesn't have a healthy leader")
+    ts_2.hull.role.leader_uri = None
+    await ts_3.start_campaign()
+    await cluster.run_election()
+    # demote leader to follower
+    assert ts_3.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_3
+    cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term")
+    await ts_1.recover_from_crash()
+    await ts_1.start_campaign()
+    ts_1_out_1 = await ts_1.do_next_out_msg()
+    ts_1_out_2 = await ts_1.do_next_out_msg()
+    assert ts_1_out_1.get_code() == PreVoteMessage.get_code()
+    assert ts_1_out_2.get_code() == PreVoteMessage.get_code()
+    ts_2_in_1 = await ts_2.do_next_in_msg()
+    assert ts_2_in_1.get_code() == PreVoteMessage.get_code()
+    ts_2_out_1 = await ts_2.do_next_out_msg()
+    assert ts_2_out_1.get_code() == PreVoteResponseMessage.get_code()
+    assert ts_2_out_1.vote is False
+    
 async def test_failed_first_election_1(cluster_maker):
+    """
+    Let a leader win, but before the followers get his term_start log message, make him crash.
+    Have a new election, then re-start the ex leader. His log will have one record in it, and so will the 
+    new leader's, but the terms will be different. This
+    hits a special case in follower code.
+
+    This test runs with pre_vote disabled. There is an identical test that has it enabled.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
     await inner_failed_first_election(cluster_maker, use_pre_vote=False)
 
 async def test_failed_first_election_2(cluster_maker):
@@ -581,18 +662,19 @@ async def test_failed_first_election_2(cluster_maker):
     
 async def inner_failed_first_election(cluster_maker, use_pre_vote):
 
-    """ Let a leader win, but before the followers get his
-        term_start log message, make him die (simuated). 
-        Have a new election, then re-start the ex leader.
-        His log will have one record in it, and so will the 
-        new leader's, but the terms will be different. This
-        hits a special case in follower code.
-    """
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    if use_pre_vote:
+        the_test = test_failed_first_election_2
+    else:
+        the_test = test_failed_first_election_1
+        
+    cluster.test_trace.start_subtest("Starting election that should fail",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=the_test.__doc__)
 
     await cluster.start()
     await ts_3.start_campaign()
@@ -661,15 +743,36 @@ async def inner_failed_first_election(cluster_maker, use_pre_vote):
     await ts_1.run_till_triggers()
     await ts_2.run_till_triggers()
 
-    ts_3.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code()))
+    # make sure the leader does not deliver the append messages, it will break pre_vote,
+    # doesn't matter if pre_vote is disabled
+    ts_3.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code(), flush_when_done=False))
     await ts_3.run_till_triggers()
     assert ts_3.get_role_name() == "LEADER"
-
-    # Now block the leader and trigger an election
     ts_1.clear_triggers()
     ts_2.clear_triggers()
     ts_3.clear_triggers()
+    #await cluster.deliver_all_pending()
+    logger.debug("Node 3 is now leader, crashing it and starting node 1 campaign")
+    # Now block the leader and trigger an election
     await ts_3.simulate_crash()
+    if use_pre_vote:
+        # Node 2 is going to say no on pre vote because it is
+        # in active contact with leader. If a node has notice
+        # that the leader is not in contact, it will start and election,
+        # so any node that is in follower role will automatically reject
+        # a prevote.
+        # There is one exception to this, and that is when the follower
+        # has just started and has not yet heard from the leader. In
+        # that case it does not have a leader id (leader_uri), so
+        # it will say yes.
+        # So, to get it to say yes, we have to twiddle it directly.
+        # I using this kind of trick, but I can't think of anything else
+        # to do that is not overly complex. I could partition the
+        # network so the follower is isolated, and then send a command
+        # and do all this before crashing node 3, but then heal the
+        # network, but that a lot of monkeying.
+        logger.debug("Forcing node 2 to think it doesn't have a healthy leader")
+        ts_2.hull.role.leader_uri = None
     await ts_1.start_campaign()
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
