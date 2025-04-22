@@ -72,9 +72,12 @@ actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the clust
 | (continued)   | e=2 means that the entries list in the message is 2 items long. eXo=0 is a heartbeat         |
 | N-X->ae_reply | Node has received the response to an append_entries message, details in continued lines      |
 | (continued)   | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
-| do_vote->N-X  | Node has sent request_vote to N-X, t=1 means current term is 1 (continued next line)         |
+| poll->N-X     | Node has sent request_vote to N-X, t=1 means current term is 1 (continued next line)         |
 | (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
 | N-X->vote     | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
+| p_v_r->N-X    | Node has sent pre_vote_request to N-X, t=1 means proposed term is 1 (continued next line)    |
+| (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
+| N-X->p_v      | Node has received pre_vote_response from N-X, yes=(True or False) indicates vote value       |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line
