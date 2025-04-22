@@ -16,6 +16,8 @@
     but before any other message pass to update it, it gets sent a command request.
     The results should be a rediect to the new leader.
 
+    Prevote is disabled for this test as it makes it harder to force elections.
+    
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
@@ -27,17 +29,9 @@
 |  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
-|  CNDI  | NEW ROLE                     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-2 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-3 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | p_v->N-1 yes=True            |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           |
-|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | p_v->N-1 yes=True            |           |
-|  CNDI  | N-2->p_v yes=True            | t=1       | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | NEW ROLE                     | t=1       | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | poll->N-3 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | N-3->p_v yes=True            |           | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      | t=1       | FLWR  |                              |           |
 |  CNDI  |                              |           | FLWR  | vote->N-1 yes=True           |           | FLWR  |                              |           |
 |  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->poll t=1 li=0 lt=1      | t=1       |
@@ -77,14 +71,9 @@
 |  Role  | Op  | Delta | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  LEAD  |     |       | CNDI  | NEW ROLE                     |           | FLWR  |                              |           |
 |  LEAD  |     |       | CNDI  | ae_reply->N-1 ok=True mi=2   |           | FLWR  |                              |           |
-|  LEAD  |     |       | CNDI  | p_v_r->N-1 t=1 li=2 lt=1     |           | FLWR  |                              |           |
-|  LEAD  |     |       | CNDI  | p_v_r->N-3 t=1 li=2 lt=1     |           | FLWR  |                              |           |
-|  LEAD  |     |       | CNDI  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           |
-|  LEAD  |     |       | CNDI  |                              |           | FLWR  | N-2->p_v_r t=1 li=2 lt=1     |           |
-|  LEAD  |     |       | CNDI  |                              |           | FLWR  | p_v->N-2 yes=True            |           |
-|  LEAD  |     |       | CNDI  | N-3->p_v yes=True            | t=2       | FLWR  |                              |           |
 |  LEAD  |     |       | CNDI  | poll->N-1 t=2 li=2 lt=2      |           | FLWR  |                              |           |
 |  LEAD  |     |       | CNDI  | poll->N-3 t=2 li=2 lt=2      |           | FLWR  |                              |           |
+|  LEAD  |     |       | CNDI  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           |
 |  LEAD  |     |       | CNDI  |                              |           | FLWR  | N-2->poll t=2 li=2 lt=2      | t=2       |
 |  LEAD  |     |       | CNDI  |                              |           | FLWR  | vote->N-2 yes=True           |           |
 |  LEAD  |     |       | LEAD  | N-3->vote yes=True           | lt=2 li=3 | FLWR  |                              |           |

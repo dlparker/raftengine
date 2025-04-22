@@ -120,9 +120,11 @@ async def test_heartbeat_2(cluster_maker):
 async def test_lost_leader_1(cluster_maker):
     """
     This tests to ensure that timers will cause lost leader condition and a new election when needed.
-
+    
     This is done by setting timeout values so that heartbeat is longer than max election timeout,
     guaranteeing that at least one node will panic and run for office.
+
+    This test has pre_vote disabled to make it easier to track the new election
     
     """
     
@@ -133,7 +135,8 @@ async def test_lost_leader_1(cluster_maker):
     election_timeout_max = 0.05
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min, 
-                                          election_timeout_max=election_timeout_max)
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=False)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

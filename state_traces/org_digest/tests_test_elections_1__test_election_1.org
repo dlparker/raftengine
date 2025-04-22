@@ -6,7 +6,7 @@
     runs for leader, everybody responds correctly. It is written
     using the most granular control provided by the PausingServer
     class, controlling the message movement steps directly (for
-    the most part). The cluster is three nodes.
+    the most part). The cluster is three nodes. Prevote is disabled for this test.
 
     If some basid error is introduced in the election related code, it will
     show up here with the most detail.

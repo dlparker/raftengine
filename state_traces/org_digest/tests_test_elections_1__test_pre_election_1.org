@@ -1,0 +1,125 @@
+* Test test_pre_election_1 from file tests/test_elections_1.py
+
+
+
+    This runs the election happy path, with prevote enabled
+    everybody has same state, only one server
+    runs for leader, everybody responds correctly. It is written
+    using the most granular control provided by the PausingServer
+    class, controlling the message movement steps directly (for
+    the most part). The cluster is three nodes.
+
+    If some basid error is introduced in the election related code, it will
+    show up here with the most detail.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+
+
+ *[[condensed Trace Table Legend][Table legend]] located after last table in file*
+
+** Node 1 starts campaign, nodes 2 and 3 should get and reply 'yes' to request vote messages
+---------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                      | N-1       | N-2   | N-2                      | N-2   | N-3   | N-3                      | N-3   |
+|  Role  | Op                       | Delta     | Role  | Op                       | Delta | Role  | Op                       | Delta |
+|  FLWR  | STARTED                  |           | FLWR  | STARTED                  |       | FLWR  | STARTED                  |       |
+|  CNDI  | NEW ROLE                 |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  | p_v_r->N-2 t=1 li=0 lt=0 |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  | p_v_r->N-3 t=1 li=0 lt=0 |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  | N-1->p_v_r t=1 li=0 lt=0 |       | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  | p_v->N-1 yes=True        |       | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  |                          |       | FLWR  | N-1->p_v_r t=1 li=0 lt=0 |       |
+|  CNDI  |                          |           | FLWR  |                          |       | FLWR  | p_v->N-1 yes=True        |       |
+|  CNDI  | N-2->p_v yes=True        | t=1       | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  | N-3->p_v yes=True        |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  | poll->N-2 t=1 li=0 lt=1  |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  | poll->N-3 t=1 li=0 lt=1  |           | FLWR  |                          |       | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  | N-1->poll t=1 li=0 lt=1  | t=1   | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  | vote->N-1 yes=True       |       | FLWR  |                          |       |
+|  CNDI  |                          |           | FLWR  |                          |       | FLWR  | N-1->poll t=1 li=0 lt=1  | t=1   |
+|  CNDI  |                          |           | FLWR  |                          |       | FLWR  | vote->N-1 yes=True       |       |
+|  LEAD  | N-2->vote yes=True       | lt=1 li=1 | FLWR  |                          |       | FLWR  |                          |       |
+|  LEAD  | NEW ROLE                 |           | FLWR  |                          |       | FLWR  |                          |       |
+|  LEAD  | N-3->vote yes=True       |           | FLWR  |                          |       | FLWR  |                          |       |
+---------------------------------------------------------------------------------------------------------------------------------------
+** Node 1 is now leader, so it should declare the new term with a TERM_START log record
+---------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   |
+|  Role  | Op                           | Delta | Role  | Op  | Delta | Role  | Op  | Delta |
+|  LEAD  | ae->N-2 t=1 i=0 lt=0 e=1 c=0 |       | FLWR  |     |       | FLWR  |     |       |
+|  LEAD  | ae->N-3 t=1 i=0 lt=0 e=1 c=0 |       | FLWR  |     |       | FLWR  |     |       |
+---------------------------------------------------------------------------------------------
+** Node 1 should get success replies to append entries from nodes 2 and 3
+-------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                        | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3       |
+|  Role  | Op                         | Delta | Role  | Op                           | Delta | Role  | Op                           | Delta     |
+|  LEAD  |                            |       | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 |       | FLWR  |                              |           |
+|  LEAD  |                            |       | FLWR  | ae_reply->N-1 ok=True mi=1   |       | FLWR  |                              |           |
+|  LEAD  |                            |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=0 | lt=1 li=1 |
+|  LEAD  |                            |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   |           |
+|  LEAD  | N-2->ae_reply ok=True mi=1 | ci=1  | FLWR  |                              |       | FLWR  |                              |           |
+|  LEAD  | N-3->ae_reply ok=True mi=1 |       | FLWR  |                              |       | FLWR  |                              |           |
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+* Condensed Trace Table Legend
+All the items in these legends labeled N-X are placeholders for actual node id values,
+actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the cluster. Yes, One based, not zero.
+
+| Column Label | Description     | Details                                                                                        |
+| N-X Role     | Raft Role       | FLWR = Follower CNDI = Candidate LEAD = Leader                                                 |
+| N-X Op       | Activity        | Describes a traceable event at this node, see separate table below                             |
+| N-X Delta    | State change    | Describes any change in state since previous trace, see separate table below                   |
+
+
+** "Op" Column detail legend
+| Value         | Meaning                                                                                      |
+| STARTED       | Simulated node starting with empty log, term=0                                               |
+| CMD START     | Simulated client requested that a node (usually leader, but not for all tests) run a command |
+| CMD DONE      | The previous requested command is finished, whether complete, rejected, failed, whatever     |
+| CRASH         | Simulating node has simulated a crash                                                        |
+| RESTART       | Previously crashed node has restarted. Look at delta column to see effects on log, if any    |
+| NEW ROLE      | The node has changed Raft role since last trace line                                         |
+| NETSPLIT      | The node has been partitioned away from the majority network                                 |
+| NETJOIN       | The node has rejoined the majority network                                                   |
+| ae->N-X       | Node has sent append_entries message to N-X, next line in this table explains                |
+| (continued)   | t=1 means current term is 1, i=1 means prevLogIndex=1, lt=1 means prevLogTerm=1              |
+| (continued)   | c=1 means sender's commitIndex is 1,                                                         |
+| (continued)   | e=2 means that the entries list in the message is 2 items long. eXo=0 is a heartbeat         |
+| N-X->ae_reply | Node has received the response to an append_entries message, details in continued lines      |
+| (continued)   | ok=(True or False) means that entries were saved or not, mi=3 says log max index = 3         |
+| do_vote->N-X  | Node has sent request_vote to N-X, t=1 means current term is 1 (continued next line)         |
+| (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
+| N-X->vote     | Node has received request_vote response from N-X, yes=(True or False) indicates vote value   |
+
+** "Delta" Column detail legend
+Any item in this column indicates that the value of that item has changed since the last trace line
+
+| Item | Meaning                                                                                                                         |
+| t=X  | Term has changed to X                                                                                                           |
+| lt=X | prevLogTerm has changed to X, indicating a log record has been stored                                                           |
+| li=X | prevLogIndex has changed to X, indicating a log record has been stored                                                          |
+| ci=X | Indicates commitIndex has changed to X, meaning log record has been committed, and possibly applied depending on type of record |
+| n=X  | Indicates a change in networks status, X=1 means re-joined majority network, X=2 means partitioned to minority network          |
+
+** Notes about interpreting traces
+The way in which the traces are collected can occasionally obscure what is going on. A case in point is the commit of records at followers.
+The commit process is triggered by an append_entries message arriving at the follower with a commitIndex value that exceeds the local
+commit index, and that matches a record in the local log. This starts the commit process AFTER the response message is sent. You might
+be expecting it to be prior to sending the response, in bound, as is often said. Whether this is expected behavior is not called out
+as an element of the Raft protocol. It is certainly not required, however, as the follower doesn't report the commit index back to the
+leader.
+
+The definition of the commit state for a record is that a majority of nodes (leader and followers) have saved the record. Once
+the leader detects this it applies and commits the record. At some point it will send another append_entries to the followers and they
+will apply and commit. Or, if the leader dies before doing this, the next leader will commit by implication when it sends a term start
+log record.
+
+So when you are looking at the traces, you should not expect to see the commit index increas at a follower until some other message
+traffic occurs, because the tracing function only checks the commit index at message transmission boundaries.
+
+
+
+
+
+

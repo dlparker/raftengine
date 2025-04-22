@@ -18,11 +18,11 @@
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
 |  CNDI  | NEW ROLE                     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-2 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-3 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           | FLWR  |                              |           |
+|  CNDI  | p_v_r->N-2 t=1 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | p_v_r->N-3 t=1 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | N-1->p_v_r t=1 li=0 lt=0     |           | FLWR  |                              |           |
 |  CNDI  |                              |           | FLWR  | p_v->N-1 yes=True            |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->p_v_r t=1 li=0 lt=0     |           |
 |  CNDI  |                              |           | FLWR  |                              |           | FLWR  | p_v->N-1 yes=True            |           |
 |  CNDI  | N-2->p_v yes=True            | t=1       | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |

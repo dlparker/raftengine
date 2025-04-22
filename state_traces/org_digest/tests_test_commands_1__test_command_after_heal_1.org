@@ -9,11 +9,11 @@
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
 |  CNDI  | NEW ROLE                     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-2 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  | p_v_r->N-3 t=0 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           | FLWR  |                              |           |
+|  CNDI  | p_v_r->N-2 t=1 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  | p_v_r->N-3 t=1 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
+|  CNDI  |                              |           | FLWR  | N-1->p_v_r t=1 li=0 lt=0     |           | FLWR  |                              |           |
 |  CNDI  |                              |           | FLWR  | p_v->N-1 yes=True            |           | FLWR  |                              |           |
-|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->p_v_r t=0 li=0 lt=0     |           |
+|  CNDI  |                              |           | FLWR  |                              |           | FLWR  | N-1->p_v_r t=1 li=0 lt=0     |           |
 |  CNDI  |                              |           | FLWR  |                              |           | FLWR  | p_v->N-1 yes=True            |           |
 |  CNDI  | N-2->p_v yes=True            | t=1       | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
@@ -50,20 +50,20 @@
 |  LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       | CNDI  |                              |       | FLWR  |                              |       |
 |  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 | ci=1  | FLWR  |                              |       |
 |  LEAD  |                              |       | FLWR  | NEW ROLE                     |       | FLWR  |                              |       |
-|  LEAD  |                              |       | FLWR  | p_v_r->N-1 t=1 li=1 lt=1     |       | FLWR  |                              |       |
-|  LEAD  | N-2->p_v_r t=1 li=1 lt=1     |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | p_v_r->N-1 t=2 li=1 lt=1     |       | FLWR  |                              |       |
+|  LEAD  | N-2->p_v_r t=2 li=1 lt=1     |       | FLWR  |                              |       | FLWR  |                              |       |
 |  LEAD  | ae->N-3 t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | FLWR  |                              |       |
-|  LEAD  |                              |       | FLWR  | p_v_r->N-3 t=1 li=1 lt=1     |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | p_v_r->N-3 t=2 li=1 lt=1     |       | FLWR  |                              |       |
 |  LEAD  |                              |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 | ci=1  |
 |  LEAD  |                              |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   |       |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |       | FLWR  |                              |       | FLWR  |                              |       |
-|  LEAD  | p_v->N-2 yes=True            |       | FLWR  |                              |       | FLWR  |                              |       |
-|  LEAD  |                              |       | FLWR  | N-1->p_v yes=True            |       | FLWR  |                              |       |
+|  LEAD  | p_v->N-2 yes=False           |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-1->p_v yes=False           |       | FLWR  |                              |       |
 |  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   |       | FLWR  |                              |       |
-|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | N-2->p_v_r t=1 li=1 lt=1     |       |
-|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | p_v->N-2 yes=True            |       |
+|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | N-2->p_v_r t=2 li=1 lt=1     |       |
+|  LEAD  |                              |       | FLWR  |                              |       | FLWR  | p_v->N-2 yes=False           |       |
 |  LEAD  | N-2->ae_reply ok=True mi=1   |       | FLWR  |                              |       | FLWR  |                              |       |
-|  LEAD  |                              |       | FLWR  | N-3->p_v yes=True            |       | FLWR  |                              |       |
+|  LEAD  |                              |       | FLWR  | N-3->p_v yes=False           |       | FLWR  |                              |       |
 -----------------------------------------------------------------------------------------------------------------------------------------------
 
 

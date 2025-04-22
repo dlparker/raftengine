@@ -33,11 +33,11 @@
 |  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
 |  FLWR  |                              |           | FLWR  |                              |           | CNDI  | NEW ROLE                     |           |
-|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | p_v_r->N-1 t=0 li=0 lt=0     |           |
-|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | p_v_r->N-2 t=0 li=0 lt=0     |           |
-|  FLWR  | N-3->p_v_r t=0 li=0 lt=0     |           | FLWR  |                              |           | CNDI  |                              |           |
+|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | p_v_r->N-1 t=1 li=0 lt=0     |           |
+|  FLWR  |                              |           | FLWR  |                              |           | CNDI  | p_v_r->N-2 t=1 li=0 lt=0     |           |
+|  FLWR  | N-3->p_v_r t=1 li=0 lt=0     |           | FLWR  |                              |           | CNDI  |                              |           |
 |  FLWR  | p_v->N-3 yes=True            |           | FLWR  |                              |           | CNDI  |                              |           |
-|  FLWR  |                              |           | FLWR  | N-3->p_v_r t=0 li=0 lt=0     |           | CNDI  |                              |           |
+|  FLWR  |                              |           | FLWR  | N-3->p_v_r t=1 li=0 lt=0     |           | CNDI  |                              |           |
 |  FLWR  |                              |           | FLWR  | p_v->N-3 yes=True            |           | CNDI  |                              |           |
 |  FLWR  |                              |           | FLWR  |                              |           | CNDI  | N-1->p_v yes=True            | t=1       |
 |  FLWR  |                              |           | FLWR  |                              |           | CNDI  | poll->N-1 t=1 li=0 lt=1      |           |
@@ -125,8 +125,8 @@
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=2 lt=1 e=1 c=2 | li=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=3   | ci=3  |
-|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 | ci=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     |       |
+|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 | ci=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD START                    |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   |       | LEAD  |                              | li=4  |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=3 lt=1 e=1 c=3 |       |
@@ -134,8 +134,8 @@
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=1 c=3 | li=4  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   | ci=4  |
-|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=4 lt=1 e=0 c=4 | ci=4  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     |       |
+|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=4 lt=1 e=0 c=4 | ci=4  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=4 lt=1 e=0 c=4 |       |
