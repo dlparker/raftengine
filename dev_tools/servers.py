@@ -26,7 +26,7 @@ from raftengine.api.pilot_api import PilotAPI
 log_config = None
 
 trace_to_csv = False
-digest_org = True
+digest_org = False
 digest_csv = False
 
 def get_current_test():

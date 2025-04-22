@@ -469,6 +469,14 @@
 |  FLWR  | N-3->ae t=3 i=23 lt=1 e=1 c=24  | lt=3 li=24 ci=24   | FLWR  |                                |            | LEAD  |                                 |            |
 |  FLWR  | ae_reply->N-3 ok=True mi=24     |                    | FLWR  |                                |            | LEAD  |                                 |            |
 |  FLWR  |                                 |                    | FLWR  |                                |            | LEAD  | N-1->ae_reply ok=True mi=24     |            |
+|  FLWR  |                                 |                    | FLWR  |                                |            | LEAD  | ae->N-1 t=3 i=24 lt=3 e=0 c=24  |            |
+|  FLWR  | N-3->ae t=3 i=24 lt=3 e=0 c=24  |                    | FLWR  |                                |            | LEAD  |                                 |            |
+|  FLWR  | ae_reply->N-3 ok=True mi=24     |                    | FLWR  |                                |            | LEAD  |                                 |            |
+|  FLWR  |                                 |                    | FLWR  |                                |            | LEAD  | N-1->ae_reply ok=True mi=24     |            |
+|  FLWR  |                                 |                    | FLWR  |                                |            | LEAD  | ae->N-2 t=3 i=24 lt=3 e=0 c=24  |            |
+|  FLWR  |                                 |                    | FLWR  | N-3->ae t=3 i=24 lt=3 e=0 c=24 |            | LEAD  |                                 |            |
+|  FLWR  |                                 |                    | FLWR  | ae_reply->N-3 ok=True mi=24    |            | LEAD  |                                 |            |
+|  FLWR  |                                 |                    | FLWR  |                                |            | LEAD  | N-2->ae_reply ok=True mi=24     |            |
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 

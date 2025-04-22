@@ -31,7 +31,7 @@ async def test_election_1(cluster_maker):
     class, controlling the message movement steps directly (for
     the most part). The cluster is three nodes. Prevote is disabled for this test.
 
-    If some basid error is introduced in the election related code, it will
+    If some basic error is introduced in the election related code, it will
     show up here with the most detail.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
@@ -352,7 +352,7 @@ async def test_pre_election_1(cluster_maker):
     class, controlling the message movement steps directly (for
     the most part). The cluster is three nodes.
 
-    If some basid error is introduced in the election related code, it will
+    If some basic error is introduced in the election related code, it will
     show up here with the most detail.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.

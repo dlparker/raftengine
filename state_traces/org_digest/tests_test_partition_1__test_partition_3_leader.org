@@ -138,14 +138,6 @@
 |  FLWR  |                              |                | LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |       |
 |  FLWR  |                              |                | LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=False mi=2  |       |
 |  FLWR  | N-3->ae_reply ok=False mi=2  |                | LEAD  |                              |       | FLWR  |                              |       |
-|  FLWR  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |                | LEAD  |                              |       | FLWR  |                              |       |
-|  FLWR  |                              |                | LEAD  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       |
-|  FLWR  |                              |                | LEAD  | ae_reply->N-1 ok=False mi=2  |       | FLWR  |                              |       |
-|  FLWR  | N-2->ae_reply ok=False mi=2  |                | LEAD  |                              |       | FLWR  |                              |       |
-|  FLWR  | ae->N-3 t=1 i=1 lt=1 e=0 c=1 |                | LEAD  |                              |       | FLWR  |                              |       |
-|  FLWR  |                              |                | LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |       |
-|  FLWR  |                              |                | LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=False mi=2  |       |
-|  FLWR  | N-3->ae_reply ok=False mi=2  |                | LEAD  |                              |       | FLWR  |                              |       |
 |  FLWR  |                              |                | LEAD  | ae->N-1 t=2 i=2 lt=2 e=0 c=2 |       | FLWR  |                              |       |
 |  FLWR  | N-2->ae t=2 i=2 lt=2 e=0 c=2 |                | LEAD  |                              |       | FLWR  |                              |       |
 |  FLWR  | ae_reply->N-2 ok=False mi=1  |                | LEAD  |                              |       | FLWR  |                              |       |
