@@ -87,6 +87,16 @@ transaction on commit, the run the command and do what ever database
 updates that requires, then commit the Raft Log update and your own
 updates transactionally. 
 
+** Raft Details
+
+The code implements the algorithm described in the orignal paper and
+the thesis. The PreVote and CheckQuorum additions to the original
+protocol are optional and are controlled by the cluster configuation,
+so there is no mechanism for setting it on a per server basis. Each
+addition can be selected individually.
+
+
+
 ** TBD
 An optional part of the library provides implementations of these
 services for the user to use, or to modify and use. These are

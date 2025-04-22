@@ -7,7 +7,7 @@
    to me, but that is what it says. Prolly need some tests for failure between commit index incr and
    last applied incr.
 2. Look in paper and thesis to see about command sequence number or id, I think it is in there.
-3. [] Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
+3. [X] Need PreVote and CheckQuorum: https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11
   https://github.com/ongardie/dissertation?tab=readme-ov-file
   https://decentralizedthoughts.github.io/2020-12-12-raft-liveness-full-omission/
   Want to implement them as opt in features, segregate tests 
@@ -16,7 +16,7 @@
 
 * Test questions and issues and Demo issues
 
-1. [] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
+1. [X] Develop a plan for doing tracing in real processes, which means adding event callback support to the library.
    Maybe build an event dispatch dictionary so tracing points can be efficient. If there is a dict, then call
    a function that dispatches to traces, maybe passing locals() for context. That function can collect log data, message
    data, etc. Replace substate calls with this. Do the traces as JSON with class names in them so that it can
