@@ -268,7 +268,7 @@ async def test_reelection_3(cluster_maker):
 
     # ensure that ts_3 wins first election
 
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
     ts_1.change_cluster_config(cfg)
@@ -304,7 +304,7 @@ async def test_reelection_3(cluster_maker):
     # servers, ts_2 should win because of timeout
     # ensure that ts_2 wins re-election
 
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 1
     cfg.election_timeout_max = 1.2
     ts_1.change_cluster_config(cfg)

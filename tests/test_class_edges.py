@@ -27,7 +27,7 @@ async def test_bogus_pilot(cluster_maker):
     class BadPilot:
         pass
     with pytest.raises(Exception):
-        Hull(ts_1.cluster_config, ts_1.local_config, BadPilot())
+        Hull(ts_1.cluster_init_config, ts_1.local_config, BadPilot())
 
 async def test_str_methods():
     """

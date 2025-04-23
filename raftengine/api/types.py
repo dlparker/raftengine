@@ -200,9 +200,9 @@ class CommandSerialRange:
 @dataclass
 class NodeRec:
     uri: str
-    is_active: bool = field(default = True)
-    is_starting: bool = field(default = False)
-    is_stopping: bool = field(default = False)
+    is_adding: bool = field(default = False)   # config change to add this is in flight
+    is_removing: bool = field(default = False) # config change to remmove this is in flight
+    is_loading: bool = field(default = False)  # log is still being loaded for add, is a non-voting member
 
 @dataclass
 class ClusterSettings:

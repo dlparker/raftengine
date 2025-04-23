@@ -26,100 +26,13 @@ from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
 from raftengine.api.events import EventType, EventHandler
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
+from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
-class EventControl:
-
-    def __init__(self):
-        self.error_events = [EventType.error,]
-        self.message_events = [EventType.msg_sent, EventType.msg_recv,
-                               EventType.msg_handled]
-        self.major_events = [EventType.role_change, EventType.term_change,
-                             EventType.leader_change]
-        self.common_events = [EventType.index_change, EventType.commit_change]
-
-        self.active_events = []
-        self.handlers = []
-        self.handler_map = defaultdict(list)
-
-
-    def add_handler(self, handler: EventHandler) -> None:
-        if not handler in self.handlers:
-            self.handlers.append(handler)
-            for event_type in handler.events_handled():
-                if event_type not in self.active_events:
-                    self.active_events.append(event_type)
-                if handler not in self.handler_map[event_type]:
-                    self.handler_map[event_type].append(handler)
-
-    def remove_handler(self, handler: EventHandler) -> None:
-        if handler in self.handlers:
-            self.handlers.remove(handler)
-            for event_type in handler.events_handled():
-                self.handler_map[event_type].remove(handler)
-                if len(self.handler_map[event_type]) == 0:
-                    self.active_events.remove(event_type)
-
-    async def emit_error(self, error:str) -> None:
-        my_type = EventType.error
-        event = ErrorEvent(error)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_sent_msg(self, msg:BaseMessage) -> None:
-        my_type = EventType.msg_sent
-        event = MsgSentEvent(msg)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-            
-    async def emit_recv_msg(self, msg:BaseMessage) -> None:
-        my_type = EventType.msg_recv
-        event = MsgRecvEvent(msg)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_handled_msg(self, msg:BaseMessage, result: Optional[str] = None,
-                               error: Optional[str] = None) -> None:
-        my_type = EventType.msg_handled
-        event = MsgHandledEvent(msg, result, error)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_role_change(self, new_role: str) -> None:
-        my_type = EventType.role_change
-        event = RoleChangeEvent(new_role)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_term_change(self, new_term:int) -> None:
-        my_type = EventType.term_change
-        event = TermChangeEvent(new_term)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_leader_change(self, new_leader:str) -> None:
-        my_type = EventType.leader_change
-        event = LeaderChangeEvent(new_leader)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_index_change(self, new_index):
-        my_type = EventType.index_change
-        event = IndexChangeEvent(new_index)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_commit_change(self, new_commit):
-        my_type = EventType.commit_change
-        event = CommitChangeEvent(new_commit)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-        
 class Hull(HullAPI):
 
     # Part of API
     def __init__(self, cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
-        self.cluster_config = cluster_config
+        self.cluster_init_config = cluster_config
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
             raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
@@ -136,7 +49,7 @@ class Hull(HullAPI):
 
     # Part of API
     def change_cluster_config(self, cluster_config: ClusterInitConfig):
-        self.cluster_config = cluster_config
+        self.cluster_init_config = cluster_config
         
     # Part of API
     async def start(self):
@@ -249,25 +162,25 @@ class Hull(HullAPI):
 
     # Called by Role and in API
     def get_cluster_node_ids(self):
-        return self.cluster_config.node_uris
+        return self.cluster_init_config.node_uris
 
     # Called by Role and in API
     def get_heartbeat_period(self):
-        return self.cluster_config.heartbeat_period
+        return self.cluster_init_config.heartbeat_period
 
     # Called by Role and in API
     def get_election_timeout(self):
-        res = random.uniform(self.cluster_config.election_timeout_min,
-                             self.cluster_config.election_timeout_max)
+        res = random.uniform(self.cluster_init_config.election_timeout_min,
+                             self.cluster_init_config.election_timeout_max)
         return res
 
     # Called by Role 
     def get_election_timeout_range(self):
-        return self.cluster_config.election_timeout_min, self.cluster_config.election_timeout_max
+        return self.cluster_init_config.election_timeout_min, self.cluster_init_config.election_timeout_max
 
     # Called by Role
     def get_max_entries_per_message(self):
-        return self.cluster_config.max_entries_per_message
+        return self.cluster_init_config.max_entries_per_message
 
     # Part of API 
     async def stop(self):
@@ -290,17 +203,17 @@ class Hull(HullAPI):
     # Called by Role
     async def start_campaign(self, authorized=False):
         await self.stop_role()
-        self.role = Candidate(self, use_pre_vote=self.cluster_config.use_pre_vote, authorized=authorized)
+        self.role = Candidate(self, use_pre_vote=self.cluster_init_config.use_pre_vote, authorized=authorized)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
         self.logger.warning("%s started campaign term = %s pre_vote=%s", self.get_my_uri(),
-                            await self.log.get_term(), self.cluster_config.use_pre_vote)
+                            await self.log.get_term(), self.cluster_init_config.use_pre_vote)
 
     # Called by Role
     async def win_vote(self, new_term):
         await self.stop_role()
-        self.role = Leader(self, new_term, use_check_quorum=self.cluster_config.use_check_quorum)
+        self.role = Leader(self, new_term, use_check_quorum=self.cluster_init_config.use_check_quorum)
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
@@ -387,3 +300,163 @@ class Hull(HullAPI):
             self.message_problem_history = []
         return res
 
+    async def get_cluster_config(self):
+        log = self.get_log()
+        stored_config = await log.get_cluster_config()
+        if stored_config:
+            return stored_config
+        nd = {}
+        for uri in self.cluster_init_config.node_uris:
+            nd[uri] = NodeRec(uri)
+        cc = ClusterConfig(nodes=nd)
+        await log.save_cluster_config(cc)
+        self.cluster_init_config
+        return await log.get_cluster_config()
+
+    async def start_node_add(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node:
+            raise Exception(f"cluster memebership change already in progress with node {cc.pending_node.uri}")
+        if node_uri not in cc.nodes:
+            rec = NodeRec(node_uri)
+            cc.pending_node = rec
+            rec.is_adding = True
+            rec.is_loading = True
+            return await self.log.save_cluster_config(cc)
+        raise Exception(f'node {node_uri} is already in active node set')
+
+    async def node_add_prepared(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node is None or cc.pending_node.uri != node_uri:
+            raise Exception(f'node {node_uri} is not pending add')
+        cc.pending_node.is_loading = False
+        return await self.log.save_cluster_config(cc)
+        
+    async def apply_node_add(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_adding:
+            if cc.pending_node.is_loading:
+                raise Exception(f"Cannot apply add on node {node_uri}, it hasn't been loaded yet")
+            cc.pending_node.is_adding = False
+            cc.nodes[node_uri] = cc.pending_node
+            cc.pending_node = None
+            return await self.log.save_cluster_config(cc)
+        raise Exception(f'node {node_uri} is not pending addition')
+
+    async def start_node_remove(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node:
+            raise Exception(f"cannot remove node {node_uri}, another action is pending for node {cc.pending_node.uri}")
+        if node_uri in cc.nodes:
+            rec = cc.nodes[node_uri]
+            cc.pending_node = rec
+            rec.is_removing = True
+            del cc.nodes[node_uri]
+            return await self.log.save_cluster_config(cc)
+        raise Exception(f'node {node_uri} is not in active node set')
+
+    async def apply_node_remove(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_removing:
+            cc.pending_node = None
+            return await self.log.save_cluster_config(cc)
+        raise Exception(f'node {node_uri} is not pending removal')
+
+    async def node_is_voter(self, node_uri):
+        cc = await self.get_cluster_config()
+        # leader gets the wrong answer here if itself is removing, so leader needs a different check
+        if (cc.pending_node 
+            and cc.pending_node.uri == node_uri
+            and cc.pending_node.is_loading):
+            return False
+        return True
+
+
+class EventControl:
+
+    def __init__(self):
+        self.error_events = [EventType.error,]
+        self.message_events = [EventType.msg_sent, EventType.msg_recv,
+                               EventType.msg_handled]
+        self.major_events = [EventType.role_change, EventType.term_change,
+                             EventType.leader_change]
+        self.common_events = [EventType.index_change, EventType.commit_change]
+
+        self.active_events = []
+        self.handlers = []
+        self.handler_map = defaultdict(list)
+
+
+    def add_handler(self, handler: EventHandler) -> None:
+        if not handler in self.handlers:
+            self.handlers.append(handler)
+            for event_type in handler.events_handled():
+                if event_type not in self.active_events:
+                    self.active_events.append(event_type)
+                if handler not in self.handler_map[event_type]:
+                    self.handler_map[event_type].append(handler)
+
+    def remove_handler(self, handler: EventHandler) -> None:
+        if handler in self.handlers:
+            self.handlers.remove(handler)
+            for event_type in handler.events_handled():
+                self.handler_map[event_type].remove(handler)
+                if len(self.handler_map[event_type]) == 0:
+                    self.active_events.remove(event_type)
+
+    async def emit_error(self, error:str) -> None:
+        my_type = EventType.error
+        event = ErrorEvent(error)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+
+    async def emit_sent_msg(self, msg:BaseMessage) -> None:
+        my_type = EventType.msg_sent
+        event = MsgSentEvent(msg)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+            
+    async def emit_recv_msg(self, msg:BaseMessage) -> None:
+        my_type = EventType.msg_recv
+        event = MsgRecvEvent(msg)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+
+    async def emit_handled_msg(self, msg:BaseMessage, result: Optional[str] = None,
+                               error: Optional[str] = None) -> None:
+        my_type = EventType.msg_handled
+        event = MsgHandledEvent(msg, result, error)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+        
+    async def emit_role_change(self, new_role: str) -> None:
+        my_type = EventType.role_change
+        event = RoleChangeEvent(new_role)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+
+    async def emit_term_change(self, new_term:int) -> None:
+        my_type = EventType.term_change
+        event = TermChangeEvent(new_term)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+        
+    async def emit_leader_change(self, new_leader:str) -> None:
+        my_type = EventType.leader_change
+        event = LeaderChangeEvent(new_leader)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+        
+    async def emit_index_change(self, new_index):
+        my_type = EventType.index_change
+        event = IndexChangeEvent(new_index)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+
+    async def emit_commit_change(self, new_commit):
+        my_type = EventType.commit_change
+        event = CommitChangeEvent(new_commit)
+        for handler in self.handler_map[my_type]:
+            await handler.on_event(event)
+        
+        

@@ -65,7 +65,7 @@ async def test_empty_log_1(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     # enough to get two full and one partial append_entries catchups.
     loop_limit = cfg.max_entries_per_message * 2 + 2
     await cluster.start_auto_comms()

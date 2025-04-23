@@ -66,6 +66,9 @@ class Records:
         self.nodes = config.nodes
         self.pending_node = config.pending_node
         self.cluster_settings = config.settings
+        return ClusterConfig(nodes=self.nodes,
+                             pending_node=self.pending_node,
+                             settings=self.cluster_settings)
     
     async def get_cluster_config(self):
         if self.nodes is None:
@@ -173,10 +176,10 @@ class MemoryLog(LogAPI):
         return self.records.delete_all_from(index)
 
     async def save_cluster_config(self, config: ClusterConfig) -> None:
-        return self.records.save_cluster_config(config)
+        return await self.records.save_cluster_config(config)
     
-    async def get_cluster_config(self) -> Optional[ClusterConfigNone]:  
-        return self.records.get_cluster_config()
+    async def get_cluster_config(self) -> Optional[ClusterConfig]:  
+        return await self.records.get_cluster_config()
 
     def close(self):
         pass

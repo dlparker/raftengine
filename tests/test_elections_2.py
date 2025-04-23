@@ -42,7 +42,7 @@ async def test_stepwise_election_1(cluster_maker):
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     cfg.use_pre_vote = False
     ts_1.change_cluster_config(cfg)
     ts_2.change_cluster_config(cfg)
@@ -200,15 +200,15 @@ async def test_election_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
     ts_1.change_cluster_config(cfg)
-    cfg = ts_2.cluster_config
+    cfg = ts_2.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
     ts_2.change_cluster_config(cfg)
-    cfg = ts_3.cluster_config
+    cfg = ts_3.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
     ts_3.change_cluster_config(cfg)
@@ -234,15 +234,15 @@ async def test_election_timeout_1(cluster_maker):
     old_term = await ts_2.log.get_term()
     await ts_2.do_leader_lost()
 
-    cfg = ts_1.cluster_config
+    cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
     ts_1.change_cluster_config(cfg)
-    cfg = ts_2.cluster_config
+    cfg = ts_2.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
     ts_2.change_cluster_config(cfg)
-    cfg = ts_3.cluster_config
+    cfg = ts_3.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
     ts_3.change_cluster_config(cfg)

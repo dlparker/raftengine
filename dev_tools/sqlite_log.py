@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from raftengine.api.log_api import LogRec, LogAPI, RecordCode
+from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 def bool_converter(value):
     return bool(int(value))
@@ -342,4 +343,11 @@ class SqliteLog(LogAPI):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         return self.records.delete_all_from(index)
+    
+
+    async def save_cluster_config(self, config: ClusterConfig) -> None:
+        return self.records.save_cluster_config(config)
+    
+    async def get_cluster_config(self) -> Optional[ClusterConfig]:  
+        return self.records.get_cluster_config()
     

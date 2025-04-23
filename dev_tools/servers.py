@@ -824,7 +824,7 @@ class PausingServer(PilotAPI):
     def __init__(self, uri, cluster, use_log=MemoryLog):
         self.uri = uri
         self.cluster = cluster
-        self.cluster_config = None
+        self.cluster_init_config = None
         self.local_config = None
         self.hull = None
         self.in_messages = []
@@ -850,15 +850,15 @@ class PausingServer(PilotAPI):
         self.save_message_history = False
 
     def set_configs(self, local_config, cluster_config):
-        self.cluster_config = cluster_config
+        self.cluster_init_config = cluster_config
         self.local_config = local_config
-        self.hull = TestHull(self.cluster_config, self.local_config, self)
+        self.hull = TestHull(self.cluster_init_config, self.local_config, self)
         self.operations = SimpleOps(self)
     
     def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
-        self.cluster_config = deepcopy(cluster_config)
-        self.hull.change_cluster_config(self.cluster_config)
+        self.cluster_init_config = deepcopy(cluster_config)
+        self.hull.change_cluster_config(self.cluster_init_config)
         
     async def simulate_crash(self):
         await self.hull.stop()
@@ -878,7 +878,7 @@ class PausingServer(PilotAPI):
         if not save_ops:
             self.operations = SimpleOps(self)
         self.am_crashed = False
-        self.hull = TestHull(self.cluster_config, self.local_config, self)
+        self.hull = TestHull(self.cluster_init_config, self.local_config, self)
         await self.hull.start()
         self.network.reconnect_server(self, deliver=deliver)
         test_trace = self.network.test_trace

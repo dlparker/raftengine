@@ -133,7 +133,7 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def get_cluster_config(self) -> Optional[ClusterConfigNone]:  # pragma: no cover abstract
+    async def get_cluster_config(self) -> Optional[ClusterConfig]:  # pragma: no cover abstract
         raise NotImplementedError
 
     
