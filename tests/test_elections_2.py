@@ -313,7 +313,8 @@ async def test_election_vote_once_1(cluster_maker):
 
     Finally the election is allowed to complete normally.
     
-    Prevote is disabled for this test as it makes it harder to force elections.
+    Prevote is disabled for this test as it makes the test code more complicated for no benefit.
+    
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
@@ -415,7 +416,8 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     As a bonus test we push the earlier yes vote from node 1 back on the input queue and allow
     node 2 to process it. It should just ignore it. This is probably notthe only test that hits that code.
 
-    Prevote is disabled for this test as it makes it harder to force elections.
+    Prevote is disabled for this test as it makes the test code more complicated for no benefit.
+
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 

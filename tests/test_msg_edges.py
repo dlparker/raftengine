@@ -37,13 +37,10 @@ async def test_restart_during_heartbeat(cluster_maker):
     Note that both of these scenarios are common occurances. The purpose of this test is
     to ensure that they are logged.
 
-    Prevote is disabled for this test as it makes it harder to force elections.
-    
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+    cluster.set_configs()
     uri_1 = cluster.node_uris[0]
     uri_2 = cluster.node_uris[1]
     uri_3 = cluster.node_uris[2]
@@ -84,7 +81,7 @@ async def test_restart_during_heartbeat(cluster_maker):
     assert len(hist) == 2
 
     cluster.test_trace.start_subtest("Node 3 starting a new election")
-    await ts_3.start_campaign()
+    await ts_3.start_campaign(authorized=True)
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     assert ts_3.get_role_name() == "LEADER"

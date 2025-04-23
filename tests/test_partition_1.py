@@ -222,15 +222,12 @@ async def test_partition_2_leader(cluster_maker):
 
     When all that is done, the state machine state at the old leader should match the replicated
     state in the other nodes.
-
-    Prevote is disabled for this test as it makes it harder to force elections.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+    cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
@@ -270,7 +267,7 @@ async def test_partition_2_leader(cluster_maker):
 
     logger.info('---------!!!!!!! stopping comms')
     cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
-    await ts_2.start_campaign()
+    await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
@@ -312,7 +309,6 @@ async def test_partition_3_leader(cluster_maker):
 
     Then, just for completeness, the partion is healed and the leader is checked
     to see if it is up to date. It should have the term start record for the new term in the log.
-    Prevote is disabled for this test as it makes it harder to force elections.
     
     """
     
@@ -322,8 +318,7 @@ async def test_partition_3_leader(cluster_maker):
     election_timeout_max = 0.011
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min, 
-                                          election_timeout_max=election_timeout_max,
-                                          use_pre_vote=False)
+                                          election_timeout_max=election_timeout_max)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -348,7 +343,7 @@ async def test_partition_3_leader(cluster_maker):
     await cluster.split_network([part1, part2])
 
     cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
-    await ts_2.start_campaign()
+    await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"

@@ -254,14 +254,11 @@ async def double_leader_inner(cluster, discard):
     Regardless of how the affected messages are handled, the rejoin should deliver the same
     result, the new leader's state being replicated to the old leader.
 
-    Prevote is disabled for this test as it makes it harder to force elections.
-
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
 
     """
     
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+    cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -292,7 +289,7 @@ async def double_leader_inner(cluster, discard):
     cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election at node 2')
-    await ts_2.start_campaign()
+    await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
@@ -372,14 +369,12 @@ async def test_command_2_leaders_3(cluster_maker):
     but before any other message pass to update it, it gets sent a command request.
     The results should be a rediect to the new leader.
 
-    Prevote is disabled for this test as it makes it harder to force elections.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+    cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -413,7 +408,7 @@ async def test_command_2_leaders_3(cluster_maker):
     cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
-    await ts_2.start_campaign()
+    await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "LEADER"
@@ -888,12 +883,9 @@ async def test_follower_rewrite_1(cluster_maker):
 
     Sheesh.
 
-    Prevote is disabled for this test as it makes it harder to force elections.
-
     """
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+    cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -924,7 +916,7 @@ async def test_follower_rewrite_1(cluster_maker):
     logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
     cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
-    await ts_2.start_campaign()
+    await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_2.get_role_name() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
