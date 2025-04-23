@@ -44,9 +44,9 @@ async def test_stepwise_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     cfg = ts_1.cluster_init_config
     cfg.use_pre_vote = False
-    ts_1.change_cluster_config(cfg)
-    ts_2.change_cluster_config(cfg)
-    ts_3.change_cluster_config(cfg)
+    await ts_1.change_cluster_config(cfg)
+    await ts_2.change_cluster_config(cfg)
+    await ts_3.change_cluster_config(cfg)
 
 
     cluster.test_trace.start_subtest("Starting election at node 3",
@@ -203,15 +203,15 @@ async def test_election_timeout_1(cluster_maker):
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
-    ts_1.change_cluster_config(cfg)
+    await ts_1.change_cluster_config(cfg)
     cfg = ts_2.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
-    ts_2.change_cluster_config(cfg)
+    await ts_2.change_cluster_config(cfg)
     cfg = ts_3.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    ts_3.change_cluster_config(cfg)
+    await ts_3.change_cluster_config(cfg)
 
     cluster.test_trace.start_subtest("Initial election with timers manipulated to ensure node 3 will win",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
@@ -237,15 +237,15 @@ async def test_election_timeout_1(cluster_maker):
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    ts_1.change_cluster_config(cfg)
+    await ts_1.change_cluster_config(cfg)
     cfg = ts_2.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    ts_2.change_cluster_config(cfg)
+    await ts_2.change_cluster_config(cfg)
     cfg = ts_3.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    ts_3.change_cluster_config(cfg)
+    await ts_3.change_cluster_config(cfg)
 
 
     # now it should just finish, everybody should know what to do

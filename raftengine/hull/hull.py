@@ -19,6 +19,7 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
@@ -47,9 +48,19 @@ class Hull(HullAPI):
         self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
 
-    # Part of API
-    def change_cluster_config(self, cluster_config: ClusterInitConfig):
-        self.cluster_init_config = cluster_config
+    # For testing only
+    async def change_cluster_config(self, init: ClusterInitConfig):
+        # cant add or remove  nodes here, just update settings
+        config = await self.get_cluster_config()
+        settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
+                                   election_timeout_min=init.election_timeout_min,
+                                   election_timeout_max=init.election_timeout_max,
+                                   max_entries_per_message=init.max_entries_per_message,
+                                   use_pre_vote=init.use_pre_vote,
+                                   use_check_quorum=init.use_check_quorum,
+                                   use_dynamic_config=init.use_dynamic_config)
+        config.settings = settings
+        return await self.log.save_cluster_config(config)
         
     # Part of API
     async def start(self):
@@ -63,7 +74,8 @@ class Hull(HullAPI):
         mtypes = [AppendEntriesMessage,AppendResponseMessage,
                   RequestVoteMessage,RequestVoteResponseMessage,
                   PreVoteMessage,PreVoteResponseMessage,
-                  TransferPowerMessage,TransferPowerResponseMessage,]
+                  TransferPowerMessage,TransferPowerResponseMessage,
+                  MembershipChangeMessage,MembershipChangeResponseMessage,]
                   
         message = None
         for mtype in mtypes:
@@ -127,7 +139,21 @@ class Hull(HullAPI):
             if orig_commit != new_commit:
                 await self.event_control.emit_commit_change(new_commit)
         return result
-    
+
+    async def handle_membership_change_log_update(self, log_rec):
+        cdict = json.loads(log_rec.command)
+        config = ClusterConfig(**cdict['config'])
+        op = cdict['op']
+        operand = cdict['operand']
+        if op == "add_node":
+            config = await self.start_node_add(operand)
+        if op == "remove_node":
+            config = await self.start_node_remove(operand)
+        self.logger.debug(f"{self.get_my_uri()}\n\nop={op} operand={operand}\n\n")
+        self.logger.debug(f"{cdict['config']}\n\n")
+        self.logger.debug(f"{config.__dict__}\n\n")
+
+            
     # Called by Role
     def get_log(self):
         return self.log
@@ -165,23 +191,38 @@ class Hull(HullAPI):
         return self.cluster_init_config.node_uris
 
     # Called by Role and in API
-    def get_heartbeat_period(self):
-        return self.cluster_init_config.heartbeat_period
+    async def get_heartbeat_period(self):
+        config = await self.get_cluster_config()
+        return config.settings.heartbeat_period
 
     # Called by Role and in API
-    def get_election_timeout(self):
-        res = random.uniform(self.cluster_init_config.election_timeout_min,
-                             self.cluster_init_config.election_timeout_max)
+    async def get_election_timeout(self):
+        config = await self.get_cluster_config()
+        emin = config.settings.election_timeout_min
+        emax =  config.settings.election_timeout_max
+
+        res = random.uniform(emin, emax)
         return res
 
     # Called by Role 
-    def get_election_timeout_range(self):
-        return self.cluster_init_config.election_timeout_min, self.cluster_init_config.election_timeout_max
+    async def get_election_timeout_range(self):
+        config = await self.get_cluster_config()
+        emin = config.settings.election_timeout_min
+        emax =  config.settings.election_timeout_max
+        return emin, emax
 
     # Called by Role
-    def get_max_entries_per_message(self):
-        return self.cluster_init_config.max_entries_per_message
+    async def get_max_entries_per_message(self):
+        config = await self.get_cluster_config()
+        return config.settings.max_entries_per_message
 
+    # Part of API 
+    async def exit_cluster(self):
+        if self.role.role_name == "LEADER":
+            await self.role.do_node_exit(self.get_my_uri())
+        else:
+            await self.role.send_self_exit()
+        
     # Part of API 
     async def stop(self):
         await self.stop_role()
@@ -203,17 +244,19 @@ class Hull(HullAPI):
     # Called by Role
     async def start_campaign(self, authorized=False):
         await self.stop_role()
-        self.role = Candidate(self, use_pre_vote=self.cluster_init_config.use_pre_vote, authorized=authorized)
+        config = await self.get_cluster_config()
+        self.role = Candidate(self, use_pre_vote=config.settings.use_pre_vote, authorized=authorized)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
         self.logger.warning("%s started campaign term = %s pre_vote=%s", self.get_my_uri(),
-                            await self.log.get_term(), self.cluster_init_config.use_pre_vote)
+                            await self.log.get_term(), config.settings.use_pre_vote)
 
     # Called by Role
     async def win_vote(self, new_term):
         await self.stop_role()
-        self.role = Leader(self, new_term, use_check_quorum=self.cluster_init_config.use_check_quorum)
+        config = await self.get_cluster_config()
+        self.role = Leader(self, new_term, use_check_quorum=config.settings.use_check_quorum)
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
@@ -259,6 +302,7 @@ class Hull(HullAPI):
     # Better to circumvent it by running the actual timers and callbacks in this
     # class, which never goes away.
     async def role_run_after(self, delay, target):
+        delay += 0.0
         loop = asyncio.get_event_loop()
         if self.role_async_handle:
             self.logger.debug('%s cancelling after target to %s', self.local_config.uri,
@@ -306,11 +350,18 @@ class Hull(HullAPI):
         if stored_config:
             return stored_config
         nd = {}
-        for uri in self.cluster_init_config.node_uris:
+        init = self.cluster_init_config
+        for uri in init.node_uris:
             nd[uri] = NodeRec(uri)
-        cc = ClusterConfig(nodes=nd)
+        settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
+                                   election_timeout_min=init.election_timeout_min,
+                                   election_timeout_max=init.election_timeout_max,
+                                   max_entries_per_message=init.max_entries_per_message,
+                                   use_pre_vote=init.use_pre_vote,
+                                   use_check_quorum=init.use_check_quorum,
+                                   use_dynamic_config=init.use_dynamic_config)
+        cc = ClusterConfig(nodes=nd, settings=settings)
         await log.save_cluster_config(cc)
-        self.cluster_init_config
         return await log.get_cluster_config()
 
     async def start_node_add(self, node_uri):
@@ -332,11 +383,11 @@ class Hull(HullAPI):
         cc.pending_node.is_loading = False
         return await self.log.save_cluster_config(cc)
         
-    async def apply_node_add(self, node_uri):
+    async def finish_node_add(self, node_uri):
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_adding:
             if cc.pending_node.is_loading:
-                raise Exception(f"Cannot apply add on node {node_uri}, it hasn't been loaded yet")
+                raise Exception(f"Cannot finish add on node {node_uri}, it hasn't been loaded yet")
             cc.pending_node.is_adding = False
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None
@@ -355,7 +406,7 @@ class Hull(HullAPI):
             return await self.log.save_cluster_config(cc)
         raise Exception(f'node {node_uri} is not in active node set')
 
-    async def apply_node_remove(self, node_uri):
+    async def finish_node_remove(self, node_uri):
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_removing:
             cc.pending_node = None
@@ -371,6 +422,13 @@ class Hull(HullAPI):
             return False
         return True
 
+    async def get_node_ids(self, voter_only=False):
+        uris = list(cc.nodes.keys())
+        if cc.pending:
+            if voter_only and not cc.pending_node.is_loading:
+                uris.append(cc.pending.uri)
+        return uris
+    
 
 class EventControl:
 

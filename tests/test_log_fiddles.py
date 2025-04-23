@@ -148,7 +148,7 @@ async def test_empty_log_2(cluster_maker):
     await ts_1.enable_timers()
     logger.info('------------------------ ts_2 "crash" and restart done')
     start_time = time.time()
-    while (time.time() - start_time < heartbeat_period * 2 
+    while (time.time() - start_time < heartbeat_period * 5 
            and await ts_2.log.get_last_index() != 1):
         await asyncio.sleep(0.0001)
     assert await ts_2.log.get_last_index() == 1

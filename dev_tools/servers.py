@@ -855,10 +855,10 @@ class PausingServer(PilotAPI):
         self.hull = TestHull(self.cluster_init_config, self.local_config, self)
         self.operations = SimpleOps(self)
     
-    def change_cluster_config(self, cluster_config):
+    async def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
         self.cluster_init_config = deepcopy(cluster_config)
-        self.hull.change_cluster_config(self.cluster_init_config)
+        await self.hull.change_cluster_config(self.cluster_init_config)
         
     async def simulate_crash(self):
         await self.hull.stop()
@@ -945,6 +945,9 @@ class PausingServer(PilotAPI):
     def get_log(self):
         return self.log
 
+    async def exit_cluster(self):
+        await self.hull.exit_cluster()
+    
     # Part of PilotAPI
     async def process_command(self, command, serial):
         return await self.operations.process_command(command, serial)

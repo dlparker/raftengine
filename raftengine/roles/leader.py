@@ -29,85 +29,6 @@ class FollowerTracker:
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
 
-class CommandWaiter:
-
-    def __init__(self, leader, log, orig_log_record, timeout=1.0):
-        self.leader = leader
-        self.log = log
-        self.orig_log_record = orig_log_record
-        self.timeout = timeout
-        self.done_condition = asyncio.Condition()
-        self.committed = False
-        self.time_expired = False
-        self.local_error = None
-        self.result = None
-
-    async def wait_for_result(self):
-
-        async def do_timeout(timeout):
-            start_time = time.time()
-            while not self.committed and not self.local_error:
-                await asyncio.sleep(0.001)
-                if time.time() - start_time >= timeout:
-                    self.time_expired = True
-                    self.leader.logger.warning("%s !!!!!!!!!! Timeout on command ", self.leader.my_uri())
-                    raise TimeoutTaskGroup(f"timeout after {timeout}")
-            
-        async def check_done():
-            while not self.time_expired and not self.result:
-                async with self.done_condition:
-                    await self.done_condition.wait()
-                    self.leader.logger.debug("%s check_done awake from command ", self.leader.my_uri())
-            return self.result
-
-        try:
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(check_done())
-                tg.create_task(do_timeout(self.timeout))
-                self.leader.logger.debug("%s scheduled timeout for %f and check_done", self.leader.my_uri(), self.timeout)
-        except* TimeoutTaskGroup:
-            self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
-            hull = self.leader.hull
-            leader_uri = None
-            if hull.role != self.leader:
-                if hasattr(hull.role, 'leader_uri'):
-                    leader_uri = hull.role.leader_uri
-                self.leader.logger.debug("%s after timeout exception am no longer leader! maybe %s?",
-                                         self.leader.my_uri(), leader_uri)
-                self.result = CommandResult(command=self.orig_log_record.command,
-                                            committed=False,
-                                            redirect=leader_uri)
-            else:
-                self.leader.logger.debug("%s command timeout exception",
-                                         self.leader.my_uri())
-                self.result = CommandResult(command=self.orig_log_record.command,
-                                            committed=False,
-                                            timeout_expired=True)
-            
-        return self.result
-
-    async def handle_run_result(self, command_result, error_data):
-        if not error_data:
-            self.committed = True
-        self.local_error = error_data
-        result = CommandResult(command=self.orig_log_record.command,
-                               committed=self.committed,
-                               timeout_expired=False,
-                               result=command_result,
-                               error=error_data,
-                               redirect=None)
-        if error_data:
-            await self.leader.hull.record_substate(SubstateCode.failed_command)
-        else:
-            await self.leader.hull.record_substate(SubstateCode.committing_command)
-            log_record = await self.log.read(self.orig_log_record.index)
-            log_record.result = command_result
-            new_rec = await self.log.replace(log_record)
-        self.result = result
-        async with self.done_condition:
-            self.done_condition.notify()
-        return 
-        
 class Leader(BaseRole):
 
     def __init__(self, hull, term, use_check_quorum):
@@ -119,16 +40,16 @@ class Leader(BaseRole):
         self.bcast_pendings = []
         self.use_check_quorum = use_check_quorum
         self.accepting_commands = True
+        self.exit_in_progress = False
 
-    @property
-    def max_entries_per_message(self):
-        return self.hull.get_max_entries_per_message()
+    async def max_entries_per_message(self):
+        return await self.hull.get_max_entries_per_message()
         
     async def start(self):
         await super().start()
         for uri in self.hull.get_cluster_node_ids():
             tracker = await self.tracker_for_follower(uri)
-        await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
+        await self.run_after(await self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
         start_record = LogRec(code=RecordCode.term_start,
                               term=await self.log.get_term(),
                               leader_id=self.my_uri())
@@ -140,7 +61,7 @@ class Leader(BaseRole):
             raise Exception(f"{target_node} is not in cluster node list")
         asyncio.get_event_loop().call_soon(lambda target_node=target_node:
                                          asyncio.create_task(self.transfer_runner(target_node)))
-        etime_min, etime_max = self.hull.get_election_timeout_range()
+        etime_min, etime_max = await self.hull.get_election_timeout_range()
         self.accepting_commands = False
         return time.time() + etime_max
         
@@ -148,7 +69,7 @@ class Leader(BaseRole):
         self.logger.info("%s checking readiness for power transfer to %s", self.my_uri(), target_node)
         tracker = self.follower_trackers[target_node]
         start_time = time.time()
-        etime_min, etime_max = self.hull.get_election_timeout_range()
+        etime_min, etime_max = await self.hull.get_election_timeout_range()
         time_limit = time.time() + etime_max
         while tracker.matchIndex < await self.log.get_commit_index() and time.time() < time_limit:
             await self.send_heartbeats()
@@ -247,7 +168,7 @@ class Leader(BaseRole):
         
     async def scheduled_send_heartbeats(self):
         await self.send_heartbeats()
-        await self.run_after(self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
+        await self.run_after(await self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
         
     async def send_heartbeats(self):
         entries = []
@@ -373,8 +294,9 @@ class Leader(BaseRole):
         send_start_index = tracker.matchIndex + 1
         send_end_index = await self.log.get_last_index()
         # we want to send max of XXX, math is inclusive of both start and end
-        if send_end_index - send_start_index > self.max_entries_per_message:
-            send_end_index = send_start_index + self.max_entries_per_message
+        max_e = await self.max_entries_per_message()
+        if send_end_index - send_start_index > max_e:
+            send_end_index = send_start_index + max_e
         tracker.nextIndex = send_end_index + 1
         tracker.lastSentIndex = send_end_index
         entries = []
@@ -479,7 +401,7 @@ class Leader(BaseRole):
         self.logger.debug("%s after in message pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
                 
     async def check_quorum(self):
-        et_min, et_max = self.hull.get_election_timeout_range()
+        et_min, et_max = await self.hull.get_election_timeout_range()
         node_count = len(self.hull.get_cluster_node_ids())
         quorum = int(node_count/2) # normal cluster is odd, yielding x.5, with this server added, will be more than half
         pop_bcasts = []
@@ -506,5 +428,117 @@ class Leader(BaseRole):
                                       matchIndex=0)
             self.follower_trackers[uri] = tracker
         return tracker
-        
 
+    async def on_membership_change_message(self, message):
+        ok = await self.do_node_exit(message.op, message.target_uri)
+        await self.send_membership_change_response_message(message, ok=ok)
+        return 
+
+    async def do_node_exit(self, op, target_uri):
+        ok = False
+        command = None
+        if op == "ADD":
+            try:
+                config = await self.hull.start_node_add(target_uri)
+                command = dict(op="add_node", config=config, operand=target_uri)
+                ok = True
+            except Exception as e:
+                self.logger.error(f"got error trying to service add node message {e}")
+        elif op == "REMOVE":
+            try:
+                config = await self.hull.start_node_remove(target_uri)
+                command = dict(op="remove_node", config=config, operand=target_uri)
+                ok = True
+            except Exception as e:
+                self.logger.error(f"got error trying to service remove node message {e}")
+        else:
+            self.logger.error(f"got unknown op {op} trying to service membership change message")
+                
+        if ok:
+            encoded = json.dumps(command, default=lambda o:o.__dict__)
+            rec = LogRec(code=RecordCode.cluster_config, command=encoded)
+            rec_to_send = await self.log.append(rec)
+            await self.broadcast_log_record(rec_to_send)
+            if target_uri == self.my_uri():
+                self.exit_in_progress = True
+        return ok
+    
+class CommandWaiter:
+
+    def __init__(self, leader, log, orig_log_record, timeout=1.0):
+        self.leader = leader
+        self.log = log
+        self.orig_log_record = orig_log_record
+        self.timeout = timeout
+        self.done_condition = asyncio.Condition()
+        self.committed = False
+        self.time_expired = False
+        self.local_error = None
+        self.result = None
+
+    async def wait_for_result(self):
+
+        async def do_timeout(timeout):
+            start_time = time.time()
+            while not self.committed and not self.local_error:
+                await asyncio.sleep(0.001)
+                if time.time() - start_time >= timeout:
+                    self.time_expired = True
+                    self.leader.logger.warning("%s !!!!!!!!!! Timeout on command ", self.leader.my_uri())
+                    raise TimeoutTaskGroup(f"timeout after {timeout}")
+            
+        async def check_done():
+            while not self.time_expired and not self.result:
+                async with self.done_condition:
+                    await self.done_condition.wait()
+                    self.leader.logger.debug("%s check_done awake from command ", self.leader.my_uri())
+            return self.result
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(check_done())
+                tg.create_task(do_timeout(self.timeout))
+                self.leader.logger.debug("%s scheduled timeout for %f and check_done", self.leader.my_uri(), self.timeout)
+        except* TimeoutTaskGroup:
+            self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
+            hull = self.leader.hull
+            leader_uri = None
+            if hull.role != self.leader:
+                if hasattr(hull.role, 'leader_uri'):
+                    leader_uri = hull.role.leader_uri
+                self.leader.logger.debug("%s after timeout exception am no longer leader! maybe %s?",
+                                         self.leader.my_uri(), leader_uri)
+                self.result = CommandResult(command=self.orig_log_record.command,
+                                            committed=False,
+                                            redirect=leader_uri)
+            else:
+                self.leader.logger.debug("%s command timeout exception",
+                                         self.leader.my_uri())
+                self.result = CommandResult(command=self.orig_log_record.command,
+                                            committed=False,
+                                            timeout_expired=True)
+            
+        return self.result
+
+    async def handle_run_result(self, command_result, error_data):
+        if not error_data:
+            self.committed = True
+        self.local_error = error_data
+        result = CommandResult(command=self.orig_log_record.command,
+                               committed=self.committed,
+                               timeout_expired=False,
+                               result=command_result,
+                               error=error_data,
+                               redirect=None)
+        if error_data:
+            await self.leader.hull.record_substate(SubstateCode.failed_command)
+        else:
+            await self.leader.hull.record_substate(SubstateCode.committing_command)
+            log_record = await self.log.read(self.orig_log_record.index)
+            log_record.result = command_result
+            new_rec = await self.log.replace(log_record)
+        self.result = result
+        async with self.done_condition:
+            self.done_condition.notify()
+        return 
+        

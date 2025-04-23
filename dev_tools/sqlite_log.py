@@ -76,6 +76,26 @@ class Records:
             "(dummy INTERGER primary key, max_index INTEGER," \
             " term INTEGER, voted_for TEXT)"
         cursor.execute(schema)
+        schema =  "CREATE TABLE if not exists nodes " 
+        schema += "(uri TEXT PRIMARY KEY UNIQUE, " 
+        schema += "is_adding BOOLEAN, " 
+        schema += "is_removing BOOLEAN, " 
+        schema += "is_loading BOOLEAN)" 
+        cursor.execute(schema)
+        schema =  "CREATE TABLE if not exists settings " 
+        schema += "(the_index INTEGER PRIMARY KEY UNIQUE, " 
+        schema += "heartbeat_period FLOAT, " 
+        schema += "election_timeout_min FLOAT, " 
+        schema += "election_timeout_max FLOAT, " 
+        schema += "max_entries_per_message int, "
+        schema += "use_pre_vote BOOLEAN, "
+        schema += "use_check_quorum BOOLEAN, "
+        schema += "use_dynamic_config BOOLEAN) "
+        cursor.execute(schema)
+        schema = f"CREATE TABLE if not exists stats " \
+            "(dummy INTERGER primary key, max_index INTEGER," \
+            " term INTEGER, voted_for TEXT)"
+        cursor.execute(schema)
         self.db.commit()
         cursor.close()
                      
@@ -219,6 +239,52 @@ class Records:
         self.db.commit()
         cursor.close()
     
+    def save_cluster_config(self, config: ClusterConfig) -> None:
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        cursor = self.db.cursor()
+        for node in config.nodes.values():
+            sql = "insert or replace into nodes (uri, is_adding, is_removing, is_loading)"
+            sql += " values (?,?,?,?)"
+            cursor.execute(sql, [node.uri, node.is_adding, node.is_removing, node.is_loading])
+        sql = "insert or replace into settings (the_index, heartbeat_period, election_timeout_min,"
+        sql += "election_timeout_max, use_pre_vote, use_check_quorum, use_dynamic_config)"
+        sql += " values (?,?,?,?,?,?,?)"
+        cs = config.settings
+        cursor.execute(sql, [1, cs.heartbeat_period, cs.election_timeout_min, cs.election_timeout_max,
+                             cs.use_pre_vote, cs.use_check_quorum, cs.use_dynamic_config])
+        self.db.commit()
+        cursor.close()
+    
+    def get_cluster_config(self) -> Optional[ClusterConfig]:
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        cursor = self.db.cursor()
+        sql = "select * from settings where the_index == 1"
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        settings = ClusterSettings(heartbeat_period=row['heartbeat_period'],
+                                   election_timeout_min=row['election_timeout_min'],
+                                   election_timeout_max=row['election_timeout_max'],
+                                   max_entries_per_message=row['max_entries_per_message'],
+                                   use_pre_vote=row['use_pre_vote'],
+                                   use_check_quorum=row['use_check_quorum'],
+                                   use_dynamic_config=row['use_dynamic_config'])
+
+        nodes = {}
+        sql = "select * from nodes"
+        cursor.execute(sql)
+        for row in cursor.fetchall():
+            rec = NodeRec(uri=row['uri'],
+                          is_adding=row['is_adding'],
+                          is_removing=row['is_removing'],
+                          is_loading=row['is_loading'])
+            nodes[rec.uri] = rec
+        res = ClusterConfig(nodes=nodes, settings=settings)
+        return res
+    
 class SqliteLog(LogAPI):
 
     def __init__(self, filepath: os.PathLike):
@@ -343,7 +409,6 @@ class SqliteLog(LogAPI):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         return self.records.delete_all_from(index)
-    
 
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         return self.records.save_cluster_config(config)

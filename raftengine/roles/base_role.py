@@ -4,6 +4,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
 from raftengine.api.types import RoleName, SubstateCode
     
 class BaseRole:
@@ -40,12 +41,17 @@ class BaseRole:
         code = PreVoteResponseMessage.get_code()
         route = self.on_pre_vote_response
         self.routes[code] = route
-
         code = TransferPowerMessage.get_code()
         route = self.on_transfer_power_message
         self.routes[code] = route
         code = TransferPowerResponseMessage.get_code()
         route = self.on_transfer_power_response
+        self.routes[code] = route
+        code = MembershipChangeMessage.get_code()
+        route = self.on_membership_change_message
+        self.routes[code] = route
+        code = MembershipChangeResponseMessage.get_code()        
+        route = self.on_membership_change_response
         self.routes[code] = route
 
     async def start(self):
@@ -67,16 +73,17 @@ class BaseRole:
         await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
-        if (message.term > await self.log.get_term()
-            and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
-            self.logger.debug('%s received message from higher term, calling self.term_expired',
-                              self.my_uri())
-            res = await self.term_expired(message)
-            if not res:
-                self.logger.debug('%s self.term_expired said no further processing required',
+        if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
+            if (message.term > await self.log.get_term()
+                and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
+                self.logger.debug('%s received message from higher term, calling self.term_expired',
                                   self.my_uri())
-                # no additional handling of message needed
-                return None
+                res = await self.term_expired(message)
+                if not res:
+                    self.logger.debug('%s self.term_expired said no further processing required',
+                                      self.my_uri())
+                    # no additional handling of message needed
+                    return None
         route = self.routes.get(message.get_code(), None)
         if route:
             return await route(message)
@@ -213,6 +220,34 @@ class BaseRole:
                                                          prevLogTerm=await self.log.get_last_term(),
                                                          success=success)
         await self.hull.send_response(message, xfer_power_response)
+
+    async def send_self_exit(self):
+        message = MembershipChangeMessage(sender=self.my_uri(),
+                                      receiver=self.leader_uri,
+                                      op=ChangeOp.remove,
+                                      target_uri=self.my_uri())
+        await self.hull.send_message(message)
+    
+    async def on_membership_change_message(self, message):
+        problem = 'pre_membership_change_message not implemented in the class '
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
+        self.logger.warning(problem)
+        await self.hull.record_message_problem(message, problem)
+        await self.send_membership_change_response_message(message, ok=False)
+        
+    async def on_membership_change_response(self, message):
+        problem = 'pre_membership_change_respone not implemented in the class '
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, ignoring'
+        self.logger.warning(problem)
+        await self.hull.record_message_problem(message, problem)
+        
+    async def send_membership_change_response_message(self, message, ok=True):
+        response = MembershipChangeResponseMessage(sender=self.my_uri(),
+                                                   receiver=message.sender,
+                                                   op=message.op,
+                                                   target_uri=message.target_uri,
+                                                   ok=ok)
+        await self.hull.send_response(message, response)
         
     def my_uri(self):
         return self.hull.get_my_uri()

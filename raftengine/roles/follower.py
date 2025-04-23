@@ -8,6 +8,7 @@ from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteResponseMessage
 from raftengine.roles.base_role import BaseRole
+from raftengine.messages.cluster_change import MembershipChangeMessage
 
 class Follower(BaseRole):
 
@@ -24,7 +25,7 @@ class Follower(BaseRole):
         await super().start()
         self.last_leader_contact = time.time()
         await self.hull.record_substate(SubstateCode.leader_unknown)
-        await self.run_after(self.hull.get_election_timeout(), self.contact_checker)
+        await self.run_after(await self.hull.get_election_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
         self.last_leader_contact = time.time()
@@ -82,6 +83,9 @@ class Follower(BaseRole):
             self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
             recs.append(await self.log.append(log_rec))
+            # config changes are applied immediately
+            if log_rec.code == RecordCode.cluster_config:
+                await self.hull.handle_membership_change_log_update(log_rec)
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)
         if message.commitIndex >= await self.log.get_last_index():
@@ -184,8 +188,10 @@ class Follower(BaseRole):
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
-            
-            
+             
+    async def on_membership_change_response(self, message):
+        pass
+           
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term
         # value that they receive in a message. Always means an election has
@@ -227,13 +233,13 @@ class Follower(BaseRole):
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):
-        max_time = self.hull.get_election_timeout()
+        max_time = await self.hull.get_election_timeout()
         e_time = time.time() - self.last_leader_contact
         if e_time > max_time:
             self.logger.debug("%s lost leader after %f", self.my_uri(), e_time)
             await self.leader_lost()
             return
         # reschedule
-        await self.run_after(self.hull.get_election_timeout(), self.contact_checker)
+        await self.run_after(await self.hull.get_election_timeout(), self.contact_checker)
     
 

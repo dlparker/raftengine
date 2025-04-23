@@ -69,9 +69,3 @@ class ClusterInitConfig:
     use_check_quorum: bool = True
     use_dynamic_config: bool = True
 
-    @classmethod
-    def from_dict(cls, data):
-        copy_of = dict(data)
-        msg = cls(**copy_of)
-        return msg
-    

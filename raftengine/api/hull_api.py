@@ -43,7 +43,7 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    def change_cluster_config(self, cluster_config: ClusterInitConfig):
+    async def change_cluster_config(self, cluster_config: ClusterInitConfig):
         """
         Replace the existing cluster_config with the supplied version. Note that this
         assumes that the configuration has already been propogated via Raft memebership

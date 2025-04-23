@@ -271,12 +271,12 @@ async def test_reelection_3(cluster_maker):
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
-    ts_1.change_cluster_config(cfg)
-    ts_2.change_cluster_config(cfg)
+    await ts_1.change_cluster_config(cfg)
+    await ts_2.change_cluster_config(cfg)
     # okay to do this, PausingServer makes a copy on change call
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    ts_3.change_cluster_config(cfg)
+    await ts_3.change_cluster_config(cfg)
 
 
     cluster.test_trace.start_subtest("Starting cluster with election timeout timers active, biased for node 3 to win",
@@ -307,15 +307,15 @@ async def test_reelection_3(cluster_maker):
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 1
     cfg.election_timeout_max = 1.2
-    ts_1.change_cluster_config(cfg)
+    await ts_1.change_cluster_config(cfg)
     # okay to do this, PausingServer makes a copy on change call
     cfg.election_timeout_min = 0.001
     cfg.election_timeout_max = 0.0011
-    ts_2.change_cluster_config(cfg)
+    await ts_2.change_cluster_config(cfg)
     # okay to do this, PausingServer makes a copy on change call
     cfg.election_timeout_min = 1
     cfg.election_timeout_max = 1.2
-    ts_3.change_cluster_config(cfg)
+    await ts_3.change_cluster_config(cfg)
 
     logger.warning('\n\n----------- ts_3 starting campaign\n\n')
     await ts_3.do_demote_and_handle(None)
