@@ -128,9 +128,13 @@ class LogAPI(abc.ABC):
     async def delete_all_from(self, index: int) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
 
-#    @abc.abstractmethod
-#    async def save_cluster_config(self, config: ClusterConfig) -> None:  # pragma: no cover abstract
-#        raise NotImplementedError
+    @abc.abstractmethod
+    async def save_cluster_config(self, config: ClusterConfig) -> None:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_cluster_config(self) -> Optional[ClusterConfigNone]:  # pragma: no cover abstract
+        raise NotImplementedError
 
     
         

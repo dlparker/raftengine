@@ -46,7 +46,7 @@ async def get_cluster_op(log, rec_id):
     operand = command['operand']
     return op, config, operand
 
-async def test_new_config(cluster_maker):
+async def test_save_config(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(election_timeout_min=0.01,
                                           election_timeout_max=0.011)
@@ -54,7 +54,14 @@ async def test_new_config(cluster_maker):
     for uri in config.node_uris:
         nd[uri] = NodeRec(uri)
     cc = ClusterConfig(nodes=nd)
-    pprint(cc)
+    log = MemoryLog()
+    log.start()
+
+    log.save_cluster_config(cc)
+    cc2 = log.get_cluster_config()
+    assert cc.nodes == cc2.nodes
+
+    
     
 async def test_log_config(cluster_maker):
     log = MemoryLog()

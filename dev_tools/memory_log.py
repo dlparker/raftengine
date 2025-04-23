@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from raftengine.api.log_api import LogRec, LogAPI
-from raftengine.api.types import ClusterConfig
+from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 logger = logging.getLogger(__name__)
 class Records:
@@ -11,7 +11,9 @@ class Records:
     def __init__(self):
         # log record indexes start at 1, per raftengine spec
         self.entries = []
-        self.cluster_config = None
+        self.nodes = None
+        self.pending_node = None
+        self.cluster_settings = None
 
     @classmethod
     def from_json_dict(cls, jdict):
@@ -60,7 +62,17 @@ class Records:
         else:
             self.entries = self.entries[:index-1]
         
-        
+    async def save_cluster_config(self, config: ClusterConfig) -> None:
+        self.nodes = config.nodes
+        self.pending_node = config.pending_node
+        self.cluster_settings = config.settings
+    
+    async def get_cluster_config(self):
+        if self.nodes is None:
+            return None
+        return ClusterConfig(nodes=self.nodes,
+                             pending_node=self.pending_node,
+                             settings=self.cluster_settings)
     
 class MemoryLog(LogAPI):
 
@@ -163,6 +175,9 @@ class MemoryLog(LogAPI):
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         return self.records.save_cluster_config(config)
     
+    async def get_cluster_config(self) -> Optional[ClusterConfigNone]:  
+        return self.records.get_cluster_config()
+
     def close(self):
         pass
 
