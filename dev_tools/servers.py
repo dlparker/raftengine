@@ -14,7 +14,7 @@ from logging.config import dictConfig
 from collections import defaultdict
 import pytest
 
-from raftengine.api.hull_config import ClusterConfig, LocalConfig
+from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 from raftengine.api.log_api import LogRec
 from raftengine.hull.hull import Hull
 from raftengine.messages.append_entries import AppendEntriesMessage
@@ -1760,13 +1760,13 @@ class PausingCluster:
                              use_dynamic_config=False):
 
         c_list = self.node_uris[::]
-        cc = ClusterConfig(node_uris=c_list,
-                           heartbeat_period=heartbeat_period,
-                           election_timeout_min=election_timeout_min,
-                           election_timeout_max=election_timeout_max,
-                           max_entries_per_message=10,
-                           use_pre_vote=use_pre_vote,
-                           use_dynamic_config=use_dynamic_config)
+        cc = ClusterInitConfig(node_uris=c_list,
+                               heartbeat_period=heartbeat_period,
+                               election_timeout_min=election_timeout_min,
+                               election_timeout_max=election_timeout_max,
+                               max_entries_per_message=10,
+                               use_pre_vote=use_pre_vote,
+                               use_dynamic_config=use_dynamic_config)
                            
         return cc
 

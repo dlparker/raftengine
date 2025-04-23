@@ -13,6 +13,11 @@
   Want to implement them as opt in features, segregate tests 
 4. [] Cluster membership change protocol
 5. [] Snapshots
+6. [] Look at logic for sending new log entries, is there a worthwhile optimization for sending a batch of entries
+   on command? Doesn't seem likely, because that would mean delaying the earlier command records until later
+   command records arrive, but think about it
+7. [] See if complexity can be justified to all catchup entries to heartbeat message, though I am not sure when
+   that would be necessary.
 
 * Test questions and issues and Demo issues
 

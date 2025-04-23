@@ -7,8 +7,9 @@ from pathlib import Path
 from pprint import pprint
 import pytest
 from raftengine.hull.hull import EventType, EventHandler
+from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.hull_config import ClusterConfig
+from raftengine.api.hull_config import ClusterInitConfig
 from dev_tools.memory_log import MemoryLog
 from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.servers import setup_logging
@@ -41,10 +42,20 @@ async def get_cluster_op(log, rec_id):
     command = json.loads(rec.command)
     op = command['op']
     jconfig = command['config']
-    config = ClusterConfig.from_dict(jconfig)
+    config = ClusterInitConfig.from_dict(jconfig)
     operand = command['operand']
     return op, config, operand
 
+async def test_new_config(cluster_maker):
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(election_timeout_min=0.01,
+                                          election_timeout_max=0.011)
+    nd = {}
+    for uri in config.node_uris:
+        nd[uri] = NodeRec(uri)
+    cc = ClusterConfig(nodes=nd)
+    pprint(cc)
+    
 async def test_log_config(cluster_maker):
     log = MemoryLog()
     log.start()
@@ -72,7 +83,7 @@ async def test_log_config(cluster_maker):
         op, config, operand = await get_cluster_op(log, rec_id)
         pprint(f"op='{op}', operand='{operand}', config={config}")
 
-    
+                
 
 async def not_a_test_event_perf(cluster_maker):
     if False:

@@ -25,7 +25,7 @@ from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
 from raftengine.api.events import EventType, EventHandler
-from raftengine.api.hull_config import ClusterConfig, LocalConfig
+from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
 class EventControl:
 
@@ -118,7 +118,7 @@ class EventControl:
 class Hull(HullAPI):
 
     # Part of API
-    def __init__(self, cluster_config: ClusterConfig, local_config: LocalConfig, pilot: PilotAPI):
+    def __init__(self, cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
         self.cluster_config = cluster_config
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
@@ -135,7 +135,7 @@ class Hull(HullAPI):
         self.event_control = EventControl()
 
     # Part of API
-    def change_cluster_config(self, cluster_config: ClusterConfig):
+    def change_cluster_config(self, cluster_config: ClusterInitConfig):
         self.cluster_config = cluster_config
         
     # Part of API

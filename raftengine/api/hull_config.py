@@ -13,7 +13,6 @@ class LocalConfig:
     """
     Class used to supply details of the runtime configuration on the local machine to 
     the server code. 
-
     Args:
         working_dir:
             The location for the runtime to use as a working directory for output files 
@@ -26,10 +25,12 @@ class LocalConfig:
     uri: Any          # unique identifier of this server
 
 @dataclass
-class ClusterConfig:
+class ClusterInitConfig:
     """
-    Class used to supply details of the cluster configuration to the server code.
-
+    Class used to supply details of the initial cluster configuration to the server code.
+    The same information will be augmented and the results store in the log as
+    raftengine.api.types.ClusterConfig. Once save in the log that version will be used
+    and this initial config will no longer have any effect.
 
     Args:
         node_uris: 

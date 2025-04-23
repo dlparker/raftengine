@@ -1,3 +1,5 @@
+from dataclasses import dataclass, field
+from typing import Optional
 from enum import Enum
     
 class RoleName(str, Enum):
@@ -195,4 +197,26 @@ class CommandSerialRange:
     min_value = 1
     max_value = 18_446_744_073_709_551_615
 
+@dataclass
+class NodeRec:
+    uri: str
+    is_active: bool = field(default = True)
+    is_starting: bool = field(default = False)
+    is_stopping: bool = field(default = False)
+
+@dataclass
+class ClusterSettings:
+    heartbeat_period: float = field(default = 0.01)
+    election_timeout_min: float = field(default = 0.150)
+    election_timeout_max: float = field(default = 0.300)
+    max_entries_per_message: int = field(default = 20)
+    use_pre_vote: bool = field(default = True)
+    use_check_quorum: bool = field(default = True)
+    use_dynamic_config: bool = field(default = True)
+    
+@dataclass
+class ClusterConfig:
+    nodes: dict[str,NodeRec] = field(default_factory=dict)
+    pending_node: Optional[NodeRec] = field(default=None)
+    settings: ClusterSettings = field(default_factory=lambda: ClusterSettings())
     

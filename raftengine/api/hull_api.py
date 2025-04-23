@@ -4,7 +4,7 @@ from enum import Enum
 from dataclasses import dataclass
 from raftengine.api.log_api import LogAPI, LogRec
 from raftengine.api.pilot_api import PilotAPI
-from raftengine.api.hull_config import ClusterConfig, LocalConfig
+from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
 @dataclass
 class CommandResult:
@@ -33,7 +33,7 @@ class HullAPI(abc.ABC):
     """
     
     @abc.abstractmethod
-    def __init__(self, cluster_config: ClusterConfig, local_config: LocalConfig, pilot: PilotAPI):
+    def __init__(self, cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
         """
         Initialize the RaftLibrary from the LocalConfig data and possibly the ClusterConfig
         data in the case that this is the first time this server instance has joined the cluster.
@@ -43,7 +43,7 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    def change_cluster_config(self, cluster_config: ClusterConfig):
+    def change_cluster_config(self, cluster_config: ClusterInitConfig):
         """
         Replace the existing cluster_config with the supplied version. Note that this
         assumes that the configuration has already been propogated via Raft memebership

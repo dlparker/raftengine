@@ -7,6 +7,7 @@ import abc
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional, Any
 from enum import Enum
+from raftengine.api.types import ClusterConfig
 
 class RecordCode(str, Enum):
     """ String enum representing purpose of record. """
@@ -126,6 +127,10 @@ class LogAPI(abc.ABC):
     @abc.abstractmethod
     async def delete_all_from(self, index: int) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
+
+#    @abc.abstractmethod
+#    async def save_cluster_config(self, config: ClusterConfig) -> None:  # pragma: no cover abstract
+#        raise NotImplementedError
 
     
         
