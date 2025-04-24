@@ -44,7 +44,9 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def send_response(self, target_uri: str, orig_message:str, reply:str):# pragma: no cover abstract
+    async def send_response(self, target_uri: str, orig_message:str, reply:str): # pragma: no cover abstract
         raise NotImplementedError
 
-
+    @abc.abstractmethod
+    async def stop_commanded(self) -> None: # pragma: no cover abstract
+        raise NotImplementedError

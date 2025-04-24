@@ -855,7 +855,7 @@ async def test_power_transfer_2(cluster_maker):
 
     cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer")
 
-    logger.info("-------- Buncho commands run, doing recover")
+    logger.info("-------- Buncho commands run, doing recover and transfer")
     await ts_2.recover_from_crash()
     await ts_1.transfer_power(ts_2.uri)
     start_time = time.time()

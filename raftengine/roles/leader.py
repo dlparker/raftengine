@@ -6,7 +6,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Any
 from enum import Enum
-from raftengine.api.types import RoleName, SubstateCode
+from raftengine.api.types import RoleName, SubstateCode, ClusterConfig
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
@@ -29,6 +29,7 @@ class FollowerTracker:
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
 
+
 class Leader(BaseRole):
 
     def __init__(self, hull, term, use_check_quorum):
@@ -41,6 +42,8 @@ class Leader(BaseRole):
         self.use_check_quorum = use_check_quorum
         self.accepting_commands = True
         self.exit_in_progress = False
+        self.transfer_in_progress = False
+        
 
     async def max_entries_per_message(self):
         return await self.hull.get_max_entries_per_message()
@@ -56,18 +59,21 @@ class Leader(BaseRole):
         the_record = await self.log.append(start_record)
         await self.broadcast_log_record(the_record)
 
-    async def transfer_power(self, target_node):
-        if target_node not in self.hull.get_cluster_node_ids():
-            raise Exception(f"{target_node} is not in cluster node list")
-        asyncio.get_event_loop().call_soon(lambda target_node=target_node:
-                                         asyncio.create_task(self.transfer_runner(target_node)))
+    async def transfer_power(self, target_uri, log_record=None):
+        if self.transfer_in_progress:
+            return
+        if target_uri not in self.hull.get_cluster_node_ids():
+            raise Exception(f"{target_uri} is not in cluster node list")
+        self.transfer_in_progress = True
+        asyncio.get_event_loop().call_soon(lambda target_uri=target_uri, log_record=log_record:
+                                         asyncio.create_task(self.transfer_runner(target_uri, log_record)))
         etime_min, etime_max = await self.hull.get_election_timeout_range()
         self.accepting_commands = False
         return time.time() + etime_max
         
-    async def transfer_runner(self, target_node):
-        self.logger.info("%s checking readiness for power transfer to %s", self.my_uri(), target_node)
-        tracker = self.follower_trackers[target_node]
+    async def transfer_runner(self, target_uri, log_record):
+        self.logger.info("%s checking readiness for power transfer to %s", self.my_uri(), target_uri)
+        tracker = self.follower_trackers[target_uri]
         start_time = time.time()
         etime_min, etime_max = await self.hull.get_election_timeout_range()
         time_limit = time.time() + etime_max
@@ -77,7 +83,7 @@ class Leader(BaseRole):
             while time.time() < time_limit:
                 still_pending = False
                 for msg in last_pending['messages']:
-                    if msg.receiver == target_node:
+                    if msg.receiver == target_uri:
                         still_pending = True
                         break
                 if not still_pending:
@@ -86,8 +92,9 @@ class Leader(BaseRole):
             await asyncio.sleep(0.01)
         if tracker.matchIndex < await self.log.get_commit_index():
             # we couldn't bring target up to date, have to give up
-            self.logger.error("%s checking readiness for power transfe to %s timeout", self.my_uri(), target_node)
+            self.logger.error("%s failed readiness check for power transfer to %s timeout", self.my_uri(), target_uri)
             self.accepting_commands = True
+            self.transfer_in_progress = False
             return
         # now it is up to date, so we can proceed
         prevLogIndex = 0
@@ -99,14 +106,27 @@ class Leader(BaseRole):
             prevLogTerm = prev_rec.term
         term = await self.log.get_term()
         message = TransferPowerMessage(sender=self.my_uri(),
-                                       receiver=target_node,
+                                       receiver=target_uri,
                                        term=term,
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex)
-        self.logger.info("%s sending transfer power to %s", self.my_uri(), target_node)
+        self.logger.info("%s sending transfer power to %s", self.my_uri(), target_uri)
         await self.hull.send_message(message)
+        if log_record:
+            # the fact that we got a log record means that we are supposed
+            # to exit, but let's check a couple of things to validate that
+            if log_record.code == RecordCode.cluster_config and self.exit_in_progress:
+                asyncio.get_event_loop().call_later(0.01, lambda log_record=log_record:
+                                         asyncio.create_task(self.delayed_exit(log_record)))
+                return
         return
-    
+
+    async def delayed_exit(self, log_record):
+        await self.hull.handle_membership_change_log_commit(log_record)
+        log_record.applied = True
+        await self.log.replace(log_record)
+        await self.hull.exiting_cluster()
+        
     async def run_command(self, command, timeout=1.0, serial=None):
         if not self.accepting_commands:
             return CommandResult(command=command,retry=True)
@@ -341,6 +361,8 @@ class Leader(BaseRole):
             await self.log.replace(rec)
             if rec.code == RecordCode.client_command:
                 asyncio.create_task(self.run_command_locally(rec))
+            elif rec.code == RecordCode.cluster_config:
+                await self.finish_cluster_config(rec)
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
@@ -368,6 +390,21 @@ class Leader(BaseRole):
         if waiter:
             await waiter.handle_run_result(result, error_data)
 
+    async def finish_cluster_config(self, log_record):
+        if log_record.applied:
+            return
+        cdict = json.loads(log_record.command)
+        op = cdict['op']
+        operand = cdict['operand']
+        if op == "remove_node" and operand == self.my_uri():
+            config = ClusterConfig(**cdict['config'])
+            t_uri = list(config.nodes.keys())[0]
+            await self.transfer_power(t_uri, log_record)
+            return
+        await self.hull.handle_membership_change_log_commit(log_record)
+        log_record.applied = True
+        await self.log.replace(log_record)
+        
     async def term_expired(self, message):
         await self.hull.set_term(message.term)
         await self.hull.demote_and_handle(message)
@@ -430,38 +467,43 @@ class Leader(BaseRole):
         return tracker
 
     async def on_membership_change_message(self, message):
-        ok = await self.do_node_exit(message.op, message.target_uri)
+        ok = await self.do_node_inout(message.op, message.target_uri)
         await self.send_membership_change_response_message(message, ok=ok)
         return 
 
-    async def do_node_exit(self, op, target_uri):
-        ok = False
+    async def do_node_exit(self, target_uri):
+        return await self.do_node_inout("REMOVE", target_uri)
+    
+    async def do_node_inout(self, op, target_uri):
         command = None
         if op == "ADD":
-            try:
-                config = await self.hull.start_node_add(target_uri)
-                command = dict(op="add_node", config=config, operand=target_uri)
-                ok = True
-            except Exception as e:
-                self.logger.error(f"got error trying to service add node message {e}")
+            plan = await self.hull.plan_add_node(target_uri)
+            command = dict(op="add_node", config=plan, operand=target_uri)
         elif op == "REMOVE":
-            try:
-                config = await self.hull.start_node_remove(target_uri)
-                command = dict(op="remove_node", config=config, operand=target_uri)
-                ok = True
-            except Exception as e:
-                self.logger.error(f"got error trying to service remove node message {e}")
+            plan = await self.hull.plan_remove_node(target_uri)
+            command = dict(op="remove_node", config=plan, operand=target_uri)
         else:
             self.logger.error(f"got unknown op {op} trying to service membership change message")
-                
-        if ok:
-            encoded = json.dumps(command, default=lambda o:o.__dict__)
-            rec = LogRec(code=RecordCode.cluster_config, command=encoded)
-            rec_to_send = await self.log.append(rec)
-            await self.broadcast_log_record(rec_to_send)
-            if target_uri == self.my_uri():
-                self.exit_in_progress = True
-        return ok
+            return False
+        if not command:
+            self.logger.warning("%s could not perform request to %s node %s", self.get_my_uri(),
+                                op, target_uri)
+            return False
+        # gotta do the broadcast first, because applying it on remove means
+        # that the target node is no longer in the list to receive broadcasts.
+        # ask me how I know
+        
+        encoded = json.dumps(command, default=lambda o:o.__dict__)
+        rec = LogRec(code=RecordCode.cluster_config, command=encoded)
+        rec_to_send = await self.log.append(rec)
+        await self.broadcast_log_record(rec_to_send)
+        if op == "ADD":
+            await self.hull.start_node_add(target_uri)
+        else:
+            await self.hull.start_node_remove(target_uri)
+        if target_uri == self.my_uri():
+            self.exit_in_progress = True
+        return True
     
 class CommandWaiter:
 

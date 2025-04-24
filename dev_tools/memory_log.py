@@ -2,6 +2,7 @@ import abc
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
+from copy import deepcopy
 from raftengine.api.log_api import LogRec, LogAPI
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
@@ -63,19 +64,19 @@ class Records:
             self.entries = self.entries[:index-1]
         
     async def save_cluster_config(self, config: ClusterConfig) -> None:
-        self.nodes = config.nodes
-        self.pending_node = config.pending_node
-        self.cluster_settings = config.settings
-        return ClusterConfig(nodes=self.nodes,
-                             pending_node=self.pending_node,
-                             settings=self.cluster_settings)
+        self.nodes = deepcopy(config.nodes)
+        self.pending_node = deepcopy(config.pending_node)
+        self.cluster_settings = deepcopy(config.settings)
+        return ClusterConfig(nodes=deepcopy(self.nodes),
+                             pending_node=deepcopy(self.pending_node),
+                             settings=deepcopy(self.cluster_settings))
     
     async def get_cluster_config(self):
         if self.nodes is None:
             return None
-        return ClusterConfig(nodes=self.nodes,
-                             pending_node=self.pending_node,
-                             settings=self.cluster_settings)
+        return ClusterConfig(nodes=deepcopy(self.nodes),
+                             pending_node=deepcopy(self.pending_node),
+                             settings=deepcopy(self.cluster_settings))
     
 class MemoryLog(LogAPI):
 

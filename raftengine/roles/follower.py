@@ -126,9 +126,20 @@ class Follower(BaseRole):
             log_rec = await self.log.read(index)
             if log_rec.code == RecordCode.client_command:
                 if not log_rec.applied:
-                    self.logger.debug("%s applying %d ", self.my_uri(), log_rec.index)
+                    self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
                     await self.process_command_record(log_rec)
+            if log_rec.code == RecordCode.cluster_config:
+                if not log_rec.applied:
+                    self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
+                    await self.process_cluster_config(log_rec)
                 
+    async def process_cluster_config(self, log_record):
+        if log_record.applied:
+            return
+        await self.hull.handle_membership_change_log_commit(log_record)
+        log_record.applied = True
+        await self.log.replace(log_record)
+
     async def process_command_record(self, log_record):
         result = None
         error_data = None

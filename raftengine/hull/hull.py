@@ -6,6 +6,7 @@ import time
 import json
 from typing import Optional
 from collections import defaultdict
+from copy import deepcopy
     
 
 from raftengine.api.types import RoleName, SubstateCode
@@ -47,6 +48,7 @@ class Hull(HullAPI):
         self.message_problem_history = []
         self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
+        self.current_config = None
 
     # For testing only
     async def change_cluster_config(self, init: ClusterInitConfig):
@@ -60,10 +62,13 @@ class Hull(HullAPI):
                                    use_check_quorum=init.use_check_quorum,
                                    use_dynamic_config=init.use_dynamic_config)
         config.settings = settings
-        return await self.log.save_cluster_config(config)
+        res = await self.log.save_cluster_config(config)
+        self.current_config = res
+        return res
         
     # Part of API
     async def start(self):
+        await self.get_cluster_config()
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
@@ -149,10 +154,22 @@ class Hull(HullAPI):
             config = await self.start_node_add(operand)
         if op == "remove_node":
             config = await self.start_node_remove(operand)
-        self.logger.debug(f"{self.get_my_uri()}\n\nop={op} operand={operand}\n\n")
-        self.logger.debug(f"{cdict['config']}\n\n")
-        self.logger.debug(f"{config.__dict__}\n\n")
+        self.logger.debug(f"%s started op=%s operand=%s", self.get_my_uri(), op, operand)
+        if operand == self.get_my_uri():
+            self.logger.warning("%s calling stop on self", self.get_my_uri())
+            await self.exiting_cluster()
+            return
 
+    async def handle_membership_change_log_commit(self, log_rec):
+        cdict = json.loads(log_rec.command)
+        config = ClusterConfig(**cdict['config'])
+        op = cdict['op']
+        operand = cdict['operand']
+        if op == "add_node":
+            config = await self.finish_node_add(operand)
+        if op == "remove_node":
+            config = await self.finish_node_remove(operand)
+        self.logger.debug(f"%s finished op=%s operand=%s", self.get_my_uri(), op, operand)
             
     # Called by Role
     def get_log(self):
@@ -188,7 +205,7 @@ class Hull(HullAPI):
 
     # Called by Role and in API
     def get_cluster_node_ids(self):
-        return self.cluster_init_config.node_uris
+        return list(self.current_config.nodes.keys())
 
     # Called by Role and in API
     async def get_heartbeat_period(self):
@@ -234,6 +251,13 @@ class Hull(HullAPI):
             self.role_async_handle.cancel()
             self.role_async_handle = None
 
+    async def exiting_cluster(self):
+        await self.pilot.stop_commanded()
+        if not self.role.role_name == "FOLLOWER":
+            await self.stop_role()
+            self.role = Follower(self)
+        await self.role.stop()
+            
     # Called by Role
     async def transfer_power(self, other_uri):
         if self.role.role_name == "LEADER":
@@ -348,6 +372,7 @@ class Hull(HullAPI):
         log = self.get_log()
         stored_config = await log.get_cluster_config()
         if stored_config:
+            self.current_config = stored_config
             return stored_config
         nd = {}
         init = self.cluster_init_config
@@ -361,19 +386,45 @@ class Hull(HullAPI):
                                    use_check_quorum=init.use_check_quorum,
                                    use_dynamic_config=init.use_dynamic_config)
         cc = ClusterConfig(nodes=nd, settings=settings)
-        await log.save_cluster_config(cc)
-        return await log.get_cluster_config()
+        res = await log.save_cluster_config(cc)
+        self.current_config = res
+        return res
 
+    async def plan_add_node(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node:
+            return None
+        if node_uri not in cc.nodes:
+            new_cc = deepcopy(cc)
+            rec = NodeRec(node_uri)
+            rec.is_adding = True
+            rec.is_loading = True
+            new_cc.pending_node = rec
+            return new_cc
+        return None
+
+    async def plan_remove_node(self, node_uri):
+        cc = await self.get_cluster_config()
+        if cc.pending_node:
+            return None
+        if node_uri in cc.nodes:
+            new_cc = deepcopy(cc)
+            rec = new_cc.nodes[node_uri]
+            rec.is_removing = True
+            new_cc.pending_node = rec
+            del new_cc.nodes[node_uri]
+            return new_cc
+        return None
+        
     async def start_node_add(self, node_uri):
         cc = await self.get_cluster_config()
         if cc.pending_node:
             raise Exception(f"cluster memebership change already in progress with node {cc.pending_node.uri}")
         if node_uri not in cc.nodes:
-            rec = NodeRec(node_uri)
-            cc.pending_node = rec
-            rec.is_adding = True
-            rec.is_loading = True
-            return await self.log.save_cluster_config(cc)
+            new_cc = await self.plan_add_node(node_uri)
+            res = await self.log.save_cluster_config(new_cc)
+            self.current_config = res
+            return res
         raise Exception(f'node {node_uri} is already in active node set')
 
     async def node_add_prepared(self, node_uri):
@@ -381,7 +432,9 @@ class Hull(HullAPI):
         if cc.pending_node is None or cc.pending_node.uri != node_uri:
             raise Exception(f'node {node_uri} is not pending add')
         cc.pending_node.is_loading = False
-        return await self.log.save_cluster_config(cc)
+        res =  await self.log.save_cluster_config(cc)
+        self.current_config = res
+        return res
         
     async def finish_node_add(self, node_uri):
         cc = await self.get_cluster_config()
@@ -391,7 +444,9 @@ class Hull(HullAPI):
             cc.pending_node.is_adding = False
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None
-            return await self.log.save_cluster_config(cc)
+            res =  await self.log.save_cluster_config(cc)
+            self.current_config = res
+            return res
         raise Exception(f'node {node_uri} is not pending addition')
 
     async def start_node_remove(self, node_uri):
@@ -399,18 +454,19 @@ class Hull(HullAPI):
         if cc.pending_node:
             raise Exception(f"cannot remove node {node_uri}, another action is pending for node {cc.pending_node.uri}")
         if node_uri in cc.nodes:
-            rec = cc.nodes[node_uri]
-            cc.pending_node = rec
-            rec.is_removing = True
-            del cc.nodes[node_uri]
-            return await self.log.save_cluster_config(cc)
+            new_cc = await self.plan_remove_node(node_uri)
+            res =  await self.log.save_cluster_config(new_cc)
+            self.current_config = res
+            return res
         raise Exception(f'node {node_uri} is not in active node set')
 
     async def finish_node_remove(self, node_uri):
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_removing:
             cc.pending_node = None
-            return await self.log.save_cluster_config(cc)
+            res =  await self.log.save_cluster_config(cc)
+            self.current_config = res
+            return res
         raise Exception(f'node {node_uri} is not pending removal')
 
     async def node_is_voter(self, node_uri):

@@ -73,6 +73,13 @@ class BaseRole:
         await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
+        if (self.stopped and message.code == MembershipChangeMessage.get_code()
+            and message.op == ChangeOp.add and message.target_uri == self.my_uri()):
+            self.logger.debug('%s received command to reverse cluster exit', self.my_uri())
+            self.role.start()
+        elif self.stopped:
+            self.logger.debug('%s received message from %s but currently stoppped, ignoring', self.my_uri(), message.sender)
+            return
         if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
             if (message.term > await self.log.get_term()
                 and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):

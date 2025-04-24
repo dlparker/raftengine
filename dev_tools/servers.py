@@ -612,7 +612,7 @@ class Network:
             await self.test_trace.note_queued_in_message(node, message)
         
     async def deliver_all_pending(self, out_only=False):
-        """ This does the final part of the work for the Cluster "mamual" 
+        """ This does the final part of the work for the Cluster "manual" 
         message delivery control mechanism by finding and moving
         pending messages from one server's output list to another 
         servers input list and triggering the target server to process
@@ -630,16 +630,33 @@ class Network:
         # want to bounce around, not deliver each ts completely
         while any:
             any = False
-            for uri, node in self.nodes.items():
+            # since a node can exit during the loop, we need to make a copy of the node list
+            # and iterate on that
+            nodes = list(self.nodes.values())
+            for node in nodes:
                 node.am_paused = False
                 if len(node.in_messages) > 0 and not out_only:
-                    msg = await node.do_next_in_msg()
+                    try:
+                        msg = await node.do_next_in_msg()
+                    except:
+                        if node.hull is None:
+                            # node can get stop_commanded during this loop
+                            continue
+                        else:
+                            raise
                     if msg:
                         count += 1
                         in_ledger.append(msg)
                         any = True
                 if len(node.out_messages) > 0:
-                    msg = await node.do_next_out_msg()
+                    try:
+                        msg = await node.do_next_out_msg()
+                    except:
+                        if node.hull is None:
+                            # node can get stop_commanded during this loop
+                            continue
+                        else:
+                            raise
                     if msg:
                         count += 1
                         out_ledger.append(msg)
@@ -717,6 +734,21 @@ class NetManager:
             self.quorum_segment.set_test_trace(test_trace)
             for seg in self.other_segments:
                 seg.set_test_trace(test_trace)
+
+    def remove_node(self, uri):
+        if self.quorum_segment:
+             if uri in self.quorum_segment.nodes:
+                 node = self.quorum_segment.nodes[uri]
+                 self.quorum_segment.remove_node(node)
+                 return
+             for seg in self.other_segments:
+                if uri in seg.nodes:
+                    node = seg.nodes[uri]
+                    seg.remove_node(node)
+                    return
+        if uri in self.full_cluster.nodes:
+            node = self.full_cluster.nodes[uri]
+            self.full_cluster.remove_node(node)
         
     def get_majority_network(self):
         if self.quorum_segment:
@@ -912,7 +944,7 @@ class PausingServer(PilotAPI):
         return self.hull.role.leader_uri
         
     async def start_campaign(self, authorized=False):
-        res =  await self.hull.start_campaign(authorized=authorized)
+        res = await self.hull.start_campaign(authorized=authorized)
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
         return res
@@ -945,9 +977,6 @@ class PausingServer(PilotAPI):
     def get_log(self):
         return self.log
 
-    async def exit_cluster(self):
-        await self.hull.exit_cluster()
-    
     # Part of PilotAPI
     async def process_command(self, command, serial):
         return await self.operations.process_command(command, serial)
@@ -975,6 +1004,14 @@ class PausingServer(PilotAPI):
         if self.save_message_history:
             self.out_message_history.append(reply)
         
+    # Part of PilotAPI
+    async def stop_commanded(self) -> None: 
+        self.logger.debug('%s stop_commanded from hull', self.uri)
+        #await self.cluster.remove_node(self.uri)
+    
+    async def exit_cluster(self):
+        await self.hull.exit_cluster()
+    
     async def start(self):
         await self.hull.start()
         
@@ -1078,16 +1115,17 @@ class PausingServer(PilotAPI):
     async def cleanup(self):
         hull = self.hull
         if hull and hull.role:
-            self.logger.debug('cleanup stopping %s %s', hull.role, hull.get_my_uri())
+            self.logger.debug('cleanup stopping %s %s', hull.role, self.uri)
             handle =  hull.role_async_handle
             await hull.role.stop()
             if handle:
                 self.logger.debug('after %s %s stop, handle.cancelled() says %s',
-                                 hull.role, hull.get_my_uri(), handle.cancelled())
-            
-        self.hull = None
-        del hull
+                                 hull.role, self.uri, handle.cancelled())
+        if hull:
+            self.hull = None
+            del hull
         self.log.close()
+        self.logger.debug('cleanup done on %s', self.uri)
 
     def clear_triggers(self):
         self.trigger = None
@@ -1789,7 +1827,7 @@ class PausingCluster:
                                        )
             node.set_configs(local_config, cc)
 
-    def add_node(self):
+    def add_node(self, start=True):
         nid = len(self.nodes) + 1 # one offset
         uri = f"mcpy://{nid}"
         self.node_uris.append(uri)
@@ -1799,8 +1837,10 @@ class PausingCluster:
         return ps
         
     async def remove_node(self, node_uri):
+        self.net_mgr.remove_node(node_uri)
         node = self.nodes[node_uri]
         await node.cleanup()
+        del self.nodes[node_uri]
         
     async def start(self, only_these=None, timers_disabled=True):
         await self.test_trace.start()
