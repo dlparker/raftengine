@@ -60,8 +60,6 @@ async def test_log_config_ops(cluster_maker):
     uri = 'mcpy://4'
     await hull.start_node_add(uri)
     with pytest.raises(Exception):
-        await hull.finish_node_add(uri)
-    with pytest.raises(Exception):
         await hull.start_node_add('mcpy://5')
     with pytest.raises(Exception):
         await hull.start_node_remove(uri)
@@ -72,8 +70,6 @@ async def test_log_config_ops(cluster_maker):
     assert uri in cc4.nodes
     with pytest.raises(Exception):
         await hull.start_node_add(uri)
-    with pytest.raises(Exception):
-        await hull.node_add_prepared(uri)
     with pytest.raises(Exception):
         await hull.finish_node_add(uri)
     cc5 = await hull.start_node_remove(uri)

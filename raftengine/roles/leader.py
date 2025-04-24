@@ -492,10 +492,6 @@ class Leader(BaseRole):
         else:
             self.logger.error(f"got unknown op {op} trying to service membership change message")
             return False
-        if not command:
-            self.logger.warning("%s could not perform request to %s node %s", self.get_my_uri(),
-                                op, target_uri)
-            return False
         # gotta do the broadcast first, because applying it on remove means
         # that the target node is no longer in the list to receive broadcasts.
         # ask me how I know

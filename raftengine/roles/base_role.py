@@ -73,11 +73,7 @@ class BaseRole:
         await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
-        if (self.stopped and message.code == MembershipChangeMessage.get_code()
-            and message.op == ChangeOp.add and message.target_uri == self.my_uri()):
-            self.logger.debug('%s received command to reverse cluster exit', self.my_uri())
-            self.role.start()
-        elif self.stopped:
+        if self.stopped:
             self.logger.debug('%s received message from %s but currently stoppped, ignoring', self.my_uri(), message.sender)
             return
         if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
@@ -170,7 +166,6 @@ class BaseRole:
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
         
-
     async def on_transfer_power_response(self, message):
         self.logger.info('%s transfer_power response requires no action, ignoring %s', self.my_uri(), str(message))
         
@@ -235,9 +230,6 @@ class BaseRole:
                                       target_uri=self.my_uri())
         await self.hull.send_message(message)
     
-    async def send_self_add(self, leader_uri):
-        await self.hull.role.send_self_add(leader_uri)
-        
     async def on_membership_change_message(self, message):
         problem = 'pre_membership_change_message not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'

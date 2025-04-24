@@ -469,14 +469,6 @@ class Hull(HullAPI):
             return False
         return True
 
-    async def get_node_ids(self, voter_only=False):
-        uris = list(cc.nodes.keys())
-        if cc.pending:
-            if voter_only and not cc.pending_node.is_loading:
-                uris.append(cc.pending.uri)
-        return uris
-    
-
 class EventControl:
 
     def __init__(self):
