@@ -8,7 +8,7 @@ from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteResponseMessage
 from raftengine.roles.base_role import BaseRole
-from raftengine.messages.cluster_change import MembershipChangeMessage
+from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp
 
 class Follower(BaseRole):
 
@@ -200,8 +200,18 @@ class Follower(BaseRole):
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
              
+    async def join_cluster(self, leader_uri):
+        message = MembershipChangeMessage(sender=self.my_uri(),
+                                          receiver=leader_uri,
+                                          op=ChangeOp.add,
+                                          target_uri=self.my_uri())
+        await self.hull.send_message(message)
+        
     async def on_membership_change_response(self, message):
-        pass
+        if message.op == ChangeOp.add and message.target_uri == self.my_uri():
+            self.logger.info("%s leader accepted add request, expecting catch up append entries", self.my_uri())
+        else:
+            self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
            
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term

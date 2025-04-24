@@ -1,6 +1,17 @@
 1. [] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.
 2. [] Need to have self exit generate an event.
+3. [] Have self_add just pick a node from cluster config, expecting to get leader_uri back in the change response,
+   then update leader_uri and try again.
+4. [] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
+5. [] Need to figure out what it means to abort remove node. Add abort happens when catchup fails. Maybe remove abort
+   would only happen when leader crashes with uncommitted, then new leader removes the record (old leader rejoins after
+   new cluster commits new stuff). So that means that deleting records on leader command needs to see if any of them
+   are membership changed records, and undo the change. That's probably true for both types. It means follower can
+   no longer just blindly delete, it has to inspect and dispose.
+   a remove record hang the config forever? 
+   
+
 
 * Protocol
 

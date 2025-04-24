@@ -43,16 +43,6 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def change_cluster_config(self, cluster_config: ClusterInitConfig):
-        """
-        Replace the existing cluster_config with the supplied version. Note that this
-        assumes that the configuration has already been propogated via Raft memebership
-        change operations if there are membership differences. If the only changes are
-        in timeouts, then it is just applied.
-        """
-        raise NotImplementedError
-        
-    @abc.abstractmethod
     async def start(self):
         """
         Begin processing RaftState. Note that much of the Raft behavior is timeout based, so
@@ -64,6 +54,14 @@ class HullAPI(abc.ABC):
         """
         raise NotImplementedError
     
+    @abc.abstractmethod
+    async def start_and_join(self, leader_uri):
+        """
+        This should only be called for a server that has never been part of the cluster, to join
+        the cluster. This may take a while if there are a lot of log records to replicate
+        to this server. 
+        """
+        
     @abc.abstractmethod
     async def on_message(self, in_message:str) -> None:
         """

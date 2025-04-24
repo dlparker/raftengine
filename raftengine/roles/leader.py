@@ -11,6 +11,7 @@ from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.cluster_change import ChangeOp
 from raftengine.messages.base_message import BaseMessage
 from raftengine.roles.base_role import BaseRole
 
@@ -401,9 +402,15 @@ class Leader(BaseRole):
             t_uri = list(config.nodes.keys())[0]
             await self.transfer_power(t_uri, log_record)
             return
+        if op == "add_node":
+            await self.hull.node_add_prepared(operand)
+            await self.tracker_for_follower(operand)
+        elif op == "remove_node":
+            del self.follower_trackers[operand] 
         await self.hull.handle_membership_change_log_commit(log_record)
         log_record.applied = True
         await self.log.replace(log_record)
+        await self.send_heartbeats()
         
     async def term_expired(self, message):
         await self.hull.set_term(message.term)
@@ -476,10 +483,10 @@ class Leader(BaseRole):
     
     async def do_node_inout(self, op, target_uri):
         command = None
-        if op == "ADD":
+        if op == ChangeOp.add:
             plan = await self.hull.plan_add_node(target_uri)
             command = dict(op="add_node", config=plan, operand=target_uri)
-        elif op == "REMOVE":
+        elif op == ChangeOp.remove:
             plan = await self.hull.plan_remove_node(target_uri)
             command = dict(op="remove_node", config=plan, operand=target_uri)
         else:

@@ -16,6 +16,7 @@ import pytest
 
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 from raftengine.api.log_api import LogRec
+from raftengine.api.types import ClusterConfig, ClusterSettings
 from raftengine.hull.hull import Hull
 from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.messages.base_message import BaseMessage
@@ -533,6 +534,22 @@ class TestHull(Hull):
         self.timers_disabled = False
         self.wrapper_logger = logging.getLogger("SimulatedNetwork")
         
+    # For testing only
+    async def change_cluster_config(self, init: ClusterInitConfig):
+        # cant add or remove  nodes here, just update settings
+        config = await self.get_cluster_config()
+        settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
+                                   election_timeout_min=init.election_timeout_min,
+                                   election_timeout_max=init.election_timeout_max,
+                                   max_entries_per_message=init.max_entries_per_message,
+                                   use_pre_vote=init.use_pre_vote,
+                                   use_check_quorum=init.use_check_quorum,
+                                   use_dynamic_config=init.use_dynamic_config)
+        config.settings = settings
+        res = await self.log.save_cluster_config(config)
+        self.current_config = res
+        return res
+
     async def on_message(self, message):
         dmsg = self.decode_message(message)
         if self.break_on_message_code == dmsg.get_code():
@@ -712,8 +729,7 @@ class Network:
         
 class NetManager:
 
-    def __init__(self, all_nodes:dict, start_nodes:dict):
-        self.all_nodes = all_nodes
+    def __init__(self, start_nodes:dict):
         self.start_nodes = start_nodes
         self.full_cluster = None
         self.quorum_segment = None
@@ -735,6 +751,12 @@ class NetManager:
             for seg in self.other_segments:
                 seg.set_test_trace(test_trace)
 
+    def add_node(self, node):
+        if self.quorum_segment:
+            self.quorum_segment.add_node(node)
+        else:
+            self.full_cluster.add_node(node)
+        
     def remove_node(self, uri):
         if self.quorum_segment:
              if uri in self.quorum_segment.nodes:
@@ -1014,6 +1036,9 @@ class PausingServer(PilotAPI):
     
     async def start(self):
         await self.hull.start()
+        
+    async def start_and_join(self, leader_uri):
+        await self.hull.start_and_join(leader_uri)
         
     async def start_election(self):
         await self.hull.campaign()
@@ -1320,6 +1345,12 @@ class TestTrace:
         # order
         tl = []
         for uri,node in self.cluster.nodes.items():
+            # nodes can get added after startup
+            if uri not in self.node_states:
+                ns = self.node_states[uri] = await self.create_node_state(node)
+                tl.append(deepcopy(ns))
+                ns.save_event = None
+                tl.append(deepcopy(ns))
             ns = self.node_states[uri]
             ns = await self.update_node_state(node, ns)
             tl.append(deepcopy(ns))
@@ -1786,12 +1817,13 @@ class PausingCluster:
             self.node_uris.append(uri)
             t1s = PausingServer(uri, self, use_log=use_log)
             self.nodes[uri] = t1s
-        self.net_mgr = NetManager(self.nodes, self.nodes)
+        self.net_mgr = NetManager(self.nodes)
         self.net_mgr.set_test_trace(self.test_trace)
         net = self.net_mgr.setup_network()
         for uri, node in self.nodes.items():
             node.network = net
         assert len(self.node_uris) == node_count
+        self.cluster_init_config = None
 
     def build_cluster_config(self, heartbeat_period=1000,
                              election_timeout_min=10000,
@@ -1814,6 +1846,7 @@ class PausingCluster:
     def set_configs(self, cluster_config=None):
         if cluster_config is None:
             cluster_config = self.build_cluster_config()
+        self.cluster_init_config = cluster_config
         for uri, node in self.nodes.items():
             # in real code you'd have only on cluster config in
             # something like a cluster manager, but in test
@@ -1827,13 +1860,18 @@ class PausingCluster:
                                        )
             node.set_configs(local_config, cc)
 
-    def add_node(self, start=True):
+    def add_node(self):
         nid = len(self.nodes) + 1 # one offset
         uri = f"mcpy://{nid}"
         self.node_uris.append(uri)
         ps = PausingServer(uri, self, use_log=self.use_log)
         self.nodes[uri] = ps
         node_uris=self.node_uris,
+        self.net_mgr.add_node(ps)
+        local_config = LocalConfig(uri=uri,
+                                   working_dir='/tmp/',
+                                   )
+        ps.set_configs(local_config, self.cluster_init_config)
         return ps
         
     async def remove_node(self, node_uri):

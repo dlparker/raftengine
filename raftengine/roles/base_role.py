@@ -235,6 +235,9 @@ class BaseRole:
                                       target_uri=self.my_uri())
         await self.hull.send_message(message)
     
+    async def send_self_add(self, leader_uri):
+        await self.hull.role.send_self_add(leader_uri)
+        
     async def on_membership_change_message(self, message):
         problem = 'pre_membership_change_message not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'

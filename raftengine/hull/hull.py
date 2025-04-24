@@ -49,22 +49,6 @@ class Hull(HullAPI):
         self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
         self.current_config = None
-
-    # For testing only
-    async def change_cluster_config(self, init: ClusterInitConfig):
-        # cant add or remove  nodes here, just update settings
-        config = await self.get_cluster_config()
-        settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
-                                   election_timeout_min=init.election_timeout_min,
-                                   election_timeout_max=init.election_timeout_max,
-                                   max_entries_per_message=init.max_entries_per_message,
-                                   use_pre_vote=init.use_pre_vote,
-                                   use_check_quorum=init.use_check_quorum,
-                                   use_dynamic_config=init.use_dynamic_config)
-        config.settings = settings
-        res = await self.log.save_cluster_config(config)
-        self.current_config = res
-        return res
         
     # Part of API
     async def start(self):
@@ -73,6 +57,15 @@ class Hull(HullAPI):
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
 
+    async def start_and_join(self, leader_uri):
+        await self.get_cluster_config()
+        if leader_uri not in self.current_config.nodes:
+            raise Exception(f'cannot find specified leader {leader_uri} in cluster {self.current_config.nodes.keys()}')
+        await self.role.start()
+        if EventType.role_change in self.event_control.active_events:
+            await self.event_control.emit_role_change(self.get_role_name())
+        await self.role.join_cluster(leader_uri)
+        
     # Part of API
     def decode_message(self, in_message):
         mdict = json.loads(in_message)
@@ -432,15 +425,13 @@ class Hull(HullAPI):
         if cc.pending_node is None or cc.pending_node.uri != node_uri:
             raise Exception(f'node {node_uri} is not pending add')
         cc.pending_node.is_loading = False
-        res =  await self.log.save_cluster_config(cc)
+        res = await self.log.save_cluster_config(cc)
         self.current_config = res
         return res
         
     async def finish_node_add(self, node_uri):
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_adding:
-            if cc.pending_node.is_loading:
-                raise Exception(f"Cannot finish add on node {node_uri}, it hasn't been loaded yet")
             cc.pending_node.is_adding = False
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None

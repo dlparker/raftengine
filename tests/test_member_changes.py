@@ -177,3 +177,47 @@ async def test_remove_leader_1(cluster_maker):
     await asyncio.sleep(0.01)
     assert ts_1.hull.role.stopped
 
+async def test_add_follower_1(cluster_maker):
+    """
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_remove_leader_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    # vote requests, then vote responses
+    await cluster.deliver_all_pending()
+    assert ts_1.get_role_name() == "LEADER"
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    # append entries, then responses
+    await cluster.deliver_all_pending()
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    ts_4 = cluster.add_node()
+    leader = cluster.get_leader()
+    await ts_4.start_and_join(leader.uri)
+    start_time = time.time()
+    while time.time() - start_time < 0.1:
+        cc = await ts_1.log.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert ts_4.operations.total == 1
+
+    
