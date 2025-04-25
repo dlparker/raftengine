@@ -92,7 +92,7 @@ def set_levels(handler_names, additions=None, default_level='error'): # pragma: 
     log_loggers['Leader'] = default_log
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
-    log_loggers['BaseState'] = default_log
+    log_loggers['BaseRole'] = default_log
     log_loggers['Hull'] = default_log
     log_loggers['Substates'] = default_log
     log_loggers['PausingServer'] = default_log
@@ -546,8 +546,8 @@ class TestHull(Hull):
                                    use_check_quorum=init.use_check_quorum,
                                    use_dynamic_config=init.use_dynamic_config)
         config.settings = settings
-        res = await self.log.save_cluster_config(config)
-        self.current_config = res
+        await self.log.save_cluster_config(config)
+        res = self.current_config = await self.cluster_ops.get_cluster_config()
         return res
 
     async def on_message(self, message):
@@ -912,7 +912,7 @@ class PausingServer(PilotAPI):
     async def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
         self.cluster_init_config = deepcopy(cluster_config)
-        await self.hull.change_cluster_config(self.cluster_init_config)
+        return await self.hull.change_cluster_config(self.cluster_init_config)
         
     async def simulate_crash(self):
         await self.hull.stop()

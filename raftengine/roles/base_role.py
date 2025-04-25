@@ -10,17 +10,21 @@ from raftengine.api.types import RoleName, SubstateCode
 class BaseRole:
 
     
-    def __init__(self, hull, role_name):
+    def __init__(self, hull, role_name, cluster_ops):
         self.hull = hull
         self.role_name = role_name
-        self.logger = logging.getLogger("BaseState")
+        self.logger = logging.getLogger("BaseRole")
         self.substate = SubstateCode.starting
         self.log = hull.get_log()
         self.stopped = False
         self.routes = None
         self.build_routes()
-        self.leader_uri = None
+        self.cluster_ops = cluster_ops
 
+    @property
+    def leader_uri(self):
+        return self.hull.leader_uri
+        
     def build_routes(self):
         self.routes = dict()
         code = AppendEntriesMessage.get_code()
@@ -57,9 +61,8 @@ class BaseRole:
     async def start(self):
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().start())
+        self.cluster_op = self.hull.get_cluster_ops()
         self.stopped = False
-        if self.role_name == "LEADER":
-            self.leader_uri = self.my_uri()
 
     async def stop(self):
         # child classes not required to have this method, but if they do,
@@ -105,8 +108,7 @@ class BaseRole:
             if hasattr(message, 'leaderId'):
                 if message.term == await self.log.get_term() and self.leader_uri is None:
                     self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
-                    self.leader_uri = message.leaderId
-                    await self.hull.set_leader_uri(self.leader_uri)
+                    await self.hull.set_leader_uri(message.leaderId)
                     problem += f" except adopting leader {self.leader_uri}"
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)

@@ -1,7 +1,6 @@
 import asyncio
 import traceback
 import logging
-import random
 import time
 import json
 from typing import Optional
@@ -29,6 +28,7 @@ from raftengine.api.hull_api import HullAPI
 from raftengine.api.events import EventType, EventHandler
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
+from raftengine.hull.cluster_ops import ClusterOps
 
 class Hull(HullAPI):
 
@@ -39,28 +39,37 @@ class Hull(HullAPI):
         if not isinstance(pilot, PilotAPI):
             raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
         self.pilot = pilot
+        self.started = False
         self.log = pilot.get_log()
-        self.role = Follower(self)
-        self.leader_uri = None
         self.logger = logging.getLogger("Hull")
         self.role_async_handle = None
         self.role_run_after_target = None
         self.message_problem_history = []
         self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
-        self.current_config = None
+        self.cluster_ops = ClusterOps(self, cluster_config, self.log)
+        self.role = Follower(self, self.cluster_ops)
         
     # Part of API
     async def start(self):
-        await self.get_cluster_config()
+        await self.cluster_ops.get_cluster_config()
+        self.started = True
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
 
+    def get_cluster_ops(self):
+        if not self.started:
+            return None
+        return self.cluster_ops
+
+    def get_role(self):
+        return self.role
+   
     async def start_and_join(self, leader_uri):
-        await self.get_cluster_config()
-        if leader_uri not in self.current_config.nodes:
-            raise Exception(f'cannot find specified leader {leader_uri} in cluster {self.current_config.nodes.keys()}')
+        config = await self.cluster_ops.get_cluster_config()
+        if leader_uri not in config.nodes:
+            raise Exception(f'cannot find specified leader {leader_uri} in cluster {self.cluster_ops.get_cluster_node_ids()}')
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
@@ -138,32 +147,6 @@ class Hull(HullAPI):
                 await self.event_control.emit_commit_change(new_commit)
         return result
 
-    async def handle_membership_change_log_update(self, log_rec):
-        cdict = json.loads(log_rec.command)
-        config = ClusterConfig(**cdict['config'])
-        op = cdict['op']
-        operand = cdict['operand']
-        if op == "add_node":
-            config = await self.start_node_add(operand)
-        if op == "remove_node":
-            config = await self.start_node_remove(operand)
-        self.logger.debug(f"%s started op=%s operand=%s", self.get_my_uri(), op, operand)
-        if operand == self.get_my_uri():
-            self.logger.warning("%s calling stop on self", self.get_my_uri())
-            await self.exiting_cluster()
-            return
-
-    async def handle_membership_change_log_commit(self, log_rec):
-        cdict = json.loads(log_rec.command)
-        config = ClusterConfig(**cdict['config'])
-        op = cdict['op']
-        operand = cdict['operand']
-        if op == "add_node":
-            config = await self.finish_node_add(operand)
-        if op == "remove_node":
-            config = await self.finish_node_remove(operand)
-        self.logger.debug(f"%s finished op=%s operand=%s", self.get_my_uri(), op, operand)
-            
     # Called by Role
     def get_log(self):
         return self.log
@@ -179,10 +162,14 @@ class Hull(HullAPI):
     # Called by Role
     def get_processor(self):
         return self.pilot
+
+    @property
+    def leader_uri(self):
+        return self.cluster_ops.leader_uri
     
     # Called by Role
     async def set_leader_uri(self, uri):
-        self.leader_uri = uri
+        self.cluster_ops.leader_uri = uri
         if EventType.leader_change in self.event_control.active_events:
             await self.event_control.emit_leader_change(uri)
     
@@ -196,35 +183,29 @@ class Hull(HullAPI):
             await self.event_control.emit_term_change(term)
         return await self.log.set_term(term)
 
+    # Called by  API
+    async def get_cluster_config(self):
+        return await self.cluster_ops.get_cluster_config()
+    
     # Called by Role and in API
     def get_cluster_node_ids(self):
-        return list(self.current_config.nodes.keys())
+        return self.cluster_ops.get_cluster_node_ids()
 
     # Called by Role and in API
     async def get_heartbeat_period(self):
-        config = await self.get_cluster_config()
-        return config.settings.heartbeat_period
+        return await self.cluster_ops.get_heartbeat_period()
 
     # Called by Role and in API
     async def get_election_timeout(self):
-        config = await self.get_cluster_config()
-        emin = config.settings.election_timeout_min
-        emax =  config.settings.election_timeout_max
-
-        res = random.uniform(emin, emax)
-        return res
+        return await self.cluster_ops.get_election_timeou()
 
     # Called by Role 
     async def get_election_timeout_range(self):
-        config = await self.get_cluster_config()
-        emin = config.settings.election_timeout_min
-        emax =  config.settings.election_timeout_max
-        return emin, emax
+        return await self.cluster_ops.get_election_timeout_range()
 
     # Called by Role
     async def get_max_entries_per_message(self):
-        config = await self.get_cluster_config()
-        return config.settings.max_entries_per_message
+        return await self.cluster_ops.get_max_entries_per_message()
 
     # Part of API 
     async def exit_cluster(self):
@@ -248,7 +229,7 @@ class Hull(HullAPI):
         await self.pilot.stop_commanded()
         if not self.role.role_name == "FOLLOWER":
             await self.stop_role()
-            self.role = Follower(self)
+            self.role = Follower(self, self.cluster_ops)
         await self.role.stop()
             
     # Called by Role
@@ -261,8 +242,8 @@ class Hull(HullAPI):
     # Called by Role
     async def start_campaign(self, authorized=False):
         await self.stop_role()
-        config = await self.get_cluster_config()
-        self.role = Candidate(self, use_pre_vote=config.settings.use_pre_vote, authorized=authorized)
+        config = await self.cluster_ops.get_cluster_config()
+        self.role = Candidate(self, self.cluster_ops, use_pre_vote=config.settings.use_pre_vote, authorized=authorized)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
@@ -272,8 +253,9 @@ class Hull(HullAPI):
     # Called by Role
     async def win_vote(self, new_term):
         await self.stop_role()
-        config = await self.get_cluster_config()
-        self.role = Leader(self, new_term, use_check_quorum=config.settings.use_check_quorum)
+        config = await self.cluster_ops.get_cluster_config()
+        self.role = Leader(self, self.cluster_ops, new_term, config.settings.use_check_quorum)
+        await self.set_leader_uri(self.get_my_uri())
         self.logger.warning("%s promoting to leader for term %s", self.get_my_uri(), new_term)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
@@ -283,13 +265,12 @@ class Hull(HullAPI):
     async def demote_and_handle(self, message=None):
         self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.role)
         await self.stop_role()
-        self.role = Follower(self)
+        self.role = Follower(self, self.cluster_ops)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
         if message and hasattr(message, 'leaderId'):
             self.logger.debug('%s message says leader is %s, adopting', self.get_my_uri(), message.leaderId)
-            self.role.leader_uri = message.leaderId
             await self.set_leader_uri(message.leaderId)
         if message:
             self.logger.warning('%s reprocessing message as follower %s', self.get_my_uri(), message)
@@ -361,113 +342,6 @@ class Hull(HullAPI):
             self.message_problem_history = []
         return res
 
-    async def get_cluster_config(self):
-        log = self.get_log()
-        stored_config = await log.get_cluster_config()
-        if stored_config:
-            self.current_config = stored_config
-            return stored_config
-        nd = {}
-        init = self.cluster_init_config
-        for uri in init.node_uris:
-            nd[uri] = NodeRec(uri)
-        settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
-                                   election_timeout_min=init.election_timeout_min,
-                                   election_timeout_max=init.election_timeout_max,
-                                   max_entries_per_message=init.max_entries_per_message,
-                                   use_pre_vote=init.use_pre_vote,
-                                   use_check_quorum=init.use_check_quorum,
-                                   use_dynamic_config=init.use_dynamic_config)
-        cc = ClusterConfig(nodes=nd, settings=settings)
-        res = await log.save_cluster_config(cc)
-        self.current_config = res
-        return res
-
-    async def plan_add_node(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node:
-            return None
-        if node_uri not in cc.nodes:
-            new_cc = deepcopy(cc)
-            rec = NodeRec(node_uri)
-            rec.is_adding = True
-            rec.is_loading = True
-            new_cc.pending_node = rec
-            return new_cc
-        return None
-
-    async def plan_remove_node(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node:
-            return None
-        if node_uri in cc.nodes:
-            new_cc = deepcopy(cc)
-            rec = new_cc.nodes[node_uri]
-            rec.is_removing = True
-            new_cc.pending_node = rec
-            del new_cc.nodes[node_uri]
-            return new_cc
-        return None
-        
-    async def start_node_add(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node:
-            raise Exception(f"cluster memebership change already in progress with node {cc.pending_node.uri}")
-        if node_uri not in cc.nodes:
-            new_cc = await self.plan_add_node(node_uri)
-            res = await self.log.save_cluster_config(new_cc)
-            self.current_config = res
-            return res
-        raise Exception(f'node {node_uri} is already in active node set')
-
-    async def node_add_prepared(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node is None or cc.pending_node.uri != node_uri:
-            raise Exception(f'node {node_uri} is not pending add')
-        cc.pending_node.is_loading = False
-        res = await self.log.save_cluster_config(cc)
-        self.current_config = res
-        return res
-        
-    async def finish_node_add(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_adding:
-            cc.pending_node.is_adding = False
-            cc.nodes[node_uri] = cc.pending_node
-            cc.pending_node = None
-            res =  await self.log.save_cluster_config(cc)
-            self.current_config = res
-            return res
-        raise Exception(f'node {node_uri} is not pending addition')
-
-    async def start_node_remove(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node:
-            raise Exception(f"cannot remove node {node_uri}, another action is pending for node {cc.pending_node.uri}")
-        if node_uri in cc.nodes:
-            new_cc = await self.plan_remove_node(node_uri)
-            res =  await self.log.save_cluster_config(new_cc)
-            self.current_config = res
-            return res
-        raise Exception(f'node {node_uri} is not in active node set')
-
-    async def finish_node_remove(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_removing:
-            cc.pending_node = None
-            res =  await self.log.save_cluster_config(cc)
-            self.current_config = res
-            return res
-        raise Exception(f'node {node_uri} is not pending removal')
-
-    async def node_is_voter(self, node_uri):
-        cc = await self.get_cluster_config()
-        # leader gets the wrong answer here if itself is removing, so leader needs a different check
-        if (cc.pending_node 
-            and cc.pending_node.uri == node_uri
-            and cc.pending_node.is_loading):
-            return False
-        return True
 
 class EventControl:
 

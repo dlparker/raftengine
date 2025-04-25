@@ -12,8 +12,8 @@ from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp
 
 class Follower(BaseRole):
 
-    def __init__(self, hull):
-        super().__init__(hull, RoleName.follower)
+    def __init__(self, hull, cluster_ops):
+        super().__init__(hull, RoleName.follower, cluster_ops)
         # log is set in BaseState as is leader_uri
         # only used during voting for leadership
         # Needs to be as recent as configured maximum silence period, or we raise hell.
@@ -25,7 +25,7 @@ class Follower(BaseRole):
         await super().start()
         self.last_leader_contact = time.time()
         await self.hull.record_substate(SubstateCode.leader_unknown)
-        await self.run_after(await self.hull.get_election_timeout(), self.contact_checker)
+        await self.run_after(await self.cluster_ops.get_election_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
         self.last_leader_contact = time.time()
@@ -37,8 +37,7 @@ class Follower(BaseRole):
                           len(message.entries))
 
         if message.term == await self.log.get_term() and self.leader_uri != message.sender:
-            self.leader_uri = message.sender
-            await self.hull.set_leader_uri(self.leader_uri)
+            await self.hull.set_leader_uri(message.sender)
             self.logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
             await self.hull.record_substate(SubstateCode.joined_leader)
@@ -85,7 +84,7 @@ class Follower(BaseRole):
             recs.append(await self.log.append(log_rec))
             # config changes are applied immediately
             if log_rec.code == RecordCode.cluster_config:
-                await self.hull.handle_membership_change_log_update(log_rec)
+                await self.cluster_ops.handle_membership_change_log_update(log_rec)
         await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)
         if message.commitIndex >= await self.log.get_last_index():
@@ -131,12 +130,12 @@ class Follower(BaseRole):
             if log_rec.code == RecordCode.cluster_config:
                 if not log_rec.applied:
                     self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
-                    await self.process_cluster_config(log_rec)
+                    await self.process_cluster_ops(log_rec)
                 
-    async def process_cluster_config(self, log_record):
+    async def process_cluster_ops(self, log_record):
         if log_record.applied:
             return
-        await self.hull.handle_membership_change_log_commit(log_record)
+        await self.cluster_ops.handle_membership_change_log_commit(log_record)
         log_record.applied = True
         await self.log.replace(log_record)
 
@@ -254,13 +253,11 @@ class Follower(BaseRole):
         await self.hull.send_response(message, append_response)
 
     async def contact_checker(self):
-        max_time = await self.hull.get_election_timeout()
+        max_time = await self.cluster_ops.get_election_timeout()
         e_time = time.time() - self.last_leader_contact
         if e_time > max_time:
             self.logger.debug("%s lost leader after %f", self.my_uri(), e_time)
             await self.leader_lost()
             return
         # reschedule
-        await self.run_after(await self.hull.get_election_timeout(), self.contact_checker)
-    
-
+        await self.run_after(await self.cluster_ops.get_election_timeout(), self.contact_checker)

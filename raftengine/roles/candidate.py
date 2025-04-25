@@ -8,8 +8,8 @@ from raftengine.messages.pre_vote import PreVoteMessage
 
 class Candidate(BaseRole):
 
-    def __init__(self, hull, use_pre_vote=False, authorized=False):
-        super().__init__(hull, RoleName.candidate)
+    def __init__(self, hull, cluster_ops, use_pre_vote=False, authorized=False):
+        super().__init__(hull, RoleName.candidate, cluster_ops)
         self.term = None
         self.votes = dict()
         self.pre_votes = dict()
@@ -45,7 +45,7 @@ class Candidate(BaseRole):
                                              prevLogTerm=await self.log.get_term(),
                                              prevLogIndex=await self.log.get_last_index())
                 await self.hull.send_message(message)
-        timeout = await self.hull.get_election_timeout()
+        timeout = await self.cluster_ops.get_election_timeout()
         self.logger.debug("%s setting election timeout to %f", self.hull.get_my_uri(), timeout)
         await self.hull.record_substate(SubstateCode.no_votes_in)
         await self.run_after(timeout, self.election_timed_out)
@@ -65,7 +65,7 @@ class Candidate(BaseRole):
                                              prevLogIndex=await self.log.get_last_index(),
                                              authorized=self.authorized)
                 await self.hull.send_message(message)
-        timeout = await self.hull.get_election_timeout()
+        timeout = await self.cluster_ops.get_election_timeout()
         self.logger.debug("%s setting pre vote election timeout to %f", self.hull.get_my_uri(), timeout)
         await self.hull.record_substate(SubstateCode.no_pre_votes_in)
         await self.run_after(timeout, self.election_timed_out)
@@ -92,7 +92,7 @@ class Candidate(BaseRole):
         if self.reply_count + 1 > len(self.votes) / 2:
             self.logger.info("candidate %s campaign lost, trying again", self.hull.get_my_uri())
             await self.cancel_run_after()
-            await self.run_after(await self.hull.get_election_timeout(), self.start_campaign)            
+            await self.run_after(await self.cluster_ops.get_election_timeout(), self.start_campaign)            
             await self.hull.record_substate(SubstateCode.start_new_election)
             return
         await self.hull.record_substate(SubstateCode.some_votes_in)
@@ -119,7 +119,7 @@ class Candidate(BaseRole):
         if self.reply_count + 1 > len(self.pre_votes) / 2:
             self.logger.info("candidate %s pre vote campaign lost, trying again", self.hull.get_my_uri())
             await self.cancel_run_after()
-            await self.run_after(await self.hull.get_election_timeout(), self.start_campaign)            
+            await self.run_after(await self.cluster_ops.get_election_timeout(), self.start_campaign)            
             await self.hull.record_substate(SubstateCode.start_new_election)
             return
         await self.hull.record_substate(SubstateCode.some_pre_votes_in)

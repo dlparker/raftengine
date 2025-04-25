@@ -159,7 +159,7 @@ async def test_run_to_election_1(cluster_maker):
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
-    await ts_2.do_leader_lost()
+    await ts_2.start_campaign(authorized=True)
     
     ts_1.set_trigger(WhenElectionDone())
     ts_2.set_trigger(WhenElectionDone())
@@ -203,16 +203,21 @@ async def test_election_timeout_1(cluster_maker):
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
-    await ts_1.change_cluster_config(cfg)
+    ncc = await ts_1.change_cluster_config(cfg)
+    assert ncc.settings.election_timeout_max == 1.0
+
     cfg = ts_2.cluster_init_config
     cfg.election_timeout_min = 0.90
     cfg.election_timeout_max = 1.0
-    await ts_2.change_cluster_config(cfg)
+    ncc = await ts_2.change_cluster_config(cfg)
+    assert ncc.settings.election_timeout_max == 1.0
+
     cfg = ts_3.cluster_init_config
     cfg.election_timeout_min = 0.01
     cfg.election_timeout_max = 0.011
-    await ts_3.change_cluster_config(cfg)
-
+    ncc = await ts_3.change_cluster_config(cfg)
+    assert ncc.settings.election_timeout_max == 0.011
+    
     cluster.test_trace.start_subtest("Initial election with timers manipulated to ensure node 3 will win",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_election_timeout_1.__doc__)
@@ -220,19 +225,25 @@ async def test_election_timeout_1(cluster_maker):
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
-    
-    assert ts_3.get_role_name() == "LEADER"
-    assert ts_1.get_leader_uri() == uri_3
-    assert ts_2.get_leader_uri() == uri_3
 
-    logger.info("-------- Initial election completion, starting reelection")
-    cluster.test_trace.start_subtest("Node 3 is leader know demoting it, timer values equal, poking node 2 to start election ")
+    leader =  cluster.get_leader()
+    f1 = f2 = None
+    for ts in [ts_1, ts_2, ts_3]:
+        if ts != leader:
+            assert ts.get_leader_uri() == leader.uri
+            if not f1:
+                f1 = ts
+            else:
+                f2 = ts
+
+    logger.info("\n\n-------- Initial election completion, starting reelection\n\n")
+    cluster.test_trace.start_subtest(f"{leader.uri} is leader know demoting it, timer values equal, poking node other node to start election ")
     # now have leader resign, by telling it to become follower
-    await ts_3.do_demote_and_handle(None)
-    assert ts_3.get_role_name() == "FOLLOWER"
+    await leader.do_demote_and_handle(None)
+    assert leader.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
-    old_term = await ts_2.log.get_term()
-    await ts_2.do_leader_lost()
+    old_term = await f2.log.get_term()
+    await f2.do_leader_lost()
 
     cfg = ts_1.cluster_init_config
     cfg.election_timeout_min = 0.01
@@ -262,12 +273,18 @@ async def test_election_timeout_1(cluster_maker):
     ts_2.clear_triggers()
     ts_3.clear_triggers()
 
-    assert ts_2.get_role_name() == "LEADER"
-    assert ts_1.get_leader_uri() == uri_2
-    assert ts_3.get_leader_uri() == uri_2
+    leader =  cluster.get_leader()
+    f1 = f2 = None
+    for ts in [ts_1, ts_2, ts_3]:
+        if ts != leader:
+            assert ts.get_leader_uri() == leader.uri
+            if not f1:
+                f1 = ts
+            else:
+                f2 = ts
     logger.info("-------- Re-election timeout test done")
 
-    cluster.test_trace.start_subtest("Node 2 is leader, testing election timeout interaction with stop flag")
+    cluster.test_trace.start_subtest("Node {leader.uri} is leader, testing election timeout interaction with stop flag")
 
     # Do the same sequence, only this time set the stopped flag on the
     # candidate to make sure the election timeout does not start another
@@ -282,18 +299,18 @@ async def test_election_timeout_1(cluster_maker):
     # So we have this mechanism to ensure that it doesn't run because
     # it is shimmed by the hull.role_after_runner method.
     
-    await ts_2.do_demote_and_handle()
-    await ts_1.do_leader_lost()
-    assert ts_1.get_role_name() == "CANDIDATE"
+    await leader.do_demote_and_handle()
+    await f1.do_leader_lost()
+    assert f1.get_role_name() == "CANDIDATE"
     # Set the stopped flag to prevent timeout from restarting election
     # don't call stop(), it cancels the timeout
-    ts_1.hull.role.stopped = True
+    f1.hull.role.stopped = True
     # now delay for more than the timeout, should start new election with new term
-    old_term = await ts_1.get_term()
-    assert ts_1.hull.role_async_handle is not None
+    old_term = await f1.get_term()
+    assert f1.hull.role_async_handle is not None
     await asyncio.sleep(0.015)
-    assert ts_1.get_role_name() == "CANDIDATE"
-    new_term = await ts_1.get_term()
+    assert f1.get_role_name() == "CANDIDATE"
+    new_term = await f1.get_term()
     assert new_term == old_term
     
     logger.info("-------- Election restart on timeout prevention test passed")

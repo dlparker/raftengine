@@ -21,8 +21,8 @@ from dev_tools.servers import setup_logging, log_config
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
 #log_config = setup_logging(extra_logging, default_level="debug")
-#default_level="debug"
 default_level="error"
+#default_level="debug"
 log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 

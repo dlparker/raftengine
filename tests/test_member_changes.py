@@ -55,37 +55,38 @@ async def test_log_config_ops(cluster_maker):
     log.start()
     
     hull = Hull(cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
+    c_ops = hull.cluster_ops
     cc = await hull.get_cluster_config()
     
     uri = 'mcpy://4'
-    await hull.start_node_add(uri)
+    await c_ops.start_node_add(uri)
     with pytest.raises(Exception):
-        await hull.start_node_add('mcpy://5')
+        await c_ops.start_node_add('mcpy://5')
     with pytest.raises(Exception):
-        await hull.start_node_remove(uri)
-    assert await hull.node_is_voter(uri) is False
-    await hull.node_add_prepared(uri)
-    assert await hull.node_is_voter(uri) is True
-    cc4 = await hull.finish_node_add(uri)
+        await c_ops.start_node_remove(uri)
+    assert await c_ops.node_is_voter(uri) is False
+    await c_ops.node_add_prepared(uri)
+    assert await c_ops.node_is_voter(uri) is True
+    cc4 = await c_ops.finish_node_add(uri)
     assert uri in cc4.nodes
     with pytest.raises(Exception):
-        await hull.start_node_add(uri)
+        await c_ops.start_node_add(uri)
     with pytest.raises(Exception):
-        await hull.finish_node_add(uri)
-    cc5 = await hull.start_node_remove(uri)
+        await c_ops.finish_node_add(uri)
+    cc5 = await c_ops.start_node_remove(uri)
     assert uri not in cc5.nodes
-    assert await hull.node_is_voter(uri) is True
+    assert await c_ops.node_is_voter(uri) is True
     with pytest.raises(Exception):
-        await hull.start_node_add('mcpy://5')
+        await c_ops.start_node_add('mcpy://5')
     with pytest.raises(Exception):
-        await hull.start_node_remove('mcpy://5')
-    cc6 = await hull.finish_node_remove(uri)
+        await c_ops.start_node_remove('mcpy://5')
+    cc6 = await c_ops.finish_node_remove(uri)
     assert uri not in cc6.nodes
     assert cc6.pending_node is None
     with pytest.raises(Exception):
-        await hull.start_node_remove(uri)
+        await c_ops.start_node_remove(uri)
     with pytest.raises(Exception):
-        await hull.finish_node_remove(uri)
+        await c_ops.finish_node_remove(uri)
 
 
 async def test_remove_follower_1(cluster_maker):

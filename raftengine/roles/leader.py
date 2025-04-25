@@ -15,26 +15,14 @@ from raftengine.messages.cluster_change import ChangeOp
 from raftengine.messages.base_message import BaseMessage
 from raftengine.roles.base_role import BaseRole
 
-@dataclass
-class FollowerTracker:
-    uri: str 
-    nextIndex: int = 0
-    lastSentIndex: int = 0
-    matchIndex: int = 0
-    msg_count: int = 0
-    reply_count: int = 0
-    last_msg_time: int = 0
-    last_reply_time: int = 0
-
-        
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
 
 
 class Leader(BaseRole):
 
-    def __init__(self, hull, term, use_check_quorum):
-        super().__init__(hull, RoleName.leader)
+    def __init__(self, hull, cluster_ops, term, use_check_quorum):
+        super().__init__(hull, RoleName.leader, cluster_ops)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
         self.follower_trackers = dict()
@@ -44,16 +32,15 @@ class Leader(BaseRole):
         self.accepting_commands = True
         self.exit_in_progress = False
         self.transfer_in_progress = False
-        
 
     async def max_entries_per_message(self):
-        return await self.hull.get_max_entries_per_message()
+        return await self.cluster_ops.get_max_entries_per_message()
         
     async def start(self):
         await super().start()
-        for uri in self.hull.get_cluster_node_ids():
-            tracker = await self.tracker_for_follower(uri)
-        await self.run_after(await self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
+        for uri in self.cluster_ops.get_cluster_node_ids():
+            tracker = await self.cluster_ops.tracker_for_follower(uri)
+        await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
         start_record = LogRec(code=RecordCode.term_start,
                               term=await self.log.get_term(),
                               leader_id=self.my_uri())
@@ -63,20 +50,20 @@ class Leader(BaseRole):
     async def transfer_power(self, target_uri, log_record=None):
         if self.transfer_in_progress:
             return
-        if target_uri not in self.hull.get_cluster_node_ids():
+        if target_uri not in self.cluster_ops.get_cluster_node_ids():
             raise Exception(f"{target_uri} is not in cluster node list")
         self.transfer_in_progress = True
         asyncio.get_event_loop().call_soon(lambda target_uri=target_uri, log_record=log_record:
                                          asyncio.create_task(self.transfer_runner(target_uri, log_record)))
-        etime_min, etime_max = await self.hull.get_election_timeout_range()
+        etime_min, etime_max = await self.cluster_ops.get_election_timeout_range()
         self.accepting_commands = False
         return time.time() + etime_max
         
     async def transfer_runner(self, target_uri, log_record):
         self.logger.info("%s checking readiness for power transfer to %s", self.my_uri(), target_uri)
-        tracker = self.follower_trackers[target_uri]
+        tracker = await self.cluster_ops.tracker_for_follower(target_uri)
         start_time = time.time()
-        etime_min, etime_max = await self.hull.get_election_timeout_range()
+        etime_min, etime_max = await self.cluster_ops.get_election_timeout_range()
         time_limit = time.time() + etime_max
         while tracker.matchIndex < await self.log.get_commit_index() and time.time() < time_limit:
             await self.send_heartbeats()
@@ -123,9 +110,10 @@ class Leader(BaseRole):
         return
 
     async def delayed_exit(self, log_record):
-        await self.hull.handle_membership_change_log_commit(log_record)
+        await self.cluster_ops.handle_membership_change_log_commit(log_record)
         log_record.applied = True
         await self.log.replace(log_record)
+        self.logger.info("%s leader exiting cluster", self.my_uri())
         await self.hull.exiting_cluster()
         
     async def run_command(self, command, timeout=1.0, serial=None):
@@ -168,10 +156,10 @@ class Leader(BaseRole):
             await self.hull.record_substate(SubstateCode.broadcasting_command)
         if log_record.code == RecordCode.term_start:
             await self.hull.record_substate(SubstateCode.broadcasting_term_start)
-        for uri in self.hull.get_cluster_node_ids():
+        for uri in self.cluster_ops.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
-            tracker = self.follower_trackers[uri]
+            tracker = await self.cluster_ops.tracker_for_follower(uri)
             if tracker.nextIndex < log_record.index:
                 # we don't send the new record unless the
                 # follower is up to date, it will get
@@ -189,7 +177,7 @@ class Leader(BaseRole):
         
     async def scheduled_send_heartbeats(self):
         await self.send_heartbeats()
-        await self.run_after(await self.hull.get_heartbeat_period(), self.scheduled_send_heartbeats)
+        await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
         
     async def send_heartbeats(self):
         entries = []
@@ -202,7 +190,7 @@ class Leader(BaseRole):
         last_index = await self.log.get_last_index()
         commit_index = await self.log.get_commit_index()
         msgs = []
-        for uri in self.hull.get_cluster_node_ids():
+        for uri in self.cluster_ops.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
             message = AppendEntriesMessage(sender=my_uri,
@@ -221,7 +209,7 @@ class Leader(BaseRole):
         self.logger.debug("%s pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
         
     async def on_append_entries_response(self, message):
-        tracker = self.follower_trackers[message.sender]
+        tracker = await self.cluster_ops.tracker_for_follower(message.sender)
         self.logger.debug('handling response %s', message)
         self.logger.debug('follower=%s at message beginning tracker.nextIndex = %d tracker.matchIndex = %d',
                           message.sender, tracker.nextIndex, tracker.matchIndex)
@@ -257,7 +245,7 @@ class Leader(BaseRole):
         
     async def send_backdown(self, message):
         uri = message.sender
-        tracker = self.follower_trackers[uri]
+        tracker = await self.cluster_ops.tracker_for_follower(uri)
         pnum = -1
         if message.maxIndex < message.prevLogIndex:
             # Follower is telling us to skip a bit, brother,
@@ -298,7 +286,7 @@ class Leader(BaseRole):
     
     async def send_catchup(self, message):
         uri = message.sender
-        tracker = self.follower_trackers[uri]
+        tracker = await self.cluster_ops.tracker_for_follower(uri)
         # Due to asnyc nature of this code, it is possible for one
         # message from the leader to get processed by the follower
         # and trigger a reply before the previous message reply has
@@ -348,10 +336,10 @@ class Leader(BaseRole):
     async def record_commit_checker(self, log_record):
         # count the followers that have committed this far
         ayes = 1  # for me
-        for tracker in self.follower_trackers.values():
+        for tracker in self.cluster_ops.get_all_follower_trackers():
             if tracker.matchIndex >= log_record.index:
                 ayes += 1
-        if ayes > len(self.hull.get_cluster_node_ids()) / 2:
+        if ayes > len(self.cluster_ops.get_cluster_node_ids()) / 2:
             # update the log record, just in case
             rec = await self.log.read(log_record.index)
             # We might be hear because the record is committed but
@@ -363,7 +351,7 @@ class Leader(BaseRole):
             if rec.code == RecordCode.client_command:
                 asyncio.create_task(self.run_command_locally(rec))
             elif rec.code == RecordCode.cluster_config:
-                await self.finish_cluster_config(rec)
+                await self.cluster_ops.finish_cluster_config(rec)
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
@@ -391,39 +379,18 @@ class Leader(BaseRole):
         if waiter:
             await waiter.handle_run_result(result, error_data)
 
-    async def finish_cluster_config(self, log_record):
-        if log_record.applied:
-            return
-        cdict = json.loads(log_record.command)
-        op = cdict['op']
-        operand = cdict['operand']
-        if op == "remove_node" and operand == self.my_uri():
-            config = ClusterConfig(**cdict['config'])
-            t_uri = list(config.nodes.keys())[0]
-            await self.transfer_power(t_uri, log_record)
-            return
-        if op == "add_node":
-            await self.hull.node_add_prepared(operand)
-            await self.tracker_for_follower(operand)
-        elif op == "remove_node":
-            del self.follower_trackers[operand] 
-        await self.hull.handle_membership_change_log_commit(log_record)
-        log_record.applied = True
-        await self.log.replace(log_record)
-        await self.send_heartbeats()
-        
     async def term_expired(self, message):
         await self.hull.set_term(message.term)
         await self.hull.demote_and_handle(message)
         return None
 
     async def record_sent_message(self, message):
-        tracker = await self.tracker_for_follower(message.sender)
+        tracker = await self.cluster_ops.tracker_for_follower(message.sender)
         tracker.msg_count += 1
         tracker.last_msg_time = time.time()
 
     async def record_received_message(self, message):
-        tracker = await self.tracker_for_follower(message.sender)
+        tracker = await self.cluster_ops.tracker_for_follower(message.sender)
         tracker.reply_count += 1
         tracker.last_reply_time = time.time()
         pop_bcasts = []
@@ -445,8 +412,8 @@ class Leader(BaseRole):
         self.logger.debug("%s after in message pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
                 
     async def check_quorum(self):
-        et_min, et_max = await self.hull.get_election_timeout_range()
-        node_count = len(self.hull.get_cluster_node_ids())
+        et_min, et_max = await self.cluster_ops.get_election_timeout_range()
+        node_count = len(self.cluster_ops.get_cluster_node_ids())
         quorum = int(node_count/2) # normal cluster is odd, yielding x.5, with this server added, will be more than half
         pop_bcasts = []
         for b_index,pending in enumerate(self.bcast_pendings):
@@ -463,50 +430,14 @@ class Leader(BaseRole):
             self.bcast_pendings.remove(p_b)
         return True
         
-    async def tracker_for_follower(self, uri):
-        tracker = self.follower_trackers.get(uri, None)
-        last_index = await self.log.get_last_index()
-        if not tracker:
-            tracker = FollowerTracker(uri=uri,
-                                      nextIndex=last_index + 1,
-                                      matchIndex=0)
-            self.follower_trackers[uri] = tracker
-        return tracker
-
     async def on_membership_change_message(self, message):
-        ok = await self.do_node_inout(message.op, message.target_uri)
+        ok = await self.cluster_ops.do_node_inout(message.op, message.target_uri)
         await self.send_membership_change_response_message(message, ok=ok)
         return 
 
     async def do_node_exit(self, target_uri):
-        return await self.do_node_inout("REMOVE", target_uri)
+        return await self.cluster_ops.do_node_inout("REMOVE", target_uri)
     
-    async def do_node_inout(self, op, target_uri):
-        command = None
-        if op == ChangeOp.add:
-            plan = await self.hull.plan_add_node(target_uri)
-            command = dict(op="add_node", config=plan, operand=target_uri)
-        elif op == ChangeOp.remove:
-            plan = await self.hull.plan_remove_node(target_uri)
-            command = dict(op="remove_node", config=plan, operand=target_uri)
-        else:
-            self.logger.error(f"got unknown op {op} trying to service membership change message")
-            return False
-        # gotta do the broadcast first, because applying it on remove means
-        # that the target node is no longer in the list to receive broadcasts.
-        # ask me how I know
-        
-        encoded = json.dumps(command, default=lambda o:o.__dict__)
-        rec = LogRec(code=RecordCode.cluster_config, command=encoded)
-        rec_to_send = await self.log.append(rec)
-        await self.broadcast_log_record(rec_to_send)
-        if op == "ADD":
-            await self.hull.start_node_add(target_uri)
-        else:
-            await self.hull.start_node_remove(target_uri)
-        if target_uri == self.my_uri():
-            self.exit_in_progress = True
-        return True
     
 class CommandWaiter:
 
@@ -546,16 +477,12 @@ class CommandWaiter:
                 self.leader.logger.debug("%s scheduled timeout for %f and check_done", self.leader.my_uri(), self.timeout)
         except* TimeoutTaskGroup:
             self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
-            hull = self.leader.hull
-            leader_uri = None
-            if hull.role != self.leader:
-                if hasattr(hull.role, 'leader_uri'):
-                    leader_uri = hull.role.leader_uri
-                self.leader.logger.debug("%s after timeout exception am no longer leader! maybe %s?",
-                                         self.leader.my_uri(), leader_uri)
+            if self.leader.hull.role != self.leader:
+                self.leader.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
+                                         self.leader.my_uri(), self.leader.hull.leader_uri)
                 self.result = CommandResult(command=self.orig_log_record.command,
                                             committed=False,
-                                            redirect=leader_uri)
+                                            redirect=self.leader.hull.leader_uri)
             else:
                 self.leader.logger.debug("%s command timeout exception",
                                          self.leader.my_uri())

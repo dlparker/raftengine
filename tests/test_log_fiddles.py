@@ -48,7 +48,8 @@ async def test_empty_log_1(cluster_maker):
     election_timeout_max=0.11
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period,
                                           election_timeout_min=election_timeout_min,
-                                          election_timeout_max=election_timeout_max)
+                                          election_timeout_max=election_timeout_max,
+                                          use_pre_vote=False)
     cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
