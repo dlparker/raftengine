@@ -1,5 +1,6 @@
 import random
 import logging
+import time
 import json
 from copy import deepcopy
 from dataclasses import dataclass
@@ -17,9 +18,19 @@ class FollowerTracker:
     matchIndex: int = 0
     msg_count: int = 0
     reply_count: int = 0
-    last_msg_time: int = 0
-    last_reply_time: int = 0
+    last_msg_time: float = 0.0
+    last_reply_time: float = 0.0
+    add_loading = False
 
+@dataclass
+class NewNodeLoad:
+    uri: str
+    start_time: float = 0.0
+    initial_count: int = 0
+    last_batch_index: int = 0
+    last_batch_time: float = 0.0
+    batch_count: int = 0
+    
 class ClusterOps:
 
     def __init__(self, hull:HullAPI, initial_config: ClusterConfig, log:LogAPI):
@@ -30,6 +41,7 @@ class ClusterOps:
         self.current_config = None
         self.log = log
         self._leader_uri = None
+        self.loading_data = None
 
     async def start(self):
         await self.get_cluster_config()
@@ -87,20 +99,101 @@ class ClusterOps:
         config = await self.get_cluster_config()
         return config.settings.max_entries_per_message
 
+    async def do_node_inout(self, op, target_uri, leader):
+        """
+        Called by leader to start the process of adding or removing
+        a node. This may be in response to a MembershipChangeMessage
+        or to a direct call via the HullAPI.
+        """
+        command = None
+        if op == ChangeOp.remove:
+            plan = await self.plan_remove_node(target_uri)
+            command = dict(op="remove_node", config=plan, operand=target_uri)
+            # Do the broadcast first, because applying it on remove means
+            # that the target node is no longer in the list to receive broadcasts.
+            # Ask me how I know
+            encoded = json.dumps(command, default=lambda o:o.__dict__)
+            rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
+            rec_to_send = await self.log.append(rec)
+            await leader.broadcast_log_record(rec_to_send)
+            await self.start_node_remove(target_uri)
+        elif op == "ADD":
+            await self.start_node_add(target_uri) 
+            # we need to start the catchup for this node
+            tracker = await self.tracker_for_follower(target_uri)
+            self.loading_data = NewNodeLoad(target_uri, time.time(), await self.log.get_last_index())
+            tracker.add_loading = True
+        if target_uri == self.my_uri():
+            leader.exit_in_progress = True
+        return True
+
+    async def note_loading_progress(self, target_uri, log_index, leader):
+        my_index = await self.log.get_last_index()
+        self.logger.info("%s initial load to new server %s has reached %d of %d", self.my_uri(),
+                         target_uri, log_index, my_index)
+        if log_index < my_index:
+            self.loading_data.batch_count += 1
+            self.loading_data.last_batch_index = log_index
+            self.loading_data.last_batch_time = time.time()
+            return
+        self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
+                         target_uri)
+        tracker = await self.tracker_for_follower(target_uri)
+        tracker.add_loading = False
+        plan = await self.get_cluster_config() # current config include change info as pending_node field
+        command = dict(op="add_node", config=plan, operand=target_uri)
+        encoded = json.dumps(command, default=lambda o:o.__dict__)
+        #print(f'\n\n\n{json.dumps(command, default=lambda o:o.__dict__, indent=4)}\n\n\n')
+        rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
+        rec_to_send = await self.log.append(rec)
+        await leader.broadcast_log_record(rec_to_send)
+        
     async def plan_add_node(self, node_uri):
+        """
+        Create a modified version of the cluster config that
+        includes the pending change to add the named node.
+        There is a pending_node property in the cluster config
+        object that stores the new node.
+        Leaders keep the config this state until they have brought
+        the new node up to date and are ready to commit the
+        change through log replication. At this point they
+        save the change in the log and replicate it, and also
+        begin to include the new node in replication.
+        Followers stay in this state until they get a commit
+        update from the leader, but they treat the new server as being
+        part of the cluster as soon as they have saved
+        the change in the log, not waiting for commit.
+        Once the commit applies, they update the actual stored
+        configuration to include the new node. This allows
+        them to roll back the change should the uncommitted
+        log record get removed after leadership change.
+        """
         cc = await self.get_cluster_config()
         if cc.pending_node:
             return None
         if node_uri not in cc.nodes:
             new_cc = deepcopy(cc)
             rec = NodeRec(node_uri)
-            rec.is_adding = True
-            rec.is_loading = True
             new_cc.pending_node = rec
+            rec.is_adding = True
             return new_cc
         return None
 
     async def plan_remove_node(self, node_uri):
+        """
+        Create a modified version of the cluster config that
+        includes the pending change to remove the named node.
+        There is a pending_node property in the cluster config
+        object that stores the new exiting until the server is
+        ready to commit the change, at which time the mode. The
+        exiting node is not counted in votes, and it is not
+        included in broadcasts. It simply waits for config
+        changing log record to be committed and it then exits.
+        If the log record is re-written on leadership change
+        because it is uncommitted and not in the leader's
+        log, then the config change will be reversed and the
+        exiting node will continue as part of the cluster.
+        """
         cc = await self.get_cluster_config()
         if cc.pending_node:
             return None
@@ -114,6 +207,16 @@ class ClusterOps:
         return None
         
     async def start_node_add(self, node_uri):
+        """
+        Update the stored config to include the change
+        needed to add the named node to the cluster. If
+        the calling node is the Leader, setup the process
+        of loading the new node's log.
+        This pending change is active, but not permanent. If a leadership
+        change happens before the related log record is committed,
+        then it is possible that the log record will be overwritten.
+        In that case this change will be reversed
+        """
         cc = await self.get_cluster_config()
         if cc.pending_node:
             raise Exception(f"cluster memebership change already in progress with node {cc.pending_node.uri}")
@@ -123,20 +226,15 @@ class ClusterOps:
             self.current_config = res
             return res
         raise Exception(f'node {node_uri} is already in active node set')
-
-    async def node_add_prepared(self, node_uri):
-        cc = await self.get_cluster_config()
-        if cc.pending_node is None or cc.pending_node.uri != node_uri:
-            raise Exception(f'node {node_uri} is not pending add')
-        cc.pending_node.is_loading = False
-        res = await self.log.save_cluster_config(cc)
-        self.current_config = res
-        return res
         
     async def finish_node_add(self, node_uri):
+        """
+        Update the stored config to incororate the added node and discard
+        the change in progress state. This means that the related log
+        record has been committed at this node.
+        """
         cc = await self.get_cluster_config()
-        if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_adding:
-            cc.pending_node.is_adding = False
+        if cc.pending_node is not None and cc.pending_node.uri == node_uri:
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None
             res =  await self.log.save_cluster_config(cc)
@@ -145,6 +243,14 @@ class ClusterOps:
         raise Exception(f'node {node_uri} is not pending addition')
 
     async def start_node_remove(self, node_uri):
+        """
+        Update the stored config to include the change  needed to
+        remove the named node to the cluster. 
+        This pending change is active, but not permanent. If a leadership
+        change happens before the related log record is committed,
+        then it is possible that the log record will be overwritten.
+        In that case this change will be reversed.
+        """
         cc = await self.get_cluster_config()
         if cc.pending_node:
             raise Exception(f"cannot remove node {node_uri}, another action is pending for node {cc.pending_node.uri}")
@@ -156,6 +262,12 @@ class ClusterOps:
         raise Exception(f'node {node_uri} is not in active node set')
 
     async def finish_node_remove(self, node_uri):
+        """
+        Update the stored config to discard the change in progress
+        state, leaving the node list without the removed node.
+        This means that the related log record has been committed at
+        this node and the change should no longer be reversed.
+        """
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri and cc.pending_node.is_removing:
             cc.pending_node = None
@@ -164,16 +276,32 @@ class ClusterOps:
             return res
         raise Exception(f'node {node_uri} is not pending removal')
 
-    async def node_is_voter(self, node_uri):
+    async def reverse_config_change(self, log_rec):
+        """
+        When a cluster config change is discarded because if an
+        log record overwrite after a leadership change, sending
+        the log record to this method will undo the active but
+        not permanent change, reverting the membership to the
+        state prior to the change.
+        """
         cc = await self.get_cluster_config()
-        # leader gets the wrong answer here if itself is removing, so leader needs a different check
-        if (cc.pending_node 
-            and cc.pending_node.uri == node_uri
-            and cc.pending_node.is_loading):
-            return False
-        return True
+        cdict = json.loads(log_rec.command)
+        config = ClusterConfig(**cdict['config'])
+        op = cdict['op']
+        operand = cdict['operand']
+        if op == "add_node" and operand in cc.nodes:
+            del cc.nodes[operand]
+        if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
+            cc.nodes.append(cc.pending_node)
+        cc.pending_node = None
+        return await self.log.save_cluster_config(new_cc)
     
     async def handle_membership_change_log_update(self, log_rec):
+        """
+        Called by followers to apply the membership change and
+        make it active, but not permanent.
+        Called when the related log record has arrived from the leader.
+        """
         cdict = json.loads(log_rec.command)
         config = ClusterConfig(**cdict['config'])
         op = cdict['op']
@@ -182,70 +310,62 @@ class ClusterOps:
             config = await self.start_node_add(operand)
         if op == "remove_node":
             config = await self.start_node_remove(operand)
+            if operand == self.my_uri() and self.hull.role.role_name == "LEADER":
+                self.logger.warning("%s starting cluster exit process", self.my_uri())
         self.logger.debug(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
-        if operand == self.my_uri():
-            self.logger.warning("%s calling stop on self", self.my_uri())
-            await self.hull.exiting_cluster()
-            return
+
 
     async def handle_membership_change_log_commit(self, log_rec):
+        """
+        Called by followers to make the membership change permanent.
+        Called when the related log record is committed.
+        """
         cdict = json.loads(log_rec.command)
         config = ClusterConfig(**cdict['config'])
         op = cdict['op']
         operand = cdict['operand']
         if op == "add_node":
+            # leader committed record, means that the node is loaded and ready
+            # to vote
             config = await self.finish_node_add(operand)
         if op == "remove_node":
             config = await self.finish_node_remove(operand)
+            if operand == self.my_uri():
+                self.logger.warning("%s calling stop on self", self.my_uri())
+                await self.hull.exiting_cluster()
         self.logger.debug(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
             
-    async def do_node_inout(self, op, target_uri):
-        command = None
-        if op == ChangeOp.add:
-            plan = await self.plan_add_node(target_uri)
-            command = dict(op="add_node", config=plan, operand=target_uri)
-        elif op == ChangeOp.remove:
-            plan = await self.plan_remove_node(target_uri)
-            command = dict(op="remove_node", config=plan, operand=target_uri)
-        else:
-            self.logger.error(f"got unknown op {op} trying to service membership change message")
-            return False
-        # gotta do the broadcast first, because applying it on remove means
-        # that the target node is no longer in the list to receive broadcasts.
-        # ask me how I know
-        
-        encoded = json.dumps(command, default=lambda o:o.__dict__)
-        rec = LogRec(code=RecordCode.cluster_config, command=encoded)
-        rec_to_send = await self.log.append(rec)
-        await self.hull.role.broadcast_log_record(rec_to_send)
-        if op == "ADD":
-            await self.start_node_add(target_uri)
-        else:
-            await self.start_node_remove(target_uri)
-        if target_uri == self.my_uri():
-            self.hull.role.exit_in_progress = True
-        return True
-
-    async def finish_cluster_config(self, log_record):
+    async def cluster_config_vote_passed(self, log_record, leader):
+        """
+        Called by leader when it receives enough votes on the membership
+        change to commit it.
+        """
         if log_record.applied:
             return
         cdict = json.loads(log_record.command)
         op = cdict['op']
         operand = cdict['operand']
-        if op == "remove_node" and operand == self.my_uri():
-            config = ClusterConfig(**cdict['config'])
-            t_uri = list(config.nodes.keys())[0]
-            await self.hull.role.transfer_power(t_uri, log_record)
-            return
-        if op == "add_node":
-            await self.node_add_prepared(operand)
-            await self.tracker_for_follower(operand)
-        elif op == "remove_node":
-            del self.follower_trackers[operand] 
-        await self.handle_membership_change_log_commit(log_record)
-        log_record.applied = True
-        await self.log.replace(log_record)
-        await self.hull.role.send_heartbeats()
+        if op == "remove_node":
+            if operand != self.my_uri():
+                await self.finish_node_remove(operand)
+                log_record.committed = True
+                log_record.applied = True
+                await self.log.replace(log_record)
+                # notify the target node directly
+                await self.hull.role.send_heartbeats(target_only=operand)
+                # notify everone else
+                await self.hull.role.send_heartbeats()
+            else:
+                config = ClusterConfig(**cdict['config'])
+                t_uri = list(config.nodes.keys())[0]
+                await self.hull.role.transfer_power(t_uri, log_record)
+                return
+        elif op == "add_node":
+            # we need to start the catchup for this node
+            await self.finish_node_add(operand)
+            log_record.committed = True
+            log_record.applied = True
+            await self.log.replace(log_record)
 
     async def tracker_for_follower(self, uri):
         tracker = self.follower_trackers.get(uri, None)
@@ -259,7 +379,6 @@ class ClusterOps:
 
     def get_all_follower_trackers(self):
         return list(self.follower_trackers.values())
-
 
     def my_uri(self):
         return self.hull.get_my_uri()

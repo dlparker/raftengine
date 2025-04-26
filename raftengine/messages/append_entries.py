@@ -1,16 +1,17 @@
 from typing import Any, List
 import json
 from .base_message import BaseMessage
+from raftengine.messages.log_msg import LogMessage
 from raftengine.api.log_api import LogRec
 
 
-class AppendEntriesMessage(BaseMessage):
+class AppendEntriesMessage(LogMessage):
 
     code = "append_entries"
     
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
                  entries:List[Any], commitIndex: int=0):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm)
         self.entries = entries
         self.commitIndex = commitIndex
         
@@ -35,23 +36,16 @@ class AppendEntriesMessage(BaseMessage):
         msg += f" e={len(self.entries)} ci={self.commitIndex}"
         return msg
 
-class AppendResponseMessage(BaseMessage):
+class AppendResponseMessage(LogMessage):
 
     code = "append_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,  maxIndex: int,
                  success: bool, leaderId: str):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage)
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage)
         self.leaderId = leaderId
         self.success = success
         self.maxIndex = maxIndex
-
-    @classmethod
-    def from_dict(cls, data):
-        copy_of = dict(data)
-        del copy_of['code']
-        msg = cls(**copy_of)
-        return msg
         
     def __repr__(self):
         msg = super().__repr__()

@@ -110,7 +110,7 @@ class Leader(BaseRole):
         return
 
     async def delayed_exit(self, log_record):
-        await self.cluster_ops.handle_membership_change_log_commit(log_record)
+        await self.cluster_ops.finish_node_remove(self.my_uri())
         log_record.applied = True
         await self.log.replace(log_record)
         self.logger.info("%s leader exiting cluster", self.my_uri())
@@ -179,7 +179,7 @@ class Leader(BaseRole):
         await self.send_heartbeats()
         await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
         
-    async def send_heartbeats(self):
+    async def send_heartbeats(self, target_only=None):
         entries = []
         if self.use_check_quorum and len(self.bcast_pendings) > 0:
             if not await self.check_quorum():
@@ -190,7 +190,11 @@ class Leader(BaseRole):
         last_index = await self.log.get_last_index()
         commit_index = await self.log.get_commit_index()
         msgs = []
-        for uri in self.cluster_ops.get_cluster_node_ids():
+        if target_only:
+            nodes = [target_only,]
+        else:
+            nodes = self.cluster_ops.get_cluster_node_ids() 
+        for uri in nodes:
             if uri == self.my_uri():
                 continue
             message = AppendEntriesMessage(sender=my_uri,
@@ -227,6 +231,10 @@ class Leader(BaseRole):
             tracker.nextIndex += 1
             self.logger.debug('Success to %s upped tracker.nextIndex to %d',
                               message.sender, tracker.nextIndex)
+        if tracker.add_loading:
+            self.logger.debug("%s node %s pre cluster join load progress at %d", self.my_uri(),
+                              message.sender, message.maxIndex)
+            await self.cluster_ops.note_loading_progress(message.sender, message.maxIndex, self)
         if tracker.nextIndex > await self.log.get_last_index():
             self.logger.debug('After success to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
@@ -351,7 +359,7 @@ class Leader(BaseRole):
             if rec.code == RecordCode.client_command:
                 asyncio.create_task(self.run_command_locally(rec))
             elif rec.code == RecordCode.cluster_config:
-                await self.cluster_ops.finish_cluster_config(rec)
+                await self.cluster_ops.cluster_config_vote_passed(rec, self)
 
     async def run_command_locally(self, log_record):
         # make a last check to ensure it is not already done
@@ -431,12 +439,14 @@ class Leader(BaseRole):
         return True
         
     async def on_membership_change_message(self, message):
-        ok = await self.cluster_ops.do_node_inout(message.op, message.target_uri)
+        ok = await self.cluster_ops.do_node_inout(message.op, message.target_uri, self)
         await self.send_membership_change_response_message(message, ok=ok)
+        if message.op == ChangeOp.add:
+            await self.send_heartbeats(target_only=message.target_uri)
         return 
 
     async def do_node_exit(self, target_uri):
-        return await self.cluster_ops.do_node_inout("REMOVE", target_uri)
+        return await self.cluster_ops.do_node_inout("REMOVE", target_uri, self)
     
     
 class CommandWaiter:

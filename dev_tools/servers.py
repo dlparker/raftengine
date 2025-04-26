@@ -95,6 +95,7 @@ def set_levels(handler_names, additions=None, default_level='error'): # pragma: 
     log_loggers['BaseRole'] = default_log
     log_loggers['Hull'] = default_log
     log_loggers['Substates'] = default_log
+    log_loggers['ClusterOps'] = default_log
     log_loggers['PausingServer'] = default_log
     log_loggers['SimulatedNetwork'] = default_log
     log_loggers['test_code'] = default_log
@@ -1294,6 +1295,8 @@ class TestTrace:
             ns.save_event = None
         self.trace_lines.append(tl)
         
+    async def add_node(self, node):
+        ns = self.node_states[node.uri] = await self.create_node_state(node)
         
     async def create_node_state(self, node):
         ns = NodeState(save_event=SaveEvent.started,
@@ -1860,7 +1863,7 @@ class PausingCluster:
                                        )
             node.set_configs(local_config, cc)
 
-    def add_node(self):
+    async def add_node(self):
         nid = len(self.nodes) + 1 # one offset
         uri = f"mcpy://{nid}"
         self.node_uris.append(uri)
@@ -1872,6 +1875,7 @@ class PausingCluster:
                                    working_dir='/tmp/',
                                    )
         ps.set_configs(local_config, self.cluster_init_config)
+        await self.test_trace.add_node(ps)
         return ps
         
     async def remove_node(self, node_uri):

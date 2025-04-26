@@ -1,12 +1,12 @@
-from .base_message import BaseMessage
+from raftengine.messages.log_msg import LogMessage
 
 
-class PreVoteMessage(BaseMessage):
+class PreVoteMessage(LogMessage):
 
     code = "pre_vote"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, authorized:bool = False):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm)
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm)
         self.authorized = authorized
 
     def __repr__(self):
@@ -14,21 +14,14 @@ class PreVoteMessage(BaseMessage):
         msg += f" auth={self.authorized}"
         return msg
 
-class PreVoteResponseMessage(BaseMessage):
+class PreVoteResponseMessage(LogMessage):
 
     code = "pre_vote_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool):
-        BaseMessage.__init__(self, sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=PreVoteMessage)
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=PreVoteMessage)
         self.vote = vote
 
-    @classmethod
-    def from_dict(cls, data):
-        copy_of = dict(data)
-        del copy_of['code']
-        msg = cls(**copy_of)
-        return msg
-        
     def __repr__(self):
         msg = super().__repr__()
         msg += f" v={self.vote}"

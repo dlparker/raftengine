@@ -133,7 +133,7 @@ class Follower(BaseRole):
                     await self.process_cluster_ops(log_rec)
                 
     async def process_cluster_ops(self, log_record):
-        if log_record.applied:
+        if log_record.applied or not log_record.committed:
             return
         await self.cluster_ops.handle_membership_change_log_commit(log_record)
         log_record.applied = True

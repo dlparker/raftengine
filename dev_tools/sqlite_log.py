@@ -79,8 +79,7 @@ class Records:
         schema =  "CREATE TABLE if not exists nodes " 
         schema += "(uri TEXT PRIMARY KEY UNIQUE, " 
         schema += "is_adding BOOLEAN, " 
-        schema += "is_removing BOOLEAN, " 
-        schema += "is_loading BOOLEAN)" 
+        schema += "is_removing BOOLEAN)" 
         cursor.execute(schema)
         schema =  "CREATE TABLE if not exists settings " 
         schema += "(the_index INTEGER PRIMARY KEY UNIQUE, " 
@@ -244,9 +243,9 @@ class Records:
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         for node in config.nodes.values():
-            sql = "insert or replace into nodes (uri, is_adding, is_removing, is_loading)"
-            sql += " values (?,?,?,?)"
-            cursor.execute(sql, [node.uri, node.is_adding, node.is_removing, node.is_loading])
+            sql = "insert or replace into nodes (uri, is_adding, is_removing)"
+            sql += " values (?,?,?)"
+            cursor.execute(sql, [node.uri, node.is_adding, node.is_removing])
         sql = "insert or replace into settings (the_index, heartbeat_period, election_timeout_min,"
         sql += "election_timeout_max, use_pre_vote, use_check_quorum, use_dynamic_config)"
         sql += " values (?,?,?,?,?,?,?)"
@@ -279,8 +278,7 @@ class Records:
         for row in cursor.fetchall():
             rec = NodeRec(uri=row['uri'],
                           is_adding=row['is_adding'],
-                          is_removing=row['is_removing'],
-                          is_loading=row['is_loading'])
+                          is_removing=row['is_removing'])
             nodes[rec.uri] = rec
         res = ClusterConfig(nodes=nodes, settings=settings)
         return res

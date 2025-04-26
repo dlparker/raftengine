@@ -12,12 +12,9 @@ class BaseMessage:
 
     code = "invalid"
     
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, reply_to_type=None):
+    def __init__(self, sender:str, receiver:str, reply_to_type=None):
         self.sender = sender
         self.receiver = receiver
-        self.term = term
-        self.prevLogIndex = prevLogIndex
-        self.prevLogTerm = prevLogTerm
         self.code = self.__class__.code
         if reply_to_type:
             pair_mapping[self.__class__] = reply_to_type
@@ -26,12 +23,15 @@ class BaseMessage:
         global pair_mapping
         paired = pair_mapping.get(self.__class__, None)
         if paired and paired == other.__class__:
-            if (other.sender == self.receiver
-                and other.receiver == self.sender
-                and other.term == self.term
-                and other.prevLogTerm == self.prevLogTerm
-                and other.prevLogIndex == self.prevLogIndex):
-                return True
+            if other.sender == self.receiver and other.receiver == self.sender:
+                if hasattr(self, 'prevLogTerm') and hasattr(other, 'prevLogTerm'):
+                    if(other.term == self.term
+                       and other.prevLogTerm == self.prevLogTerm
+                       and other.prevLogIndex == self.prevLogIndex):
+                        return True
+                else:
+                    # if this is not true for a message class, override this method
+                    return True
         return False
 
     @classmethod
@@ -46,7 +46,6 @@ class BaseMessage:
 
     def __repr__(self):
         msg = f"{self.code}:{self.sender}->{self.receiver}: "
-        msg += f"t={self.term},pI={self.prevLogIndex},pt={self.prevLogTerm}"
         return msg
     
     @classmethod

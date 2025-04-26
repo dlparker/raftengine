@@ -1,4 +1,5 @@
 from enum import Enum
+from raftengine.messages.base_message import BaseMessage
 
 
 class ChangeOp(str, Enum):
@@ -10,7 +11,7 @@ class ChangeOp(str, Enum):
     def __str__(self):
         return self.value
     
-class MembershipChangeMessage:
+class MembershipChangeMessage(BaseMessage):
     """
     This is a message that a server or client can send to the leader to ask to change
     the status of the target server's membership. It is not used to replicate the change, that is
@@ -29,37 +30,23 @@ class MembershipChangeMessage:
     code = "membership_change"
 
     def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str):
-        self.sender = sender
-        self.receiver = receiver
+        super().__init__(sender, receiver)
         self.op = op
         self.target_uri = target_uri
         self.code = self.__class__.code
-
     
     def __repr__(self):
         msg = super().__repr__()
         msg += f" op={self.op} uri={self.target_uri}"
         return msg
 
-    @classmethod
-    def get_code(cls):
-        return cls.code
 
-    @classmethod
-    def from_dict(cls, data):
-        copy_of = dict(data)
-        del copy_of['code']
-        msg = cls(**copy_of)
-        return msg
-
-
-class MembershipChangeResponseMessage:
+class MembershipChangeResponseMessage(BaseMessage):
 
     code = "membership_change_response"
 
     def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str, ok: bool):
-        self.sender = sender
-        self.receiver = receiver
+        super().__init__(sender, receiver, reply_to_type=MembershipChangeMessage)
         self.op = op
         self.target_uri = target_uri
         self.ok = ok
@@ -71,19 +58,9 @@ class MembershipChangeResponseMessage:
             and other.target_uri == self.target_uri):
             return True
         return False
-        
+
     def __repr__(self):
         msg = super().__repr__()
         msg += f" op={self.op} uri={self.target_uri} ok={self.ok}"
         return msg
 
-    @classmethod
-    def get_code(cls):
-        return cls.code
-
-    @classmethod
-    def from_dict(cls, data):
-        copy_of = dict(data)
-        del copy_of['code']
-        msg = cls(**copy_of)
-        return msg
