@@ -8,6 +8,7 @@ import pytest
 from dev_tools.memory_log import MemoryLog
 from dev_tools.servers import cluster_maker
 from dev_tools.servers import setup_logging
+from raftengine.api.events import EventType, EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogRec
 from raftengine.api.types import NodeRec, ClusterConfig
@@ -17,7 +18,7 @@ from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level="error"
-#default_level="debug"
+default_level="debug"
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -227,7 +228,10 @@ async def test_add_follower_1(cluster_maker):
     assert ts_1.operations.total == 1
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
-    await ts_4.start_and_join(leader.uri)
+    async def join_done(ok, new_uri):
+        print(f"Join callbak said {ok} joining as {new_uri}")
+        assert ok
+    await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
     while time.time() - start_time < 0.1:
         cc = await ts_1.log.get_cluster_config()
@@ -268,20 +272,42 @@ async def test_add_follower_2(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    for i in range(2, 202):
-        rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+    msg_per = await ts_1.hull.get_max_entries_per_message()
+    limit = (msg_per *2) + 2 # get two blocks of update, will start at 2 because we have one record already
+    for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
-            await ts.log.append(rec)
-            ts.operations.total += 1
+            await ts.fake_command(i, "add", 1)
     for ts in [ts_1, ts_2, ts_3]:
         assert await ts.log.get_last_term() == 1
-        assert await ts.log.get_last_index() == 201
-        assert await ts.log.get_commit_index() == 201
-        assert await ts.log.get_applied_index() == 201
-        ts.operations.total == 200
+        assert await ts.log.get_last_index() == limit
+        assert await ts.log.get_commit_index() == limit
+        assert await ts.log.get_applied_index() == limit
+        ts.operations.total == limit - 1
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
-    await ts_4.start_and_join(leader.uri)
+    done_by_callback = None
+    done_by_event = None
+    async def join_done(ok, new_uri):
+        nonlocal done_by_callback
+        print(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        done_by_callback = ok
+        
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                print('in handler with success = True\n')
+            else:
+                print('in handler with success = False\n')
+                done_by_event = False
+    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
     while time.time() - start_time < 0.1:
         cc = await ts_1.log.get_cluster_config()
@@ -291,5 +317,7 @@ async def test_add_follower_2(cluster_maker):
         await asyncio.sleep(0.001)
 
     assert ts_4.operations.total == ts_1.operations.total
-
+    assert done_by_callback 
+    await asyncio.sleep(0.00)
+    assert done_by_event 
     

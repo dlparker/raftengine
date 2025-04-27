@@ -2,12 +2,13 @@ import random
 import logging
 import time
 import json
+from typing import Optional
 from copy import deepcopy
 from dataclasses import dataclass
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import HullAPI
 from raftengine.api.log_api import LogAPI
-from raftengine.messages.cluster_change import ChangeOp
+from raftengine.messages.cluster_change import ChangeOp, MembershipChangeMessage
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 @dataclass
@@ -26,10 +27,13 @@ class FollowerTracker:
 class NewNodeLoad:
     uri: str
     start_time: float = 0.0
-    initial_count: int = 0
-    last_batch_index: int = 0
-    last_batch_time: float = 0.0
-    batch_count: int = 0
+    first_round_max_index: int = 0
+    prev_round_max_index: int = 0
+    prev_round_start_time: float = 0.0
+    prev_send_time: float = 0.0
+    prev_send_max_index: float = 0.0
+    round_count: int = 1
+    change_message: Optional[MembershipChangeMessage] = None
     
 class ClusterOps:
 
@@ -99,7 +103,7 @@ class ClusterOps:
         config = await self.get_cluster_config()
         return config.settings.max_entries_per_message
 
-    async def do_node_inout(self, op, target_uri, leader):
+    async def do_node_inout(self, op, target_uri, leader, message=None):
         """
         Called by leader to start the process of adding or removing
         a node. This may be in response to a MembershipChangeMessage
@@ -117,36 +121,96 @@ class ClusterOps:
             rec_to_send = await self.log.append(rec)
             await leader.broadcast_log_record(rec_to_send)
             await self.start_node_remove(target_uri)
+            if message:
+                await leader.send_membership_change_response_message(message, ok=True)
         elif op == "ADD":
             await self.start_node_add(target_uri) 
             # we need to start the catchup for this node
             tracker = await self.tracker_for_follower(target_uri)
-            self.loading_data = NewNodeLoad(target_uri, time.time(), await self.log.get_last_index())
+            self.loading_data = NewNodeLoad(uri=target_uri,
+                                            start_time=time.time(),
+                                            first_round_max_index=await self.log.get_last_index(),
+                                            change_message=message)
             tracker.add_loading = True
+            await leader.send_heartbeats(target_only=message.target_uri)
         if target_uri == self.my_uri():
             leader.exit_in_progress = True
-        return True
 
     async def note_loading_progress(self, target_uri, log_index, leader):
         my_index = await self.log.get_last_index()
         self.logger.info("%s initial load to new server %s has reached %d of %d", self.my_uri(),
                          target_uri, log_index, my_index)
-        if log_index < my_index:
-            self.loading_data.batch_count += 1
-            self.loading_data.last_batch_index = log_index
-            self.loading_data.last_batch_time = time.time()
-            return
-        self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
-                         target_uri)
-        tracker = await self.tracker_for_follower(target_uri)
-        tracker.add_loading = False
-        plan = await self.get_cluster_config() # current config include change info as pending_node field
-        command = dict(op="add_node", config=plan, operand=target_uri)
-        encoded = json.dumps(command, default=lambda o:o.__dict__)
-        #print(f'\n\n\n{json.dumps(command, default=lambda o:o.__dict__, indent=4)}\n\n\n')
-        rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
-        rec_to_send = await self.log.append(rec)
-        await leader.broadcast_log_record(rec_to_send)
+
+        if log_index == my_index:
+            self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
+                             target_uri)
+            tracker = await self.tracker_for_follower(target_uri)
+            tracker.add_loading = False
+            plan = await self.get_cluster_config() # current config include change info as pending_node field
+            command = dict(op="add_node", config=plan, operand=target_uri)
+            encoded = json.dumps(command, default=lambda o:o.__dict__)
+            #print(f'\n\n\n{json.dumps(command, default=lambda o:o.__dict__, indent=4)}\n\n\n')
+            rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
+            rec_to_send = await self.log.append(rec)
+            await leader.broadcast_log_record(rec_to_send)
+            msg = self.loading_data.change_message
+            if msg:
+                await leader.send_membership_change_response_message(msg, ok=True)
+            await self.hull.note_join_done(True)
+            self.loading_data = None
+            return True
+        config = await self.get_cluster_config()
+        timeout =  config.settings.election_timeout_max
+        if self.loading_data.prev_send_time != 0.0:
+            if time.time() - self.loading_data.prev_send_time > timeout:
+                self.logger.warning("%s single entries send to new server %s is is too slow, aborting", self.my_uri(),
+                                    target_uri)
+                await self.abort_node_add(target_uri, leader)
+                return False
+        if self.loading_data.prev_round_start_time:
+            if time.time() - self.loading_data.prev_round_start_time > timeout:
+                self.logger.warning("%s initial load to new server %s is is too slow to finish round, aborting", self.my_uri(),
+                                    target_uri)
+                await self.abort_node_add(target_uri, leader)
+                return False
+        my_last = await self.log.get_last_index()
+        if self.loading_data.prev_round_start_time == 0.0:
+            # we are still sending data in first round, see if we are done with it
+            if log_index < self.loading_data.first_round_max_index:
+                self.loading_data.prev_send_time = time.time()
+                return True
+            # finished with first round
+            # start another round
+            self.loading_data.round_count += 1
+            self.loading_data.prev_round_start_time = time.time()
+            self.loading_data.prev_round_max_index = my_last
+            self.loading_data.prev_send_time = time.time()
+            return True
+        # First round is finished, we are in some later round see if we are done
+        if log_index >=  self.loading_data.prev_round_max_index:
+            # finished with this round
+            if self.loading_data.round_count == 10:
+                # not finished after 10 rounds, time to abort
+                self.logger.warning("%s initial load to new server %s is is too slow, 10 rounds done, aborting", self.my_uri(),
+                                    target_uri)
+                await self.abort_node_add(target_uri, leader)
+                return False
+            self.loading_data.round_count += 1
+            self.loading_data.prev_round_start_time = time.time()
+            self.loading_data.prev_round_max_index = my_last
+            self.loading_data.prev_send_time = time.time()
+            return True
+        # not done with whatever round we are working, keep going
+        self.loading_data.prev_send_time = time.time()
+        return True
+        
+    async def abort_node_add(self, node_uri, leader):
+        cc = await self.get_cluster_config()
+        del self.follower_trackers[node_uri]
+        msg = self.loading_data.change_message
+        if msg:
+            await leader.send_membership_change_response_message(msg, ok=False)
+        await self.hull.note_join_done(False)
         
     async def plan_add_node(self, node_uri):
         """

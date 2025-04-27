@@ -2,6 +2,8 @@ from enum import Enum
 from typing import Optional
 import json
 from raftengine.messages.base_message import BaseMessage
+from raftengine.messages.cluster_change import ChangeOp
+
 
 class EventType(str, Enum):
     error = "ERROR"
@@ -13,6 +15,8 @@ class EventType(str, Enum):
     leader_change = "LEADER_CHANGE"
     index_change = "INDEX_CHANGE"
     commit_change = "COMMIT_CHANGE"
+    membership_change_complete = "MEMBERSHIP_CHANGE_COMPLETE"
+    membership_change_aborted = "MEMBERSHIP_CHANGE_ABORTED"
 
     def __str__(self):
         return self.value
@@ -99,6 +103,23 @@ class CommitChangeEvent(Event):
     
     def __init__(self, new_commit):
         self.new_commit = new_commit
+
+class  MembershipChangeDoneEvent(Event):
+
+    event_type = EventType.membership_change_complete
+    
+    def __init__(self, op: ChangeOp, new_node_uri):
+        self.op = op
+        self.new_node_uri = new_node_uri
+
+class MembershipChangeAbortedEvent(Event):
+
+    event_type = EventType.membership_change_aborted
+    
+    def __init__(self, op: ChangeOp, failed_node_uri):
+        self.op = op
+        self.failed_node_uri = failed_node_uri
+
 
 class EventHandler:
 

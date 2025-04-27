@@ -4,7 +4,7 @@ import logging
 import pytest
 import time
 from pathlib import Path
-from raftengine.hull.hull import EventType, EventHandler
+from raftengine.api.events import EventType, EventHandler
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
@@ -138,6 +138,7 @@ async def test_event_handlers(cluster_maker):
     
     command_result = await cluster.run_command("add 1", 1)
     await cluster.deliver_all_pending()
+    await asyncio.sleep(0)
     assert sends > 0
     assert sends == recvs == handles
     assert index_changes == 1
@@ -155,6 +156,7 @@ async def test_event_handlers(cluster_maker):
 
     # now demote the leader and make sure we get the event
     await ts_1.hull.demote_and_handle()
+    await asyncio.sleep(0)
     assert role_change_counter == 6
 
     await cluster.stop_auto_comms()
@@ -214,7 +216,7 @@ async def test_message_errors(cluster_maker):
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()
-    
+    await asyncio.sleep(0)
     assert error_counter == 1
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
@@ -226,6 +228,7 @@ async def test_message_errors(cluster_maker):
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
     await ts_1.do_next_in_msg()
+    await asyncio.sleep(0)
     assert error_counter == 2
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1

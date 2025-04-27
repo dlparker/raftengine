@@ -18,6 +18,7 @@
 9. [] Update follower remove op to wait for commit, and update leader to sent heartbeat to removing server. Follower logic
    probably needs to ignore heatbeats unless commit equals the record index of the remove log entry. Avoid overly complex
    logic to prevent messing wwith ongoing log replication.
+10. [] completely convert substate to events
    
    
    

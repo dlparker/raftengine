@@ -208,7 +208,7 @@ class Follower(BaseRole):
         
     async def on_membership_change_response(self, message):
         if message.op == ChangeOp.add and message.target_uri == self.my_uri():
-            self.logger.info("%s leader accepted add request, expecting catch up append entries", self.my_uri())
+            self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
         else:
             self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
            

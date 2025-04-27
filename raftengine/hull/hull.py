@@ -3,31 +3,22 @@ import traceback
 import logging
 import time
 import json
-from typing import Optional
-from collections import defaultdict
-from copy import deepcopy
-    
 
-from raftengine.api.types import RoleName, SubstateCode
-from raftengine.api.events import EventType, EventHandler, ErrorEvent
-from raftengine.api.events import RoleChangeEvent, TermChangeEvent, LeaderChangeEvent
-from raftengine.api.events import MsgHandledEvent, MsgRecvEvent, MsgSentEvent
-from raftengine.api.events import IndexChangeEvent, CommitChangeEvent
+from raftengine.api.types import RoleName
 from raftengine.api.hull_api import CommandResult
-from raftengine.messages.base_message import BaseMessage
+from raftengine.hull.event_control import EventControl
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
-from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage
+from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_api import HullAPI
-from raftengine.api.events import EventType, EventHandler
+from raftengine.api.events import EventType
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
-from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine.hull.cluster_ops import ClusterOps
 
 class Hull(HullAPI):
@@ -49,6 +40,7 @@ class Hull(HullAPI):
         self.event_control = EventControl()
         self.cluster_ops = ClusterOps(self, cluster_config, self.log)
         self.role = Follower(self, self.cluster_ops)
+        self.join_result = None
         
     # Part of API
     async def start(self):
@@ -65,8 +57,28 @@ class Hull(HullAPI):
 
     def get_role(self):
         return self.role
-   
-    async def start_and_join(self, leader_uri):
+
+    async def note_join_done(self, success):
+        self.join_result = success
+        
+    async def join_waiter(self, callback=None):
+        emin,emax = await self.cluster_ops.get_election_timeout_range()
+        hb_time = await self.cluster_ops.get_heartbeat_period()
+        start_time = time.time()
+        while time.time() - start_time < emax * 10.0 and self.join_in_progress is None:
+            await asyncio.sleep(hb_time/10.0)
+        ok = self.join_in_progress
+        self.join_in_progress = None
+        if ok:
+            if EventType.membership_change_complete in self.event_control.active_events:
+                await self.event_control.emit_membership_change_complete(ChangeOp.add, self.get_my_uri())
+        else:
+            if EventType.membership_change_aborted in self.event_control.active_events:
+                await self.event_control.emit_membership_change_aborted(ChangeOp.add, self.get_my_uri())
+        if callback:
+            await callback(ok,self.get_my_uri())
+
+    async def start_and_join(self, leader_uri, callback=False):
         config = await self.cluster_ops.get_cluster_config()
         if leader_uri not in config.nodes:
             raise Exception(f'cannot find specified leader {leader_uri} in cluster {self.cluster_ops.get_cluster_node_ids()}')
@@ -74,6 +86,9 @@ class Hull(HullAPI):
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
         await self.role.join_cluster(leader_uri)
+        self.join_in_progress = True
+        asyncio.create_task(self.join_waiter(callback))
+
         
     # Part of API
     def decode_message(self, in_message):
@@ -147,6 +162,14 @@ class Hull(HullAPI):
                 await self.event_control.emit_commit_change(new_commit)
         return result
 
+    # Part of API
+    async def add_event_handler(self, handler):
+        return self.event_control.add_handler(handler)
+    
+    # Part of API
+    async def remove_event_handler(self, handler):
+        return self.event_control.remove_handler(handler)
+    
     # Called by Role
     def get_log(self):
         return self.log
@@ -343,91 +366,3 @@ class Hull(HullAPI):
         return res
 
 
-class EventControl:
-
-    def __init__(self):
-        self.error_events = [EventType.error,]
-        self.message_events = [EventType.msg_sent, EventType.msg_recv,
-                               EventType.msg_handled]
-        self.major_events = [EventType.role_change, EventType.term_change,
-                             EventType.leader_change]
-        self.common_events = [EventType.index_change, EventType.commit_change]
-
-        self.active_events = []
-        self.handlers = []
-        self.handler_map = defaultdict(list)
-
-
-    def add_handler(self, handler: EventHandler) -> None:
-        if not handler in self.handlers:
-            self.handlers.append(handler)
-            for event_type in handler.events_handled():
-                if event_type not in self.active_events:
-                    self.active_events.append(event_type)
-                if handler not in self.handler_map[event_type]:
-                    self.handler_map[event_type].append(handler)
-
-    def remove_handler(self, handler: EventHandler) -> None:
-        if handler in self.handlers:
-            self.handlers.remove(handler)
-            for event_type in handler.events_handled():
-                self.handler_map[event_type].remove(handler)
-                if len(self.handler_map[event_type]) == 0:
-                    self.active_events.remove(event_type)
-
-    async def emit_error(self, error:str) -> None:
-        my_type = EventType.error
-        event = ErrorEvent(error)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_sent_msg(self, msg:BaseMessage) -> None:
-        my_type = EventType.msg_sent
-        event = MsgSentEvent(msg)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-            
-    async def emit_recv_msg(self, msg:BaseMessage) -> None:
-        my_type = EventType.msg_recv
-        event = MsgRecvEvent(msg)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_handled_msg(self, msg:BaseMessage, result: Optional[str] = None,
-                               error: Optional[str] = None) -> None:
-        my_type = EventType.msg_handled
-        event = MsgHandledEvent(msg, result, error)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_role_change(self, new_role: str) -> None:
-        my_type = EventType.role_change
-        event = RoleChangeEvent(new_role)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_term_change(self, new_term:int) -> None:
-        my_type = EventType.term_change
-        event = TermChangeEvent(new_term)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_leader_change(self, new_leader:str) -> None:
-        my_type = EventType.leader_change
-        event = LeaderChangeEvent(new_leader)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-    async def emit_index_change(self, new_index):
-        my_type = EventType.index_change
-        event = IndexChangeEvent(new_index)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-
-    async def emit_commit_change(self, new_commit):
-        my_type = EventType.commit_change
-        event = CommitChangeEvent(new_commit)
-        for handler in self.handler_map[my_type]:
-            await handler.on_event(event)
-        
-        

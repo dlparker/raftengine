@@ -234,7 +234,9 @@ class Leader(BaseRole):
         if tracker.add_loading:
             self.logger.debug("%s node %s pre cluster join load progress at %d", self.my_uri(),
                               message.sender, message.maxIndex)
-            await self.cluster_ops.note_loading_progress(message.sender, message.maxIndex, self)
+            if not await self.cluster_ops.note_loading_progress(message.sender, message.maxIndex, self):
+                # false result means loading was aborted, done process this message any further
+                return
         if tracker.nextIndex > await self.log.get_last_index():
             self.logger.debug('After success to %s tracker.nextIndex = %d tracker.matchIndex = %d',
                               message.sender, tracker.nextIndex, tracker.matchIndex)
@@ -439,11 +441,7 @@ class Leader(BaseRole):
         return True
         
     async def on_membership_change_message(self, message):
-        ok = await self.cluster_ops.do_node_inout(message.op, message.target_uri, self)
-        await self.send_membership_change_response_message(message, ok=ok)
-        if message.op == ChangeOp.add:
-            await self.send_heartbeats(target_only=message.target_uri)
-        return 
+        await self.cluster_ops.do_node_inout(message.op, message.target_uri, self, message)
 
     async def do_node_exit(self, target_uri):
         return await self.cluster_ops.do_node_inout("REMOVE", target_uri, self)

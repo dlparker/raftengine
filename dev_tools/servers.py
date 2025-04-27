@@ -1038,8 +1038,8 @@ class PausingServer(PilotAPI):
     async def start(self):
         await self.hull.start()
         
-    async def start_and_join(self, leader_uri):
-        await self.hull.start_and_join(leader_uri)
+    async def start_and_join(self, leader_uri, callback=None):
+        await self.hull.start_and_join(leader_uri, callback)
         
     async def start_election(self):
         await self.hull.campaign()
@@ -1049,6 +1049,18 @@ class PausingServer(PilotAPI):
 
     async def enable_timers(self, reset=True):
         return await self.hull.enable_timers(reset=reset)
+
+    async def fake_command(self, log_index, op, value):
+        rec = LogRec(index=log_index, term=1, command=f"{op} {value}", committed=True, applied=True)
+        await self.log.append(rec)
+        if op == "add":
+            self.operations.total += value
+        elif op == "sub":
+            self.operations.total -= value
+        else:
+            raise Exception(f'unexpected op "{op}"')
+        
+        
 
     def replace_log(self, new_log=None):
         if self.use_log == SqliteLog:

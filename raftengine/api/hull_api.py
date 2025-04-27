@@ -63,6 +63,14 @@ class HullAPI(abc.ABC):
         """
         
     @abc.abstractmethod
+    async def add_event_handler(self, handler):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def remove_event_handler(self, handler):
+        raise NotImplementedError
+    
+    @abc.abstractmethod
     async def on_message(self, in_message:str) -> None:
         """
         When the server receives a message for the RaftLibrary, it should pass it to this

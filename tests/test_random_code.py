@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from pprint import pprint
 import pytest
-from raftengine.hull.hull import EventType, EventHandler, Hull
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
