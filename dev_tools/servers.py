@@ -573,7 +573,8 @@ class TestHull(Hull):
 
     async def disable_timers(self):
         self.timers_disabled = True
-        self.role_async_handle.cancel()
+        if self.role_async_handle:
+            self.role_async_handle.cancel()
         self.role_async_handle = None
     
     async def enable_timers(self, reset=True):
@@ -964,7 +965,7 @@ class PausingServer(PilotAPI):
             return None
         if self.hull.get_role_name() == "LEADER":
             return self.uri
-        return self.hull.role.leader_uri
+        return self.hull.leader_uri
         
     async def start_campaign(self, authorized=False):
         res = await self.hull.start_campaign(authorized=authorized)
@@ -1038,8 +1039,11 @@ class PausingServer(PilotAPI):
     async def start(self):
         await self.hull.start()
         
-    async def start_and_join(self, leader_uri, callback=None):
-        await self.hull.start_and_join(leader_uri, callback)
+    async def stop(self):
+        await self.hull.stop()
+        
+    async def start_and_join(self, leader_uri, callback=None, timeout=10.0):
+        await self.hull.start_and_join(leader_uri, callback, timeout)
         
     async def start_election(self):
         await self.hull.campaign()
@@ -1060,8 +1064,6 @@ class PausingServer(PilotAPI):
         else:
             raise Exception(f'unexpected op "{op}"')
         
-        
-
     def replace_log(self, new_log=None):
         if self.use_log == SqliteLog:
             self.log.close()
@@ -1691,6 +1693,14 @@ class TestTrace:
                 short_code = "p_v_r"
             elif message.code == "pre_vote_response":
                 short_code = "p_v"
+            elif message.code == "membership_change":
+                short_code = "m_c"
+            elif message.code == "membership_change_response":
+                short_code = "m_cr"
+            elif message.code == "transfer_power":
+                short_code = "t_p"
+            elif message.code == "transfer_power_response":
+                short_code = "t_pr"
             target = message.receiver.split("/")[-1]
             sender = message.sender.split("/")[-1]
             if message.sender == ns.uri:
@@ -1706,6 +1716,14 @@ class TestTrace:
                 value += f" ok={message.success} mi={message.maxIndex}"
             elif message.code in ("request_vote_response", "pre_vote_response"):
                 value += f" yes={message.vote} "
+            elif message.code in ("membership_change", "membership_change_response"):
+                value += f" op={message.op} n={message.target_uri} "
+                if message.code == "membership_change_response":
+                    value += f"ok={message.ok} "
+            elif message.code in ("transfer_power", "transfer_power_response"):
+                value += f" i={message.prevLogIndex} c={message.commitIndex}"
+                if message.code == "transfer_power_response":
+                    value += "ok={message.success} "
             else:
                 raise Exception('no code for message type')
             return value

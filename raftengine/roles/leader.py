@@ -178,7 +178,7 @@ class Leader(BaseRole):
     async def scheduled_send_heartbeats(self):
         await self.send_heartbeats()
         await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
-        
+
     async def send_heartbeats(self, target_only=None):
         entries = []
         if self.use_check_quorum and len(self.bcast_pendings) > 0:

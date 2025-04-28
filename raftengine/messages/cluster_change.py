@@ -64,3 +64,4 @@ class MembershipChangeResponseMessage(BaseMessage):
         msg += f" op={self.op} uri={self.target_uri} ok={self.ok}"
         return msg
 
+

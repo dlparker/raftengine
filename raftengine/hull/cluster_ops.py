@@ -2,6 +2,7 @@ import random
 import logging
 import time
 import json
+import asyncio
 from typing import Optional
 from copy import deepcopy
 from dataclasses import dataclass
@@ -46,6 +47,7 @@ class ClusterOps:
         self.log = log
         self._leader_uri = None
         self.loading_data = None
+        self.loading_round_timer_handle = None
 
     async def start(self):
         await self.get_cluster_config()
@@ -136,6 +138,23 @@ class ClusterOps:
         if target_uri == self.my_uri():
             leader.exit_in_progress = True
 
+    async def loading_round_timeout(self, target_uri, leader):
+        self.logger.warning("%s loading records into new server %s is is too slow, aborting", self.my_uri(),
+                            target_uri)
+        await self.abort_node_add(target_uri, leader)
+        
+    async def start_loading_round_timer(self, target_uri, leader):
+        config = await self.get_cluster_config()
+        timeout =  config.settings.election_timeout_max
+        loop = asyncio.get_event_loop()
+        self.loading_round_timer_handle = loop.call_later(timeout,
+                                                          lambda target_uri=target_uri, leader=leader:
+                                                          asyncio.create_task(self.loading_round_timeout(target_uri, leader)))
+        
+    async def stop_loading_round_timer(self):
+        if self.loading_round_timer_handle:
+            self.loading_round_timer_handle.cancel()
+
     async def note_loading_progress(self, target_uri, log_index, leader):
         my_index = await self.log.get_last_index()
         self.logger.info("%s initial load to new server %s has reached %d of %d", self.my_uri(),
@@ -144,6 +163,7 @@ class ClusterOps:
         if log_index == my_index:
             self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
                              target_uri)
+            await self.stop_loading_round_timer()
             tracker = await self.tracker_for_follower(target_uri)
             tracker.add_loading = False
             plan = await self.get_cluster_config() # current config include change info as pending_node field
@@ -185,6 +205,7 @@ class ClusterOps:
             self.loading_data.prev_round_start_time = time.time()
             self.loading_data.prev_round_max_index = my_last
             self.loading_data.prev_send_time = time.time()
+            await self.start_loading_round_timer(target_uri, leader)
             return True
         # First round is finished, we are in some later round see if we are done
         if log_index >=  self.loading_data.prev_round_max_index:
@@ -199,6 +220,7 @@ class ClusterOps:
             self.loading_data.prev_round_start_time = time.time()
             self.loading_data.prev_round_max_index = my_last
             self.loading_data.prev_send_time = time.time()
+            await self.start_loading_round_timer(target_uri, leader)
             return True
         # not done with whatever round we are working, keep going
         self.loading_data.prev_send_time = time.time()
@@ -206,11 +228,13 @@ class ClusterOps:
         
     async def abort_node_add(self, node_uri, leader):
         cc = await self.get_cluster_config()
+        cc.pending_node = None
+        await self.log.save_cluster_config(cc)
+        await self.stop_loading_round_timer()
         del self.follower_trackers[node_uri]
         msg = self.loading_data.change_message
         if msg:
             await leader.send_membership_change_response_message(msg, ok=False)
-        await self.hull.note_join_done(False)
         
     async def plan_add_node(self, node_uri):
         """

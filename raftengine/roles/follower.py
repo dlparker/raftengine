@@ -208,10 +208,13 @@ class Follower(BaseRole):
         
     async def on_membership_change_response(self, message):
         if message.op == ChangeOp.add and message.target_uri == self.my_uri():
-            self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
+            if message.ok:
+                self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
+            else:
+                self.logger.info("%s leader rejected add request", self.my_uri())
+            await self.hull.note_join_done(message.ok)
         else:
             self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
-           
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term
         # value that they receive in a message. Always means an election has

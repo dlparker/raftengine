@@ -19,6 +19,7 @@
    probably needs to ignore heatbeats unless commit equals the record index of the remove log entry. Avoid overly complex
    logic to prevent messing wwith ongoing log replication.
 10. [] completely convert substate to events
+11. [] refactor servers.py into subunits, setup_log, test_tracing, sim_net, pausing_server, pausing_cluster, pause_triggers, sequences.
    
    
    

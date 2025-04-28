@@ -103,6 +103,6 @@ class EventControl:
 
     async def emit_membership_change_aborted(self, op, new_node_uri):
         my_type = EventType.membership_change_aborted
-        event = MembershipChangeAbortedEvent(new_node_uri)
+        event = MembershipChangeAbortedEvent(op, new_node_uri)
         for handler in self.handler_map[my_type]:
-            asyncio.create_task(handler.on_event(op, event))
+            asyncio.create_task(handler.on_event(event))
