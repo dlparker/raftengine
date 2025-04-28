@@ -1088,57 +1088,14 @@ async def test_reverse_remove_follower_1(cluster_maker):
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
-    ts_4 = await cluster.add_node()
-    leader = cluster.get_leader()
-    async def join_done(ok, new_uri):
-        logger.debug(f"Join callback said {ok} joining as {new_uri}")
-        assert ok
-    await ts_4.start_and_join(leader.uri, join_done)
 
-    # want add load to complete and leader to send add log message, but we don't want followers
-    # to accept that message, rather to discard it.
+    await ts_3.exit_cluster()
     ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
-    ts_4.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
+    ts_3.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
     await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_4.run_till_triggers())
+                         ts_3.run_till_triggers())
     ts_1.clear_triggers()
-    ts_4.clear_triggers()
-
-    # first dialog should have false from new node
-    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
-    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_4.run_till_triggers())
-    ts_1.clear_triggers()
-    ts_4.clear_triggers()
-    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
-    assert not ts_1.in_messages[0].success
-    await ts_1.do_next_in_msg()
-
-    
-    # second dialog should have ok from new node, but one more needed
-    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
-    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_4.run_till_triggers())
-    ts_1.clear_triggers()
-    ts_4.clear_triggers()
-    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
-    assert ts_1.in_messages[0].success
-    assert ts_1.in_messages[0].success
-    assert ts_1.in_messages[0].maxIndex == 1
-    await ts_1.do_next_in_msg()
-    # second dialog should have ok from new node, but one more needed
-    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
-    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_4.run_till_triggers())
-    ts_1.clear_triggers()
-    ts_4.clear_triggers()
-    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
-    assert ts_1.in_messages[0].success
-    assert ts_1.in_messages[0].maxIndex == 2
-
+    ts_3.clear_triggers()
     # next message from leader should be log record with membership change
     await ts_1.do_next_in_msg()
     assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
@@ -1148,6 +1105,8 @@ async def test_reverse_remove_follower_1(cluster_maker):
     assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
 
+    # now crash the leader, no changes at followers yet, so leader's record
+    # should get overwritten on restart
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
     sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri], 1)
@@ -1181,7 +1140,6 @@ async def test_reverse_remove_follower_1(cluster_maker):
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()
     await ts_1.do_next_in_msg()
-    assert ts_1.out_messages[0].success
     
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None

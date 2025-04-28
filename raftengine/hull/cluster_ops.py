@@ -357,7 +357,7 @@ class ClusterOps:
         op = cdict['op']
         operand = cdict['operand']
         if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
-            cc.nodes.append(cc.pending_node)
+            cc.nodes[operand] = cc.pending_node
         cc.pending_node = None
         return await self.log.save_cluster_config(cc)
     

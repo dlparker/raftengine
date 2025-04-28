@@ -29,9 +29,6 @@ class BaseMessage:
                        and other.prevLogTerm == self.prevLogTerm
                        and other.prevLogIndex == self.prevLogIndex):
                         return True
-                else:
-                    # if this is not true for a message class, override this method
-                    return True
         return False
 
     @classmethod

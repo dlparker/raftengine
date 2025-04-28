@@ -102,14 +102,8 @@ class BaseRole:
         await self.hull.record_message_problem(message, problem)
 
     async def on_append_entries_response(self, message):
-        if self.role_name == "FOLLOWER":
-            problem = 'append_entries_response not implemented in the class '
-            problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
-            if hasattr(message, 'leaderId'):
-                if message.term == await self.log.get_term() and self.leader_uri is None:
-                    self.logger.debug('%s message says leader is %s, adopting', self.my_uri(), message.leaderId)
-                    await self.hull.set_leader_uri(message.leaderId)
-                    problem += f" except adopting leader {self.leader_uri}"
+        problem = 'append_entries_response not implemented in the class '
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
 
