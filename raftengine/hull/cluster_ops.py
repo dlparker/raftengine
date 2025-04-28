@@ -49,9 +49,6 @@ class ClusterOps:
         self.loading_data = None
         self.loading_round_timer_handle = None
 
-    async def start(self):
-        await self.get_cluster_config()
-
     @property
     def leader_uri(self):
         return self._leader_uri
@@ -157,8 +154,8 @@ class ClusterOps:
 
     async def note_loading_progress(self, target_uri, log_index, leader):
         my_index = await self.log.get_last_index()
-        self.logger.info("%s initial load to new server %s has reached %d of %d", self.my_uri(),
-                         target_uri, log_index, my_index)
+        self.logger.info("%s initial load to new server %s has reached %d of %d on round %d", self.my_uri(),
+                         target_uri, log_index, my_index, self.loading_data.round_count)
 
         if log_index == my_index:
             self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
@@ -181,23 +178,12 @@ class ClusterOps:
             return True
         config = await self.get_cluster_config()
         timeout =  config.settings.election_timeout_max
-        if self.loading_data.prev_send_time != 0.0:
-            if time.time() - self.loading_data.prev_send_time > timeout:
-                self.logger.warning("%s single entries send to new server %s is is too slow, aborting", self.my_uri(),
-                                    target_uri)
-                await self.abort_node_add(target_uri, leader)
-                return False
-        if self.loading_data.prev_round_start_time:
-            if time.time() - self.loading_data.prev_round_start_time > timeout:
-                self.logger.warning("%s initial load to new server %s is is too slow to finish round, aborting", self.my_uri(),
-                                    target_uri)
-                await self.abort_node_add(target_uri, leader)
-                return False
         my_last = await self.log.get_last_index()
         if self.loading_data.prev_round_start_time == 0.0:
             # we are still sending data in first round, see if we are done with it
             if log_index < self.loading_data.first_round_max_index:
                 self.loading_data.prev_send_time = time.time()
+                self.logger.debug("%s round 1 continues", self.my_uri())
                 return True
             # finished with first round
             # start another round
@@ -221,10 +207,12 @@ class ClusterOps:
             self.loading_data.prev_round_max_index = my_last
             self.loading_data.prev_send_time = time.time()
             await self.start_loading_round_timer(target_uri, leader)
+            self.logger.debug("%s round %d begins", self.my_uri(), self.loading_data.round_count)
             return True
-        # not done with whatever round we are working, keep going
-        self.loading_data.prev_send_time = time.time()
-        return True
+        else:
+            self.loading_data.prev_send_time = time.time()
+            self.logger.debug("%s round %d continues", self.my_uri(), self.loading_data.round_count)
+            return True
         
     async def abort_node_add(self, node_uri, leader):
         cc = await self.get_cluster_config()
@@ -428,8 +416,6 @@ class ClusterOps:
         Called by leader when it receives enough votes on the membership
         change to commit it.
         """
-        if log_record.applied:
-            return
         cdict = json.loads(log_record.command)
         op = cdict['op']
         operand = cdict['operand']

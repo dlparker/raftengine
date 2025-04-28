@@ -360,7 +360,7 @@ class Leader(BaseRole):
             await self.log.replace(rec)
             if rec.code == RecordCode.client_command:
                 asyncio.create_task(self.run_command_locally(rec))
-            elif rec.code == RecordCode.cluster_config:
+            elif rec.code == RecordCode.cluster_config and not rec.applied:
                 await self.cluster_ops.cluster_config_vote_passed(rec, self)
 
     async def run_command_locally(self, log_record):

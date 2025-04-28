@@ -1054,8 +1054,9 @@ class PausingServer(PilotAPI):
     async def enable_timers(self, reset=True):
         return await self.hull.enable_timers(reset=reset)
 
-    async def fake_command(self, log_index, op, value):
-        rec = LogRec(index=log_index, term=1, command=f"{op} {value}", committed=True, applied=True)
+    async def fake_command(self, op, value):
+        last_index = await self.log.get_last_index()
+        rec = LogRec(index=last_index + 1, term=1, command=f"{op} {value}", committed=True, applied=True)
         await self.log.append(rec)
         if op == "add":
             self.operations.total += value

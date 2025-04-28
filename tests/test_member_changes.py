@@ -119,7 +119,7 @@ async def test_remove_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_remove_follower_1.__doc__)
     await cluster.start()
@@ -138,7 +138,7 @@ async def test_remove_follower_1(cluster_maker):
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
 
-    print("\n\n\nRemoving node 3\n\n\n")
+    logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
     await ts_3.exit_cluster()
     await cluster.deliver_all_pending()
@@ -161,7 +161,7 @@ async def test_remove_leader_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_remove_leader_1.__doc__)
     await cluster.start()
@@ -180,7 +180,7 @@ async def test_remove_leader_1(cluster_maker):
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
 
-    print("\n\n\nRemoving leader node 1\n\n\n")
+    logger.debug("\n\n\nRemoving leader node 1\n\n\n")
     await ts_1.exit_cluster()
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
@@ -207,7 +207,7 @@ async def test_add_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_remove_leader_1.__doc__)
     await cluster.start()
@@ -231,7 +231,7 @@ async def test_add_follower_1(cluster_maker):
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
     async def join_done(ok, new_uri):
-        print(f"Join callbak said {ok} joining as {new_uri}")
+        logger.debug(f"Join callbak said {ok} joining as {new_uri}")
         assert ok
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -246,7 +246,7 @@ async def test_add_follower_1(cluster_maker):
 
 async def test_add_follower_2(cluster_maker):
     """
-    Adding a follower to the cluster with a long log, filled with a couple hundred entries. We are
+    Adding a follower to the cluster with a long log, filled with a bunch entries. We are
     cheating by directly adding the entries to each member node before the add, just to keep the
     logging, time and tracing down.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
@@ -256,7 +256,7 @@ async def test_add_follower_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_remove_leader_1.__doc__)
     await cluster.start()
@@ -276,10 +276,10 @@ async def test_add_follower_2(cluster_maker):
     await cluster.deliver_all_pending()
     #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
     msg_per = await ts_1.hull.get_max_entries_per_message()
-    limit = (msg_per *2) + 2 # get two blocks of update, will start at 2 because we have one record already
+    limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
-            await ts.fake_command(i, "add", 1)
+            await ts.fake_command("add", 1)
     for ts in [ts_1, ts_2, ts_3]:
         assert await ts.log.get_last_term() == 1
         assert await ts.log.get_last_index() == limit
@@ -292,7 +292,7 @@ async def test_add_follower_2(cluster_maker):
     done_by_event = None
     async def join_done(ok, new_uri):
         nonlocal done_by_callback
-        print(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
         done_by_callback = ok
         
     class MembershipChangeResultHandler(EventHandler):
@@ -304,10 +304,12 @@ async def test_add_follower_2(cluster_maker):
             nonlocal done_by_event
             if event.event_type == EventType.membership_change_complete:
                 done_by_event = True
-                print('in handler with success = True\n')
+                logger.debug('in handler with success = True\n')
             else:
-                print('in handler with success = False\n')
+                logger.debug('in handler with success = False\n')
                 done_by_event = False
+
+    logger.debug("\n\nStarting join from node 4\n\n")
     await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -331,7 +333,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_remove_leader_1.__doc__)
     await cluster.start()
@@ -354,7 +356,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
-            await ts.fake_command(i, "add", 1)
+            await ts.fake_command("add", 1)
     for ts in [ts_1, ts_2, ts_3]:
         assert await ts.log.get_last_term() == 1
         assert await ts.log.get_last_index() == limit
@@ -367,7 +369,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     done_by_event = None
     async def join_done(ok, new_uri):
         nonlocal done_by_callback
-        print(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
         done_by_callback = ok
         
     class MembershipChangeResultHandler(EventHandler):
@@ -379,9 +381,9 @@ async def test_add_follower_2_rounds_1(cluster_maker):
             nonlocal done_by_event
             if event.event_type == EventType.membership_change_complete:
                 done_by_event = True
-                print('in handler with success = True\n')
+                logger.debug('in handler with success = True\n')
             else:
-                print('in handler with success = False\n')
+                logger.debug('in handler with success = False\n')
                 done_by_event = False
 
     # first exchange will tell leader that node 4 needs catchup, by
@@ -395,7 +397,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
                          ts_4.run_till_triggers())
     ts_1.clear_triggers()
     ts_4.clear_triggers()
-    print("\n\nappend 1 done, should backdown\n\n")
+    logger.debug("\n\nappend 1 done, should backdown\n\n")
     await ts_1.do_next_in_msg()
     assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
     await ts_1.do_next_out_msg()
@@ -405,22 +407,23 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     await ts_4.do_next_out_msg()
     # this last exchange was the backdown, should result in replicating record 1, term start
     # next should replicate the command records
-    print("\n\nappend 2 done, backdown should be done, now catchup\n\n")
+    logger.debug("\n\nappend 2 done, backdown should be done, now catchup\n\n")
     await ts_1.do_next_in_msg()
     assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
     await ts_1.do_next_out_msg()
     assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
     await ts_4.do_next_in_msg()
     assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
-    await ts_4.do_next_out_msg()
 
     assert await ts_4.log.get_last_index() == limit
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
-    print("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command\n")
-    await ts_1.fake_command(limit + 1, "add", 1)
-    print("\n\nfaked command at leader, should start round 2 now\n")
+    logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking commands\n")
+    await ts_1.fake_command("add", 1)
+    logger.debug("\n\nfaked command at leader, should start round 2 now\n")
+    
+    await ts_4.do_next_out_msg()
     
     start_time = time.time()
     while time.time() - start_time < 0.1:
@@ -434,6 +437,270 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     assert done_by_callback 
     await asyncio.sleep(0.00)
     assert done_by_event 
+    
+async def test_add_follower_3_rounds_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_remove_leader_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    # vote requests, then vote responses
+    await cluster.deliver_all_pending()
+    assert ts_1.get_role_name() == "LEADER"
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    # append entries, then responses
+    await cluster.deliver_all_pending()
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+    msg_per = await ts_1.hull.get_max_entries_per_message()
+    limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
+    for i in range(2, limit+1):
+        for ts in [ts_1, ts_2, ts_3]:
+            await ts.fake_command("add", 1)
+    for ts in [ts_1, ts_2, ts_3]:
+        assert await ts.log.get_last_term() == 1
+        assert await ts.log.get_last_index() == limit
+        assert await ts.log.get_commit_index() == limit
+        assert await ts.log.get_applied_index() == limit
+        assert ts.operations.total == limit - 1
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    done_by_callback = None
+    done_by_event = None
+    async def join_done(ok, new_uri):
+        nonlocal done_by_callback
+        logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        done_by_callback = ok
+        
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+
+    # first exchange will tell leader that node 4 needs catchup, by
+    # how much from maxIndex in response
+    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.start_and_join(leader.uri, join_done)
+
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug("\n\nappend 1 done, should backdown\n\n")
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_1.do_next_out_msg()
+    assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_4.do_next_in_msg()
+    assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+    await ts_4.do_next_out_msg()
+    # this last exchange was the backdown, should result in replicating record 1, term start
+    # next should replicate the command records
+    logger.debug("\n\nappend 2 done, backdown should be done, now catchup\n\n")
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_1.do_next_out_msg()
+    assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_4.do_next_in_msg()
+    assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+
+    assert await ts_4.log.get_last_index() == limit
+    assert await ts_4.log.get_commit_index() == limit
+    assert ts_4.operations.total == limit - 1
+
+    logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command to start a round\n")
+    last_index = await ts_4.log.get_last_index()
+    await ts_1.fake_command("add", 1)
+    logger.debug("\n\nfaked command at leader, should start round 2 now\n")
+    
+    await ts_4.do_next_out_msg()
+    await ts_1.do_next_in_msg()
+    # these asserts don't test much, but they help readers understand what it happening
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_1.do_next_out_msg()
+    assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_4.do_next_in_msg()
+    assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+
+    # poised to finish round 2, add more commands to force round 3, and make it enough to take > 1 message
+    msg_per = await ts_1.hull.get_max_entries_per_message()
+    limit = int(msg_per*2)
+    for i in range(limit):
+        for ts in [ts_1, ts_2, ts_3]:
+            await ts.fake_command("add", 1)
+    logger.debug(f"\n\nfaked {limit} commands at leader, should start round 3 now\n")
+
+    await ts_4.do_next_out_msg()
+    
+    start_time = time.time()
+    while time.time() - start_time < 0.1:
+        cc = await ts_1.log.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert ts_4.operations.total == ts_1.operations.total
+    assert done_by_callback 
+    await asyncio.sleep(0.00)
+    assert done_by_event 
+    
+async def test_add_follower_too_many_rounds_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_add_follower_too_many_rounds_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    # vote requests, then vote responses
+    await cluster.deliver_all_pending()
+    assert ts_1.get_role_name() == "LEADER"
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    # append entries, then responses
+    await cluster.deliver_all_pending()
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+    msg_per = await ts_1.hull.get_max_entries_per_message()
+    limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
+    for i in range(2, limit+1):
+        for ts in [ts_1, ts_2, ts_3]:
+            await ts.fake_command("add", 1)
+    for ts in [ts_1, ts_2, ts_3]:
+        assert await ts.log.get_last_term() == 1
+        assert await ts.log.get_last_index() == limit
+        assert await ts.log.get_commit_index() == limit
+        assert await ts.log.get_applied_index() == limit
+        assert ts.operations.total == limit - 1
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    done_by_callback = None
+    done_by_event = None
+    async def join_done(ok, new_uri):
+        nonlocal done_by_callback
+        logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        done_by_callback = ok
+        
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+
+
+
+    # first exchange will tell leader that node 4 needs catchup, by
+    # how much from maxIndex in response
+    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.start_and_join(leader.uri, join_done)
+
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug("\n\nappend 1 done, should backdown\n\n")
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_1.do_next_out_msg()
+    assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_4.do_next_in_msg()
+    assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+    await ts_4.do_next_out_msg()
+    # this last exchange was the backdown, should result in replicating record 1, term start
+    # next should replicate the command records
+    logger.debug("\n\nappend 2 done, backdown should be done, now catchup\n\n")
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_1.do_next_out_msg()
+    assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+    await ts_4.do_next_in_msg()
+    assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+
+    assert await ts_4.log.get_last_index() == limit
+    assert await ts_4.log.get_commit_index() == limit
+    assert ts_4.operations.total == limit - 1
+
+    logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command to start a round\n")
+
+    async def buy_another_round(last_round_number):
+        last_index = await ts_4.log.get_last_index()
+        await ts_1.fake_command("add", 1)
+        logger.debug(f"\n\nfaked command at leader, should start round {last_round_number} now\n")
+        await ts_4.do_next_out_msg()
+        await ts_1.do_next_in_msg()
+        # these asserts don't test much, but they help readers understand what it happening
+        if last_round_number < 10:
+            assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+            await ts_1.do_next_out_msg()
+            assert ts_4.in_messages[0].code == AppendEntriesMessage.get_code()
+            await ts_4.do_next_in_msg()
+            assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
+        else:
+            assert ts_1.out_messages[0].code == MembershipChangeResponseMessage.get_code()
+            await ts_1.do_next_out_msg()
+            assert ts_4.in_messages[0].code == MembershipChangeResponseMessage.get_code()
+            await ts_4.do_next_in_msg()
+
+            
+    for i in range(1, 11):
+        await buy_another_round(i)
+        
+    # poised to finish round 9, forcing another round should force abort
+    await ts_4.do_next_out_msg()
+    
+    start_time = time.time()
+    while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    # node 4 should have gotten callback and event to notify it that add failed
+    assert done_by_callback is False
+    assert done_by_event is False
     
 async def test_add_follower_round_2_timeout_1(cluster_maker):
     """
@@ -504,7 +771,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 5",
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
                                      test_doc_string=test_add_follower_round_2_timeout_1.__doc__)
     await cluster.start()
@@ -527,7 +794,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records")
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
-            await ts.fake_command(i, "add", 1)
+            await ts.fake_command("add", 1)
     for ts in [ts_1, ts_2, ts_3]:
         assert await ts.log.get_last_term() == 1
         assert await ts.log.get_last_index() == limit
@@ -599,9 +866,9 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command\n")
     cluster.test_trace.start_subtest("Node 4 has caught up its log, but last append response is paused before delivery to leader, adding log record")
-    await ts_1.fake_command(limit + 1, "add", 1)
-    await ts_2.fake_command(limit + 1, "add", 1)
-    await ts_3.fake_command(limit + 1, "add", 1)
+    await ts_1.fake_command("add", 1)
+    await ts_2.fake_command("add", 1)
+    await ts_3.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now, but blocking node 4 so timeout should happen\n")
 
     # let leader run until timeout causes send of member change response, but don't let it deliver
@@ -616,7 +883,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     ts_4.unblock_network()
 
     start_time = time.time()
-    while time.time() - start_time < 1 and done_by_callback is None:
+    while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
 
@@ -640,7 +907,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     await ts_4.start_and_join(leader.uri, join_done, timeout=1)
     
     start_time = time.time()
-    while time.time() - start_time < 1 and done_by_callback is None:
+    while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
 
