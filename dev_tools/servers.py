@@ -916,10 +916,16 @@ class PausingServer(PilotAPI):
         self.cluster_init_config = deepcopy(cluster_config)
         return await self.hull.change_cluster_config(self.cluster_init_config)
         
+    async def get_cluster_config(self):
+        # in case test reuses one improperly, which is convenient
+        return await self.hull.get_cluster_config()
+        
     async def simulate_crash(self):
         await self.hull.stop()
         self.am_crashed = True
         self.network.isolate_server(self)
+        self.in_messages = []
+        self.out_messages = []
         test_trace = self.network.test_trace
         await test_trace.note_crash(self)
         self.hull = None
@@ -977,8 +983,8 @@ class PausingServer(PilotAPI):
         res =  await self.hull.transfer_power(other_uri)
         return res
     
-    async def send_heartbeats(self):
-        return await self.hull.role.send_heartbeats()
+    async def send_heartbeats(self, target_only=None):
+        return await self.hull.role.send_heartbeats(target_only)
     
     async def do_leader_lost(self):
         await self.hull.role.leader_lost()
@@ -1162,6 +1168,10 @@ class PausingServer(PilotAPI):
             if handle:
                 self.logger.debug('after %s %s stop, handle.cancelled() says %s',
                                  hull.role, self.uri, handle.cancelled())
+            ohandle =  hull.join_waiter_handle
+            if ohandle:
+                self.logger.debug('after %s %s stop, join_waiter handle.cancelled() says %s',
+                                 hull.role, self.uri, ohandle.cancelled())
         if hull:
             self.hull = None
             del hull

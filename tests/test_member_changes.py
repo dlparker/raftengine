@@ -8,11 +8,11 @@ import pytest
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.api.events import EventType, EventHandler
 from raftengine.api.pilot_api import PilotAPI
-from raftengine.api.log_api import LogRec
+from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import NodeRec, ClusterConfig
 from raftengine.hull.hull import Hull
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
-from dev_tools.servers import WhenMessageOut, WhenMessageIn
+from dev_tools.servers import WhenMessageOut, WhenMessageIn, SPartialElection
 from dev_tools.memory_log import MemoryLog
 from dev_tools.servers import cluster_maker
 from dev_tools.servers import setup_logging
@@ -231,7 +231,7 @@ async def test_add_follower_1(cluster_maker):
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
     async def join_done(ok, new_uri):
-        logger.debug(f"Join callbak said {ok} joining as {new_uri}")
+        logger.debug(f"Join callback said {ok} joining as {new_uri}")
         assert ok
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -926,4 +926,263 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
         cc = await ts.hull.cluster_ops.get_cluster_config()
         assert ts_4.uri in cc.nodes
         assert cc.pending_node is None
+
+async def test_reverse_add_follower_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_reverse_add_follower_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    # vote requests, then vote responses
+    await cluster.deliver_all_pending()
+    assert ts_1.get_role_name() == "LEADER"
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    # append entries, then responses
+    await cluster.deliver_all_pending()
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    await ts_4.start_and_join(leader.uri)
+    assert ts_4.hull.join_waiter_handle is not None
+    
+
+    # want add load to complete and leader to send add log message, but we don't want followers
+    # to accept that message, rather to discard it.
+    ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+
+    # first dialog should have false from new node
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert not ts_1.in_messages[0].success
+    await ts_1.do_next_in_msg()
+
+    
+    # second dialog should have ok from new node, but one more needed
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].maxIndex == 1
+    await ts_1.do_next_in_msg()
+    # second dialog should have ok from new node, but one more needed
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].maxIndex == 2
+
+    # next message from leader should be log record with membership change
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    log_rec = ts_1.out_messages[0].entries[0]
+    assert log_rec.code == RecordCode.cluster_config
+    # 
+    assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
+
+    await ts_1.simulate_crash()
+    await ts_2.start_campaign(authorized=True)
+    sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri], 1)
+    await cluster.run_sequence(sequence)
+
+    # ensure that the new term start log message is the same index as the
+    # cluster change log message at the old leader, and a different term
+    assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() == await ts_3.log.get_last_index()
+    assert await ts_1.log.get_last_term() != await ts_2.log.get_last_term()
+    assert await ts_1.log.get_last_term() != await ts_3.log.get_last_term()
+
+    # now restart the old leader, send a heart beat from new leader, hold old leader before
+    # processing message, check to see that it has temporary add (restored from log). Then
+    # let it process message and make sure it discards add.
+    await ts_1.recover_from_crash()
+    await ts_2.send_heartbeats(target_only=ts_1.uri)
+    ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
+    ts_2.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_2.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    cc = await ts_1.get_cluster_config()
+    assert cc.pending_node is not None
+    logger.debug(f'\n\nprocessing message {ts_1.in_messages[0]}\n\n')
+    # this should note out of sync
+    await ts_1.do_next_in_msg()
+    assert not ts_1.out_messages[0].success
+    await ts_1.do_next_out_msg()
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].success
+    
+    cc = await ts_1.get_cluster_config()
+    assert cc.pending_node is None
+    # now stop ts_4 cause it never gets notified
+    await ts_4.stop()
+
+async def test_reverse_remove_follower_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_reverse_add_follower_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    # vote requests, then vote responses
+    await cluster.deliver_all_pending()
+    assert ts_1.get_role_name() == "LEADER"
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    # append entries, then responses
+    await cluster.deliver_all_pending()
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    async def join_done(ok, new_uri):
+        logger.debug(f"Join callback said {ok} joining as {new_uri}")
+        assert ok
+    await ts_4.start_and_join(leader.uri, join_done)
+
+    # want add load to complete and leader to send add log message, but we don't want followers
+    # to accept that message, rather to discard it.
+    ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+
+    # first dialog should have false from new node
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert not ts_1.in_messages[0].success
+    await ts_1.do_next_in_msg()
+
+    
+    # second dialog should have ok from new node, but one more needed
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].maxIndex == 1
+    await ts_1.do_next_in_msg()
+    # second dialog should have ok from new node, but one more needed
+    ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
+    ts_4.set_trigger(WhenMessageOut(AppendResponseMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_4.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_4.clear_triggers()
+    logger.debug(f"\n\n{ts_1.in_messages[0]}\n\n")
+    assert ts_1.in_messages[0].success
+    assert ts_1.in_messages[0].maxIndex == 2
+
+    # next message from leader should be log record with membership change
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    log_rec = ts_1.out_messages[0].entries[0]
+    assert log_rec.code == RecordCode.cluster_config
+    # 
+    assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
+
+    await ts_1.simulate_crash()
+    await ts_2.start_campaign(authorized=True)
+    sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri], 1)
+    await cluster.run_sequence(sequence)
+
+    # ensure that the new term start log message is the same index as the
+    # cluster change log message at the old leader, and a different term
+    assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() == await ts_3.log.get_last_index()
+    assert await ts_1.log.get_last_term() != await ts_2.log.get_last_term()
+    assert await ts_1.log.get_last_term() != await ts_3.log.get_last_term()
+
+    # now restart the old leader, send a heart beat from new leader, hold old leader before
+    # processing message, check to see that it has temporary add (restored from log). Then
+    # let it process message and make sure it discards add.
+    await ts_1.recover_from_crash()
+    await ts_2.send_heartbeats(target_only=ts_1.uri)
+    ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
+    ts_2.set_trigger(WhenMessageOut(AppendEntriesMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_2.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_2.clear_triggers()
+    cc = await ts_1.get_cluster_config()
+    assert cc.pending_node is not None
+    logger.debug(f'\n\nprocessing message {ts_1.in_messages[0]}\n\n')
+    # this should note out of sync
+    await ts_1.do_next_in_msg()
+    assert not ts_1.out_messages[0].success
+    await ts_1.do_next_out_msg()
+    await ts_2.do_next_in_msg()
+    await ts_2.do_next_out_msg()
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].success
+    
+    cc = await ts_1.get_cluster_config()
+    assert cc.pending_node is None
 

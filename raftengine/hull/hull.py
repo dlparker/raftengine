@@ -42,6 +42,7 @@ class Hull(HullAPI):
         self.role = Follower(self, self.cluster_ops)
         self.joining_cluster = False
         self.join_result = None
+        self.join_waiter_handle = None
         
     # Part of API
     async def start(self):
@@ -65,8 +66,12 @@ class Hull(HullAPI):
         
     async def join_waiter(self, timeout, callback=None):
         start_time = time.time()
-        while time.time() - start_time < timeout and self.join_result is None:
+        while time.time() - start_time < timeout and self.join_result is None and self.joining_cluster:
             await asyncio.sleep(0.001)
+
+        if not self.joining_cluster:
+            self.join_waiter_handle = None
+            return
         ok = self.join_result
         self.join_result = None
         if ok is None:
@@ -85,7 +90,8 @@ class Hull(HullAPI):
         self.joining_cluster = False
         if not ok:
             await self.stop()
-
+        self.join_waiter_handle = None
+        
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
         self.joining_cluster = True
         config = await self.cluster_ops.get_cluster_config()
@@ -96,7 +102,10 @@ class Hull(HullAPI):
             await self.event_control.emit_role_change(self.get_role_name())
         self.join_result = None
         await self.role.join_cluster(leader_uri)
-        asyncio.create_task(self.join_waiter(timeout, callback))
+        loop = asyncio.get_event_loop()
+        self.logger.info("%s trying to join cluster via leader %s, starting join_waiter", self.get_my_uri(), leader_uri)
+        self.join_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
+                                                asyncio.create_task(self.join_waiter(timeout, callback)))
         
     # Part of API
     def decode_message(self, in_message):
@@ -248,7 +257,14 @@ class Hull(HullAPI):
     # Part of API 
     async def stop(self):
         await self.stop_role()
-
+        if self.join_waiter_handle:
+            self.joining_cluster = None
+            await asyncio.sleep(0.001)
+            if self.join_waiter_handle:
+                self.logger.debug("%s canceling join_waiter task", self.get_my_uri())
+                self.join_waiter_handle.cancel()
+                self.join_waiter_handle = None
+            
     async def stop_role(self):
         await self.role.stop()
         if self.role_async_handle:

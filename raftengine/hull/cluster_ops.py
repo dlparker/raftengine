@@ -30,9 +30,6 @@ class NewNodeLoad:
     start_time: float = 0.0
     first_round_max_index: int = 0
     prev_round_max_index: int = 0
-    prev_round_start_time: float = 0.0
-    prev_send_time: float = 0.0
-    prev_send_max_index: float = 0.0
     round_count: int = 1
     change_message: Optional[MembershipChangeMessage] = None
     
@@ -179,18 +176,15 @@ class ClusterOps:
         config = await self.get_cluster_config()
         timeout =  config.settings.election_timeout_max
         my_last = await self.log.get_last_index()
-        if self.loading_data.prev_round_start_time == 0.0:
+        if self.loading_data.round_count == 1:
             # we are still sending data in first round, see if we are done with it
             if log_index < self.loading_data.first_round_max_index:
-                self.loading_data.prev_send_time = time.time()
                 self.logger.debug("%s round 1 continues", self.my_uri())
                 return True
             # finished with first round
             # start another round
             self.loading_data.round_count += 1
-            self.loading_data.prev_round_start_time = time.time()
             self.loading_data.prev_round_max_index = my_last
-            self.loading_data.prev_send_time = time.time()
             await self.start_loading_round_timer(target_uri, leader)
             return True
         # First round is finished, we are in some later round see if we are done
@@ -203,14 +197,11 @@ class ClusterOps:
                 await self.abort_node_add(target_uri, leader)
                 return False
             self.loading_data.round_count += 1
-            self.loading_data.prev_round_start_time = time.time()
             self.loading_data.prev_round_max_index = my_last
-            self.loading_data.prev_send_time = time.time()
             await self.start_loading_round_timer(target_uri, leader)
             self.logger.debug("%s round %d begins", self.my_uri(), self.loading_data.round_count)
             return True
         else:
-            self.loading_data.prev_send_time = time.time()
             self.logger.debug("%s round %d continues", self.my_uri(), self.loading_data.round_count)
             return True
         
@@ -365,12 +356,10 @@ class ClusterOps:
         config = ClusterConfig(**cdict['config'])
         op = cdict['op']
         operand = cdict['operand']
-        if op == "add_node" and operand in cc.nodes:
-            del cc.nodes[operand]
         if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
             cc.nodes.append(cc.pending_node)
         cc.pending_node = None
-        return await self.log.save_cluster_config(new_cc)
+        return await self.log.save_cluster_config(cc)
     
     async def handle_membership_change_log_update(self, log_rec):
         """

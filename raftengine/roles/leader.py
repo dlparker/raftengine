@@ -347,7 +347,9 @@ class Leader(BaseRole):
         # count the followers that have committed this far
         ayes = 1  # for me
         for tracker in self.cluster_ops.get_all_follower_trackers():
-            if tracker.matchIndex >= log_record.index:
+            # don't count new node that is in process of loading, not yet
+            # added to cluster
+            if tracker.matchIndex >= log_record.index and not tracker.add_loading:
                 ayes += 1
         if ayes > len(self.cluster_ops.get_cluster_node_ids()) / 2:
             # update the log record, just in case

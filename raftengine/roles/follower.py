@@ -44,7 +44,7 @@ class Follower(BaseRole):
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
         if message.prevLogIndex == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
-            await self.log.delete_all_from(0)
+            await self.delete_log_from(1)
         elif message.term != await self.log.get_term():
             await self.send_no_sync_append_response(message)
             return
@@ -57,9 +57,17 @@ class Follower(BaseRole):
                 await self.send_no_sync_append_response(message)
                 return
             else:
-                self.logger.warning("%s Leader resent same log record pi=%d, pt=%d, probably async out of order issue, ignoring",
-                                    self.my_uri(), message.prevLogIndex,  message.prevLogTerm)
-                return
+                if len(message.entries) > 0 and await self.log.get_last_index() > message.prevLogIndex:
+                    leader_rec = message.entries[0]
+                    our_next_rec = await self.log.read(leader_rec.index)
+                    if our_next_rec.term == leader_rec.term:
+                        self.logger.warning("%s Leader resent same log record pi=%d, pt=%d, probably async out of order issue, ignoring",
+                                            self.my_uri(), message.prevLogIndex,  message.prevLogTerm)
+                        return
+                    self.logger.warning("%s Leader says rewrite at record pi=%d",  self.my_uri(), leader_rec.index)
+                    await self.delete_log_from(leader_rec.index)
+                    # fall through to append logic
+
         elif (await self.log.get_last_index() != message.prevLogIndex
               or await self.log.get_last_term() != message.prevLogTerm):
             await self.send_no_sync_append_response(message)
@@ -198,7 +206,17 @@ class Follower(BaseRole):
             self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
-             
+
+    async def delete_log_from(self, index):
+        cur_index = await self.log.get_last_index()
+        while cur_index >= index:
+            rec = await self.log.read(cur_index)
+            if rec.code == RecordCode.cluster_config:
+                self.logger.warning("%s reversing config change record at %d", self.my_uri(), rec.index)
+                await self.cluster_ops.reverse_config_change(rec)
+            await self.log.delete_all_from(cur_index)
+            cur_index -= 1
+            
     async def join_cluster(self, leader_uri):
         message = MembershipChangeMessage(sender=self.my_uri(),
                                           receiver=leader_uri,
