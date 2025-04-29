@@ -76,23 +76,21 @@ class BaseRole:
         await self.hull.cancel_role_run_after()
         
     async def on_message(self, message):
-        if self.stopped:
-            self.logger.debug('%s received message from %s but currently stoppped, ignoring', self.my_uri(), message.sender)
-            return
-        if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
-            if (message.term > await self.log.get_term()
-                and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
-                self.logger.debug('%s received message from higher term, calling self.term_expired',
-                                  self.my_uri())
-                res = await self.term_expired(message)
-                if not res:
-                    self.logger.debug('%s self.term_expired said no further processing required',
+        if not self.stopped:
+            if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
+                if (message.term > await self.log.get_term()
+                    and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
+                    self.logger.debug('%s received message from higher term, calling self.term_expired',
                                       self.my_uri())
-                    # no additional handling of message needed
-                    return None
-        route = self.routes.get(message.get_code(), None)
-        if route:
-            return await route(message)
+                    res = await self.term_expired(message)
+                    if not res:
+                        self.logger.debug('%s self.term_expired said no further processing required',
+                                          self.my_uri())
+                        # no additional handling of message needed
+                        return None
+            route = self.routes.get(message.get_code(), None)
+            if route:
+                return await route(message)
 
     async def on_append_entries(self, message):
         problem = 'append_entries not implemented in the class '
@@ -232,13 +230,17 @@ class BaseRole:
         self.logger.warning(problem)
         await self.hull.record_message_problem(message, problem)
         await self.send_membership_change_response_message(message, ok=False)
-        
+
     async def on_membership_change_response(self, message):
-        problem = 'pre_membership_change_respone not implemented in the class '
-        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, ignoring'
-        self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
-        
+        if message.op == ChangeOp.add and message.target_uri == self.my_uri():
+            if message.ok:
+                self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
+            else:
+                self.logger.info("%s leader rejected add request", self.my_uri())
+            await self.hull.note_join_done(message.ok)
+        else:
+            self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
+            
     async def send_membership_change_response_message(self, message, ok=True):
         response = MembershipChangeResponseMessage(sender=self.my_uri(),
                                                    receiver=message.sender,

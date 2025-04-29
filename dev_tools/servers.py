@@ -959,7 +959,7 @@ class PausingServer(PilotAPI):
     def get_role(self):
         if self.hull is None:
             return None
-        return self.hull.role
+        return self.hull.get_role()
 
     async def get_term(self):
         if self.hull is None:

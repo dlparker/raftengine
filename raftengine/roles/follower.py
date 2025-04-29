@@ -141,11 +141,10 @@ class Follower(BaseRole):
                     await self.process_cluster_ops(log_rec)
                 
     async def process_cluster_ops(self, log_record):
-        if log_record.applied or not log_record.committed:
-            return
-        await self.cluster_ops.handle_membership_change_log_commit(log_record)
-        log_record.applied = True
-        await self.log.replace(log_record)
+        if not log_record.applied:
+            await self.cluster_ops.handle_membership_change_log_commit(log_record)
+            log_record.applied = True
+            await self.log.replace(log_record)
 
     async def process_command_record(self, log_record):
         result = None
@@ -224,15 +223,6 @@ class Follower(BaseRole):
                                           target_uri=self.my_uri())
         await self.hull.send_message(message)
         
-    async def on_membership_change_response(self, message):
-        if message.op == ChangeOp.add and message.target_uri == self.my_uri():
-            if message.ok:
-                self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
-            else:
-                self.logger.info("%s leader rejected add request", self.my_uri())
-            await self.hull.note_join_done(message.ok)
-        else:
-            self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term
         # value that they receive in a message. Always means an election has

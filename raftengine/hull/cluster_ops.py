@@ -375,8 +375,6 @@ class ClusterOps:
             config = await self.start_node_add(operand)
         if op == "remove_node":
             config = await self.start_node_remove(operand)
-            if operand == self.my_uri() and self.hull.role.role_name == "LEADER":
-                self.logger.warning("%s starting cluster exit process", self.my_uri())
         self.logger.debug(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
 
 

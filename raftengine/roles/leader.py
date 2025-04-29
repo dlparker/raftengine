@@ -345,7 +345,9 @@ class Leader(BaseRole):
 
     async def record_commit_checker(self, log_record):
         # count the followers that have committed this far
-        ayes = 1  # for me
+        ayes = 0
+        if not self.exit_in_progress:
+            ayes += 1  # for me
         for tracker in self.cluster_ops.get_all_follower_trackers():
             # don't count new node that is in process of loading, not yet
             # added to cluster

@@ -63,7 +63,7 @@ async def test_member_change_messages(cluster_maker):
     assert str(cr1) == str(r1)
 
     
-async def atest_log_config_ops(cluster_maker):
+async def test_cluster_config_ops(cluster_maker):
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -78,7 +78,7 @@ async def atest_log_config_ops(cluster_maker):
     log = MemoryLog()
     log.start()
     
-    hull = Hull(cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
+    hull = Hull(initial_cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
     c_ops = hull.cluster_ops
     cc = await hull.get_cluster_config()
     
@@ -108,6 +108,19 @@ async def atest_log_config_ops(cluster_maker):
     with pytest.raises(Exception):
         await c_ops.finish_node_remove(uri)
 
+    # make sure calling plan add on the same node twice returns None
+    assert await c_ops.start_node_add(uri) 
+    assert await c_ops.plan_add_node(uri) is None
+    # make sure calling plan add on an already added node returns None
+    assert await c_ops.finish_node_add(uri)
+    assert await c_ops.plan_add_node(uri) is None
+
+    # make sure calling plan remove on the same node twice returns None
+    assert await c_ops.start_node_remove(uri) 
+    assert await c_ops.plan_remove_node(uri) is None
+    # make sure calling plan remove on an already removed node returns None
+    assert await c_ops.finish_node_remove(uri)
+    assert await c_ops.plan_remove_node(uri) is None
 
 async def test_remove_follower_1(cluster_maker):
     """
@@ -127,17 +140,8 @@ async def test_remove_follower_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
     await ts_3.exit_cluster()
@@ -169,16 +173,8 @@ async def test_remove_leader_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
 
     logger.debug("\n\n\nRemoving leader node 1\n\n\n")
     await ts_1.exit_cluster()
@@ -215,16 +211,8 @@ async def test_add_follower_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -264,17 +252,9 @@ async def test_add_follower_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
     for i in range(2, limit+1):
@@ -341,17 +321,9 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
@@ -454,17 +426,9 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
@@ -585,17 +549,8 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    #rec = LogRec(index=i, term=1, command="add 1", leader_id=ts_1.uri, committed=True, applied=True)
+    await cluster.run_election()
+
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
@@ -779,15 +734,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
+    await cluster.run_election()
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -943,16 +890,8 @@ async def test_reverse_add_follower_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1073,16 +1012,8 @@ async def test_reverse_remove_follower_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
-    # vote requests, then vote responses
-    await cluster.deliver_all_pending()
-    assert ts_1.get_role_name() == "LEADER"
+    await cluster.run_election()
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
-    # append entries, then responses
-    await cluster.deliver_all_pending()
-    assert ts_2.get_leader_uri() == uri_1
-    assert ts_3.get_leader_uri() == uri_1
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1143,4 +1074,133 @@ async def test_reverse_remove_follower_1(cluster_maker):
     
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None
+
+async def test_add_follower_timeout_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(heartbeat_period=0.05,
+                                          election_timeout_min=0.1,
+                                          election_timeout_max=0.11,
+                                          use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    assert leader.get_role().role_name == "LEADER"
+    callback_result = None
+    async def join_done(ok, new_uri):
+        nonlocal callback_result
+        logger.debug(f"Join callback said {ok} joining as {new_uri}")
+        callback_result = ok
+
+    assert await ts_1.hull.get_election_timeout() > 0.01
+    assert await ts_1.hull.get_heartbeat_period() > 0.01
+    assert (await ts_1.hull.get_election_timeout_range())[1] > 0.01
+    
+    await ts_4.start_and_join(leader.uri, join_done, timeout=0.01)
+    ts_1.block_network()
+    start_time = time.time()
+    while time.time() - start_time < 0.05 and callback_result is None:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert callback_result == False
+
+async def test_add_follower_errors_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(heartbeat_period=0.05,
+                                          election_timeout_min=0.1,
+                                          election_timeout_max=0.11,
+                                          use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    assert leader.get_role().role_name == "LEADER"
+    callback_result = None
+    async def join_done(ok, new_uri):
+        nonlocal callback_result
+        logger.debug(f"Join callback said {ok} joining as {new_uri}")
+        callback_result = ok
+
+    assert await ts_1.hull.get_election_timeout() > 0.01
+    assert await ts_1.hull.get_heartbeat_period() > 0.01
+    assert (await ts_1.hull.get_election_timeout_range())[1] > 0.01
+
+    # bogus leader id should raise
+    with pytest.raises(Exception):
+        await ts_4.start_and_join('xxx', join_done, timeout=0.01)
+
+    # Trying to join at non-leader should get error response
+    await ts_4.start_and_join(ts_2.uri, join_done, timeout=0.1)
+    start_time = time.time()
+    while time.time() - start_time < 0.05 and callback_result is None:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert callback_result == False
+
+async def test_remove_candidate_1(cluster_maker):
+    """
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    assert leader.get_role().role_name == "LEADER"
+
+    # remove node while it is a candidate
+    await ts_3.start_campaign()
+    await ts_3.exit_cluster()
+    await cluster.deliver_all_pending()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_3.hull.role.stopped
+
+    # now make sure heartbeat send only goes to the one remaining follower
+    await ts_1.send_heartbeats()
+    assert len(ts_1.out_messages) == 1
+    assert ts_1.out_messages[0].receiver == ts_2.uri
 

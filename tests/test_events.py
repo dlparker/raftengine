@@ -61,15 +61,15 @@ async def test_event_handlers(cluster_maker):
             event.to_json()
 
     for ts in [ts_1, ts_2, ts_3]:
-        ts.hull.event_control.add_handler(RoleChangeHandler())
-        ts.hull.event_control.add_handler(TermChangeHandler())
+        await ts.hull.add_event_handler(RoleChangeHandler())
+        await ts.hull.add_event_handler(TermChangeHandler())
         leader_handler = LeaderChangeHandler()
-        ts.hull.event_control.add_handler(leader_handler)
+        await ts.hull.add_event_handler(leader_handler)
             
     await cluster.start()
     await ts_1.start_campaign()
-    
     await cluster.run_election()
+    assert cluster.get_leader() == ts_1
     # each node should change to follower at start, thats 3
     # then ts_1 should change to candidate, then leader, thats 5
     assert role_change_counter == 5 # once to candidate, once to leader
@@ -132,9 +132,9 @@ async def test_event_handlers(cluster_maker):
     index_handler = IndexChangeHandler()
     commit_handler = CommitChangeHandler()
     for ts in [ts_1, ts_2, ts_3]:
-        ts.hull.event_control.add_handler(msg_handler)
-        ts.hull.event_control.add_handler(index_handler)
-        ts.hull.event_control.add_handler(commit_handler)
+        await ts.hull.add_event_handler(msg_handler)
+        await ts.hull.add_event_handler(index_handler)
+        await ts.hull.add_event_handler(commit_handler)
     
     command_result = await cluster.run_command("add 1", 1)
     await cluster.deliver_all_pending()
@@ -148,7 +148,7 @@ async def test_event_handlers(cluster_maker):
     recvs = 0
     handles = 0
     for ts in [ts_1, ts_2, ts_3]:
-        ts.hull.event_control.remove_handler(msg_handler)
+        await ts.hull.remove_event_handler(msg_handler)
         
     command_result = await cluster.run_command("add 1", 1)
     await cluster.deliver_all_pending()
@@ -199,7 +199,7 @@ async def test_message_errors(cluster_maker):
             error_counter += 1
             
     for ts in [ts_1, ts_2, ts_3]:
-        ts.hull.event_control.add_handler(ErrorHandler())
+        await ts.hull.add_event_handler(ErrorHandler())
     
     await cluster.start()
     await ts_3.start_campaign()

@@ -22,7 +22,6 @@ class EventControl:
         self.handlers = []
         self.handler_map = defaultdict(list)
 
-
     def add_handler(self, handler: EventHandler) -> None:
         if not handler in self.handlers:
             self.handlers.append(handler)

@@ -24,8 +24,7 @@ from raftengine.hull.cluster_ops import ClusterOps
 class Hull(HullAPI):
 
     # Part of API
-    def __init__(self, cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
-        self.cluster_init_config = cluster_config
+    def __init__(self, initial_cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
             raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
@@ -38,7 +37,7 @@ class Hull(HullAPI):
         self.message_problem_history = []
         self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
-        self.cluster_ops = ClusterOps(self, cluster_config, self.log)
+        self.cluster_ops = ClusterOps(self, initial_cluster_config, self.log)
         self.role = Follower(self, self.cluster_ops)
         self.joining_cluster = False
         self.join_result = None
@@ -53,8 +52,6 @@ class Hull(HullAPI):
             await self.event_control.emit_role_change(self.get_role_name())
 
     def get_cluster_ops(self):
-        if not self.started:
-            return None
         return self.cluster_ops
 
     def get_role(self):
@@ -93,13 +90,11 @@ class Hull(HullAPI):
         self.join_waiter_handle = None
         
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
-        self.joining_cluster = True
         config = await self.cluster_ops.get_cluster_config()
         if leader_uri not in config.nodes:
             raise Exception(f'cannot find specified leader {leader_uri} in cluster {self.cluster_ops.get_cluster_node_ids()}')
-        await self.role.start()
-        if EventType.role_change in self.event_control.active_events:
-            await self.event_control.emit_role_change(self.get_role_name())
+        self.joining_cluster = True
+        await self.start()
         self.join_result = None
         await self.role.join_cluster(leader_uri)
         loop = asyncio.get_event_loop()
@@ -237,7 +232,7 @@ class Hull(HullAPI):
 
     # Called by Role and in API
     async def get_election_timeout(self):
-        return await self.cluster_ops.get_election_timeou()
+        return await self.cluster_ops.get_election_timeout()
 
     # Called by Role 
     async def get_election_timeout_range(self):
