@@ -1,0 +1,5 @@
+  N-1   , N-1                          , N-1       , N-2   , N-2                          , N-2       , N-3   , N-3                          , N-3       , N-4  , N-4 , N-4   
+  Role  , Op                           , Delta     , Role  , Op                           , Delta     , Role  , Op                           , Delta     , Role , Op  , Delta 
+  N-1   , N-1 , N-1   , N-2   , N-2 , N-2   , N-3   , N-3 , N-3   , N-4   , N-4                         , N-4   
+  Role  , Op  , Delta , Role  , Op  , Delta , Role  , Op  , Delta , Role  , Op                          , Delta 
+  LEAD  ,     ,       , FLWR  ,     ,       , FLWR  ,     ,       , FLWR  , m_c->N-1 op=ADD n=mcpy://4  ,       
