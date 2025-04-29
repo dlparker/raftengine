@@ -1,10 +1,21 @@
+
+Events and errors rework:
 1. [] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.
-2. [] Need to have self exit generate an event.
-3. [] Have self_add just pick a node from cluster config, expecting to get leader_uri back in the change response,
+2. [] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
+3. [] completely convert substate to events
+4. [] Need to have self exit generate an event.
+
+
+1. [] Have self_add just pick a node from cluster config, expecting to get leader_uri back in the change response,
    then update leader_uri and try again.
-4. [x] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
-5. [x] Need to figure out what it means to abort remove node. Reverse would only happen when leader crashes with
+2. [] Need to add logic the the bcast_pending code in leader to remove out of date records in case a server
+   goes down for a while, could retire on arrival of another message from same server, also on election_timeout
+3. [] refactor servers.py into subunits, setup_log, test_tracing, sim_net, pausing_server, pausing_cluster, pause_triggers, sequences.
+   
+   
+1. [x] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
+2. [x] Need to figure out what it means to abort remove node. Reverse would only happen when leader crashes with
    uncommitted and followers don't have it yet, then election overwrites the index. So when leader restarts, it
    gets an overwrite from new leader on that record, and it has to undo the temporary change. It can't notify the
    original requester, because it does not have the info about who that was. 
@@ -12,18 +23,11 @@
    are membership changed records, and undo the change. That's probably true for both types. It means follower can
    no longer just blindly delete, it has to inspect and dispose.
    Can a remove record hang the config forever? 
-6. [] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
-7. [] Need to add logic the the bcast_pending code in leader to remove out of date records in case a server
-   goes down for a while, could retire on arrival of another message from same server, also on election_timeout
-8. [x] Need to update cluster change calls so that they only return when complete, like command runner. That way
+3. [x] Need to update cluster change calls so that they only return when complete, like command runner. That way
    caller can know that the change is complete. Consider a callback or event instead
-9. [x] Update follower remove op to wait for commit, and update leader to sent heartbeat to removing server. Follower logic
+4. [x] Update follower remove op to wait for commit, and update leader to sent heartbeat to removing server. Follower logic
    probably needs to ignore heatbeats unless commit equals the record index of the remove log entry. Avoid overly complex
    logic to prevent messing wwith ongoing log replication.
-10. [] completely convert substate to events
-11. [] refactor servers.py into subunits, setup_log, test_tracing, sim_net, pausing_server, pausing_cluster, pause_triggers, sequences.
-   
-   
    
 
 

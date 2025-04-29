@@ -8,10 +8,10 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
 
-from dev_tools.servers import WhenElectionDone
-from dev_tools.servers import PausingCluster, cluster_maker
-from dev_tools.servers import setup_logging
-from dev_tools.servers import SNormalElection
+from dev_tools.triggers import WhenElectionDone
+from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.logging_ops import setup_logging
+from dev_tools.sequences import SNormalElection
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)

@@ -100,6 +100,10 @@ actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the clust
 | p_v_r->N-X    | Node has sent pre_vote_request to N-X, t=1 means proposed term is 1 (continued next line)    |
 | (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
 | N-X->p_v      | Node has received pre_vote_response from N-X, yes=(True or False) indicates vote value       |
+| m_c->N-X      | Node has sent memebership change to N-X op is add or remove and n is the node affected       |
+| N-X->m_cr     | Node has received membership change response from N-X, ok indicates success value            |
+| p_t->N-X      | Node has sent power transfer command N-X so node should assume power                         |
+| N-X->p_tr     | Node has received power transfer response from N-X, ok indicates success value               |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line

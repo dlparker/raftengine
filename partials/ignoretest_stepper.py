@@ -8,7 +8,7 @@ import json
 
 from dev_tools.cluster_states import (DoNow, NoOp, ValidateState, PhaseStep, ActionOnState, ActionOnMessage, Phase)
 from dev_tools.cluster_states import (MessageCode, CommsEdge, ActionCode, LogState, CommsOp, Sequence)
-from dev_tools.servers import setup_logging
+from dev_tools.logging_ops import setup_logging
 from dev_tools.stepper import Sequencer, StandardElectionSequence
 
 #extra_logging = [dict(name=__name__, level="debug"),]

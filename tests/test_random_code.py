@@ -11,9 +11,9 @@ from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_config import ClusterInitConfig
 from dev_tools.memory_log import MemoryLog
-from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.servers import setup_logging
-from dev_tools.servers import PausingCluster, cluster_maker
+from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
+from dev_tools.logging_ops import setup_logging
+from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)

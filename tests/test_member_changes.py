@@ -12,10 +12,11 @@ from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import NodeRec, ClusterConfig
 from raftengine.hull.hull import Hull
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
-from dev_tools.servers import WhenMessageOut, WhenMessageIn, SPartialElection
+from dev_tools.triggers import WhenMessageOut, WhenMessageIn
+from dev_tools.sequences import SPartialElection
 from dev_tools.memory_log import MemoryLog
-from dev_tools.servers import cluster_maker
-from dev_tools.servers import setup_logging
+from dev_tools.pausing_cluster import cluster_maker
+from dev_tools.logging_ops import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)

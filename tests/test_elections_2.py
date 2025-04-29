@@ -9,14 +9,14 @@ from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
 
-from dev_tools.servers import WhenMessageOut, WhenMessageIn
-from dev_tools.servers import WhenIsLeader, WhenHasLeader
-from dev_tools.servers import WhenElectionDone
-from dev_tools.servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
-from dev_tools.servers import WhenInMessageCount
-from dev_tools.servers import PausingCluster, cluster_maker
-from dev_tools.servers import SNormalElection
-from dev_tools.servers import setup_logging
+from dev_tools.triggers import WhenMessageOut, WhenMessageIn
+from dev_tools.triggers import WhenIsLeader, WhenHasLeader
+from dev_tools.triggers import WhenElectionDone
+from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
+from dev_tools.triggers import WhenInMessageCount
+from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.sequences import SNormalElection
+from dev_tools.logging_ops import setup_logging
 
 extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
 #setup_logging(extra_logging, default_level="debug")

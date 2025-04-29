@@ -50,7 +50,9 @@ from dataclasses import dataclass
 from dev_tools.cluster_states import (NodeState, LogState, ActionOnState, ActionOnMessage,
                                       ValidateState, MessageCode, CommsOp, CommsEdge, ActionCode, Sequence, DoNow,
                                       PhaseStep, NoOp, Phase, ClusterState, RunState, RoleCode, NetworkMode, PhaseResult)
-from dev_tools.servers import PausingCluster, PausingServer, PauseTrigger
+from dev_tools.triggers import PauseTrigger
+from dev_tools.pausing_server import PausingServer
+from dev_tools.pausing_cluster import PausingCluster
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 

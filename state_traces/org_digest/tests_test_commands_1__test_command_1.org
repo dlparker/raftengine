@@ -125,8 +125,8 @@
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=2 lt=1 e=1 c=2 | li=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=3   | ci=3  |
-|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 | ci=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     |       |
+|  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=0 c=3 | ci=3  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD START                    |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=3   |       | LEAD  |                              | li=4  |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-2 t=1 i=3 lt=1 e=1 c=3 |       |
@@ -134,8 +134,8 @@
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=3 lt=1 e=1 c=3 | li=4  | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   | ci=4  |
-|  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     |       |
 |  FLWR  |        |       | FLWR  | N-3->ae t=1 i=4 lt=1 e=0 c=4 | ci=4  | LEAD  |                              |       |
+|  FLWR  |        |       | FLWR  |                              |       | LEAD  | CMD DONE                     |       |
 |  FLWR  |        |       | FLWR  | ae_reply->N-3 ok=True mi=4   |       | LEAD  |                              |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | N-2->ae_reply ok=True mi=4   |       |
 |  FLWR  |        |       | FLWR  |                              |       | LEAD  | ae->N-1 t=1 i=4 lt=1 e=0 c=4 |       |
@@ -200,6 +200,10 @@ actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the clust
 | p_v_r->N-X    | Node has sent pre_vote_request to N-X, t=1 means proposed term is 1 (continued next line)    |
 | (continued)   | li=0 means prevLogIndex = 0, lt=0 means prevLogTerm = 0                                      |
 | N-X->p_v      | Node has received pre_vote_response from N-X, yes=(True or False) indicates vote value       |
+| m_c->N-X      | Node has sent memebership change to N-X op is add or remove and n is the node affected       |
+| N-X->m_cr     | Node has received membership change response from N-X, ok indicates success value            |
+| p_t->N-X      | Node has sent power transfer command N-X so node should assume power                         |
+| N-X->p_tr     | Node has received power transfer response from N-X, ok indicates success value               |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line

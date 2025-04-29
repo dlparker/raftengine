@@ -10,13 +10,13 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.api.log_api import LogRec
 from dev_tools.memory_log import MemoryLog
 
-from dev_tools.servers import WhenMessageOut, WhenMessageIn
-from dev_tools.servers import WhenHasLogIndex
-from dev_tools.servers import WhenInMessageCount, WhenElectionDone
-from dev_tools.servers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
-from dev_tools.servers import PausingCluster, cluster_maker
-from dev_tools.servers import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.servers import setup_logging, log_config
+from dev_tools.triggers import WhenMessageOut, WhenMessageIn
+from dev_tools.triggers import WhenHasLogIndex
+from dev_tools.triggers import WhenInMessageCount, WhenElectionDone
+from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
+from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
+from dev_tools.logging_ops import setup_logging, log_config
 
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
