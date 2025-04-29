@@ -6,7 +6,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Any
 from enum import Enum
-from raftengine.api.types import RoleName, SubstateCode, ClusterConfig
+from raftengine.api.types import RoleName, OpDetail, ClusterConfig
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
@@ -126,7 +126,6 @@ class Leader(BaseRole):
         log_rec = await self.log.append(raw_rec)
         self.logger.debug("%s saved log record at index %d", self.my_uri(), log_rec.index)
         # now send it to everybody
-        await self.hull.record_substate(SubstateCode.preparing_command)
         await self.broadcast_log_record(log_rec)
         waiter = CommandWaiter(self, log=self.log, orig_log_record=log_rec, timeout=timeout)
         self.command_waiters[log_rec.index] = waiter
@@ -151,10 +150,8 @@ class Leader(BaseRole):
                                              prevLogTerm=prevLogTerm,
                                              prevLogIndex=prevLogIndex,
                                              commitIndex=commit_index)
-        if log_record.code == RecordCode.client_command:
-            await self.hull.record_substate(SubstateCode.broadcasting_command)
         if log_record.code == RecordCode.term_start:
-            await self.hull.record_substate(SubstateCode.broadcasting_term_start)
+            await self.hull.record_op_detail(OpDetail.broadcasting_term_start)
         for uri in self.cluster_ops.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
@@ -289,7 +286,7 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.logger.info("sending backdown %s", message)
-        await self.hull.record_substate(SubstateCode.sending_backdown)
+        await self.hull.record_op_detail(OpDetail.sending_backdown)
         await self.record_sent_message(message)
         await self.hull.send_message(message)
     
@@ -338,7 +335,7 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.logger.debug("sending catchup %s", message)
-        await self.hull.record_substate(SubstateCode.sending_catchup)
+        await self.hull.record_op_detail(OpDetail.sending_catchup)
         await self.record_sent_message(message)
         await self.hull.send_message(message)
 
@@ -373,7 +370,6 @@ class Leader(BaseRole):
             return
         result = None
         error_data = None
-        await self.hull.record_substate(SubstateCode.local_command)
         try:
             self.logger.info("%s applying command committed at index %d", self.my_uri(),
                              await self.log.get_last_index())
@@ -511,9 +507,8 @@ class CommandWaiter:
                                error=error_data,
                                redirect=None)
         if error_data:
-            await self.leader.hull.record_substate(SubstateCode.failed_command)
+            await self.leader.hull.event_control.emit_error(error_data)
         else:
-            await self.leader.hull.record_substate(SubstateCode.committing_command)
             log_record = await self.log.read(self.orig_log_record.index)
             log_record.result = command_result
             new_rec = await self.log.replace(log_record)

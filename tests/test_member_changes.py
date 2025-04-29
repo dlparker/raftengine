@@ -219,6 +219,7 @@ async def test_add_follower_1(cluster_maker):
     assert ts_1.operations.total == 1
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
+    assert await ts_1.hull.get_leader_uri() == leader.uri
     async def join_done(ok, new_uri):
         logger.debug(f"Join callback said {ok} joining as {new_uri}")
         assert ok

@@ -3,6 +3,7 @@ from typing import List, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 from raftengine.api.log_api import LogAPI, LogRec
+from raftengine.api.events import EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
@@ -55,19 +56,24 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def start_and_join(self, leader_uri):
+    async def get_leader_uri(self) -> str:
+        raise NotImplementedError
+        
+    @abc.abstractmethod
+    async def start_and_join(self, leader_uri:str) -> None:
         """
         This should only be called for a server that has never been part of the cluster, to join
         the cluster. This may take a while if there are a lot of log records to replicate
         to this server. 
         """
+        raise NotImplementedError
         
     @abc.abstractmethod
-    async def add_event_handler(self, handler):
+    async def add_event_handler(self, handler:EventHandler) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def remove_event_handler(self, handler):
+    async def remove_event_handler(self, handler:EventHandler) -> None:
         raise NotImplementedError
     
     @abc.abstractmethod

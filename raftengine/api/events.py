@@ -7,16 +7,13 @@ from raftengine.messages.cluster_change import ChangeOp
 
 class EventType(str, Enum):
     error = "ERROR"
-    msg_sent = "MSG_SENT"
-    msg_recv = "MSG_RECV"
-    msg_handled = "MSG_HANDLED"
     role_change = "ROLE_CHANGE"
     term_change = "TERM_CHANGE"
     leader_change = "LEADER_CHANGE"
-    index_change = "INDEX_CHANGE"
-    commit_change = "COMMIT_CHANGE"
     membership_change_complete = "MEMBERSHIP_CHANGE_COMPLETE"
     membership_change_aborted = "MEMBERSHIP_CHANGE_ABORTED"
+    election_op = "ELECTION_OP"
+    resync_op = "RESYNC_OP"
 
     def __str__(self):
         return self.value
@@ -56,54 +53,6 @@ class LeaderChangeEvent(Event):
     def __init__(self, new_leader:str):
         self.new_leader = new_leader
 
-class MsgEvent(Event):
-
-    def __init__(self, msg:BaseMessage, event_type:EventType):
-        self.event_type = event_type
-        self.msg_type = msg.code
-        self.term = msg.term
-        self.sender = msg.sender
-        self.receiver = msg.receiver
-        self.prevLogIndex = msg.prevLogIndex
-        self.prevLogTerm = msg.prevLogTerm
-        
-class MsgHandledEvent(MsgEvent):
-
-    event_type = EventType.msg_handled
-    
-    def __init__(self, msg:BaseMessage, result: Optional[str] = None, error: Optional[str] = None):
-        super().__init__(msg, self.event_type)
-        self.result = result
-        self.error = error
-
-class MsgRecvEvent(MsgEvent):
-
-    event_type = EventType.msg_recv
-    
-    def __init__(self, msg:BaseMessage):
-        super().__init__(msg, self.event_type)
-
-class MsgSentEvent(MsgEvent):
-
-    event_type = EventType.msg_sent
-    
-    def __init__(self, msg:BaseMessage):
-        super().__init__(msg, self.event_type)
-
-class IndexChangeEvent(Event):
-
-    event_type = EventType.index_change
-    
-    def __init__(self, new_index):
-        self.new_index = new_index
-
-class CommitChangeEvent(Event):
-
-    event_type = EventType.commit_change
-    
-    def __init__(self, new_commit):
-        self.new_commit = new_commit
-
 class  MembershipChangeDoneEvent(Event):
 
     event_type = EventType.membership_change_complete
@@ -120,7 +69,21 @@ class MembershipChangeAbortedEvent(Event):
         self.op = op
         self.failed_node_uri = failed_node_uri
 
+class ElectionEvent(Event):
 
+    event_type = EventType.election_op
+    
+    def __init__(self, tag):
+        self.op = tag
+
+class ResyncEvent(Event):
+
+    event_type = EventType.resync_op
+    
+    def __init__(self, tag):
+        self.op = tag
+
+        
 class EventHandler:
 
     def __init__(self, event_types: list[EventType]):

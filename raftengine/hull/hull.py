@@ -4,7 +4,7 @@ import logging
 import time
 import json
 
-from raftengine.api.types import RoleName
+from raftengine.api.types import RoleName, OpDetail
 from raftengine.api.hull_api import CommandResult
 from raftengine.hull.event_control import EventControl
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
@@ -57,6 +57,12 @@ class Hull(HullAPI):
     def get_role(self):
         return self.role
 
+    # Part of API
+    async def get_leader_uri(self):
+        # just in case it has never been called
+        await self.cluster_ops.get_cluster_config()
+        return self.cluster_ops.leader_uri
+
     async def note_join_done(self, success):
         self.join_result = success
         self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
@@ -89,6 +95,7 @@ class Hull(HullAPI):
             await self.stop()
         self.join_waiter_handle = None
         
+    # Part of API
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
         config = await self.cluster_ops.get_cluster_config()
         if leader_uri not in config.nodes:
@@ -123,8 +130,6 @@ class Hull(HullAPI):
     async def on_message(self, in_message):
         try:
             message = self.decode_message(in_message)
-            if EventType.msg_recv in self.event_control.active_events:
-                await self.event_control.emit_recv_msg(message)
         except:
             error = traceback.format_exc()
             self.logger.error(error)
@@ -144,8 +149,6 @@ class Hull(HullAPI):
         except Exception as e:
             error = traceback.format_exc()
             self.logger.error(error)
-        if EventType.msg_handled in self.event_control.active_events:
-            await self.event_control.emit_handled_msg(message, result=res, error=error)
         if error:
             if EventType.error in self.event_control.active_events:
                 await self.event_control.emit_error(error)
@@ -154,24 +157,12 @@ class Hull(HullAPI):
 
     # Part of API
     async def run_command(self, command, timeout=1):
-        if EventType.index_change in self.event_control.active_events:
-            orig_log = await self.log.read()
-        if EventType.commit_change in self.event_control.active_events:
-            orig_commit = await self.log.get_commit_index()
         if self.role.role_name == RoleName.leader:
             result = await self.role.run_command(command, timeout=timeout)
         elif self.role.role_name == RoleName.follower:
             result = CommandResult(command, redirect=self.leader_uri)
         elif self.role.role_name == RoleName.candidate:
             result = CommandResult(command, retry=1)
-        if EventType.index_change in self.event_control.active_events:
-            new_log = await self.log.read()
-            if new_log.index > orig_log.index:
-                await self.event_control.emit_index_change(new_log.index)
-        if EventType.commit_change in self.event_control.active_events:
-            new_commit = await self.log.get_commit_index()
-            if orig_commit != new_commit:
-                await self.event_control.emit_commit_change(new_commit)
         return result
 
     # Part of API
@@ -323,8 +314,6 @@ class Hull(HullAPI):
         self.logger.debug("Sending message type %s to %s", message.get_code(), message.receiver)
         encoded = json.dumps(message, default=lambda o:o.__dict__)
         await self.pilot.send_message(message.receiver, encoded)
-        if EventType.msg_sent in self.event_control.active_events:
-            await self.event_control.emit_sent_msg(message)
 
     # Called by Role
     async def send_response(self, message, response):
@@ -332,8 +321,6 @@ class Hull(HullAPI):
         encoded = json.dumps(message, default=lambda o:o.__dict__)
         encoded_reply = json.dumps(response, default=lambda o:o.__dict__)
         await self.pilot.send_response(response.receiver, encoded, encoded_reply)
-        if EventType.msg_sent in self.event_control.active_events:
-            await self.event_control.emit_sent_msg(message)
 
     # Called by Role. This may seem odd, but it is done this
     # way to make it possible to protect against race conditions where a role
@@ -373,10 +360,12 @@ class Hull(HullAPI):
         self.message_problem_history.append(rec)
 
     # Called by Role
-    async def record_substate(self, substate):
-        rec = dict(role=str(self.role), substate=substate, time=time.time())
-        if self.log_substates:
-            self.log_substates.debug("%s %s %s %s", self.get_my_uri(), rec['role'], rec['substate'], rec['time'])
+    async def record_op_detail(self, op_detail):
+        if op_detail in [str(OpDetail.sending_catchup), str(OpDetail.sending_backdown)]:
+            if EventType.resync_op in self.event_control.active_events:
+                await self.event_control.emit_resync_op(str(op_detail))
+        elif EventType.election_op in self.event_control.active_events:
+            await self.event_control.emit_election_op(str(op_detail))
 
     def get_message_problem_history(self, clear=False):
         res =  self.message_problem_history

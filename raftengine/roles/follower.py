@@ -3,7 +3,7 @@ import traceback
 import logging
 import json
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.types import RoleName, SubstateCode
+from raftengine.api.types import RoleName, OpDetail
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteResponseMessage
@@ -24,7 +24,6 @@ class Follower(BaseRole):
     async def start(self):
         await super().start()
         self.last_leader_contact = time.time()
-        await self.hull.record_substate(SubstateCode.leader_unknown)
         await self.run_after(await self.cluster_ops.get_election_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
@@ -40,7 +39,7 @@ class Follower(BaseRole):
             await self.hull.set_leader_uri(message.sender)
             self.logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
-            await self.hull.record_substate(SubstateCode.joined_leader)
+            await self.hull.record_op_detail(OpDetail.joined_leader)
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
         if message.prevLogIndex == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
@@ -76,13 +75,11 @@ class Follower(BaseRole):
             self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                               message.sender)
             await self.send_append_entries_response(message)
-            await self.hull.record_substate(SubstateCode.got_heartbeat)
             if message.commitIndex >= await self.log.get_last_index():
                 if (message.commitIndex > await self.log.get_commit_index()
                     or message.commitIndex > await self.log.get_applied_index()):
                     await self.new_leader_commit_index(message.commitIndex)
             return
-        await self.hull.record_substate(SubstateCode.appending)
         recs = []
         for log_rec in message.entries:
             # ensure we don't copy the items that reflect local state
@@ -93,7 +90,6 @@ class Follower(BaseRole):
             # config changes are applied immediately
             if log_rec.code == RecordCode.cluster_config:
                 await self.cluster_ops.handle_membership_change_log_update(log_rec)
-        await self.hull.record_substate(SubstateCode.replied_to_command)
         await self.send_append_entries_response(message)
         if message.commitIndex >= await self.log.get_last_index():
             if message.commitIndex > await self.log.get_commit_index():
@@ -149,7 +145,6 @@ class Follower(BaseRole):
     async def process_command_record(self, log_record):
         result = None
         error_data = None
-        await self.hull.record_substate(SubstateCode.running_command)
         try:
             command = log_record.command
             processor = self.hull.get_processor()
@@ -159,7 +154,7 @@ class Follower(BaseRole):
             msg = f"supplied process_command caused exception {trace}"
             error_data = trace
             self.logger.error(trace)
-            await self.hull.record_substate(SubstateCode.command_error)
+            await self.hull.event_control.emit_error(error_data)
         if error_data:
             result = error_data
             error_flag = True
@@ -170,11 +165,10 @@ class Follower(BaseRole):
         if not error_flag:
             await self.log.update_and_apply(log_record)
             self.logger.debug("%s processor ran no error on log record %d", self.my_uri(), log_record.index)
-            await self.hull.record_substate(SubstateCode.command_done)
         else:
             await self.log.replace(log_record)
             self.logger.warning("processor ran but had an error %s", error_data)
-            await self.hull.record_substate(SubstateCode.command_error)
+            await self.hull.event_control.emit_error(error_data)
     
     async def on_vote_request(self, message):
         last_vote = await self.log.get_voted_for()
@@ -228,14 +222,14 @@ class Follower(BaseRole):
         # value that they receive in a message. Always means an election has
         # happened and we are in the new term.
         # Followers never decide that a higher term is not valid
-        await self.hull.record_substate(SubstateCode.newer_term)
+        await self.hull.record_op_detail(OpDetail.newer_term)
         await self.hull.set_term(message.term)
         await self.log.set_voted_for(None) # in case we voted during the now expired term
         # Tell the base class method to route the message back to us as normal
         return message
         
     async def leader_lost(self):
-        await self.hull.record_substate(SubstateCode.leader_lost)
+        await self.hull.record_op_detail(OpDetail.leader_lost)
         await self.hull.start_campaign()
         
     async def send_vote_response_message(self, message, vote_yes=True):
@@ -246,10 +240,6 @@ class Follower(BaseRole):
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    vote=vote_yes)
         await self.hull.send_response(message, vote_response)
-        if vote_yes:
-            await self.hull.record_substate(SubstateCode.voting_yes)
-        else:
-            await self.hull.record_substate(SubstateCode.voting_no)
         
     async def send_append_entries_response(self, message):
         append_response = AppendResponseMessage(sender=self.my_uri(),

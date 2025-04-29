@@ -6,7 +6,7 @@ import time
 from raftengine.hull.hull import Hull
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.api.types import RoleName, SubstateCode
+from raftengine.api.types import RoleName
 
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.logging_ops import setup_logging
@@ -37,7 +37,6 @@ async def test_str_methods():
     doesn't-blow-up part is useful.
     """
     assert str(RoleName.leader) == 'LEADER'
-    assert str(SubstateCode.starting) == 'STARTING'
     assert "request_vote" in str(RequestVoteMessage('a','b', 0, 0, 0))
     assert "request_vote_response" in str(RequestVoteResponseMessage('a','b', 0, 0, 0, True))
     assert "v=True" in str(RequestVoteResponseMessage('a','b', 0, 0, 0, True))

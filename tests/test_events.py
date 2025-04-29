@@ -30,7 +30,11 @@ async def test_event_handlers(cluster_maker):
 
     role_change_counter = 0
     term_change_counter = 0
-
+    leader_uri = None
+    election_op_counter = 0
+    resync_op_counter = 0
+    election_saves = []
+    resync_saves = []
     class RoleChangeHandler(EventHandler):
         def __init__(self):
             super().__init__(event_types=[EventType.role_change,])
@@ -60,12 +64,44 @@ async def test_event_handlers(cluster_maker):
             leader_uri = event.new_leader
             event.to_json()
 
+    class ElectionHandler(EventHandler):
+        def __init__(self, ts):
+            super().__init__(event_types=[EventType.election_op,])
+            self.ts = ts
+            
+        async def on_event(self, event):
+            nonlocal election_op_counter
+            nonlocal election_saves 
+            election_op_counter += 1
+            event.to_json()
+            election_saves.append(event.op)
+            assert "ELECTION_OP"  == str(event.event_type)
+            
+    class ResyncHandler(EventHandler):
+        def __init__(self, ts):
+            super().__init__(event_types=[EventType.resync_op,])
+            self.ts = ts
+            
+        async def on_event(self, event):
+            nonlocal resync_op_counter
+            nonlocal resync_saves 
+            resync_op_counter += 1
+            event.to_json()
+            resync_saves.append(event.op)
+
+    rch_by_node = {}
     for ts in [ts_1, ts_2, ts_3]:
-        await ts.hull.add_event_handler(RoleChangeHandler())
+        rch = RoleChangeHandler()
+        rch_by_node[ts.uri] = rch
+        await ts.hull.add_event_handler(rch)
         await ts.hull.add_event_handler(TermChangeHandler())
         leader_handler = LeaderChangeHandler()
         await ts.hull.add_event_handler(leader_handler)
-            
+        election_handler = ElectionHandler(ts)
+        await ts.hull.add_event_handler(election_handler)
+        resync_handler = ResyncHandler(ts)
+        await ts.hull.add_event_handler(resync_handler)
+
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -75,90 +111,36 @@ async def test_event_handlers(cluster_maker):
     assert role_change_counter == 5 # once to candidate, once to leader
     assert term_change_counter == 3 # once for each node
 
-
-    sends = 0
-    recvs = 0
-    handles = 0
-    index_changes = 0
-    commit_changes = 0
-    leader_uri = None
-    class MsgHandler(EventHandler):
-        def __init__(self):
-            super().__init__(event_types=[EventType.msg_handled,
-                                          EventType.msg_recv,
-                                          EventType.msg_sent,])
-            
-        async def on_event(self, event):
-            nonlocal sends
-            nonlocal recvs
-            nonlocal handles
-            if event.event_type == EventType.msg_handled:
-                if handles == 0:
-                    print(f"first message of type {event.event_type}")
-                handles += 1
-            if event.event_type == EventType.msg_sent:
-                if sends == 0:
-                    print(f"first message of type {event.event_type}")
-                sends += 1
-            if event.event_type == EventType.msg_recv:
-                if recvs == 0:
-                    print(f"first message of type {event.event_type}")
-                recvs += 1
-            # make sure to_json does not blow up
-            event.to_json()
-                    
-    class IndexChangeHandler(EventHandler):
-        def __init__(self):
-            super().__init__(event_types=[EventType.index_change,])
-            
-        async def on_event(self, event):
-            nonlocal index_changes
-            index_changes += 1
-            # make sure to_json does not blow up
-            event.to_json()
-                    
-    class CommitChangeHandler(EventHandler):
-        def __init__(self):
-            super().__init__(event_types=[EventType.commit_change,])
-            
-        async def on_event(self, event):
-            nonlocal commit_changes
-            commit_changes += 1
-            # make sure to_json does not blow up
-            event.to_json()
+    expecting = ['START_PRE_ELECTION', 'PRE_WON', 'START_ELECTION', 'NEWER_TERM', 'NEWER_TERM', 'BROADCASTING_TERM_START',
+                 'WON', 'JOINED_LEADER', 'JOINED_LEADER']
+    for index, item in enumerate(expecting):
+        assert item == election_saves[index]
+    assert election_op_counter == len(expecting)
 
 
-    msg_handler = MsgHandler()
-    index_handler = IndexChangeHandler()
-    commit_handler = CommitChangeHandler()
-    for ts in [ts_1, ts_2, ts_3]:
-        await ts.hull.add_event_handler(msg_handler)
-        await ts.hull.add_event_handler(index_handler)
-        await ts.hull.add_event_handler(commit_handler)
-    
+    # no block a follower while we run a couple of commands
+    ts_2.block_network()
     command_result = await cluster.run_command("add 1", 1)
+    command_result = await cluster.run_command("add 1", 1)
+    ts_2.unblock_network()
+    await ts_1.send_heartbeats(target_only=ts_2.uri)
     await cluster.deliver_all_pending()
+
     await asyncio.sleep(0)
-    assert sends > 0
-    assert sends == recvs == handles
-    assert index_changes == 1
-    assert commit_changes == 1
     
-    sends = 0
-    recvs = 0
-    handles = 0
-    for ts in [ts_1, ts_2, ts_3]:
-        await ts.hull.remove_event_handler(msg_handler)
+    r_expecting = ['SENDING_BACKDOWN', 'SENDING_CATCHUP']
+    for index, item in enumerate(r_expecting):
+        assert item == resync_saves[index]
+    assert resync_op_counter == len(r_expecting)
+    
+    for ts in [ts_2, ts_3]:
+        rch = rch_by_node[ts.uri]
+        await ts.hull.remove_event_handler(rch)
         
-    command_result = await cluster.run_command("add 1", 1)
-    await cluster.deliver_all_pending()
-    assert sends == recvs == handles == 0
-
-    # now demote the leader and make sure we get the event
+    # now demote the leader and make sure we get only one event
     await ts_1.hull.demote_and_handle()
     await asyncio.sleep(0)
     assert role_change_counter == 6
-
     await cluster.stop_auto_comms()
 
 

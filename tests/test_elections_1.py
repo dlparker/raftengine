@@ -94,7 +94,7 @@ async def test_election_1(cluster_maker):
     assert ts_1.in_messages[1].get_code() == AppendResponseMessage.get_code()
     await ts_1.do_next_in_msg()
     await ts_1.do_next_in_msg()
-
+    assert str(ts_1.get_role()) == "LEADER"
 
 async def test_election_2(cluster_maker):
     """

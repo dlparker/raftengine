@@ -5,7 +5,7 @@ from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResp
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
-from raftengine.api.types import RoleName, SubstateCode
+from raftengine.api.types import RoleName
     
 class BaseRole:
 
@@ -14,7 +14,6 @@ class BaseRole:
         self.hull = hull
         self.role_name = role_name
         self.logger = logging.getLogger("BaseRole")
-        self.substate = SubstateCode.starting
         self.log = hull.get_log()
         self.stopped = False
         self.routes = None
@@ -203,10 +202,6 @@ class BaseRole:
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    vote=vote_yes)
         await self.hull.send_response(message, pre_vote_response)
-        if vote_yes:
-            await self.hull.record_substate(SubstateCode.pre_voting_yes)
-        else:
-            await self.hull.record_substate(SubstateCode.pre_voting_no)
         
     async def send_transfer_power_response_message(self, message, success=True):
         xfer_power_response = TransferPowerResponseMessage(sender=self.my_uri(),
