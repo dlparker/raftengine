@@ -20,7 +20,7 @@ from dev_tools.servers import setup_logging
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level="error"
-default_level="debug"
+#default_level="debug"
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 

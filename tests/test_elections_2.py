@@ -528,8 +528,8 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     """
     It is possible for a candidate to have a log state that
     is older than the state of other servers during an
-     election. The follower election code should detect that and
-     vote no on the candidate
+    election. The follower election code should detect that and
+    vote no on the candidate
     """
     
     cluster = cluster_maker(3)
@@ -575,6 +575,7 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     ts3_out_1 = await ts_3.do_next_out_msg()
     ts3_out_2 = await ts_3.do_next_out_msg()
     logger.info("-------- Target code should run on next message to ts_1,  should vote no")
+    ts_1.hull.cluster_ops.leader_uri = None
     ts_1_in_1 = await ts_1.do_next_in_msg()
     if not use_pre_vote:
         assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
