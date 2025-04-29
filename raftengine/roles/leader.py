@@ -25,7 +25,6 @@ class Leader(BaseRole):
         super().__init__(hull, RoleName.leader, cluster_ops)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
-        self.follower_trackers = dict()
         self.command_waiters = dict()
         self.bcast_pendings = []
         self.use_check_quorum = use_check_quorum
@@ -172,7 +171,7 @@ class Leader(BaseRole):
             await self.hull.send_message(message)
             msgs.append(message)
             await self.record_sent_message(message)
-        self.bcast_pendings.append(dict(time=time.time(), messages=msgs))
+        self.bcast_pendings.append(dict(time=time.time(), messages=msgs, sent_count=len(msgs)))
         self.logger.debug("%s pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
         
     async def scheduled_send_heartbeats(self):
@@ -209,7 +208,7 @@ class Leader(BaseRole):
             await self.record_sent_message(message)
             self.last_broadcast_time = time.time()
             msgs.append(message)
-        self.bcast_pendings.append(dict(time=time.time(), messages=msgs))
+        self.bcast_pendings.append(dict(time=time.time(), messages=msgs, sent_count=len(msgs)))
         self.logger.debug("%s pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
         
     async def on_append_entries_response(self, message):
@@ -427,19 +426,16 @@ class Leader(BaseRole):
                 
     async def check_quorum(self):
         et_min, et_max = await self.cluster_ops.get_election_timeout_range()
-        node_count = len(self.cluster_ops.get_cluster_node_ids())
-        quorum = int(node_count/2) # normal cluster is odd, yielding x.5, with this server added, will be more than half
         pop_bcasts = []
         for b_index,pending in enumerate(self.bcast_pendings):
-            if time.time() - pending['time'] > et_max:
-                # Total sent is node_count - 1 for leader, so reply count is same minus pending
-                reply_count = node_count - 1 - len(pending['messages']) 
-                if reply_count < quorum:
-                    self.logger.warning("%s failed quorum check, resigning ", self.my_uri())
-                    await self.hull.demote_and_handle()
-                    return False
-                else:
-                    pop_bcasts.append(pending)
+            reply_count = pending['sent_count'] - len(pending['messages']) 
+            quorum = int(pending['sent_count']/2) # normal cluster is odd, yielding x.5 rounds up to x + 1, which works
+            if reply_count >= quorum:
+                pop_bcasts.append(pending)
+            elif time.time() - pending['time'] > et_max:
+                self.logger.warning("%s failed quorum check, resigning ", self.my_uri())
+                await self.hull.demote_and_handle()
+                return False
         for p_b in pop_bcasts:
             self.bcast_pendings.remove(p_b)
         return True

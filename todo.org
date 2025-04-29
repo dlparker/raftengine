@@ -9,9 +9,9 @@ Events and errors rework:
 
 1. [] Have self_add just pick a node from cluster config, expecting to get leader_uri back in the change response,
    then update leader_uri and try again.
-2. [] Need to add logic the the bcast_pending code in leader to remove out of date records in case a server
+2. [X] Need to add logic the the bcast_pending code in leader to remove out of date records in case a server
    goes down for a while, could retire on arrival of another message from same server, also on election_timeout
-3. [] refactor servers.py into subunits, setup_log, test_tracing, sim_net, pausing_server, pausing_cluster, pause_triggers, sequences.
+3. [X] refactor servers.py into subunits, setup_log, test_tracing, sim_net, pausing_server, pausing_cluster, pause_triggers, sequences.
    
    
 1. [x] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
