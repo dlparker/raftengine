@@ -358,6 +358,8 @@ class ClusterOps:
         operand = cdict['operand']
         if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
             cc.nodes[operand] = cc.pending_node
+            if operand == self.my_uri():
+                await self.hull.note_exit_done(success=False)
         cc.pending_node = None
         return await self.log.save_cluster_config(cc)
     
@@ -377,7 +379,6 @@ class ClusterOps:
             config = await self.start_node_remove(operand)
         self.logger.debug(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
 
-
     async def handle_membership_change_log_commit(self, log_rec):
         """
         Called by followers to make the membership change permanent.
@@ -395,7 +396,7 @@ class ClusterOps:
             config = await self.finish_node_remove(operand)
             if operand == self.my_uri():
                 self.logger.warning("%s calling stop on self", self.my_uri())
-                await self.hull.exiting_cluster()
+                await self.hull.note_exit_done(success=True)
         self.logger.debug(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
             
     async def cluster_config_vote_passed(self, log_record, leader):

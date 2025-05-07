@@ -145,10 +145,18 @@ async def test_remove_follower_1(cluster_maker):
     cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
-    await ts_3.exit_cluster()
+    removed = None
+    async def cb(success, uri):
+        nonlocal removed
+        removed = success
+        print(f'\n\nin cb with {success}\n\n')
+    await ts_3.exit_cluster(callback=cb)
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
+    await cluster.deliver_all_pending()
+    await asyncio.sleep(0.0)
+    assert removed is not None
     assert ts_3.hull.role.stopped
 
     # now make sure heartbeat send only goes to the one remaining follower

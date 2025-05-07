@@ -113,7 +113,7 @@ class Leader(BaseRole):
         log_record.applied = True
         await self.log.replace(log_record)
         self.logger.info("%s leader exiting cluster", self.my_uri())
-        await self.hull.exiting_cluster()
+        await self.hull.note_exit_done(success=True)
         
     async def run_command(self, command, timeout=1.0, serial=None):
         if not self.accepting_commands:
