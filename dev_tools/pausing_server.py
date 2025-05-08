@@ -8,6 +8,7 @@ from pathlib import Path
 from dev_tools.memory_log import MemoryLog
 from dev_tools.triggers import TriggerSet
 from dev_tools.sqlite_log import SqliteLog
+from dev_tools.operations import SimpleOps
 from raftengine.api.hull_config import ClusterInitConfig
 from raftengine.api.log_api import LogRec
 from raftengine.api.pilot_api import PilotAPI
@@ -48,11 +49,12 @@ class PausingServer(PilotAPI):
     def __str__(self):
         return self.uri
 
-    def set_configs(self, local_config, cluster_config):
+    def set_configs(self, local_config, cluster_config, ops_class=SimpleOps):
         self.cluster_init_config = cluster_config
         self.local_config = local_config
         self.hull = TestHull(self.cluster_init_config, self.local_config, self)
-        self.operations = SimpleOps(self)
+        self.ops_class = ops_class
+        self.operations = ops_class(self)
 
     async def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
@@ -81,7 +83,7 @@ class PausingServer(PilotAPI):
             else:
                 self.log = setup_sqlite_log(self.uri)
         if not save_ops:
-            self.operations = SimpleOps(self)
+            self.operations = self.ops_class(self)
         self.am_crashed = False
         self.hull = TestHull(self.cluster_init_config, self.local_config, self)
         await self.hull.start()
@@ -479,41 +481,3 @@ class TestHull(Hull):
         self.timers_disabled = False
 
 
-class SimpleOps: # pragma: no cover
-
-    def __init__(self, server):
-        self.server = server
-        self.total = 0
-        self.explode = False
-        self.exploded = False
-        self.return_error = False
-        self.reported_error = False
-        self.dump_state = False
-
-    async def process_command(self, command, serial):
-        logger = logging.getLogger("SimpleOps")
-        error = None
-        result = None
-        self.exploded = False
-        op, operand = command.split()
-        if self.explode:
-            #await asyncio.sleep(0.1)
-            self.exploded = True
-            raise Exception('boom!')
-        if self.return_error:
-            self.reported_error = True
-            return None, "inserted error"
-        if op not in ['add', 'sub']:
-            error = "invalid command"
-            logger.error("invalid command %s provided", op)
-            return None, error
-        if self.dump_state:
-            await self.server.dump_log(0, -1)
-            print(f'op {op} {operand} on total {self.total}')
-        if op == "add":
-            self.total += int(operand)
-        elif op == "sub":
-            self.total -= int(operand)
-        result = self.total
-        logger.debug("command %s returning %s no error", command, result)
-        return result, None

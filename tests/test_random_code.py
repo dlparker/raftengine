@@ -3,6 +3,7 @@ import asyncio
 import logging
 import time
 import json
+import random
 from pathlib import Path
 from pprint import pprint
 import pytest
@@ -102,4 +103,33 @@ async def test_message_ops():
     assert rvr_1.is_reply_to(c_rvm_1)
     assert str(rvm_1) == str(c_rvm_1)
     assert str(rvr_1) == str(c_rvr_1)
+    
+
+async def test_dict_ops():
+    from dev_tools.operations import DictTotalsOps
+    from raftengine.api.snapshot_api import SnapShot
+
+    dto = DictTotalsOps(1)
+
+    for i in range(1, 11):
+        command = f'add {i} {random.randint(1,100)}'
+        await dto.process_command(command, i)
+    assert len(dto.totals) == 10
+    ss = SnapShot(1,1)
+    await dto.fill_snapshot(ss)
+    assert len(ss.data) == 10
+
+    ss2 = SnapShot(1,1)
+    offset = 0
+    done = False
+    while not done:
+        chunk, new_offset, done = await ss.get_chunk(offset)
+        await ss2.save_chunk(chunk, offset)
+        offset = new_offset
+    dto_copy = DictTotalsOps(1)
+    for line in ss2.data:
+        await dto_copy.unpack_snapshot_data_item(line)
+
+    for key in dto.totals:
+        assert dto.totals[key] == dto_copy.totals[key]
     
