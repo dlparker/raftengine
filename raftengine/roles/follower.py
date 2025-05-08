@@ -62,6 +62,7 @@ class Follower(BaseRole):
                     if our_next_rec.term == leader_rec.term:
                         self.logger.warning("%s Leader resent same log record pi=%d, pt=%d, probably async out of order issue, ignoring",
                                             self.my_uri(), message.prevLogIndex,  message.prevLogTerm)
+                        await self.send_append_entries_response(message)
                         return
                     self.logger.warning("%s Leader says rewrite at record pi=%d",  self.my_uri(), leader_rec.index)
                     await self.delete_log_from(leader_rec.index)

@@ -134,6 +134,11 @@ class ClusterOps:
         if target_uri == self.my_uri():
             leader.exit_in_progress = True
 
+    async def get_cluster_config_json_string(self):
+        cc = await self.get_cluster_config()
+        encoded = json.dumps(cc, default=lambda o:o.__dict__)
+        return encoded
+        
     async def loading_round_timeout(self, target_uri, leader):
         self.logger.warning("%s loading records into new server %s is is too slow, aborting", self.my_uri(),
                             target_uri)

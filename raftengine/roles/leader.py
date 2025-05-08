@@ -42,6 +42,7 @@ class Leader(BaseRole):
         await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
         start_record = LogRec(code=RecordCode.term_start,
                               term=await self.log.get_term(),
+                              command=await self.cluster_ops.get_cluster_config_json_string(),
                               leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
         await self.broadcast_log_record(the_record)
@@ -493,7 +494,6 @@ class CommandWaiter:
                 self.result = CommandResult(command=self.orig_log_record.command,
                                             committed=False,
                                             timeout_expired=True)
-            
         return self.result
 
     async def handle_run_result(self, command_result, error_data):

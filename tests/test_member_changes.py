@@ -1325,8 +1325,12 @@ async def test_reverse_remove_follower_3(cluster_maker):
              uri_4: ts_4}
     await cluster.split_network([part1, part2])
     maj = cluster.net_mgr.get_majority_network()
+    
     minor = cluster.net_mgr.get_minority_networks()[0]
-    await minor.deliver_all_pending(out_only=True)
+    await ts_1.do_next_out_msg()
+    await ts_1.do_next_out_msg()
+    await ts_1.do_next_out_msg()
+    await ts_1.do_next_out_msg()
     await minor.deliver_all_pending()
     assert await ts_1.log.get_last_index() == await ts_5.log.get_last_index()
     
