@@ -91,6 +91,10 @@ class Follower(BaseRole):
             # config changes are applied immediately
             if log_rec.code == RecordCode.cluster_config:
                 await self.cluster_ops.handle_membership_change_log_update(log_rec)
+            elif log_rec.code == RecordCode.term_start and log_rec.index == 1:
+                # At the start of the first term we update the cluster config to whatever the
+                # leader has. Any changes will come in cluster_config record types
+                await self.cluster_ops.update_cluster_config_from_json_string(log_rec.command)
         await self.send_append_entries_response(message)
         if message.commitIndex >= await self.log.get_last_index():
             if message.commitIndex > await self.log.get_commit_index():

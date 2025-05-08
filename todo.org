@@ -1,8 +1,9 @@
 * immediate
 
-1. [] Add cluster config as term start message data, that ensures that new node can join at any time
-   and get a correct cluster config.
-2. [] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
+1. [X] Add cluster config as term start message data, that ensures that new node joining a cluster
+   with no config changes applied can look up the correct config in the last term start.
+2. [X] Add logic to follower to apply cluster config as present in first term start log record
+3. [] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
    admin command, might want to generalize it that way so other commands are easy (e.g. logging control)
    
 Events and errors rework:

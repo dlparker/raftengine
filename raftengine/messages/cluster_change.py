@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 from raftengine.messages.base_message import BaseMessage
 
 

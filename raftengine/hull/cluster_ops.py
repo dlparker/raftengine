@@ -139,6 +139,20 @@ class ClusterOps:
         encoded = json.dumps(cc, default=lambda o:o.__dict__)
         return encoded
         
+    async def update_cluster_config_from_json_string(self, jsonstring):
+        data = json.loads(jsonstring)
+        csets = ClusterSettings(**data['settings'])
+        newcc = ClusterConfig(settings=csets)
+        nodes = {}
+        for nrd in data['nodes'].values():
+            nr = NodeRec(**nrd)
+            newcc.nodes[nr.uri] = nr
+        # Since this should only be called because the data showed up in a term
+        # start log record (and the first one actually), then we are not
+        # expecting it to have a pending membership change value. Not sure
+        # what we could do in that case, if it is even possible
+        await self.log.save_cluster_config(newcc)
+        
     async def loading_round_timeout(self, target_uri, leader):
         self.logger.warning("%s loading records into new server %s is is too slow, aborting", self.my_uri(),
                             target_uri)
