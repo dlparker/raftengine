@@ -45,6 +45,9 @@ class PausingServer(PilotAPI):
         self.out_message_history = []
         self.save_message_history = False
 
+    def __str__(self):
+        return self.uri
+
     def set_configs(self, local_config, cluster_config):
         self.cluster_init_config = cluster_config
         self.local_config = local_config

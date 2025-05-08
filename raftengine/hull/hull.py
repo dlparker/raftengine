@@ -297,10 +297,7 @@ class Hull(HullAPI):
         if self.exit_waiter_handle:
             self.exiting_cluster = False
             await asyncio.sleep(0.001)
-            if self.exit_waiter_handle:
-                self.logger.debug("%s canceling exit_waiter task", self.get_my_uri())
-                self.exit_waiter_handle.cancel()
-                self.exit_waiter_handle = None
+            self.exit_waiter_handle = None
             
     async def stop_role(self):
         await self.role.stop()

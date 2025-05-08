@@ -1,6 +1,10 @@
 * Test test_add_follower_errors_1 from file tests/test_member_changes.py
 
 
+    Testing a couple of error conditions for adding follower, one where the specified leader is
+    bogus, one where the specified leader is actually a follower.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
 

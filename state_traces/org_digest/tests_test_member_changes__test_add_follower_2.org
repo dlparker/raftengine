@@ -1,7 +1,9 @@
 * Test test_add_follower_2 from file tests/test_member_changes.py
 
 
-    Simple case of removing the leader from the cluster. 
+    Adding a follower to the cluster with a long log, filled with a bunch entries. We are
+    cheating by directly adding the entries to each member node before the add, just to keep the
+    logging, time and tracing down.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
@@ -32,7 +34,7 @@
 |  LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 1 is leader, sending heartbeat so replies will tell us that followers did commit
+** Records inserted, starting add of node 4
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                                  | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   | N-4   | N-4                                  | N-4            |
 |  Role  | Op                                   | Delta | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                                   | Delta          |

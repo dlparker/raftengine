@@ -114,6 +114,10 @@
 |  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   |       | FLWR  |     | n=2   |
 |  LEAD  | N-2->ae_reply ok=True mi=1   |       | FLWR  |                              |       | FLWR  |     | n=2   |
 |  LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | FLWR  |     | n=2   |
+|  LEAD  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |     | n=2   |
+|  LEAD  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=1   |       | FLWR  |     | n=2   |
+|  LEAD  | N-2->ae_reply ok=True mi=1   |       | FLWR  |                              |       | FLWR  |     | n=2   |
+|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=0 c=1 |       | FLWR  |                              |       | FLWR  |     | n=2   |
 ----------------------------------------------------------------------------------------------------------------------
 ** test_partition_3_follower
 --------------------------------------------------------------------------------------------------------------------

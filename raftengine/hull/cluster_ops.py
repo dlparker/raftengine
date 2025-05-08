@@ -45,6 +45,8 @@ class ClusterOps:
         self._leader_uri = None
         self.loading_data = None
         self.loading_round_timer_handle = None
+        self.remove_message:Optional[MembershipChangeMessage] = None
+
 
     @property
     def leader_uri(self):
@@ -118,7 +120,7 @@ class ClusterOps:
             await leader.broadcast_log_record(rec_to_send)
             await self.start_node_remove(target_uri)
             if message:
-                await leader.send_membership_change_response_message(message, ok=True)
+                self.remove_message = message
         elif op == "ADD":
             await self.start_node_add(target_uri) 
             # we need to start the catchup for this node
@@ -417,6 +419,9 @@ class ClusterOps:
                 await self.hull.role.send_heartbeats(target_only=operand)
                 # notify everone else
                 await self.hull.role.send_heartbeats()
+                if self.remove_message:
+                    await leader.send_membership_change_response_message(self.remove_message, ok=True)
+                    self.remove_message = None
             else:
                 config = ClusterConfig(**cdict['config'])
                 t_uri = list(config.nodes.keys())[0]

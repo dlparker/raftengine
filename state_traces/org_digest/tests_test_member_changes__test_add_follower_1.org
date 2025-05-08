@@ -1,7 +1,7 @@
 * Test test_add_follower_1 from file tests/test_member_changes.py
 
 
-    Simple case of removing the leader from the cluster. 
+    Simple case of adding a follower to the cluster with a short log, only a term start and one command.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
@@ -32,7 +32,7 @@
 |  LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 1 is leader, sending heartbeat so replies will tell us that followers did commit
+** Node 1 is leader, starting process off  adding node 4
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                                  | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3   | N-4      | N-4                                  | N-4            |
 |  Role  | Op                                   | Delta | Role  | Op                           | Delta | Role  | Op                           | Delta | Role     | Op                                   | Delta          |

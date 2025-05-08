@@ -1,15 +1,18 @@
 * Test test_remove_candidate_1 from file tests/test_member_changes.py
 
 
+    Test that a node can remove itself from the cluster when it is in candidate role.
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
     
 
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
 ** Starting election at node 1 of 3
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       | N-4  | N-4 | N-4   |
-|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role | Op  | Delta |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
 |  CNDI  | NEW ROLE                     |           | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | p_v_r->N-2 t=1 li=0 lt=0     |           | FLWR  |                              |           | FLWR  |                              |           |
@@ -37,96 +40,41 @@
 |  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   |           |
 |  LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 1 is leader, sending heartbeat so replies will tell us that followers did commit
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                                     | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                                     | N-3   | N-4      | N-4      | N-4   |
-|  Role  | Op                                      | Delta | Role  | Op                           | Delta | Role  | Op                                      | Delta | Role     | Op       | Delta |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | NEW ROLE                                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | NEW ROLE                                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-1 t=2 li=1 lt=1                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-1 t=2 li=1 lt=1                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | CNDI  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-3->p_v_r t=2 li=1 lt=1                |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-3->p_v_r t=2 li=1 lt=1                |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | p_v->N-3 yes=False                      |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | p_v->N-3 yes=False                      |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->p_v yes=False                      |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->p_v yes=False                      |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-2 t=2 li=1 lt=1                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-2 t=2 li=1 lt=1                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              | CNDI  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  | N-3->p_v_r t=2 li=1 lt=1     |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | N-3->p_v_r t=2 li=1 lt=1     |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | p_v->N-3 yes=False           |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | p_v->N-3 yes=False           |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-2->p_v yes=False                      |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-2->p_v yes=False                      |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | m_c->N-1 op=REMOVE n=mcpy://3           |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | m_c->N-1 op=REMOVE n=mcpy://3           |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | CNDI  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-3->m_c op=REMOVE n=mcpy://3           | li=2  | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-3->m_c op=REMOVE n=mcpy://3           |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              | CNDI  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 | li=2  | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | CNDI  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-2->ae_reply ok=True mi=2              | ci=2  | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1            | li=2  | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1            |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | NEW ROLE                                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | NEW ROLE                                |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2              |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2              |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-3->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-3->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | m_cr->N-3 op=REMOVE n=mcpy://3 ok=True  |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | m_cr->N-3 op=REMOVE n=mcpy://3 ok=True  |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->m_cr op=REMOVE n=mcpy://3 ok=True  |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->m_cr op=REMOVE n=mcpy://3 ok=True  |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-3 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-3 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2            | ci=2  | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2            |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2              |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2              |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-3->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-3->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 | ci=2  | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  |                                         | FLWR  |       |                              | FLWR  |       |                                         | FLWR  | STARTED  |          |
-|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
-|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | FLWR  |                                         |       | FLWR     | STARTED  |       |
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 1 is leader, telling node 3 to become a candidate and then immediately start exiting
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                                     | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                                     | N-3   |
+|  Role  | Op                                      | Delta | Role  | Op                           | Delta | Role  | Op                                      | Delta |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | NEW ROLE                                |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-1 t=2 li=1 lt=1                |       |
+|  LEAD  | N-3->p_v_r t=2 li=1 lt=1                |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  | p_v->N-3 yes=False                      |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->p_v yes=False                      |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | p_v_r->N-2 t=2 li=1 lt=1                |       |
+|  LEAD  |                                         |       | FLWR  | N-3->p_v_r t=2 li=1 lt=1     |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | p_v->N-3 yes=False           |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-2->p_v yes=False                      |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | m_c->N-1 op=REMOVE n=mcpy://3           |       |
+|  LEAD  | N-3->m_c op=REMOVE n=mcpy://3           | li=2  | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 | li=2  | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | CNDI  |                                         |       |
+|  LEAD  | N-2->ae_reply ok=True mi=2              | ci=2  | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1            |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->ae t=1 i=1 lt=1 e=1 c=1            |       |
+|  LEAD  | ae->N-3 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->ae t=1 i=2 lt=1 e=0 c=2            |       |
+|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 | ci=2  | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | CNDI  |                                         |       |
+|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  | m_cr->N-3 op=REMOVE n=mcpy://3 ok=True  |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  |                              |       | CNDI  | N-1->m_cr op=REMOVE n=mcpy://3 ok=True  |       |
+|  LEAD  | ae->N-2 t=1 i=2 lt=1 e=0 c=2            |       | FLWR  |                              |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 |       | CNDI  |                                         |       |
+|  LEAD  |                                         |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | CNDI  |                                         |       |
+|  LEAD  | N-2->ae_reply ok=True mi=2              |       | FLWR  |                              |       | CNDI  |                                         |       |
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

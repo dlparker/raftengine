@@ -51,18 +51,13 @@
 |  Role  | Op        | Delta | Role  | Op  | Delta | Role  | Op  | Delta |
 |  FLWR  | NEW ROLE  |       | FLWR  |     |       | FLWR  |     |       |
 --------------------------------------------------------------------------
-** Starting auto comms, enabling timers at node 2 and it to start election
+** Node 2 started election, waiting for it to timeout
 ----------------------------------------------------------------------------------------
 |  N-1   | N-1 | N-1   | N-2   | N-2                     | N-2   | N-3   | N-3 | N-3   |
 |  Role  | Op  | Delta | Role  | Op                      | Delta | Role  | Op  | Delta |
 |  FLWR  |     |       | CNDI  | poll->N-1 t=2 li=1 lt=2 |       | FLWR  |     |       |
 |  FLWR  |     |       | CNDI  | poll->N-3 t=2 li=1 lt=2 |       | FLWR  |     |       |
-----------------------------------------------------------------------------------------
-** Node 2 started election, waiting for it to timeout
-----------------------------------------------------------------------------------------
-|  N-1   | N-1 | N-1   | N-2   | N-2                     | N-2   | N-3   | N-3 | N-3   |
-|  Role  | Op  | Delta | Role  | Op                      | Delta | Role  | Op  | Delta |
-|  FLWR  |     |       | CNDI  | poll->N-1 t=3 li=1 lt=3 |       | FLWR  |     |       |
+|  FLWR  |     |       | CNDI  | poll->N-1 t=3 li=1 lt=3 | t=3   | FLWR  |     |       |
 |  FLWR  |     |       | CNDI  | poll->N-3 t=3 li=1 lt=3 |       | FLWR  |     |       |
 ----------------------------------------------------------------------------------------
 ** Node 2 election timeout detected, enabling other nodes to let election finish

@@ -152,10 +152,26 @@ async def test_remove_follower_1(cluster_maker):
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
     removed = None
+    done_by_event = None
     async def cb(success, uri):
         nonlocal removed
         removed = success
         print(f'\n\nin cb with {success}\n\n')
+
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+    await ts_3.hull.add_event_handler(MembershipChangeResultHandler())
     await ts_3.exit_cluster(callback=cb)
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
@@ -163,6 +179,8 @@ async def test_remove_follower_1(cluster_maker):
     await cluster.deliver_all_pending()
     await asyncio.sleep(0.0)
     assert removed is not None
+    await asyncio.sleep(0.0)
+    assert done_by_event is not None
     assert ts_3.hull.role.stopped
 
     # now make sure heartbeat send only goes to the one remaining follower
@@ -291,6 +309,19 @@ async def test_add_follower_2(cluster_maker):
         logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
         done_by_callback = ok
         
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
     class MembershipChangeResultHandler(EventHandler):
         def __init__(self):
             super().__init__(event_types=[EventType.membership_change_complete,
@@ -916,6 +947,16 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 
 async def test_reverse_add_follower_1(cluster_maker):
     """
+    This tests the scenario where a node begins the process of joining the cluster but 
+     a crash of the leader at a specific time leaves the leader with a log record describing
+    the membership change, but no other node also having that record. Then and election is run
+    and the new leader writes a term start record in the log which ends up with the same
+    record index as the old leader's change membership record. So once the old leader restarts
+    and resynchronizes it overwrites the member change record and reverses its effect, so it
+    no longer thinks the other node is joining. The node that was trying to join will experience
+    a timeout on that request.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -931,7 +972,7 @@ async def test_reverse_add_follower_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, running a command then adding node 4 and starting the join")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -995,6 +1036,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     # 
     assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
+    cluster.test_trace.start_subtest("Node 4 up to date and leader saved membership change log record, crashing leader and running election")
 
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
@@ -1011,6 +1053,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     # now restart the old leader, send a heart beat from new leader, hold old leader before
     # processing message, check to see that it has temporary add (restored from log). Then
     # let it process message and make sure it discards add.
+    cluster.test_trace.start_subtest("Node 2 is now leader, restarting crashed old leader and sending heartbeats")
     await ts_1.recover_from_crash()
     await ts_2.send_heartbeats(target_only=ts_1.uri)
     ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
@@ -1036,31 +1079,23 @@ async def test_reverse_add_follower_1(cluster_maker):
     # now stop ts_4 cause it never gets notified
     await ts_4.stop()
 
-async def test_reverse_remove_follower_1(cluster_maker):
-    """
-    """
-    
-    cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config)
+async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_reverse_add_follower_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 3")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
 
-    await ts_3.exit_cluster()
+    await ts_3.hull.add_event_handler(event_handler)
+    await ts_3.exit_cluster(callback, timeout)
     ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
     ts_3.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
     await asyncio.gather(ts_1.run_till_triggers(),
@@ -1078,13 +1113,14 @@ async def test_reverse_remove_follower_1(cluster_maker):
 
     # now crash the leader, no changes at followers yet, so leader's record
     # should get overwritten on restart
+    cluster.test_trace.start_subtest("Leader has saved membership change log but not replicated it, crashing leader and running election")
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
     sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri], 1)
     await cluster.run_sequence(sequence)
 
     # ensure that the new term start log message is the same index as the
-    # cluster change log message at the old leader, and a different term
+    # member change log message at the old leader, and a different term
     assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() == await ts_3.log.get_last_index()
     assert await ts_1.log.get_last_term() != await ts_2.log.get_last_term()
@@ -1093,6 +1129,7 @@ async def test_reverse_remove_follower_1(cluster_maker):
     # now restart the old leader, send a heart beat from new leader, hold old leader before
     # processing message, check to see that it has temporary add (restored from log). Then
     # let it process message and make sure it discards add.
+    cluster.test_trace.start_subtest("Log state verified, restarting crashed lerader and sending heartbeats from new leader")
     await ts_1.recover_from_crash()
     await ts_2.send_heartbeats(target_only=ts_1.uri)
     ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
@@ -1114,9 +1151,213 @@ async def test_reverse_remove_follower_1(cluster_maker):
     
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None
+    cluster.test_trace.start_subtest("Old leader cluster membership as original confirmed, running final checks")
 
+async def test_reverse_remove_follower_1(cluster_maker):
+    """
+    This tests the scenario where a node begins the process of exiting the cluster's membership
+    list but a crash of the leader at a specific time leaves the leader with a log record describing
+    the membership change, but no other node also having that record. Then and election is run
+    and the new leader writes a term start record in the log which ends up with the same
+    record index as the old leader's change membership record. So once the old leader restarts
+    and resynchronizes it overwrites the member change record and reverses its effect, so it
+    no longer thinks the other node is exiting. The node that was trying to exit will experience
+    a timeout on that request.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_reverse_remove_follower_1.__doc__)
+
+    done_by_callback = None
+    done_by_event = None
+    async def exit_done(ok, exit_uri):
+        nonlocal done_by_callback 
+
+        logger.debug(f"Exit callback said {ok} on exiting request")
+        done_by_callback = ok
+
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+
+    await reverse_remove_part_1(cluster, 0.02, exit_done, MembershipChangeResultHandler())
+
+    start_time = time.time()
+    while time.time() - start_time < 0.05 and done_by_callback is None:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+    assert done_by_callback is False
+    await asyncio.sleep(0.00)
+    assert done_by_event is False
+
+async def test_reverse_remove_follower_2(cluster_maker):
+    """
+    This tests is identical to test_reverse_remove_follower_1 except that the cluster exiting node told
+    to stop before it can receive the timeout. This tests code that cleans up the handler in
+    hull.py that monitors the cluster exit process. It is a very unlikely event in real life, but possible
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_reverse_remove_follower_2.__doc__)
+
+    done_by_callback = None
+    done_by_event = None
+    async def exit_done(ok, exit_uri):
+        nonlocal done_by_callback 
+
+        logger.debug(f"Exit callback said {ok} on exiting request")
+        done_by_callback = ok
+
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+
+    await reverse_remove_part_1(cluster, 0.1, exit_done, MembershipChangeResultHandler())
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    await ts_3.stop()
+    
+async def test_reverse_remove_follower_3(cluster_maker):
+    """
+    This test is tricky to setup. The targeted condition is that a node tries to exit the cluster, and it
+    has received the membership change log record, but it has not yet been committed, then it
+    is told to remove the record because it is superceeded by the same index at a later term.
+    At this point it should reverse the exit and remain in the cluster.
+
+    To make this happen, we start with a five node cluster. We run election, run a command, then start
+    node 5 down the exit path. When the leader has recorded the change in the log and is ready to
+    send it out for replication we partion the network so that the leader and the exiting node are
+    together on a minority network. We allow the exiting node to get the append entries record and
+    apply it, but the leader can't get a commit because the other nodes are unreachable. So both
+    leader and node 5 have applied and saved the removal of node 5. The record index will be 3 and the term
+    will be 1.
+
+    At this point we trigger node 2 to run a new election which it will win, saving a TERM START record
+    at index 3 and term 2.
+
+    Now the network will be healed, and the new leader will be triggered to send heartbeats. This will
+    result in the two minority nodes realizing that their last log records are invalid because of the
+    new term in the heartbeat spec for last log record term. This will cause and overwrite and
+    a reversal of the cluster membership change.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
+    """
+    
+    cluster = cluster_maker(5)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_reverse_remove_follower_3.__doc__)
+
+    await cluster.start()
+    uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
+    ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 5")
+    
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    assert ts_4.operations.total == 1
+    assert ts_5.operations.total == 1
+
+    await ts_5.exit_cluster(timeout=0.05)
+    ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
+    ts_5.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
+    await asyncio.gather(ts_1.run_till_triggers(),
+                         ts_5.run_till_triggers())
+    ts_1.clear_triggers()
+    ts_5.clear_triggers()
+    # next message from leader should be log record with membership change
+    await ts_1.do_next_in_msg()
+    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
+    log_rec = ts_1.out_messages[0].entries[0]
+    assert log_rec.code == RecordCode.cluster_config
+    # 
+    assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
+    assert await ts_1.log.get_last_index() > await ts_4.log.get_last_index()
+    assert await ts_1.log.get_last_index() > await ts_5.log.get_last_index()
+
+    cluster.test_trace.start_subtest("Leader has saved member change log record, splitting network, delivering pending, starting election")
+    part1 = {uri_1: ts_1, uri_5: ts_5}
+    part2 = {uri_2: ts_2,
+             uri_3: ts_3,
+             uri_4: ts_4}
+    await cluster.split_network([part1, part2])
+    maj = cluster.net_mgr.get_majority_network()
+    minor = cluster.net_mgr.get_minority_networks()[0]
+    await minor.deliver_all_pending(out_only=True)
+    await minor.deliver_all_pending()
+    assert await ts_1.log.get_last_index() == await ts_5.log.get_last_index()
+    
+    await ts_2.start_campaign(authorized=True)
+    sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri, ts_4.uri], 1)
+    await cluster.run_sequence(sequence)
+
+    # ensure that the new term start log message is the same index as the
+    # member change log message at the old leader, and a different term
+    assert await ts_1.log.get_last_index() == await ts_2.log.get_last_index()
+    assert await ts_1.log.get_last_index() == await ts_3.log.get_last_index()
+    assert await ts_1.log.get_last_index() == await ts_4.log.get_last_index()
+    assert await ts_1.log.get_last_term() != await ts_2.log.get_last_term()
+    assert await ts_1.log.get_last_term() != await ts_3.log.get_last_term()
+    assert await ts_1.log.get_last_term() != await ts_4.log.get_last_term()
+
+    # now heal network, send a heart beat from new leader, let things run until settled and check conditions
+    cluster.test_trace.start_subtest("Log state verified, healing partition and triggering heartbeats")
+    await cluster.unsplit()
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
+    cc_1 = await ts_1.get_cluster_config()
+    assert cc_1.pending_node is None
+    cc_5 = await ts_1.get_cluster_config()
+    assert cc_5.pending_node is None
+    
 async def test_add_follower_timeout_1(cluster_maker):
     """
+    Simple test of add follower timeout, just prevent the leader from acting on the request.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -1135,7 +1376,7 @@ async def test_add_follower_timeout_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, starting node 4 join but setting timeout low and sisabling messages")
     
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1161,6 +1402,10 @@ async def test_add_follower_timeout_1(cluster_maker):
 
 async def test_add_follower_errors_1(cluster_maker):
     """
+    Testing a couple of error conditions for adding follower, one where the specified leader is
+    bogus, one where the specified leader is actually a follower.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -1172,7 +1417,7 @@ async def test_add_follower_errors_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+                                     test_doc_string=test_add_follower_errors_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1190,10 +1435,6 @@ async def test_add_follower_errors_1(cluster_maker):
         logger.debug(f"Join callback said {ok} joining as {new_uri}")
         callback_result = ok
 
-    assert await ts_1.hull.get_election_timeout() > 0.01
-    assert await ts_1.hull.get_heartbeat_period() > 0.01
-    assert (await ts_1.hull.get_election_timeout_range())[1] > 0.01
-
     # bogus leader id should raise
     with pytest.raises(Exception):
         await ts_4.start_and_join('xxx', join_done, timeout=0.01)
@@ -1209,6 +1450,9 @@ async def test_add_follower_errors_1(cluster_maker):
 
 async def test_remove_candidate_1(cluster_maker):
     """
+    Test that a node can remove itself from the cluster when it is in candidate role.
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
     """
     
     cluster = cluster_maker(3)
@@ -1218,16 +1462,16 @@ async def test_remove_candidate_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+                                     test_doc_string=test_remove_candidate_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to become a candidate and then immediately start exiting")
     
-    ts_4 = await cluster.add_node()
+    #ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
     assert leader.get_role().role_name == "LEADER"
 

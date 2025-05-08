@@ -1,22 +1,21 @@
-* Test test_add_follower_3_rounds_1 from file tests/test_member_changes.py
+* Test test_reverse_remove_follower_2 from file tests/test_member_changes.py
 
 
-    Adding a follower to the cluster with intervention to ensure that three rounds of log catch up
-    happen. This occurs when new records are added to the leader's log before the leader receives acknowledgement
-    that all of the records in the previous round of pre-join log updates happened. So the test method is to
-    pause the leader just before it receives the append entries response that completes a round and to
-    insert new log records so that the pre-join log sync process will trigger another round.
+    This tests is identical to test_reverse_remove_follower_1 except that the cluster exiting node told
+    to stop before it can receive the timeout. This tests code that cleans up the handler in
+    hull.py that monitors the cluster exit process. It is a very unlikely event in real life, but possible
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+
     
 
 
  *[[condensed Trace Table Legend][Table legend]] located after last table in file*
 
 ** Starting election at node 1 of 3
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       | N-4  | N-4 | N-4   |
-|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role | Op  | Delta |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
 |  FLWR  | STARTED                      |           | FLWR  | STARTED                      |           | FLWR  | STARTED                      |           |
 |  CNDI  | NEW ROLE                     | t=1       | FLWR  |                              |           | FLWR  |                              |           |
 |  CNDI  | poll->N-2 t=1 li=0 lt=1      |           | FLWR  |                              |           | FLWR  |                              |           |
@@ -36,53 +35,56 @@
 |  LEAD  |                              |           | FLWR  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=1   |           |
 |  LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 1 is leader, loading log records and then starting add of node 4
------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                          | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   | N-4   | N-4                          | N-4            |
-|  Role  | Op                           | Delta | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                           | Delta          |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | m_c->N-1 op=ADD n=mcpy://4   |                |
-|  LEAD  | N-4->m_c op=ADD n=mcpy://4   |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  | ae->N-4 t=1 i=7 lt=1 e=0 c=7 |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=7 lt=1 e=0 c=7 | t=1            |
-|  LEAD  | N-4->ae_reply ok=False mi=0  |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  | ae->N-4 t=1 i=0 lt=0 e=1 c=7 |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=0 lt=0 e=1 c=7 | lt=1 li=1 ci=1 |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=1   |                |
-|  LEAD  | N-4->ae_reply ok=True mi=1   |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  | ae->N-4 t=1 i=1 lt=1 e=6 c=7 |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |                |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=6 c=7 | li=7 ci=7      |
------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 4 caught up, adding new records before letting leader know that
-------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                          | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   | N-4   | N-4                          | N-4       |
-|  Role  | Op                           | Delta | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                           | Delta     |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=7   |           |
-|  LEAD  | N-4->ae_reply ok=True mi=7   |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |           |
-|  LEAD  | ae->N-4 t=1 i=7 lt=1 e=1 c=8 |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                              |           |
-|  LEAD  |                              |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=7 lt=1 e=1 c=8 | li=8 ci=8 |
-------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 4 caught up on roudn 2, adding new records before letting leader know that
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
-|  N-1   | N-1                                  | N-1   | N-2   | N-2 | N-2   | N-3   | N-3 | N-3   | N-4   | N-4                                  | N-4         |
-|  Role  | Op                                   | Delta | Role  | Op  | Delta | Role  | Op  | Delta | Role  | Op                                   | Delta       |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=8           |             |
-|  LEAD  | N-4->ae_reply ok=True mi=8           |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  | ae->N-4 t=1 i=8 lt=1 e=11 c=28       |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=8 lt=1 e=11 c=28       | li=19 ci=19 |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=19          |             |
-|  LEAD  | N-4->ae_reply ok=True mi=19          |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  | ae->N-4 t=1 i=19 lt=1 e=9 c=28       |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=19 lt=1 e=9 c=28       | li=28 ci=28 |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=28          |             |
-|  LEAD  | N-4->ae_reply ok=True mi=28          | li=29 | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  | m_cr->N-4 op=ADD n=mcpy://4 ok=True  |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->m_cr op=ADD n=mcpy://4 ok=True  |             |
-|  LEAD  | ae->N-4 t=1 i=28 lt=1 e=1 c=28       |       | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | N-1->ae t=1 i=28 lt=1 e=1 c=28       | li=29       |
-|  LEAD  |                                      |       | FLWR  |     |       | FLWR  |     |       | FLWR  | ae_reply->N-1 ok=True mi=29          |             |
-|  LEAD  | N-4->ae_reply ok=True mi=29          | ci=29 | FLWR  |     |       | FLWR  |     |       | FLWR  |                                      |             |
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+** Node 1 is leader, running a command, then starting cluster exit at node 3
+-------------------------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                            | N-1   | N-2   | N-2                          | N-2   | N-3   | N-3                          | N-3   |
+|  Role  | Op                             | Delta | Role  | Op                           | Delta | Role  | Op                           | Delta |
+|  LEAD  | CMD START                      |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | ae->N-2 t=1 i=1 lt=1 e=1 c=1   | li=2  | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | ae->N-3 t=1 i=1 lt=1 e=1 c=1   |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                                |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 | li=2  | FLWR  |                              |       |
+|  LEAD  |                                |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       | FLWR  |                              |       |
+|  LEAD  |                                |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=1 lt=1 e=1 c=1 | li=2  |
+|  LEAD  |                                |       | FLWR  |                              |       | FLWR  | ae_reply->N-1 ok=True mi=2   |       |
+|  LEAD  | N-2->ae_reply ok=True mi=2     | ci=2  | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | N-3->ae_reply ok=True mi=2     |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  |                                |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 | ci=2  | FLWR  |                              |       |
+|  LEAD  |                                |       | FLWR  |                              |       | FLWR  | N-1->ae t=1 i=2 lt=1 e=0 c=2 | ci=2  |
+|  LEAD  | CMD DONE                       |       | FLWR  |                              |       | FLWR  |                              |       |
+|  LEAD  | N-3->m_c op=REMOVE n=mcpy://3  | li=3  | FLWR  |                              |       | FLWR  |                              |       |
+-------------------------------------------------------------------------------------------------------------------------------------------------
+** Leader has saved membership change log but not replicated it, crashing leader and running election
+---------------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1    | N-1   | N-2   | N-2                          | N-2       | N-3   | N-3                          | N-3       |
+|  Role  | Op     | Delta | Role  | Op                           | Delta     | Role  | Op                           | Delta     |
+|  LEAD  | CRASH  |       | FLWR  |                              |           | FLWR  |                              |           |
+|  FLWR  |        |       | CNDI  | NEW ROLE                     | t=2       | FLWR  |                              |           |
+|  FLWR  |        |       | CNDI  | ae_reply->N-1 ok=True mi=2   |           | FLWR  |                              |           |
+|  FLWR  |        |       | CNDI  | poll->N-1 t=2 li=2 lt=2      |           | FLWR  |                              |           |
+|  FLWR  |        |       | CNDI  | poll->N-3 t=2 li=2 lt=2      |           | FLWR  |                              |           |
+|  FLWR  |        |       | CNDI  |                              |           | FLWR  | ae_reply->N-1 ok=True mi=2   |           |
+|  FLWR  |        |       | CNDI  |                              |           | FLWR  | N-2->poll t=2 li=2 lt=2      | t=2       |
+|  FLWR  |        |       | CNDI  |                              |           | FLWR  | vote->N-2 yes=True           |           |
+|  FLWR  |        |       | LEAD  | N-3->vote yes=True           | lt=2 li=3 | FLWR  |                              |           |
+|  FLWR  |        |       | LEAD  | NEW ROLE                     |           | FLWR  |                              |           |
+|  FLWR  |        |       | LEAD  | ae->N-1 t=2 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           |
+|  FLWR  |        |       | LEAD  | ae->N-3 t=2 i=2 lt=1 e=1 c=2 |           | FLWR  |                              |           |
+|  FLWR  |        |       | LEAD  |                              |           | FLWR  | N-2->ae t=2 i=2 lt=1 e=1 c=2 | lt=2 li=3 |
+|  FLWR  |        |       | LEAD  |                              |           | FLWR  | ae_reply->N-2 ok=True mi=3   |           |
+|  FLWR  |        |       | LEAD  | N-3->ae_reply ok=True mi=3   | ci=3      | FLWR  |                              |           |
+---------------------------------------------------------------------------------------------------------------------------------
+** Log state verified, restarting crashed lerader and sending heartbeats from new leader
+--------------------------------------------------------------------------------------------------------------------------
+|  N-1   | N-1                          | N-1       | N-2   | N-2                          | N-2   | N-3   | N-3 | N-3   |
+|  Role  | Op                           | Delta     | Role  | Op                           | Delta | Role  | Op  | Delta |
+|  FLWR  | RESTART                      |           | LEAD  |                              |       | FLWR  |     |       |
+|  FLWR  | N-2->ae t=2 i=3 lt=2 e=0 c=3 | t=2       | LEAD  |                              |       | FLWR  |     |       |
+|  FLWR  | ae_reply->N-2 ok=False mi=3  |           | LEAD  |                              |       | FLWR  |     |       |
+|  FLWR  |                              |           | LEAD  | N-1->ae_reply ok=False mi=3  |       | FLWR  |     |       |
+|  FLWR  |                              |           | LEAD  | ae->N-1 t=2 i=2 lt=1 e=1 c=3 |       | FLWR  |     |       |
+|  FLWR  | N-2->ae t=2 i=2 lt=1 e=1 c=3 | lt=2 ci=3 | LEAD  |                              |       | FLWR  |     |       |
+--------------------------------------------------------------------------------------------------------------------------
 
 
 * Condensed Trace Table Legend

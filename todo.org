@@ -1,10 +1,13 @@
-
+* problems:
+1. [X] Leader sends membership change response too soon on remove, should wait for commit. See
+   tests/test_member_changes.py::test_reverse_remove_follower_3
+   
 Events and errors rework:
 1. [] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.
 2. [] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
 3. [x] completely convert substate to events
-4. [] Need to have self exit generate an event.
+4. [x] Need to have self exit generate an event.
 
 
 1. [x] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
@@ -35,7 +38,7 @@ Events and errors rework:
   https://github.com/ongardie/dissertation?tab=readme-ov-file
   https://decentralizedthoughts.github.io/2020-12-12-raft-liveness-full-omission/
   Want to implement them as opt in features, segregate tests 
-4. [] Cluster membership change protocol
+4. [X] Cluster membership change protocol
 5. [] Snapshots
 
 

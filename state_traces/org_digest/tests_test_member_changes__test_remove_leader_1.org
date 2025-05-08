@@ -32,7 +32,7 @@
 |  LEAD  | N-2->ae_reply ok=True mi=1   | ci=1      | FLWR  |                              |           | FLWR  |                              |           |
 |  LEAD  | N-3->ae_reply ok=True mi=1   |           | FLWR  |                              |           | FLWR  |                              |           |
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
-** Node 1 is leader, sending heartbeat so replies will tell us that followers did commit
+** Node 1 is leader, telling it to exit the cluster
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
 |  N-1   | N-1                                | N-1   | N-2   | N-2                                | N-2       | N-3   | N-3                          | N-3       |
 |  Role  | Op                                 | Delta | Role  | Op                                 | Delta     | Role  | Op                           | Delta     |
