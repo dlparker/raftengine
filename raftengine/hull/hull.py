@@ -42,6 +42,9 @@ class Hull(HullAPI):
         self.joining_cluster = False
         self.join_result = None
         self.join_waiter_handle = None
+        self.exiting_cluster = False
+        self.exit_result = None
+        self.exit_waiter_handle = None
         
     # Part of API
     async def start(self):
@@ -233,12 +236,53 @@ class Hull(HullAPI):
     async def get_max_entries_per_message(self):
         return await self.cluster_ops.get_max_entries_per_message()
 
+    async def note_exit_done(self, success):
+        self.exit_result = success
+        self.logger.warning("%s exit call to leader result is %s", self.get_my_uri(), self.exit_result)
+        
+    async def exit_waiter(self, timeout, callback=None):
+        start_time = time.time()
+        while time.time() - start_time < timeout and self.exit_result is None and self.exiting_cluster:
+            await asyncio.sleep(0.001)
+        self.logger.debug("%s detected exit result %s", self.get_my_uri(), self.exit_result)
+        if not self.exiting_cluster:
+            self.exit_waiter_handle = None
+            return
+        ok = self.exit_result
+        self.exit_result = None
+        if ok is None:
+            # timeout
+            ok = False
+            etime  = time.time() - start_time
+            self.logger.warning("%s attempt to exit leader timedout after %f", self.get_my_uri(), etime)
+        if ok:
+            if EventType.membership_change_complete in self.event_control.active_events:
+                await self.event_control.emit_membership_change_complete(ChangeOp.remove, self.get_my_uri())
+        else:
+            if EventType.membership_change_aborted in self.event_control.active_events:
+                await self.event_control.emit_membership_change_aborted(ChangeOp.remove, self.get_my_uri())
+        if callback:
+            await callback(ok ,self.get_my_uri())
+        self.exiting_cluster = False
+        if ok:
+            self.exit_waiter_handle = None
+            await self.stop()
+
+        
     # Part of API 
-    async def exit_cluster(self):
+    async def exit_cluster(self, callback=None, timeout=10.0):
+        self.exiting_cluster = True
+        self.exit_result = None
         if self.role.role_name == "LEADER":
             await self.role.do_node_exit(self.get_my_uri())
         else:
             await self.role.send_self_exit()
+        loop = asyncio.get_event_loop()
+        leader_uri = await self.get_leader_uri()
+        self.logger.info("%s trying to exit cluster via leader %s, starting exit_waiter", self.get_my_uri(), leader_uri)
+        self.exit_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
+                                                asyncio.create_task(self.exit_waiter(timeout, callback)))
+        await asyncio.sleep(0)
         
     # Part of API 
     async def stop(self):
@@ -250,6 +294,13 @@ class Hull(HullAPI):
                 self.logger.debug("%s canceling join_waiter task", self.get_my_uri())
                 self.join_waiter_handle.cancel()
                 self.join_waiter_handle = None
+        if self.exit_waiter_handle:
+            self.exiting_cluster = False
+            await asyncio.sleep(0.001)
+            if self.exit_waiter_handle:
+                self.logger.debug("%s canceling exit_waiter task", self.get_my_uri())
+                self.exit_waiter_handle.cancel()
+                self.exit_waiter_handle = None
             
     async def stop_role(self):
         await self.role.stop()
@@ -258,12 +309,6 @@ class Hull(HullAPI):
             self.role_async_handle.cancel()
             self.role_async_handle = None
 
-    async def exiting_cluster(self):
-        await self.pilot.stop_commanded()
-        if not self.role.role_name == "FOLLOWER":
-            await self.stop_role()
-            self.role = Follower(self, self.cluster_ops)
-        await self.role.stop()
             
     # Called by Role
     async def transfer_power(self, other_uri):
@@ -298,6 +343,8 @@ class Hull(HullAPI):
     async def demote_and_handle(self, message=None):
         self.logger.warning("%s demoting from %s to follower", self.get_my_uri(), self.role)
         await self.stop_role()
+        if self.exiting_cluster:
+            return
         self.role = Follower(self, self.cluster_ops)
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:

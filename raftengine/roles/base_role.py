@@ -234,7 +234,8 @@ class BaseRole:
                 self.logger.info("%s leader rejected add request", self.my_uri())
             await self.hull.note_join_done(message.ok)
         else:
-            self.logger.info("%s got unexpected member change response, ignoring", self.my_uri())
+            if self.hull.exiting_cluster:
+                await self.hull.note_exit_done(message.ok)
             
     async def send_membership_change_response_message(self, message, ok=True):
         response = MembershipChangeResponseMessage(sender=self.my_uri(),

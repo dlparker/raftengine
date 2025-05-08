@@ -179,8 +179,8 @@ class PausingServer(PilotAPI):
         self.logger.debug('%s stop_commanded from hull', self.uri)
         #await self.cluster.remove_node(self.uri)
 
-    async def exit_cluster(self):
-        await self.hull.exit_cluster()
+    async def exit_cluster(self, callback=None, timeout=10.0):
+        await self.hull.exit_cluster(callback, timeout)
 
     async def start(self):
         await self.hull.start()

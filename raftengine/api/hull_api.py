@@ -104,3 +104,6 @@ class HullAPI(abc.ABC):
         """
         raise NotImplementedError
     
+    @abc.abstractmethod
+    async def exit_cluster(self, timeout=10.0, callback=None) -> None:
+        raise NotImplementedError

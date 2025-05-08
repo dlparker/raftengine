@@ -46,7 +46,9 @@ class PilotSim(PilotAPI):
         raise NotImplementedError
 
 async def test_member_change_messages(cluster_maker):
-
+    """
+    Test some basic features of the messages classes used to coordinate membership changes.
+    """
     m1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', ChangeOp.add, target_uri="mcpy://4")
     r1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', ChangeOp.add, target_uri="mcpy://4", ok=True)
     
@@ -65,6 +67,10 @@ async def test_member_change_messages(cluster_maker):
 
     
 async def test_cluster_config_ops(cluster_maker):
+    """
+    Tests the cluster configuration operations and their database operations used to track
+    the progress of membership change operations. No message or timer operations are involved.
+    """
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -142,13 +148,21 @@ async def test_remove_follower_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself.")
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
-    await ts_3.exit_cluster()
+    removed = None
+    async def cb(success, uri):
+        nonlocal removed
+        removed = success
+        print(f'\n\nin cb with {success}\n\n')
+    await ts_3.exit_cluster(callback=cb)
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
+    await cluster.deliver_all_pending()
+    await asyncio.sleep(0.0)
+    assert removed is not None
     assert ts_3.hull.role.stopped
 
     # now make sure heartbeat send only goes to the one remaining follower
@@ -175,7 +189,7 @@ async def test_remove_leader_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, telling it to exit the cluster")
 
     logger.debug("\n\n\nRemoving leader node 1\n\n\n")
     await ts_1.exit_cluster()
@@ -196,7 +210,7 @@ async def test_remove_leader_1(cluster_maker):
 
 async def test_add_follower_1(cluster_maker):
     """
-    Simple case of adding a follower to the cluster with a short log, only a term start and one command." 
+    Simple case of adding a follower to the cluster with a short log, only a term start and one command.
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
@@ -206,14 +220,14 @@ async def test_add_follower_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_leader_1.__doc__)
+                                     test_doc_string=test_add_follower_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -248,14 +262,14 @@ async def test_add_follower_2(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_leader_1.__doc__)
+                                     test_doc_string=test_add_follower_2.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
@@ -292,6 +306,7 @@ async def test_add_follower_2(cluster_maker):
                 done_by_event = False
 
     logger.debug("\n\nStarting join from node 4\n\n")
+    cluster.test_trace.start_subtest("Records inserted, starting add of node 4")
     await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -309,6 +324,10 @@ async def test_add_follower_2(cluster_maker):
     
 async def test_add_follower_2_rounds_1(cluster_maker):
     """
+    Adding a follower to the cluster with intervention to ensure that more than one round of log catch up
+    happens. This occurs when new records are added to the leader's log before the leader receives acknowledgement
+    that all of the records in the first round of pre-join log updates happened.
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -317,14 +336,14 @@ async def test_add_follower_2_rounds_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_leader_1.__doc__)
+                                     test_doc_string=test_add_follower_2_rounds_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via direct insert")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -393,6 +412,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
+    cluster.test_trace.start_subtest("New node has added all first round records, but leader not yet informed, adding new records")
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking commands\n")
     await ts_1.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now\n")
@@ -414,6 +434,13 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     
 async def test_add_follower_3_rounds_1(cluster_maker):
     """
+    Adding a follower to the cluster with intervention to ensure that three rounds of log catch up
+    happen. This occurs when new records are added to the leader's log before the leader receives acknowledgement
+    that all of the records in the previous round of pre-join log updates happened. So the test method is to
+    pause the leader just before it receives the append entries response that completes a round and to
+    insert new log records so that the pre-join log sync process will trigger another round.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -422,14 +449,14 @@ async def test_add_follower_3_rounds_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_leader_1.__doc__)
+                                     test_doc_string=test_add_follower_3_rounds_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -498,6 +525,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
+    cluster.test_trace.start_subtest("Node 4 caught up, adding new records before letting leader know that")
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command to start a round\n")
     last_index = await ts_4.log.get_last_index()
     await ts_1.fake_command("add", 1)
@@ -513,6 +541,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
 
     # poised to finish round 2, add more commands to force round 3, and make it enough to take > 1 message
+    cluster.test_trace.start_subtest("Node 4 caught up on roudn 2, adding new records before letting leader know that")
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per*2)
     for i in range(limit):
@@ -537,6 +566,13 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     
 async def test_add_follower_too_many_rounds_1(cluster_maker):
     """
+    Tests that the membership change process will abort the add node process when the new node fails
+    to catch up on all log records in 10 rounds of updates. This is accomplished by intercepting
+    the append entries responses that indicate that the new node has finished appending the records
+    for the current round ov updates and adding new records to the leader's log (and to the other followers)
+    so that the leader starts another round. This is done until ten rounds have been completed, at which
+    point the leader should abort the add. 
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
     cluster = cluster_maker(3)
@@ -552,6 +588,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
+    cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -586,7 +623,6 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
             else:
                 logger.debug('in handler with success = False\n')
                 done_by_event = False
-
 
 
     # first exchange will tell leader that node 4 needs catchup, by
@@ -644,9 +680,11 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
             await ts_4.do_next_in_msg()
 
             
+    cluster.test_trace.start_subtest("Starting a loop of round update and inserted new rounds")
     for i in range(1, 11):
         await buy_another_round(i)
         
+    cluster.test_trace.start_subtest("Leader is about to get another cycle of round complete but records pending, should abort")
     # poised to finish round 9, forcing another round should force abort
     await ts_4.do_next_out_msg()
     
