@@ -49,12 +49,12 @@ class PausingServer(PilotAPI):
     def __str__(self):
         return self.uri
 
-    def set_configs(self, local_config, cluster_config, ops_class=SimpleOps):
+    def set_configs(self, local_config, cluster_config, use_ops=SimpleOps):
         self.cluster_init_config = cluster_config
         self.local_config = local_config
         self.hull = TestHull(self.cluster_init_config, self.local_config, self)
-        self.ops_class = ops_class
-        self.operations = ops_class(self)
+        self.ops_class = use_ops
+        self.operations = use_ops(self)
 
     async def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
@@ -215,6 +215,13 @@ class PausingServer(PilotAPI):
             self.operations.total -= value
         else:
             raise Exception(f'unexpected op "{op}"')
+
+    async def fake_command2(self, command):
+        last_index = await self.log.get_last_index()
+        res = await self.operations.process_command(command, last_index + 1)
+        rec = LogRec(index=last_index + 1, term=1, command=command, result=res, committed=True, applied=True)
+        await self.log.append(rec)
+        return rec
 
     def replace_log(self, new_log=None):
         if self.use_log == SqliteLog:

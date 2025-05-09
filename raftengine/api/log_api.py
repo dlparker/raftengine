@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional, Any
 from enum import Enum
 from raftengine.api.types import ClusterConfig
+from raftengine.api.snapshot_api import SnapShotAPI
 
 class RecordCode(str, Enum):
     """ String enum representing purpose of record. """
@@ -89,6 +90,10 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    async def get_first_index(self) -> int:  # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
     async def get_last_term(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
 
@@ -136,7 +141,15 @@ class LogAPI(abc.ABC):
     async def get_cluster_config(self) -> Optional[ClusterConfig]:  # pragma: no cover abstract
         raise NotImplementedError
 
-    
+    @abc.abstractmethod
+    async def install_snapshot(self, snapshot:SnapShotAPI) -> None: # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def start_snapshot(self) -> int: # pragma: no cover abstract
+        raise NotImplementedError
+
+   
         
 
 

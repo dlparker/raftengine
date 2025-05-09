@@ -9,7 +9,7 @@ import pytest
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sequences import SPartialElection, SPartialCommand
 from dev_tools.network_sim import NetManager
-from dev_tools.pausing_server import PausingServer
+from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace, get_current_test
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
@@ -59,10 +59,11 @@ class PausingCluster:
 
         return cc
 
-    def set_configs(self, cluster_config=None):
+    def set_configs(self, cluster_config=None, use_ops=SimpleOps):
         if cluster_config is None:
             cluster_config = self.build_cluster_config()
         self.cluster_init_config = cluster_config
+        self.use_ops = use_ops
         for uri, node in self.nodes.items():
             # in real code you'd have only on cluster config in
             # something like a cluster manager, but in test
@@ -74,7 +75,7 @@ class PausingCluster:
             local_config = LocalConfig(uri=uri,
                                        working_dir='/tmp/',
                                        )
-            node.set_configs(local_config, cc)
+            node.set_configs(local_config, cc, use_ops=use_ops)
 
     async def add_node(self):
         nid = len(self.nodes) + 1 # one offset
@@ -87,7 +88,7 @@ class PausingCluster:
         local_config = LocalConfig(uri=uri,
                                    working_dir='/tmp/',
                                    )
-        ps.set_configs(local_config, self.cluster_init_config)
+        ps.set_configs(local_config, self.cluster_init_config, use_ops=self.use_ops)
         await self.test_trace.add_node(ps)
         return ps
 

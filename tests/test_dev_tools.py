@@ -101,14 +101,7 @@ async def test_log_stuff():
             await log.replace(bad_rec)
 
     m_log.close()
-    jstring = json.dumps(m_log, default=lambda o:o.__dict__, indent=4)
-    jdict = json.loads(jstring)
-    new_m_log = MemoryLog.from_json_dict(jdict)
-    loc_c = await new_m_log.get_commit_index()
-    assert loc_c == 2
-    rec = await new_m_log.read(2)
-    assert rec.index == 2
-    assert rec.command == "add 2"
+
     
     s_log.close()
     new_s_log = SqliteLog(path)

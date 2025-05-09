@@ -4,65 +4,212 @@ from typing import Union, List, Optional
 import logging
 from copy import deepcopy
 from raftengine.api.log_api import LogRec, LogAPI
+from raftengine.api.snapshot_api import SnapShotAPI
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 logger = logging.getLogger(__name__)
-class Records:
 
+class MemoryLog(LogAPI):
+    
     def __init__(self):
-        # log record indexes start at 1, per raftengine spec
-        self.entries = []
+        self.first_index = 0
+        self.last_index = 0
+        self.last_term = 0
+        self.term = 0
+        self.entries = {}
+        self.voted_for = None
+        self.snapshot = None
+        self.snapshot_records = None
         self.nodes = None
         self.pending_node = None
         self.cluster_settings = None
 
-    @classmethod
-    def from_json_dict(cls, jdict):
-        res = cls()
-        for entry_dict in jdict['entries']:
-            res.entries.append(LogRec.from_dict(entry_dict))
-        return res
-    
-    @property
-    def index(self):
-        return len(self.entries)
-    
+    def close(self):
+        self.first_index = 0
+        self.last_index = 0
+        self.last_term = 0
+        self.term = 0
+        self.entries = {}
+        self.voted_for = None
+        self.snapshot = None
+        self.snapshot_records = None
+        self.nodes = None
+        self.pending_node = None
+        self.cluster_settings = None
+        
+    def insert_entry(self, rec: LogRec) -> LogRec:
+        if rec.index > self.last_index + 1:
+            raise Exception('cannont insert past last index')
+        if rec.index == 0 or rec.index is None:
+            rec.index = self.last_index + 1
+        self.entries[rec.index] = rec
+        self.last_index = max(rec.index, self.last_index)
+        self.last_term = max(rec.term, self.last_term)
+        if self.first_index == 0:
+            self.first_index = rec.index
+        if self.last_index <= rec.index:
+            # It is possible for the last record to be re-written
+            # with a new term, and we can't tell that from
+            # an update to record commit or apply flag, so
+            # we'll assume that the term needs to update
+            self.last_index = rec.index
+            self.last_term = rec.term
+        return rec
+            
     def get_entry_at(self, index):
-        if index < 1 or len(self.entries) == 0:
-            return None
-        return self.entries[index - 1]
+        return self.entries.get(index, None)
 
     def get_last_entry(self):
-        return self.get_entry_at(self.index)
+        return self.get_entry_at(self.last_index)
 
-    def insert_entry(self, rec: LogRec) -> LogRec:
-        if rec.index > len(self.entries) + 1:
-            raise Exception('cannont insert past last index')
-        if rec.index == 0 or rec.index is None or rec.index == len(self.entries) + 1:
-            self.entries.append(rec)
-            rec.index = len(self.entries)
-            return rec
+    async def delete_ending_with(self, index: int):
+        if index == self.last_index:
+            self.entries = {}
         else:
-            self.entries[rec.index-1] = rec
+            keys = list(self.entries.keys())
+            keys.sort()
+            for rindex in keys:
+                if rindex <= index:
+                    del self.entries[rindex]
+        if len(self.entries) == 0:
+            self.first_index = None
+            if self.snapshot:
+                self.last_index = self.snapshot.get_last_index()
+                self.last_term = self.snapshot.get_last_term()
+            else:
+                self.last_index = 0
+                self.last_term = 0
+        else:
+            self.first_index = index + 1
 
-    def get_commit_index(self):
-        for entry in self.entries[::-1]:
+    # BEGIN API METHODS
+    def start(self):
+        pass
+
+    async def get_term(self) -> Union[int, None]:
+        return self.term
+    
+    async def set_term(self, value: int):
+        self.term = value
+
+    async def incr_term(self):
+        self.term += 1
+        return self.term
+
+    async def get_voted_for(self) -> Union[int, None]:
+        return self.voted_for
+    
+    async def set_voted_for(self, value: int):
+        self.voted_for = value
+
+    async def get_last_index(self):
+        return self.last_index
+
+    async def get_first_index(self):
+        return self.first_index
+    
+    async def get_last_term(self):
+        return self.last_term
+    
+    async def get_commit_index(self):
+        keys = list(self.entries.keys())
+        keys.sort()
+        for rindex in keys[::-1]:
+            entry = self.entries[rindex]
             if entry.committed:
                 return entry.index
+        if self.snapshot:
+            return self.snapshot.get_last_index()
         return 0
 
-    def get_applied_index(self):
-        for entry in self.entries[::-1]:
+    async def get_applied_index(self):
+        keys = list(self.entries.keys())
+        keys.sort()
+        for rindex in keys[::-1]:
+            entry = self.entries[rindex]
             if entry.applied:
                 return entry.index
+        if self.snapshot:
+            return self.snapshot.get_last_index()
         return 0
+    
+    async def append_multi(self, entries: List[LogRec]) -> None:
+        # make copies for in memory list, and copy
+        # the inserted ones to return to the caller
+        # so they can see the index and can't break
+        # our saved copy
+        return_recs = []
+        for entry in entries:
+            return_recs.append(await self.append(entry))
+        return return_recs
+    
+    async def append(self, record: LogRec) -> None:
+        save_rec = LogRec.from_dict(record.__dict__)
+        self.insert_entry(save_rec)
+        return_rec = LogRec.from_dict(save_rec.__dict__)
+        logger.debug("new log record %s", return_rec.index)
+        return return_rec
+    
+    async def replace(self, entry:LogRec) -> LogRec:
+        if entry.index is None:
+            raise Exception("api usage error, call append for new record")
+        if entry.index < 1:
+            raise Exception("api usage error, cannot insert at index less than 1")
+        save_rec = LogRec.from_dict(entry.__dict__)
+        self.insert_entry(save_rec)
+        return LogRec.from_dict(save_rec.__dict__)
 
-    def delete_all_from(self, index: int):
-        if index == 0:
-            self.entries = []
+    async def update_and_commit(self, entry:LogRec) -> LogRec:
+        entry.committed = True
+        return await self.replace(entry)
+
+    async def update_and_apply(self, entry:LogRec) -> LogRec:
+        entry.applied = True
+        return await self.replace(entry)
+    
+    async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
+        if index is None:
+            rec = self.get_last_entry()
         else:
-            self.entries = self.entries[:index-1]
-        
+            if index < 1:
+                raise Exception(f"cannot get index {index}, 1 is the first index")
+            if index > self.last_index:
+                return None
+            if self.first_index is None:
+                return None
+            if index < self.first_index:
+                return None
+            rec = self.get_entry_at(index)
+        if rec is None:
+            return None
+        return LogRec(**rec.__dict__)
+    
+    async def delete_all_from(self, index: int):
+        if index == 0:
+            self.entries = {}
+            self.first_entry = 0
+            if self.snapshot:
+                self.last_index = self.snapshot.get_last_index()
+                self.last_term = self.snapshot.get_last_term()
+            else:
+                self.last_index = 0
+                self.last_term = 0
+        else:
+            keys = list(self.entries.keys())
+            keys.sort()
+            for rindex in keys[::-1]:
+                if rindex >= index:
+                    del self.entries[rindex]
+            keys = list(self.entries.keys())
+            keys.sort()
+            if len(keys) == 0:
+                self.first_index = self.last_index = self.term = 0
+                return
+            self.first_index = keys[0]
+            self.last_index = keys[-1]
+            rec = self.entries[self.last_index]
+            self.last_term = rec.term
+
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         self.nodes = deepcopy(config.nodes)
         self.pending_node = deepcopy(config.pending_node)
@@ -78,113 +225,34 @@ class Records:
                              pending_node=deepcopy(self.pending_node),
                              settings=deepcopy(self.cluster_settings))
     
-class MemoryLog(LogAPI):
-
-    def __init__(self):
-        self.records = Records()
-        self.term = 0
-        self.voted_for = None
-
-    @classmethod
-    def from_json_dict(cls, jdict):
-        res = cls()
-        res.term =  jdict['term']
-        res.records = Records.from_json_dict(jdict['records'])
-        return res
-    
-    def start(self):
-        pass
-    
-    async def get_term(self) -> Union[int, None]:
-        return self.term
-    
-    async def set_term(self, value: int):
-        self.term = value
-
-    async def get_voted_for(self) -> Union[int, None]:
-        return self.voted_for
-    
-    async def set_voted_for(self, value: int):
-        self.voted_for = value
-
-    async def incr_term(self):
-        self.term += 1
-        return self.term
-
-    async def append(self, record: LogRec) -> None:
-        save_rec = LogRec.from_dict(record.__dict__)
-        self.records.insert_entry(save_rec)
-        return_rec = LogRec.from_dict(save_rec.__dict__)
-        logger.debug("new log record %s", return_rec.index)
-        return return_rec
-    
-    async def append_multi(self, entries: List[LogRec]) -> None:
-        # make copies for in memory list, and copy
-        # the inserted ones to return to the caller
-        # so they can see the index and can't break
-        # our saved copy
-        return_recs = []
-        for entry in entries:
-            return_recs.append(await self.append(entry))
-        return return_recs
-
-    async def replace(self, entry:LogRec) -> LogRec:
-        if entry.index is None:
-            raise Exception("api usage error, call append for new record")
-        if entry.index < 1:
-            raise Exception("api usage error, cannot insert at index less than 1")
-        save_rec = LogRec.from_dict(entry.__dict__)
-        self.records.insert_entry(save_rec)
-        return LogRec.from_dict(save_rec.__dict__)
-
-    async def update_and_commit(self, entry:LogRec) -> LogRec:
-        entry.committed = True
-        return await self.replace(entry)
-    
-    async def update_and_apply(self, entry:LogRec) -> LogRec:
-        entry.applied = True
-        return await self.replace(entry)
-    
-    async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
-        if index is None:
-            rec = self.records.get_last_entry()
+    async def install_snapshot(self, snapshot:SnapShotAPI):
+        self.snapshot = snapshot
+        end_index = self.snapshot.get_last_index()
+        await self.delete_ending_with(end_index)
+        self.last_term = max(self.snapshot.get_last_term(), self.last_term)
+        self.last_index = max(self.snapshot.get_last_index(), self.last_index)
+        if self.last_index > self.snapshot.get_last_index():
+            self.first_index = self.snapshot.get_last_index() + 1
         else:
-            if index < 1:
-                raise Exception(f"cannot get index {index}, 1 is the first index")
-            if index > self.records.index:
-                return None
-            rec = self.records.get_entry_at(index)
-        if rec is None:
-            return None
-        return LogRec(**rec.__dict__)
-
-    async def get_last_index(self):
-        return self.records.index
-
-    async def get_last_term(self):
-        if self.records.index == 0:
-            return 0
-        rec = self.records.get_last_entry()
-        return rec.term
+            self.first_index = None
+        self.snapshot_records = None
     
-    async def get_commit_index(self):
-        return self.records.get_commit_index()
-
-    async def get_applied_index(self):
-        return self.records.get_applied_index()
-
-    async def delete_all_from(self, index: int):
-        return self.records.delete_all_from(index)
-
-    async def save_cluster_config(self, config: ClusterConfig) -> None:
-        return await self.records.save_cluster_config(config)
-    
-    async def get_cluster_config(self) -> Optional[ClusterConfig]:  
-        return await self.records.get_cluster_config()
-
-    def close(self):
-        pass
-
+    async def start_snapshot(self) -> int:
+        self.snapshot_records = {}
+        keys = list(self.entries.keys())
+        keys.sort()
+        last_index = 0
+        for index in keys:
+            entry = self.entries[index]
+            if entry.applied:
+                self.snapshot_records[index] = entry
+                last_index = index
+        if last_index == 0:
+            return 0,0
+        final_item = self.entries[last_index]    
+        return last_index, final_item.term
+           
+ 
 
         
     

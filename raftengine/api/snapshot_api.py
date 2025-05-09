@@ -1,31 +1,45 @@
+import abc
+from typing import Any, Optional
 
-class SnapShot:
+class SnapShotAPI(abc.ABC):
 
-    def __init__(self, last_index, last_term):
-        self.last_index = last_index
-        self.last_term = last_term
-        self.data = []
-        self.items_per_chunk = 2
-
-    async def get_last_index(self):
-        return self.last_index
+    @abc.abstractmethod
+    def get_last_index(self) -> int:# pragma: no cover abstract
+        raise NotImplementedError
     
-    async def get_last_term(self):
-        return self.last_term
+    @abc.abstractmethod
+    def get_last_term(self) -> int:# pragma: no cover abstract
+        raise NotImplementedError
 
-    async def add_data_item(self, item):
-        self.data.append(item)
+    @abc.abstractmethod
+    async def add_data_item(self, item:Any) -> None:# pragma: no cover abstract
+        raise NotImplementedError
         
-    async def get_chunk(self, offset=0):
-        done = False
-        limit = offset + self.items_per_chunk
-        if limit >= len(self.data):
-            done = True
-        data = self.data[offset:limit + 1]
-        return data, limit + 1, done
+    @abc.abstractmethod
+    async def get_chunk(self, offset:Optional[int] = 0) -> (str, int, bool):# pragma: no cover abstract
+        raise NotImplementedError
 
-    async def save_chunk(self, data, offset=0):
-        if len(self.data) != offset:
-            raise Exception('cannot store data out of order')
-        self.data.extend(data)
+    @abc.abstractmethod
+    async def save_chunk(self, data:str, offset:Optional[int] = 0) -> None:# pragma: no cover abstract
+        raise NotImplementedError
+
+class SnapToolAPI(abc.ABC):
+
+    @abc.abstractmethod
+    def set_log(self, log) -> None:# pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def take_snapshot(self) -> SnapShotAPI:# pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def start_snapshot_load(self, last_index, last_term, first_chunk) -> None: # pragma: no cover abstract
+        raise NotImplementedError
+        
+    @abc.abstractmethod
+    async def continue_snapshot_load(self, chunk, offset, done) -> None:# pragma: no cover abstract
+        raise NotImplementedError
+        
+
 
