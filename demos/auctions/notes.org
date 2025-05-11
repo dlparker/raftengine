@@ -1,0 +1,29 @@
+
+The snapshot creation process in this demo first does a snapshot of the sqlite tables, in two steps.
+1. A transaction surrounds a series of commands that create exact copies of all the tables and their
+   contents in the db file.
+2. A new file is created and all the copied tables are used to populate the new db.
+
+
+This mimics an approach that would work if the database access was
+asynchronous, which would be the case when using any db server instead
+of sqlite. By doing the transactional copy to new tables, no
+intervening writes could change the state that is being snapped. This
+ensures that the snapshot is a cleanly separated point in time. This
+is important because of the logic that says a snapshot is related to
+the state immediately after a specific raft log command is applied, so
+we have to ensure that no updates take place after we start the
+snapshot.
+
+
+It is possible to write the snapshot operation in a way that prevents
+any new raft messages from being processed by the snapping node, which
+would eliminate the need for this even with a client/server database.
+Indeed, that might be a preferable way to do it, but this demo is
+intended to think out how you can minimize the risk to availabilty
+that the simplest snapshot strategy causes to the whole cluster. What
+if this is a three node cluster and a different node crashes while this
+one is preparting a snapshot?
+
+The use of templates might allow a similar snapshot approach for Postgresql as discussed in this post.
+https://dba.stackexchange.com/questions/3394/is-it-possible-to-quickly-create-restore-database-snapshots-with-postgresql

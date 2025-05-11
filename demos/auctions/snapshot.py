@@ -1,8 +1,24 @@
+#!/usr/bin/env python
+import asyncio
+import sys
+import sqlite3
 import pickle
 import os
 import base64
 import zlib
+from pathlib import Path
 from itertools import islice
+from typing import Optional
+from dataclasses import dataclass, field
+from pprint import pprint
+from records import Records, Person, Item, Sale, Bid
+
+@dataclass
+class ChunkObjs:
+    items: Optional[list] = field(default=None) 
+    people: Optional[list] = field(default=None) 
+    sales: Optional[list] = field(default=None) 
+    bids: Optional[list] = field(default=None) 
 
 class StartStats:
 
@@ -35,7 +51,6 @@ class SnapshotSerializer:
         # Deserialize
         chunk_data = pickle.loads(serialized)
         await self.in_function(chunk_data)
-
 
         
 
@@ -112,18 +127,162 @@ def receive_snapshot_chunk(message: dict, snapshot_dir: str):
     return None
 
 
-pickled = zlib.compress(pickle.dumps(chunk))
-encoded = base64.a85encode(pickled).decode('ascii')
+class SnapshotTool:
+
+    def __init__(self, records):
+        self.records = records
+
+    async def start(self):
+        await self.make_snap_db()
+
+    async def make_snap_db(self):
+        snap_records = self.records.take_snapshot()
+        db_dir = Path(__file__).parent
+        self.db_path = Path(db_dir, 'auction.snapshot.db')
+        if self.db_path.exists():
+            self.db_path.unlink()
+        self.db = sqlite3.connect(self.db_path,
+                                  detect_types=sqlite3.PARSE_DECLTYPES |
+                                  sqlite3.PARSE_COLNAMES)
+        self.db.row_factory = sqlite3.Row
+
+        cursor = self.db.cursor()
+        cursor.execute('create table chunks (chunk_id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB)')
+
+        items_offset = people_offset = sales_offset = bids_offset = 0
+        items_done = people_done = sales_done = bids_done = False
+        self.totals = dict(full=0, pickled=0, compressed=0, encoded=0)
+        while True:
+            co = ChunkObjs()
+            if not items_done:
+                items = snap_records.fetch_items(items_offset, 10)
+                if len(items) == 0:
+                    items_done = True
+                else:
+                    items_offset += len(items)
+                co.items = items
+
+            if not people_done:
+                people = snap_records.fetch_people(people_offset, 10)
+                if len(people) == 0:
+                    people_done = True
+                else:
+                    people_offset += len(people)
+                co.people = people
+        
+            if not sales_done:
+                sales = snap_records.fetch_sales(sales_offset, 10)
+                if len(sales) == 0:
+                    sales_done = True
+                else:
+                    sales_offset += len(sales)
+                co.sales = sales
+
+            if not bids_done:
+                bids = snap_records.fetch_bids(bids_offset, 10)
+                if len(bids) == 0:
+                    bids_done = True
+                else:
+                    bids_offset += len(bids)
+                co.bids = bids
+
+            if items_done and people_done and sales_done and bids_done:
+                break
+
+            pickled = pickle.dumps(co)
+            compressed = zlib.compress(pickled)
+            self.totals['full'] += get_size(co)
+            self.totals['pickled'] += len(pickled)
+            self.totals['compressed'] += len(compressed)
+            cursor.execute('insert into chunks (data) values (?)', [compressed,])
+        self.db.commit()
+        cursor.close()
+                       
+    async def get_chunk_encoded(self, index=0):
+        index += 1
+        cursor = self.db.cursor()
+        cursor.execute('select min(chunk_id) as min_id, max(chunk_id) as max_id from chunks')
+        row = cursor.fetchone()
+        if index >= row['min_id'] and index <= row['max_id']:
+            cursor.execute("select * from chunks where chunk_id = ?", (index,))
+            row = cursor.fetchone()
+            encoded = base64.a85encode(row['data']).decode('ascii')
+            self.totals['encoded'] += len(encoded)
+            return row['chunk_id'], encoded
+        return -1, None
+
+async def example(st):
+    await st.start()
+    last_index = 0
+    while last_index > -1:
+        last_index, chunk = await st.get_chunk_encoded(last_index)
+        if last_index > -1:
+            compressed = base64.a85decode(chunk.encode('ascii'))
+            serialized = zlib.decompress(compressed)
+            chunk_data = pickle.loads(serialized)
+            #pprint(chunk_data)
 
 
-# Leader: Encode and send snapshot
-data = {"key" + str(i): i for i in range(10000)}  # Large dictionary
-chunks = encode_snapshot(data, chunk_size=1000)
-save_snapshot(chunks, "snapshots", "term_5_index_100")
-send_snapshot_chunks(chunks, "follower_1")
+    print(f"full = {st.totals['full']} pickled = {st.totals['pickled']} compressed = {st.totals['compressed']} encoded = {st.totals['encoded']}")
+    # now fake collecting a snap shot from another server and creating local db
+    db_dir = Path(__file__).parent
+    snap_db_path = Path(db_dir, 'in.auction.snapshot.db')
+    if snap_db_path.exists():
+        snap_db_path.unlink()
+    snap_db = sqlite3.connect(snap_db_path,
+                              detect_types=sqlite3.PARSE_DECLTYPES |
+                              sqlite3.PARSE_COLNAMES)
+    snap_db.row_factory = sqlite3.Row
+    cursor = snap_db.cursor()
+    cursor.execute('create table chunks (chunk_id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB)')
+    records = Records(base_dir=Path(db_dir), clear=True, db_file_name="in.auction.db")
+    last_index = 0
+    while last_index > -1:
+        last_index, chunk = await st.get_chunk_encoded(last_index)
+        if last_index > -1:
+            compressed = base64.a85decode(chunk.encode('ascii'))
+            # save it in snap db, as we would do so that we could share it with other nodes
+            cursor.execute('insert into chunks (chunk_id, data) values (?,?)', [last_index, compressed,])
+            serialized = zlib.decompress(compressed)
+            chunk_data = pickle.loads(serialized)
+            if chunk_data.items:
+                for item in chunk_data.items:
+                    records.add_item(item)
+            if chunk_data.people:
+                for person in chunk_data.people:
+                    records.add_person(person)
+            if chunk_data.sales:
+                for sale in chunk_data.sales:
+                    records.add_sale(sale)
+            if chunk_data.bids:
+                for bid in chunk_data.bids:
+                    records.add_bid(bid)
+    
+    
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) + get_size(k, seen) for k, v in obj.items()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+    
+if __name__=="__main__":
+    db_dir = Path(__file__).parent
+    records = Records(base_dir=Path(db_dir), clear=False)
+    st = SnapshotTool(records)
+    asyncio.run(example(st))
 
-# Follower: Receive and decode
-# (Assume chunks received via messages and stored)
-chunks = [open(f"snapshots/snapshot_term_5_index_100_chunk_{i}.txt").read() for i in range(len(chunks))]
-restored = decode_snapshot(chunks)
-assert restored == data
+
+
+    

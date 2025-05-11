@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+import shutil
 from pathlib import Path
 from typing import List, Dict, Any
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ def adapt_datetime_epoch(val):
 
 sqlite3.register_adapter(datetime.date, adapt_date_iso)
 sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
-sqlite3.register_adapter(datetime.datetime, adapt_datetime_epoch)
+#sqlite3.register_adapter(datetime.datetime, adapt_datetime_epoch)
 
 def convert_date(val):
     """Convert ISO 8601 date to datetime.date object."""
@@ -39,6 +40,7 @@ sqlite3.register_converter("timestamp", convert_timestamp)
 
 def bool_converter(value):
     return bool(int(value))
+
 sqlite3.register_converter('BOOLEAN', bool_converter)
 
 @dataclass
@@ -85,8 +87,8 @@ class Bid:
 
 class Records:
     
-    def __init__(self, base_dir, clear=False):
-        self.db_path = Path(base_dir, 'auction.db')
+    def __init__(self, base_dir, clear=False, db_file_name="auction.db"):
+        self.db_path = Path(base_dir, db_file_name)
         if self.db_path.exists() and clear:
             self.db_path.unlink()
         self.db = sqlite3.connect(self.db_path,
@@ -94,18 +96,23 @@ class Records:
                                   sqlite3.PARSE_COLNAMES)
         self.db.row_factory = sqlite3.Row
 
-        c = self.db.cursor()
 
-        # Create tables
-        c.execute('''CREATE TABLE if not exists items
-        (item_id INTEGER PRIMARY KEY, name TEXT, description TEXT, category TEXT, starting_bid REAL, reserve_price REAL, seller_id INTEGER)''')
-        c.execute('''CREATE TABLE if not exists people
-        (person_id INTEGER PRIMARY KEY, role TEXT, name TEXT, address TEXT, email TEXT, phone TEXT)''')
-        c.execute('''CREATE TABLE if not exists sales
-        (item_id INTEGER PRIMARY KEY, name TEXT, description TEXT, category TEXT, sale_price REAL, seller_id INTEGER, buyer_id INTEGER)''')
-        c.execute('''CREATE TABLE if not exists bids
-        (bid_id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, bidder_id INTEGER, bid_amount REAL, bidtime datetime)''')
+        cursor = self.db.cursor()
+        for command in self.get_create_commands().values():
+            cursor.execute(command)
         self.db.commit()
+            
+    def get_create_commands(self, prefix=""):
+        commands = {}
+        commands['items'] = f'''CREATE TABLE if not exists {prefix}items
+        (item_id INTEGER PRIMARY KEY, name TEXT, description TEXT, category TEXT, starting_bid REAL, reserve_price REAL, seller_id INTEGER)'''
+        commands['people'] = f'''CREATE TABLE if not exists {prefix}people
+        (person_id INTEGER PRIMARY KEY, role TEXT, name TEXT, address TEXT, email TEXT, phone TEXT)'''
+        commands['sales'] = f'''CREATE TABLE if not exists {prefix}sales
+        (item_id INTEGER PRIMARY KEY, name TEXT, description TEXT, category TEXT, sale_price REAL, seller_id INTEGER, buyer_id INTEGER)'''
+        commands['bids'] = f'''CREATE TABLE if not exists {prefix}bids
+        (bid_id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, bidder_id INTEGER, bid_amount REAL, bidtime datetime)'''
+        return commands
 
     def add_item(self, item:Item):
         cursor = self.db.cursor()
@@ -137,6 +144,13 @@ class Records:
         cursor.close()
         return Item(**row)
         
+    def get_random_sale(self):
+        cursor = self.db.cursor()
+        cursor.execute("SELECT * FROM sales ORDER BY RANDOM() LIMIT 1")
+        row = cursor.fetchone()
+        cursor.close()
+        return Sale(**row)
+        
     def add_person(self, person):
         cursor = self.db.cursor()
         cursor.execute("INSERT INTO people VALUES (?, ?, ?, ?, ?, ?)",
@@ -155,15 +169,20 @@ class Records:
         cursor.close()
         return Person(**row)
 
-    def add_sale(self, item, price, buyer_id):
+    def create_and_save_sale(self, item, price, buyer_id):
+        sale = Sale(item.item_id, item.name, item.description, item.category,
+                    price, item.seller_id, buyer_id)
+        return self.add_sale(sale)
+        
+    def add_sale(self, sale):
         cursor = self.db.cursor()
         cursor.execute("INSERT INTO sales VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (item.item_id, item.name, item.description,
-                        item.category, price,
-                        item.seller_id, buyer_id))
+                       (sale.item_id, sale.name, sale.description,
+                        sale.category, sale.sale_price,
+                        sale.seller_id, sale.buyer_id))
         self.db.commit()
         cursor.close()
-        return self.get_sale(item.item_id)
+        return self.get_sale(sale.item_id)
 
     def get_sale(self, item_id):
         cursor = self.db.cursor()
@@ -172,10 +191,14 @@ class Records:
         cursor.close()
         return Sale(**row)
 
-    def add_bid(self, item, bidder_id, bid_amount):
+    def create_and_save_bid(self, item, bidder_id, bid_amount):
+        bid = Bid(item.item_id, bidder_id, bid_amount)
+        return self.add_bid(bid)
+        
+    def add_bid(self, bid):
         cursor = self.db.cursor()
         cursor.execute("INSERT INTO bids (item_id, bidder_id, bid_amount, bidtime) VALUES (?, ?, ?, ?)",
-                       (item.item_id, bidder_id, bid_amount, datetime.datetime.now().isoformat()))
+                       (bid.item_id, bid.bidder_id, bid.bid_amount, datetime.datetime.now()))
         self.db.commit()
         bid_id = cursor.lastrowid
         cursor.close()
@@ -227,6 +250,8 @@ class Records:
 
     def count_rows(self, table: str) -> int:
         cursor = self.db.cursor()
+        if table not in ('people', 'sales', 'items', 'bids'):
+            raise Exception(f'illegal table name {table}')
         cursor.execute(f"SELECT COUNT(*) FROM {table}")
         count = cursor.fetchone()[0]
         cursor.close()
@@ -245,3 +270,41 @@ class Records:
     def close(self):
         self.db.close()
         self.db = None
+
+    def take_snapshot(self):
+        cursor = self.db.cursor()
+        cursor.execute("BEGIN TRANSACTION")
+        commands = self.get_create_commands(prefix="snap_")
+        for table in ('people', 'sales', 'items', 'bids'):
+            cursor.execute(f"drop table if exists snap_{table}")
+            cursor.execute(commands[table])
+            cursor.execute(f"insert into snap_{table} select * from {table}")
+        cursor.execute("COMMIT")
+        self.db.commit()
+        snap_db_file = Path(self.db_path.parent, 'auction.snap_copy.db')
+        copy_path = Path(snap_db_file)
+        if copy_path.exists():
+            copy_path.unlink()
+        shutil.copy(self.db_path, copy_path)
+        copy_records = Records(copy_path.parent, clear=True, db_file_name=copy_path.parts[-1])
+        cursor.execute("SELECT * FROM snap_items")
+        for row in  cursor.fetchall():
+            item = Item(**row)
+            copy_records.add_item(item)
+        cursor.execute("SELECT * FROM snap_people")
+        for row in  cursor.fetchall():
+            person = Person(**row)
+            copy_records.add_person(person)
+        cursor.execute("SELECT * FROM snap_sales")
+        for row in  cursor.fetchall():
+            sale = Sale(**row)
+            copy_records.add_sale(sale)
+        cursor.execute("SELECT * FROM snap_bids")
+        for row in  cursor.fetchall():
+            bid = Bid(**row)
+            copy_records.add_bid(bid)
+            
+        for table in ('people', 'sales', 'items', 'bids'):
+            cursor.execute(f"drop table if exists snap_{table}")
+        self.db.commit()
+        return copy_records

@@ -52,7 +52,7 @@ def simulate_auction(records, item, bidders, duration=100):
             if bidder.decide_to_bid(proposed_bid, current_bid, auction_progress):
                 current_bid = proposed_bid
                 highest_bidder = bidder.bidder_id
-                bid = records.add_bid(item=item, bidder_id=bidder.bidder_id, bid_amount=proposed_bid)
+                bid = records.create_and_save_bid(item=item, bidder_id=bidder.bidder_id, bid_amount=proposed_bid)
                 bids.append(bid)
     
     return bids, highest_bidder, current_bid

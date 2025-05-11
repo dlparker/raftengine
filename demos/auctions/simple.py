@@ -37,7 +37,7 @@ focus_item = records.get_random_item()
     
 for item in items:
     bids, winner, final_bid  = simulate_auction(records, item, bidders)
-    records.add_sale(item, final_bid, winner)
+    records.create_and_save_sale(item, final_bid, winner)
     # we delete the item from items table, that is only things not yet sold
     records.delete_item(item)
 
