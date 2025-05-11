@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from raftengine.api.log_api import LogRec, LogAPI, RecordCode
-from raftengine.api.snapshot_api import SnapShotAPI
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 def bool_converter(value):
@@ -415,10 +415,7 @@ class SqliteLog(LogAPI):
     async def get_cluster_config(self) -> Optional[ClusterConfig]:  
         return self.records.get_cluster_config()
     
-    async def install_snapshot(self, snapshot:SnapShotAPI):
-        raise Exception('not done!')
-
-    async def start_snapshot(self) -> int:
+    async def install_snapshot(self, snapshot:SnapShot):
         raise Exception('not done!')
 
     async def get_first_index(self) -> int:

@@ -108,29 +108,40 @@ async def test_message_ops():
 
 async def test_dict_ops():
 
-    dto = DictTotalsOps(1)
+    class FakeServer:
 
+        def __init__(self):
+            self.log = MemoryLog()
+            self.ops = DictTotalsOps(self)
+
+        async def process_command(self, command, serial):
+            last_index = await self.log.get_last_index()
+            rec = LogRec(index=last_index + 1, term=1, command=command, committed=True, applied=True)
+            await self.log.append(rec)
+            await self.ops.process_command(command, serial)
+
+    fs1 = FakeServer()
+    ops1 = fs1.ops
+    
     for i in range(1, 11):
         command = f'add {i} {random.randint(1,100)}'
-        await dto.process_command(command, i)
-    assert len(dto.totals) == 10
-    ss = SnapShot(1,1)
-    await dto.fill_snapshot(ss)
-    assert len(ss.data) == 10
+        await fs1.process_command(command, i)
+    assert len(ops1.totals) == 10
+    ss1 = await ops1.take_snapshot()
+    assert len(ss1.tool.data) == 10
 
-    ss2 = SnapShot(1,1)
+    fs2 = FakeServer()
+    ops2 = fs2.ops
+    ss2 = SnapShot(ss1.last_index, ss1.last_term, ops2.snapshot_tool)
+    
     offset = 0
     done = False
     while not done:
-        chunk, new_offset, done = await ss.get_chunk(offset)
-        await ss2.save_chunk(chunk, offset)
+        chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(ss2, offset)
+        await ss2.tool.load_snapshot_chunk(ss2, chunk)
         offset = new_offset
-    dto_copy = DictTotalsOps(1)
-    for line in ss2.data:
-        await dto_copy.unpack_snapshot_data_item(line)
-
-    for key in dto.totals:
-        assert dto.totals[key] == dto_copy.totals[key]
+    for key in ops1.totals:
+        assert ops1.totals[key] == ops2.totals[key]
     
 async def test_snapshot_1(cluster_maker):
 

@@ -1,18 +1,16 @@
 import logging
+import json
 from collections import defaultdict
-from raftengine.api.snapshot_api import SnapShotAPI, SnapToolAPI
+from raftengine.api.snapshot_api import SnapShot, SnapshotToolAPI
 
 class DictTotalsOps: 
 
     def __init__(self, server):
         self.server = server
+        self.log = server.log
         self.totals = defaultdict(int)
-        self.tool = SnapTool(self)
+        self.snapshot_tool = SnapshotTool(self, server.log)
 
-    def get_snapshot_tool(self, log):
-        self.tool.set_log(log)
-        return self.tool
-    
     async def process_command(self, command, serial):
         logger = logging.getLogger("DictTotalsOps")
         op, operand, value = command.split()
@@ -28,61 +26,24 @@ class DictTotalsOps:
         logger.debug("command %s returning %s for slot %s no error", command, result, operand)
         return result, None
 
-    async def fill_snapshot(self, snapshot):
-        for slot_name, slot_value in self.totals.items():
-            await snapshot.add_data_item({slot_name: slot_value})
-
-    async def unpack_snapshot_data_item(self, item):
-        self.totals.update(item)
-
-    
-class SnapTool(SnapToolAPI):
-
-    def __init__(self, ops):
-        self.ops = ops
-        self.log = None
-        self.snapshot = None
-
-    def set_log(self, log):
-        self.log = log
-
     async def take_snapshot(self):
-        last_index,last_term = await self.log.start_snapshot()
-        ss = SnapShot(last_index, last_term)
-        await self.ops.fill_snapshot(ss)
-        return ss
-    
-    async def start_snapshot_load(self, last_index, last_term, first_chunk):
-        self.snapshot = SnapShot(last_index, last_term)
-        for item in first_chunk:
-            await self.ops.unpack_snapshot_data_item(item)
-        
-    async def continue_snapshot_load(self, chunk, offset, done):
-        for item in chunk:
-            await self.ops.unpack_snapshot_data_item(item)
-        if done:
-            await self.log.install_snapshot(self.snapshot)
-        
-    
-class SnapShot(SnapShotAPI):
+        return await self.snapshot_tool.take_snapshot()
 
-    def __init__(self, last_index, last_term):
-        self.last_index = last_index
-        self.last_term = last_term
+class SnapshotTool(SnapshotToolAPI):
+
+    def __init__(self, ops, log):
+        self.ops = ops
+        self.log = log
+        self.snapshot = None
         self.data = []
         self.items_per_chunk = 2
 
-    def get_last_index(self):
-        return self.last_index
+    async def load_snapshot_chunk(self, snapshot, chunk):
+        self.snapshot = snapshot
+        for item in chunk:
+            self.ops.totals.update(json.loads(item))
     
-    def get_last_term(self):
-        return self.last_term
-
-    async def add_data_item(self, item):
-        self.data.append(item)
-
-
-    async def get_chunk(self, offset=0):
+    async def get_snapshot_chunk(self, shapshot, offset=0):
         done = False
         limit = offset + self.items_per_chunk
         if limit >= len(self.data):
@@ -90,12 +51,19 @@ class SnapShot(SnapShotAPI):
         data = self.data[offset:limit + 1]
         return data, limit + 1, done
 
-    async def save_chunk(self, data, offset=0):
-        if len(self.data) != offset:
-            raise Exception('cannot store data out of order')
-        self.data.extend(data)
+    async def apply_snapshot(self):
+        return True
 
-        
+    # not part of the api, prolly not right place for it in realistic code, but works
+    # here to simplify path for testing
+    async def take_snapshot(self):
+        last_index = await self.log.get_last_index()
+        last_term = await self.log.get_last_term()
+        self.snapshot = SnapShot(last_index, last_term, self)
+        for slot_name, slot_value in self.ops.totals.items():
+            self.data.append(json.dumps({slot_name: slot_value}))
+        return self.snapshot
+
 class SimpleOps: # pragma: no cover
 
     def __init__(self, server):

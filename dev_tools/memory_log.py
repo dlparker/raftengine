@@ -4,7 +4,7 @@ from typing import Union, List, Optional
 import logging
 from copy import deepcopy
 from raftengine.api.log_api import LogRec, LogAPI
-from raftengine.api.snapshot_api import SnapShotAPI
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,6 @@ class MemoryLog(LogAPI):
         self.entries = {}
         self.voted_for = None
         self.snapshot = None
-        self.snapshot_records = None
         self.nodes = None
         self.pending_node = None
         self.cluster_settings = None
@@ -32,7 +31,6 @@ class MemoryLog(LogAPI):
         self.entries = {}
         self.voted_for = None
         self.snapshot = None
-        self.snapshot_records = None
         self.nodes = None
         self.pending_node = None
         self.cluster_settings = None
@@ -74,8 +72,8 @@ class MemoryLog(LogAPI):
         if len(self.entries) == 0:
             self.first_index = None
             if self.snapshot:
-                self.last_index = self.snapshot.get_last_index()
-                self.last_term = self.snapshot.get_last_term()
+                self.last_index = self.snapshot.last_index
+                self.last_term = self.snapshot.last_term
             else:
                 self.last_index = 0
                 self.last_term = 0
@@ -119,7 +117,7 @@ class MemoryLog(LogAPI):
             if entry.committed:
                 return entry.index
         if self.snapshot:
-            return self.snapshot.get_last_index()
+            return self.snapshot.last_index
         return 0
 
     async def get_applied_index(self):
@@ -130,7 +128,7 @@ class MemoryLog(LogAPI):
             if entry.applied:
                 return entry.index
         if self.snapshot:
-            return self.snapshot.get_last_index()
+            return self.snapshot.last_index
         return 0
     
     async def append_multi(self, entries: List[LogRec]) -> None:
@@ -189,8 +187,8 @@ class MemoryLog(LogAPI):
             self.entries = {}
             self.first_entry = 0
             if self.snapshot:
-                self.last_index = self.snapshot.get_last_index()
-                self.last_term = self.snapshot.get_last_term()
+                self.last_index = self.snapshot.last_index
+                self.last_term = self.snapshot.last_term
             else:
                 self.last_index = 0
                 self.last_term = 0
@@ -225,33 +223,17 @@ class MemoryLog(LogAPI):
                              pending_node=deepcopy(self.pending_node),
                              settings=deepcopy(self.cluster_settings))
     
-    async def install_snapshot(self, snapshot:SnapShotAPI):
+    async def install_snapshot(self, snapshot:SnapShot):
         self.snapshot = snapshot
-        end_index = self.snapshot.get_last_index()
+        end_index = self.snapshot.last_index
         await self.delete_ending_with(end_index)
-        self.last_term = max(self.snapshot.get_last_term(), self.last_term)
-        self.last_index = max(self.snapshot.get_last_index(), self.last_index)
-        if self.last_index > self.snapshot.get_last_index():
-            self.first_index = self.snapshot.get_last_index() + 1
+        self.last_term = max(self.snapshot.last_term, self.last_term)
+        self.last_index = max(self.snapshot.last_index, self.last_index)
+        if self.last_index > self.snapshot.last_index:
+            self.first_index = self.snapshot.last_index + 1
         else:
             self.first_index = None
-        self.snapshot_records = None
     
-    async def start_snapshot(self) -> int:
-        self.snapshot_records = {}
-        keys = list(self.entries.keys())
-        keys.sort()
-        last_index = 0
-        for index in keys:
-            entry = self.entries[index]
-            if entry.applied:
-                self.snapshot_records[index] = entry
-                last_index = index
-        if last_index == 0:
-            return 0,0
-        final_item = self.entries[last_index]    
-        return last_index, final_item.term
-           
  
 
         
