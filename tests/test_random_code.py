@@ -159,47 +159,44 @@ async def test_snapshot_1(cluster_maker):
             for ts in [ts_1, ts_2, ts_3]:
                 await ts.fake_command2(command)
                 
-    last_index,last_term = await ts_1.log.start_snapshot()
+    last_index = await ts_1.log.get_last_index()
+    last_term = await ts_1.log.get_last_term()
     rec = await ts_1.log.read(last_index)
-    ts_1_ss = SnapShot(last_index, last_term)
-    await ts_1.operations.fill_snapshot(ts_1_ss)
+    ts_1_ss = await ts_1.operations.take_snapshot()
     await ts_1.log.install_snapshot(ts_1_ss)
 
     # log should now be empty
     assert await ts_1.log.read(last_index) is None
     assert await ts_1.log.get_first_index() is None
     assert await ts_1.log.read(last_index + 1) is None
-    assert await ts_1.log.get_last_index() == ts_1_ss.get_last_index()
+    assert await ts_1.log.get_last_index() == ts_1_ss.last_index
     assert await ts_1.log.get_last_term() == 1
 
 
     # Now start a snap shot but before finishing it add another record
     # This covers the idea that snapshots can happen concurrently with
     # new log records appending.
-    tool_2 = ts_2.operations.get_snapshot_tool(ts_2.log)
-    ts_2_ss = await tool_2.take_snapshot()
+    ts_2_ss = await ts_2.operations.take_snapshot()
     await ts_2.fake_command2("add 1 1")
     assert ts_2.log.read(last_index + 2) is not None
     await ts_2.log.install_snapshot(ts_2_ss)
     assert await ts_2.log.read(last_index) is None
-    final_rec_index = ts_2_ss.get_last_index() + 1
+    final_rec_index = ts_2_ss.last_index + 1
     assert await ts_2.log.get_first_index() == final_rec_index
     assert await ts_2.log.read(final_rec_index) is not None
     assert await ts_2.log.get_last_index() == final_rec_index
     assert await ts_2.log.get_last_term() == 1
 
     ts_4 = await cluster.add_node()
-    tool_4  = ts_4.operations.get_snapshot_tool(ts_4.log)
+    tool_4  = ts_4.operations.snapshot_tool
+    ts_4_ss = SnapShot(ts_2_ss.last_index, ts_2_ss.last_term, tool_4)
     offset = 0
     done = False
     while not done:
-        chunk, new_offset, done = await ts_2_ss.get_chunk(offset)
-        if offset == 0:
-            await tool_4.start_snapshot_load(ts_2_ss.get_last_index(), ts_2_ss.get_last_term(), chunk)
-        else:
-            await tool_4.continue_snapshot_load(chunk, offset, done)
+        chunk, new_offset, done = await ts_2_ss.tool.get_snapshot_chunk(ts_2_ss, offset)
+        await tool_4.load_snapshot_chunk(ts_4_ss, chunk)
         offset = new_offset
-
+    await tool_4.apply_snapshot()
     # ts_2 has an additional record
     assert ts_4.operations.totals == ts_1.operations.totals
     assert await ts_4.log.get_first_index() == None

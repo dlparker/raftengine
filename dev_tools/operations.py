@@ -52,7 +52,7 @@ class SnapshotTool(SnapshotToolAPI):
         return data, limit + 1, done
 
     async def apply_snapshot(self):
-        return True
+        await self.log.install_snapshot(self.snapshot)
 
     # not part of the api, prolly not right place for it in realistic code, but works
     # here to simplify path for testing
