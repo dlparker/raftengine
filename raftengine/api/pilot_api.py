@@ -1,7 +1,7 @@
 import abc
 from typing import List, Any
 from raftengine.api.log_api import LogAPI
-
+from raftengine.api.snapshot_api import SnapShot
 
 class PilotAPI(abc.ABC):
     """
@@ -50,3 +50,8 @@ class PilotAPI(abc.ABC):
     @abc.abstractmethod
     async def stop_commanded(self) -> None: # pragma: no cover abstract
         raise NotImplementedError
+
+    @abc.abstractmethod
+    async def begin_snapshot_import(self, index, term) -> SnapShot:# pragma: no cover abstract
+        raise NotImplementedError
+    

@@ -1,7 +1,7 @@
 import logging
 import json
 from collections import defaultdict
-from raftengine.api.snapshot_api import SnapShot, SnapshotToolAPI
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 
 class DictTotalsOps: 
 
@@ -9,7 +9,7 @@ class DictTotalsOps:
         self.server = server
         self.log = server.log
         self.totals = defaultdict(int)
-        self.snapshot_tool = SnapshotTool(self, server.log)
+        self.snapshot_tool = SnapShotTool(self, server.log)
 
     async def process_command(self, command, serial):
         logger = logging.getLogger("DictTotalsOps")
@@ -29,7 +29,7 @@ class DictTotalsOps:
     async def take_snapshot(self):
         return await self.snapshot_tool.take_snapshot()
 
-class SnapshotTool(SnapshotToolAPI):
+class SnapShotTool(SnapShotToolAPI):
 
     def __init__(self, ops, log):
         self.ops = ops
@@ -57,9 +57,9 @@ class SnapshotTool(SnapshotToolAPI):
     # not part of the api, prolly not right place for it in realistic code, but works
     # here to simplify path for testing
     async def take_snapshot(self):
-        last_index = await self.log.get_last_index()
-        last_term = await self.log.get_last_term()
-        self.snapshot = SnapShot(last_index, last_term, self)
+        last_applied = await self.log.get_applied_index()
+        rec = await self.log.read(last_applied)
+        self.snapshot = SnapShot(last_applied, rec.term, self)
         for slot_name, slot_value in self.ops.totals.items():
             self.data.append(json.dumps({slot_name: slot_value}))
         return self.snapshot

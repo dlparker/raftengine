@@ -45,6 +45,9 @@ class PilotSim(PilotAPI):
     async def stop_commanded(self) -> None:
         raise NotImplementedError
 
+    async def begin_snapshot_import(self, index, term):
+        raise NotImplementedError
+    
 async def test_member_change_messages(cluster_maker):
     """
     Test some basic features of the messages classes used to coordinate membership changes.

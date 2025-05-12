@@ -3,7 +3,7 @@ from typing import Any, Optional
 from dataclasses import dataclass
 
     
-class SnapshotToolAPI(abc.ABC):
+class SnapShotToolAPI(abc.ABC):
 
     @abc.abstractmethod
     async def load_snapshot_chunk(self, snapshot, chunk) -> None: # pragma: no cover abstract
@@ -18,4 +18,5 @@ class SnapshotToolAPI(abc.ABC):
 class SnapShot:
     last_index:int
     last_term:int
-    tool:SnapshotToolAPI
+    tool:SnapShotToolAPI
+

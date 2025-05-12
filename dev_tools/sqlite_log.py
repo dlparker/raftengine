@@ -421,3 +421,6 @@ class SqliteLog(LogAPI):
     async def get_first_index(self) -> int:
         raise Exception('not done!')
 
+    async def get_snapshot(self) -> Optional[SnapShot]: 
+        return None
+            

@@ -13,6 +13,7 @@ from raftengine.api.hull_config import ClusterInitConfig
 from raftengine.api.log_api import LogRec
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.types import ClusterSettings
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.hull.hull import Hull
 
 
@@ -180,6 +181,10 @@ class PausingServer(PilotAPI):
             self.out_message_history.append(reply)
 
     # Part of PilotAPI
+    async def begin_snapshot_import(self, index, term) -> SnapShot:
+        return SnapShot(index, term, self.operations.snapshot_tool)
+
+    # Part of PilotAPI
     async def stop_commanded(self) -> None:
         self.logger.debug('%s stop_commanded from hull', self.uri)
         #await self.cluster.remove_node(self.uri)
@@ -205,6 +210,9 @@ class PausingServer(PilotAPI):
     async def enable_timers(self, reset=True):
         return await self.hull.enable_timers(reset=reset)
 
+    async def take_snapshot(self, timeout=2.0):
+        return await self.hull.take_snapshot(self.operations.snapshot_tool, timeout=timeout)
+    
     async def fake_command(self, op, value):
         last_index = await self.log.get_last_index()
         rec = LogRec(index=last_index + 1, term=1, command=f"{op} {value}", committed=True, applied=True)

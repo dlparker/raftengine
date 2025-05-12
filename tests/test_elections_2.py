@@ -8,7 +8,6 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
-
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.triggers import WhenIsLeader, WhenHasLeader
 from dev_tools.triggers import WhenElectionDone
@@ -815,6 +814,8 @@ async def test_power_transfer_1(cluster_maker):
     cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election")
 
     await ts_1.transfer_power(ts_2.uri)
+    await asyncio.sleep(0.0001)
+    await cluster.deliver_all_pending()
     await asyncio.sleep(0.0001)
     await cluster.deliver_all_pending()
     assert ts_2.get_role_name() != "FOLLOWER"

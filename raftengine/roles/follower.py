@@ -119,7 +119,7 @@ class Follower(BaseRole):
         if commit == 0:
             min_index = 1
         else:
-            min_index = commit
+            min_index = commit + 1
 
         last_index = await self.log.get_last_index()
         max_index = min(leader_commit_index + 1, last_index + 1)

@@ -43,7 +43,7 @@ class MemoryLog(LogAPI):
         self.entries[rec.index] = rec
         self.last_index = max(rec.index, self.last_index)
         self.last_term = max(rec.term, self.last_term)
-        if self.first_index == 0:
+        if self.first_index == 0 or self.first_index is None:
             self.first_index = rec.index
         if self.last_index <= rec.index:
             # It is possible for the last record to be re-written
@@ -234,7 +234,9 @@ class MemoryLog(LogAPI):
         else:
             self.first_index = None
     
- 
+    async def get_snapshot(self):
+        return self.snapshot
+    
 
         
     

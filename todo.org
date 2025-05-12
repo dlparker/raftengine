@@ -6,6 +6,21 @@
 3. [] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
    admin command, might want to generalize it that way so other commands are easy (e.g. logging control)
    
+* Snapshots
+
+1. [] Document that built in method requires node to be "offline". Note how you could keep it online
+   during snapshot creation, but how loading a snapshot must be offline. Fresh server case is clear,
+   but what about a slow server that has some records? Can leader force it offline? Maybe sending
+   a snapshot chunk message does that? So maybe there's a new role, not follower but slow_follower?
+   Can existing new node loading code in leader treat this situation as the same a new load?
+   Maybe leader just says, oh, I have to send snapshot to this follower, so I'll call it new, and
+   the follower sees the snapshot message and says "oh, all my state is bad, clear the log" and
+   when snapshot tool sees new incoming snapshot it invalidates the current state?
+   Is there any way to make this not happen by asking the leader for max current snapshot index
+   that all nodes can apply? That would not be perfect though, as slow server would delay
+   snapshotting foreverish. Prolly need to special case slow server by saying it does a full reset/rejoin.
+     
+   
 Events and errors rework:
 1. [] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.

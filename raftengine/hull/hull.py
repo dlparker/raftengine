@@ -6,6 +6,7 @@ import json
 
 from raftengine.api.types import RoleName, OpDetail
 from raftengine.api.hull_api import CommandResult
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.hull.event_control import EventControl
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
@@ -66,6 +67,11 @@ class Hull(HullAPI):
         await self.cluster_ops.get_cluster_config()
         return self.cluster_ops.leader_uri
 
+    def is_leader(self):
+        if self.role.role_name == "LEADER":
+            return True
+        return False
+        
     async def note_join_done(self, success):
         self.join_result = success
         self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
@@ -268,7 +274,28 @@ class Hull(HullAPI):
             self.exit_waiter_handle = None
             await self.stop()
 
-        
+    # Part of API
+    async def take_snapshot(self, snapshot_tool:SnapShotToolAPI, timeout=2.0) -> SnapShot:
+        if self.role.role_name == "LEADER":
+            nodes = self.cluster_ops.get_cluster_node_ids()
+            target = None
+            for uri in nodes:
+                if uri != self.get_my_uri():
+                    target = uri
+                    break
+            await self.role.transfer_power(target)
+            start_time = time.time()
+            while time.time() - start_time < timeout and self.role.role_name == "LEADER":
+                await asyncio.sleep(0.001)
+            if self.role.role_name == "LEADER":
+                raise Exception("could not start snapshot, node is leader and transfer power failed")
+        await self.role.stop()
+        shot = await snapshot_tool.take_snapshot()
+        await self.log.install_snapshot(shot)
+        self.role = Follower(self, self.cluster_ops)
+        await self.role.start()
+        return shot
+    
     # Part of API 
     async def exit_cluster(self, callback=None, timeout=10.0):
         self.exiting_cluster = True
@@ -284,6 +311,7 @@ class Hull(HullAPI):
                                                 asyncio.create_task(self.exit_waiter(timeout, callback)))
         await asyncio.sleep(0)
         
+            
     # Part of API 
     async def stop(self):
         await self.stop_role()

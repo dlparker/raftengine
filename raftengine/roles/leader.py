@@ -85,13 +85,7 @@ class Leader(BaseRole):
             self.transfer_in_progress = False
             return
         # now it is up to date, so we can proceed
-        prevLogIndex = 0
-        prevLogTerm = 0
-        msgs = []
-        prev_rec = await self.log.read()
-        if prev_rec is not None:
-            prevLogIndex = prev_rec.index
-            prevLogTerm = prev_rec.term
+        prevLogIndex, prevLogTerm = await self.get_prev_record_id(tracker.matchIndex + 1)
         term = await self.log.get_term()
         message = TransferPowerMessage(sender=self.my_uri(),
                                        receiver=target_uri,
@@ -109,6 +103,26 @@ class Leader(BaseRole):
                 return
         return
 
+    async def get_prev_record_id(self, this_index):
+        snap = await self.log.get_snapshot()
+        if snap and this_index - 1 < snap.last_index + 1:
+            if snap.last_index == this_index - 1:
+                prevLogIndex = snap.last_index
+                prevLogTerm = snap.last_term
+            elif snap.last_index > this_index - 1:
+                breakpoint()
+                raise Exception('Protection against this not implememted yet, broadcast of record that is prior to snapshot')
+        else:
+            if this_index > 1:
+                prev_rec = await self.log.read(this_index - 1)
+                prevLogIndex = prev_rec.index
+                prevLogTerm = prev_rec.term
+            else:
+                prevLogIndex = 0
+                prevLogTerm = 0
+        return prevLogIndex, prevLogTerm
+                
+        
     async def delayed_exit(self, log_record):
         await self.cluster_ops.finish_node_remove(self.my_uri())
         log_record.applied = True
@@ -135,13 +149,7 @@ class Leader(BaseRole):
         return result
 
     async def broadcast_log_record(self, log_record):
-        prevLogIndex = 0
-        prevLogTerm = 0
-        msgs = []
-        if log_record.index > 1:
-            prev_rec = await self.log.read(log_record.index - 1)
-            prevLogIndex = prev_rec.index
-            prevLogTerm = prev_rec.term
+        prevLogIndex, prevLogTerm = await self.get_prev_record_id(log_record.index)
         term = await self.log.get_term()
         commit_index = await self.log.get_commit_index()
         proto_message = AppendEntriesMessage(sender=self.my_uri(),
@@ -153,6 +161,7 @@ class Leader(BaseRole):
                                              commitIndex=commit_index)
         if log_record.code == RecordCode.term_start:
             await self.hull.record_op_detail(OpDetail.broadcasting_term_start)
+        msgs = []
         for uri in self.cluster_ops.get_cluster_node_ids():
             if uri == self.my_uri():
                 continue
@@ -242,8 +251,10 @@ class Leader(BaseRole):
                 # see if this message completes the majority saved requirement
                 # that defines commit at the cluster level, and apply it
                 # if so.
-                log_rec = await self.log.read(tracker.matchIndex)
-                await self.record_commit_checker(log_rec)
+                snap = await self.log.get_snapshot()
+                if not snap or snap.last_index < tracker.matchIndex:
+                    log_rec = await self.log.read(tracker.matchIndex)
+                    await self.record_commit_checker(log_rec)
             return
 
         await self.send_catchup(message)
@@ -268,12 +279,7 @@ class Leader(BaseRole):
             send_index = message.prevLogIndex
             tracker.nextIndex = send_index + 1
             pnum = 3
-        prevLogIndex = 0
-        prevLogTerm = 0
-        if send_index > 1:
-            pre_rec = await self.log.read(send_index - 1)
-            prevLogIndex = pre_rec.index
-            prevLogTerm = pre_rec.term
+        prevLogIndex, prevLogTerm = await self.get_prev_record_id(send_index)
         tracker.lastSentIndex = send_index
         rec = await self.log.read(send_index)
         rec.committed = False
@@ -321,12 +327,7 @@ class Leader(BaseRole):
             # make sure the follower doesn't get confused about their local commit status
             rec.committed = False
             entries.append(rec)
-        prevLogIndex = 0
-        prevLogTerm = 0
-        if send_start_index > 1:
-            pre_rec = await self.log.read(send_start_index - 1)
-            prevLogIndex = pre_rec.index
-            prevLogTerm = pre_rec.term
+        prevLogIndex, prevLogTerm = await self.get_prev_record_id(send_start_index)
 
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,

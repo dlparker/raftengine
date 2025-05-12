@@ -145,6 +145,10 @@ class LogAPI(abc.ABC):
     async def install_snapshot(self, snapshot:SnapShot) -> None: # pragma: no cover abstract
         raise NotImplementedError
 
+    @abc.abstractmethod
+    async def get_snapshot(self) -> Optional[SnapShot]: # pragma: no cover abstract
+        raise NotImplementedError
+
         
 
 

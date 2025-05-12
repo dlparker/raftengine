@@ -6,6 +6,7 @@ from raftengine.api.log_api import LogAPI, LogRec
 from raftengine.api.events import EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 
 @dataclass
 class CommandResult:
@@ -17,7 +18,6 @@ class CommandResult:
     logRec: Optional[LogRec] = None
     error: Optional[str] = None
     timeout_expired: Optional[bool] = False
-
     
 class HullAPI(abc.ABC):
     """ Main entry and control point for RaftEngine library. Caller supplies a PilotAPI implementation
@@ -57,6 +57,10 @@ class HullAPI(abc.ABC):
     
     @abc.abstractmethod
     async def get_leader_uri(self) -> str:
+        raise NotImplementedError
+        
+    @abc.abstractmethod
+    async def is_leader(self) -> bool:
         raise NotImplementedError
         
     @abc.abstractmethod
@@ -105,5 +109,11 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
+    async def take_snapshot(self, snapshot_tool:SnapShotToolAPI, timeout=2.0) -> SnapShot:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     async def exit_cluster(self, timeout=10.0, callback=None) -> None:
         raise NotImplementedError
+
+    
