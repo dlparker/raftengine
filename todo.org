@@ -19,7 +19,8 @@
    Leader stops sending broadcasts to server that is marked as receiving snapshot
 2. [] Need some way to re-install snapshot on restart. Maybe we just store the snapshot, minus
    the tool reference in the log, then when we pass the snapshot to the pilot for export it fills
-   the tool reference.
+   the tool reference. This should work as it does in memlog, just need to implement and test
+   it with sqlite log.
    
      
    
@@ -60,7 +61,7 @@ Events and errors rework:
   https://decentralizedthoughts.github.io/2020-12-12-raft-liveness-full-omission/
   Want to implement them as opt in features, segregate tests 
 4. [X] Cluster membership change protocol
-5. [] Snapshots
+5. [X] Snapshots
 
 
 * Test questions and issues and Demo issues
