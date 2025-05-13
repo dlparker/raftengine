@@ -303,3 +303,69 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
+
+
+async def test_snapshot_4(cluster_maker):
+    """
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config, use_ops=DictTotalsOps)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_snapshot_2.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+
+    # The operations object maintains a dictionary of totals,
+    # so "add x 1" adds one to the "x" dictionary entry.
+    # We're going to use numbers as keys, and add a random value to
+    # each key, 10 times.
+    for i in range(10):
+        for x in range(1, 11):
+            command = f'add {x} {random.randint(1,100)}'
+            for ts in [ts_1, ts_2, ts_3]:
+                await ts.fake_command2(command)
+    assert len(ts_1.operations.totals) == 10
+    last_index = await ts_1.log.get_last_index()
+    last_term = await ts_1.log.get_last_term()
+    rec = await ts_1.log.read(last_index)
+    cluster.test_trace.start_subtest(f"Blocking {ts_3.uri} so it gets behind when next command is run, running command")
+    ts_3.block_network()
+    command = "add 1 1"
+    await ts_1.fake_command2(command)
+    await ts_2.fake_command2(command)
+    assert await ts_3.log.get_last_index() < await ts_2.log.get_last_index()
+    cluster.test_trace.start_subtest(f"{ts_3.uri} is behind {ts_2.uri}, making snapshot at {ts_2.uri}")
+    ts_2_ss = await ts_2.take_snapshot()
+    cluster.test_trace.start_subtest("Telling leader node (node 1) to resign and letting {ts_2.uri} get elected")
+
+    await ts_1.do_demote_and_handle()
+    await ts_2.start_campaign(authorized=True)
+    await cluster.run_election()
+    assert cluster.get_leader().uri == ts_2.uri
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
+
+    cluster.test_trace.start_subtest("{ts_2.uri} now leader, unblocking {ts_3.uri}, catchup message should cause snashot install")
+    ts_3.unblock_network()
+
+    await ts_2.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and await ts_3.log.get_last_index() < await ts_2.log.get_last_index():
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+    
+    assert await ts_3.log.get_last_index() == await ts_2.log.get_last_index()
+    assert await ts_3.log.get_first_index() == await ts_2.log.get_first_index()
+    assert await ts_3.log.get_first_index() > await ts_1.log.get_first_index()
+    
