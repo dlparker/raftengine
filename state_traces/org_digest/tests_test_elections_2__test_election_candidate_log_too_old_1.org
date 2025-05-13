@@ -112,6 +112,8 @@ actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the clust
 | N-X->m_cr     | Node has received membership change response from N-X, ok indicates success value            |
 | p_t->N-X      | Node has sent power transfer command N-X so node should assume power                         |
 | N-X->p_tr     | Node has received power transfer response from N-X, ok indicates success value               |
+| sn->N-X       | Node has sent snopshot copy command N-X so X node should apply it to local snapshot          |
+| N-X>snr       | Node has received snapshot response from N-X, s indicates success value                      |
 
 ** "Delta" Column detail legend
 Any item in this column indicates that the value of that item has changed since the last trace line

@@ -23,6 +23,8 @@ class RecordCode(str, Enum):
     """ Cluster Configuration Data """
     cluster_config = "CLUSTER_CONFIG" 
 
+    def __str__(self):
+        return self.value
     
 @dataclass
 class LogRec:

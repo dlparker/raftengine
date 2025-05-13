@@ -475,6 +475,10 @@ class TestTrace:
                 short_code = "t_p"
             elif message.code == "transfer_power_response":
                 short_code = "t_pr"
+            elif message.code == "snapshot":
+                short_code = "sn"
+            elif message.code == "snapshot_response":
+                short_code = "snr"
             target = message.receiver.split("/")[-1]
             sender = message.sender.split("/")[-1]
             if message.sender == ns.uri:
@@ -498,6 +502,10 @@ class TestTrace:
                 value += f" i={message.prevLogIndex}"
                 if message.code == "transfer_power_response":
                     value += "ok={message.success} "
+            elif message.code in ("snapshot", "snapshot_response"):
+                value += f" i={message.prevLogIndex}"
+                if message.code == "snapshot_response":
+                    value += "s={message.success} "
             else:
                 raise Exception('no code for message type')
             return value

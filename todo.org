@@ -16,9 +16,11 @@
    Maybe leader just says, oh, I have to send snapshot to this follower, so I'll call it new, and
    the follower sees the snapshot message and says "oh, all my state is bad, clear the log" and
    when snapshot tool sees new incoming snapshot it invalidates the current state?
-   Is there any way to make this not happen by asking the leader for max current snapshot index
-   that all nodes can apply? That would not be perfect though, as slow server would delay
-   snapshotting foreverish. Prolly need to special case slow server by saying it does a full reset/rejoin.
+   Leader stops sending broadcasts to server that is marked as receiving snapshot
+2. [] Need some way to re-install snapshot on restart. Maybe we just store the snapshot, minus
+   the tool reference in the log, then when we pass the snapshot to the pilot for export it fills
+   the tool reference.
+   
      
    
 Events and errors rework:

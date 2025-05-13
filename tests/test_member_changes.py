@@ -47,6 +47,9 @@ class PilotSim(PilotAPI):
 
     async def begin_snapshot_import(self, index, term):
         raise NotImplementedError
+
+    async def begin_snapshot_export(self, snapshot):
+        raise NotImplementedError
     
 async def test_member_change_messages(cluster_maker):
     """

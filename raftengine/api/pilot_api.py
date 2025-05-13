@@ -54,4 +54,8 @@ class PilotAPI(abc.ABC):
     @abc.abstractmethod
     async def begin_snapshot_import(self, index, term) -> SnapShot:# pragma: no cover abstract
         raise NotImplementedError
+
+    @abc.abstractmethod
+    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShot:# pragma: no cover abstract
+        raise NotImplementedError
     

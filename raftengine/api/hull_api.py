@@ -109,7 +109,7 @@ class HullAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def take_snapshot(self, snapshot_tool:SnapShotToolAPI, timeout=2.0) -> SnapShot:
+    async def take_snapshot(self, snapshot:SnapShot, timeout=2.0) -> SnapShot:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -20,7 +20,8 @@ class Follower(BaseRole):
         # Pretend we just got a call, that gives possible actual leader time to ping us
         self.last_leader_contact = time.time()
         self.logger = logging.getLogger("Follower")
-
+        self.snapshot = None
+        
     async def start(self):
         await super().start()
         self.last_leader_contact = time.time()
@@ -267,3 +268,17 @@ class Follower(BaseRole):
             return
         # reschedule
         await self.run_after(await self.cluster_ops.get_election_timeout(), self.contact_checker)
+
+    async def on_snapshot_message(self, message):
+        if message.term == await self.log.get_term():
+            if self.snapshot is None:
+                self.logger.debug("%s starting snapshot import %s", self.my_uri(), message)
+                self.snapshot = await self.hull.pilot.begin_snapshot_import(message.prevLogIndex, message.prevLogTerm)
+            self.logger.debug("%s importing snapshot chunk %s", self.my_uri(), message)
+            await self.snapshot.tool.load_snapshot_chunk(message.data)
+            if message.done:
+                self.logger.debug("%s applying imported snapshot %s", self.my_uri(), message)
+                await self.snapshot.tool.apply_snapshot()
+                self.snapshot = None
+            await self.send_snapshot_response_message(message, True)
+

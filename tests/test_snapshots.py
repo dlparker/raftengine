@@ -16,6 +16,7 @@ from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElectio
 from dev_tools.logging_ops import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.operations import DictTotalsOps, SnapShot
+from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
@@ -52,20 +53,20 @@ async def test_dict_ops():
         command = f'add {i} {random.randint(1,100)}'
         await fs1.process_command(command, i)
     assert len(ops1.totals) == 10
-    tool_1 = ops1.snapshot_tool
-    ss1 = await tool_1.take_snapshot()
-    assert len(ss1.tool.data) == 10
+    ss1 = await fs1.ops.take_snapshot()
+    assert len(ops1.snap_data) == 10
 
     fs2 = FakeServer()
     ops2 = fs2.ops
     # this is what a pilot should do on a call to begin_snapshot_import
-    ss2 = SnapShot(ss1.last_index, ss1.last_term, ops2.snapshot_tool)
+    ss2 = await ops2.begin_snapshot_import(ss1.last_index, ss1.last_term)
     
     offset = 0
     done = False
+
     while not done:
-        chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(ss2, offset)
-        await ss2.tool.load_snapshot_chunk(ss2, chunk)
+        chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(offset)
+        await ss2.tool.load_snapshot_chunk(chunk)
         offset = new_offset
     for key in ops1.totals:
         assert ops1.totals[key] == ops2.totals[key]
@@ -104,15 +105,17 @@ async def test_snapshot_1(cluster_maker):
     offset = 0
     done = False
     while not done:
-        chunk, new_offset, done = await ts_1_ss.tool.get_snapshot_chunk(ts_1_ss, offset)
-        await tool_4.load_snapshot_chunk(ts_4_ss, chunk)
+        chunk, new_offset, done = await ts_1_ss.tool.get_snapshot_chunk(offset)
+        await tool_4.load_snapshot_chunk(chunk)
         offset = new_offset
     await tool_4.apply_snapshot()
     assert ts_4.operations.totals == ts_1.operations.totals
     assert await ts_4.log.get_first_index() == None
     assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()
     assert ts_4.operations.totals == ts_1.operations.totals
-        
+
+    
+    
 async def test_snapshot_2(cluster_maker):
     """
     Test the simplest snapshot process, at a follower in a quiet cluster. After
@@ -179,6 +182,29 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
     assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 2
         
+    # now make sure that the message interceptors work for out of sync messages
+
+    msg = await ts_2.do_next_in_msg()
+    while msg:
+        msg = await ts_2.do_next_in_msg()
+    ssm = SnapShotMessage(sender='mcpy://2', receiver='mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0,
+                          leaderId="mcpy://2", offset=0, done=True, data="[1,2]")
+    ts_2.get_message_problem_history(clear=True)
+    ts_2.in_messages.append(ssm)
+    await ts_2.do_next_in_msg()
+    res = ts_2.get_message_problem_history(clear=True)
+    assert res is not None
+    assert len(res) > 0
+    
+    ssmr = SnapShotResponseMessage(sender='mcpy://2', receiver='mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0,
+                          offset=0, success=True)
+    ts_1.get_message_problem_history(clear=True)
+    ts_1.in_messages.append(ssmr)
+    await ts_1.do_next_in_msg()
+    res = ts_1.get_message_problem_history(clear=True)
+    assert res is not None
+    assert len(res) > 0
+    
 async def test_snapshot_3(cluster_maker):
     """
     Test the snapshot process when the leader is told to snapshot. It should
@@ -199,6 +225,8 @@ async def test_snapshot_3(cluster_maker):
     
     await ts_1.start_campaign()
     await cluster.run_election()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
     cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
 
     # The operations object maintains a dictionary of totals,
@@ -206,11 +234,11 @@ async def test_snapshot_3(cluster_maker):
     # We're going to use numbers as keys, and add a random value to
     # each key, 10 times.
     for i in range(10):
-        for x in range(1, 10):
+        for x in range(1, 11):
             command = f'add {x} {random.randint(1,100)}'
             for ts in [ts_1, ts_2, ts_3]:
                 await ts.fake_command2(command)
-                
+    assert len(ts_1.operations.totals) == 10
     last_index = await ts_1.log.get_last_index()
     last_term = await ts_1.log.get_last_term()
     rec = await ts_1.log.read(last_index)
@@ -245,3 +273,33 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_1.log.get_first_index() == ts_1_ss.last_index + 1
     assert await ts_1.log.get_last_index() == ts_1_ss.last_index + 2
         
+    cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
+    print("\n\b\nnew election\n\n")
+    await new_leader.do_demote_and_handle()
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
+    assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
+    
+    ts_4 = await cluster.add_node()
+    
+    done_by_callback = None
+    async def join_done(ok, new_uri):
+        nonlocal done_by_callback
+        logger.debug(f"\nJoin callback said {ok} joining as {new_uri}\n")
+        done_by_callback = ok
+    await ts_4.start_and_join(ts_1.uri, join_done)
+    start_time = time.time()
+    while time.time() - start_time < 0.1:
+        cc = await ts_1.log.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert await ts_4.log.get_first_index() == await ts_1.log.get_first_index()
+    assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()
+    assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
+    assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()

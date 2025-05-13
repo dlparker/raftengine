@@ -182,7 +182,11 @@ class PausingServer(PilotAPI):
 
     # Part of PilotAPI
     async def begin_snapshot_import(self, index, term) -> SnapShot:
-        return SnapShot(index, term, self.operations.snapshot_tool)
+        return await self.operations.begin_snapshot_import(index, term)
+
+    # Part of PilotAPI
+    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShot:
+        return await self.operations.begin_snapshot_export(snapshot)
 
     # Part of PilotAPI
     async def stop_commanded(self) -> None:
@@ -211,7 +215,8 @@ class PausingServer(PilotAPI):
         return await self.hull.enable_timers(reset=reset)
 
     async def take_snapshot(self, timeout=2.0):
-        return await self.hull.take_snapshot(self.operations.snapshot_tool, timeout=timeout)
+        snapshot = await self.operations.begin_snapshot_build()
+        return await self.hull.take_snapshot(snapshot, timeout=timeout)
     
     async def fake_command(self, op, value):
         last_index = await self.log.get_last_index()

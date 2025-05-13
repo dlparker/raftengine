@@ -9,9 +9,17 @@ from dataclasses import dataclass
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import HullAPI
 from raftengine.api.log_api import LogAPI
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.messages.cluster_change import ChangeOp, MembershipChangeMessage
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
+@dataclass
+class SnapShotCursor:
+    uri: str
+    snapshot: SnapShot
+    offset:int = 0
+    done: bool = False
+    
 @dataclass
 class FollowerTracker:
     uri: str 
@@ -23,6 +31,7 @@ class FollowerTracker:
     last_msg_time: float = 0.0
     last_reply_time: float = 0.0
     add_loading = False
+    sending_snapshot: SnapShotCursor = None
 
 @dataclass
 class NewNodeLoad:

@@ -13,6 +13,7 @@ from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
+from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
@@ -125,8 +126,8 @@ class Hull(HullAPI):
                   RequestVoteMessage,RequestVoteResponseMessage,
                   PreVoteMessage,PreVoteResponseMessage,
                   TransferPowerMessage,TransferPowerResponseMessage,
-                  MembershipChangeMessage,MembershipChangeResponseMessage,]
-                  
+                  MembershipChangeMessage,MembershipChangeResponseMessage,
+                  SnapShotMessage,SnapShotResponseMessage,]
         message = None
         for mtype in mtypes:
             if mdict['code'] == mtype.get_code():
@@ -275,7 +276,7 @@ class Hull(HullAPI):
             await self.stop()
 
     # Part of API
-    async def take_snapshot(self, snapshot_tool:SnapShotToolAPI, timeout=2.0) -> SnapShot:
+    async def take_snapshot(self, snapshot:SnapShot, timeout=2.0) -> SnapShot:
         if self.role.role_name == "LEADER":
             nodes = self.cluster_ops.get_cluster_node_ids()
             target = None
@@ -290,7 +291,7 @@ class Hull(HullAPI):
             if self.role.role_name == "LEADER":
                 raise Exception("could not start snapshot, node is leader and transfer power failed")
         await self.role.stop()
-        shot = await snapshot_tool.take_snapshot()
+        shot = await snapshot.tool.take_snapshot()
         await self.log.install_snapshot(shot)
         self.role = Follower(self, self.cluster_ops)
         await self.role.start()

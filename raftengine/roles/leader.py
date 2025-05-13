@@ -11,9 +11,11 @@ from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.hull_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.snapshot import SnapShotMessage
 from raftengine.messages.cluster_change import ChangeOp
 from raftengine.messages.base_message import BaseMessage
 from raftengine.roles.base_role import BaseRole
+from raftengine.hull.cluster_ops import SnapShotCursor
 
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
@@ -45,6 +47,8 @@ class Leader(BaseRole):
                               command=await self.cluster_ops.get_cluster_config_json_string(),
                               leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
+        self.logger.info("New Leader %s senting term start record index %d %d %d", self.my_uri(),
+                         the_record.index, await self.log.get_last_index(), await self.log.get_last_term())
         await self.broadcast_log_record(the_record)
 
     async def transfer_power(self, target_uri, log_record=None):
@@ -110,8 +114,7 @@ class Leader(BaseRole):
                 prevLogIndex = snap.last_index
                 prevLogTerm = snap.last_term
             elif snap.last_index > this_index - 1:
-                breakpoint()
-                raise Exception('Protection against this not implememted yet, broadcast of record that is prior to snapshot')
+                return None, None
         else:
             if this_index > 1:
                 prev_rec = await self.log.read(this_index - 1)
@@ -280,6 +283,13 @@ class Leader(BaseRole):
             tracker.nextIndex = send_index + 1
             pnum = 3
         prevLogIndex, prevLogTerm = await self.get_prev_record_id(send_index)
+        if prevLogIndex is None:
+            # we must have a snapshot, so check
+            snap = await self.log.get_snapshot()
+            if snap and snap.last_index >= send_index:
+                # start the snapshot send process for this node
+                await self.start_snapshot_send(uri)
+                return
         tracker.lastSentIndex = send_index
         rec = await self.log.read(send_index)
         rec.committed = False
@@ -328,7 +338,6 @@ class Leader(BaseRole):
             rec.committed = False
             entries.append(rec)
         prevLogIndex, prevLogTerm = await self.get_prev_record_id(send_start_index)
-
         message = AppendEntriesMessage(sender=self.my_uri(),
                                        receiver=uri,
                                        term=await self.log.get_term(),
@@ -390,6 +399,47 @@ class Leader(BaseRole):
         if waiter:
             await waiter.handle_run_result(result, error_data)
 
+    async def start_snapshot_send(self, target_uri):
+        tracker = await self.cluster_ops.tracker_for_follower(target_uri)
+        snap = await self.hull.pilot.begin_snapshot_export(await self.log.get_snapshot())
+        cursor = SnapShotCursor(target_uri, snap, 0, False)
+        tracker.sending_snapshot = cursor
+        await self.snapshot_send(target_uri)
+        
+    async def snapshot_send(self, target_uri):
+        tracker = await self.cluster_ops.tracker_for_follower(target_uri)
+        ref = tracker.sending_snapshot
+        snap = ref.snapshot
+        tool = snap.tool
+        chunk, new_offset, done = await tool.get_snapshot_chunk(ref.offset)
+        message = SnapShotMessage(sender=self.my_uri(),
+                                   receiver=target_uri,
+                                   term=await self.log.get_term(),
+                                   prevLogIndex=snap.last_index,
+                                   prevLogTerm=snap.last_term,
+                                   leaderId=self.my_uri(),
+                                   offset=ref.offset,
+                                   done=done,
+                                   data=chunk)
+        if ref.offset == 0:
+            message.clusterConfig = await self.cluster_ops.get_cluster_config_json_string()
+        ref.offset = new_offset
+        ref.done = done
+        await self.hull.send_message(message)
+
+        
+    async def on_snapshot_response_message(self, message):
+        tracker = await self.cluster_ops.tracker_for_follower(message.sender)
+        if tracker.sending_snapshot:
+            snap = tracker.sending_snapshot.snapshot
+            if tracker.sending_snapshot.done and message.success:
+                tracker.sending_snapshot = None
+                tracker.nextIndex = snap.last_index + 1
+                tracker.matchIndex = snap.last_index 
+                await self.send_heartbeats(target_only=message.sender)
+                return
+        await self.snapshot_send(message.sender)
+        
     async def term_expired(self, message):
         await self.hull.set_term(message.term)
         await self.hull.demote_and_handle(message)
@@ -439,6 +489,7 @@ class Leader(BaseRole):
         return True
         
     async def on_membership_change_message(self, message):
+        last = await self.log.get_last_index()
         await self.cluster_ops.do_node_inout(message.op, message.target_uri, self, message)
 
     async def do_node_exit(self, target_uri):

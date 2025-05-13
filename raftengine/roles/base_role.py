@@ -4,6 +4,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
 from raftengine.api.types import RoleName
     
@@ -55,6 +56,12 @@ class BaseRole:
         self.routes[code] = route
         code = MembershipChangeResponseMessage.get_code()        
         route = self.on_membership_change_response
+        self.routes[code] = route
+        code = SnapShotMessage.get_code()
+        route = self.on_snapshot_message
+        self.routes[code] = route
+        code = SnapShotResponseMessage.get_code()
+        route = self.on_snapshot_response_message
         self.routes[code] = route
 
     async def start(self):
@@ -243,6 +250,31 @@ class BaseRole:
                                                    op=message.op,
                                                    target_uri=message.target_uri,
                                                    ok=ok)
+        await self.hull.send_response(message, response)
+        
+    async def on_snapshot_message(self, message):
+        self.logger.info('%s snapshot message  %s', self.my_uri(), str(message))
+        problem = 'pre_membership_change_message not implemented in the class '
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
+        self.logger.warning(problem)
+        await self.hull.record_message_problem(message, problem)
+        await self.send_snapshot_response_message(message, success=False)
+
+    async def on_snapshot_response_message(self, message):
+        self.logger.info('%s snapshot response message  %s', self.my_uri(), str(message))
+        problem = 'snapshot response message not implemented in the class '
+        problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
+        self.logger.warning(problem)
+        await self.hull.record_message_problem(message, problem)
+        
+    async def send_snapshot_response_message(self, message, success=True):
+        response = SnapShotResponseMessage(sender=self.my_uri(),
+                                           receiver=message.sender,
+                                           prevLogIndex=message.prevLogIndex,
+                                           prevLogTerm=message.prevLogTerm,
+                                           term=await self.log.get_term(),
+                                           offset=message.offset,
+                                           success=success)
         await self.hull.send_response(message, response)
         
     def my_uri(self):
