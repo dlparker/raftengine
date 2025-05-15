@@ -440,21 +440,36 @@ async def test_command_2_leaders_3(cluster_maker):
     assert command_result.redirect == uri_2
     
 async def test_command_after_heal_1(cluster_maker):
-    await inner_command_after_heal(cluster_maker, True)
-    
-async def test_command_after_heal_2(cluster_maker):
-    await inner_command_after_heal(cluster_maker, False)
-    
-async def inner_command_after_heal(cluster_maker, use_pre_vote):
     """
     The goal for this test is for a candidate to receive an append entries message from a leader of a lower term.
     This can happen when a network partition resolves before a new election has completed and the 
     old leader sends a heartbeat out. There wouldn't be any problem with the candidate resigning in this
     case because everybody's log roles match, but Raft is conservative on this point and requires
-    that the candidate reject an append entries of a lower term.
+    that the candidate reject an append entries of a lower term. This test is identical
+    to test_command_after_heal_2 except that this version uses pre vote logic.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
+    docstring = test_command_after_heal_1.__doc__
+    await inner_command_after_heal(cluster_maker, True, test_path_str, docstring)
+    
+async def test_command_after_heal_2(cluster_maker):
+    """
+    The goal for this test is for a candidate to receive an append entries message from a leader of a lower term.
+    This can happen when a network partition resolves before a new election has completed and the 
+    old leader sends a heartbeat out. There wouldn't be any problem with the candidate resigning in this
+    case because everybody's log roles match, but Raft is conservative on this point and requires
+    that the candidate reject an append entries of a lower term. This test is identical
+    to test_command_after_heal_1 except that this version does not use pre vote logic.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
+    docstring = test_command_after_heal_2.__doc__
+    await inner_command_after_heal(cluster_maker, False, test_path_str, docstring)
+    
+async def inner_command_after_heal(cluster_maker, use_pre_vote, test_path_string, docstring):
 
 
     cluster = cluster_maker(3)
@@ -466,8 +481,7 @@ async def inner_command_after_heal(cluster_maker, use_pre_vote):
     logger = logging.getLogger("test_code")
 
     cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_command_after_heal_1.__doc__)
+                                     test_path_str=test_path_string, test_doc_string=docstring)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()

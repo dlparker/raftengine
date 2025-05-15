@@ -15,6 +15,7 @@ from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
 trace_to_csv = False
 digest_org = False
+part_digest_org = True
 digest_csv = False
 
 class PausingCluster:
@@ -253,7 +254,7 @@ async def cluster_maker():
     yield make_cluster
     if the_cluster is not None:
         await the_cluster.stop_auto_comms()
-        if trace_to_csv or digest_org or digest_csv:
+        if trace_to_csv or digest_org or digest_csv or part_digest_org:
             full_name, tfile, test_name = get_current_test()
             # convert the full name to something that doesn't look like a file path
             x = full_name.split('::')
@@ -282,6 +283,17 @@ async def cluster_maker():
         if digest_org:
             orgname = fstem + ".org"
             org_dir = Path(trace_dir, "org_digest")
+            if not org_dir.exists():
+                org_dir.mkdir()
+            fpath = Path(org_dir, orgname)
+            if len(org_lines) > 0:
+                with open(fpath, 'w') as f:
+                    for line in org_lines:
+                        f.write(line + "\n")
+        if part_digest_org or digest_csv:
+            org_lines = the_cluster.test_trace.to_condensed_org(include_legend=False)
+            orgname = fstem + ".org"
+            org_dir = Path(trace_dir, "part_org_digest")
             if not org_dir.exists():
                 org_dir.mkdir()
             fpath = Path(org_dir, orgname)

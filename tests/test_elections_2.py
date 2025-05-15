@@ -518,18 +518,40 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
     
 async def test_election_candidate_log_too_old_1(cluster_maker):
-    await inner_candidate_log_too_old(cluster_maker, use_pre_vote=False)
-    
-async def test_election_candidate_log_too_old_2(cluster_maker):
-    await inner_candidate_log_too_old(cluster_maker, use_pre_vote=True)
-
-async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
     """
     It is possible for a candidate to have a log state that
     is older than the state of other servers during an
     election. The follower election code should detect that and
-    vote no on the candidate
+    vote no on the candidate. This test forces that condition
+    by crashing a node, then running a command with the remaining
+    nodes, then restarting the crashed node and forcing it to try
+    to get elected. This test is identical to test_election_candidate_log_too_old_1
+    except that this version uses the pre vote logic.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
+    docstring = test_election_candidate_log_too_old_1.__doc__
+    await inner_candidate_log_too_old(cluster_maker, False, test_path_str, docstring)
+    
+async def test_election_candidate_log_too_old_2(cluster_maker):
+    """
+    It is possible for a candidate to have a log state that
+    is older than the state of other servers during an
+    election. The follower election code should detect that and
+    vote no on the candidate. This test forces that condition
+    by crashing a node, then running a command with the remaining
+    nodes, then restarting the crashed node and forcing it to try
+    to get elected. This test is identical to test_election_candidate_log_too_old_1
+    except that this version uses the pre vote logic.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
+    docstring = test_election_candidate_log_too_old_2.__doc__
+    await inner_candidate_log_too_old(cluster_maker, True, test_path_str, docstring)
+
+async def inner_candidate_log_too_old(cluster_maker, use_pre_vote, test_path_string, docstring):
     
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
@@ -537,14 +559,10 @@ async def inner_candidate_log_too_old(cluster_maker, use_pre_vote):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    if use_pre_vote:
-        the_test = test_election_candidate_log_too_old_2
-    else:
-        the_test = test_election_candidate_log_too_old_1
         
-    cluster.test_trace.start_subtest("Starting normal election",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=the_test.__doc__)
+
+    cluster.test_trace.start_subtest("Initial election, normal",
+                                     test_path_str=test_path_string, test_doc_string=docstring)
 
     await cluster.start()
     await ts_1.start_campaign()
@@ -652,33 +670,42 @@ async def test_failed_first_election_1(cluster_maker):
     """
     Let a leader win, but before the followers get his term_start log message, make him crash.
     Have a new election, then re-start the ex leader. His log will have one record in it, and so will the 
-    new leader's, but the terms will be different. This
-    hits a special case in follower code.
+    new leader's, but the terms will be different. This hits a special case in follower code.
 
-    This test runs with pre_vote disabled. There is an identical test that has it enabled.
+    This test runs with pre_vote disabled. test_failed_first_election_2 is identical
+    except that it runs with prev_vote enabled.o
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    await inner_failed_first_election(cluster_maker, use_pre_vote=False)
+    test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+    docstring = test_failed_first_election_1.__doc__
+    await inner_failed_first_election(cluster_maker, False, test_path_str, docstring)
 
 async def test_failed_first_election_2(cluster_maker):
-    await inner_failed_first_election(cluster_maker, use_pre_vote=True)
+    """
+    Let a leader win, but before the followers get his term_start log message, make him crash.
+    Have a new election, then re-start the ex leader. His log will have one record in it, and so will the 
+    new leader's, but the terms will be different. This hits a special case in follower code.
+
+    This test runs with pre_vote enabled. test_failed_first_election_1 is identical
+    except that it runs with prev_vote enabled.o
     
-async def inner_failed_first_election(cluster_maker, use_pre_vote):
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+    docstring = test_failed_first_election_1.__doc__
+    await inner_failed_first_election(cluster_maker, False, test_path_str, docstring)
+    
+async def inner_failed_first_election(cluster_maker, use_pre_vote, test_path_string, docstring):
 
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
     cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    if use_pre_vote:
-        the_test = test_failed_first_election_2
-    else:
-        the_test = test_failed_first_election_1
         
     cluster.test_trace.start_subtest("Starting election that should fail",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=the_test.__doc__)
+                                     test_path_str=test_path_string, test_doc_string=docstring)
 
     await cluster.start()
     await ts_3.start_campaign()
@@ -921,7 +948,7 @@ async def test_power_transfer_fails_1(cluster_maker):
 
     cluster.test_trace.start_subtest("Initial election, normal",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_power_transfer_2.__doc__)
+                                     test_doc_string=test_power_transfer_fails_1.__doc__)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)

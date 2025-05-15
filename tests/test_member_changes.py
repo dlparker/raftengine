@@ -162,7 +162,6 @@ async def test_remove_follower_1(cluster_maker):
     async def cb(success, uri):
         nonlocal removed
         removed = success
-        print(f'\n\nin cb with {success}\n\n')
 
     class MembershipChangeResultHandler(EventHandler):
         def __init__(self):

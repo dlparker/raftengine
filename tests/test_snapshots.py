@@ -288,7 +288,6 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_1.log.get_last_index() == ts_1_ss.last_index + 2
         
     cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
-    print("\n\b\nnew election\n\n")
     await new_leader.do_demote_and_handle()
     await ts_1.start_campaign()
     await cluster.run_election()

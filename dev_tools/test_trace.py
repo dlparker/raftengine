@@ -7,6 +7,7 @@ from typing import Optional
 
 from raftengine.api.log_api import LogRec
 
+warn_no_docstring = True
 
 class SaveEvent(str, Enum):
     message_op = "MESSAGE_OP"
@@ -114,6 +115,11 @@ class TestTrace:
 
 
     def start_subtest(self, description, test_path_str=None, test_doc_string=None):
+        if warn_no_docstring and test_path_str:
+            if test_doc_string is None or test_doc_string.strip() == "":
+                print(f'\n\n{"-"*100}\n\n')
+                print(f'Test {test_path_str} has no docstring')
+                print(f'\n\n{"-"*100}\n\n')
         old_st = self.current_wrap
         if old_st and old_st.end_pos is None:
             old_st.end_pos=len(self.trace_lines)-1,
