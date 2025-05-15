@@ -488,30 +488,30 @@ class TestTrace:
             target = message.receiver.split("/")[-1]
             sender = message.sender.split("/")[-1]
             if message.sender == ns.uri:
-                value = f' {short_code}->N-{target}'
+                value = f' {short_code}+N-{target}'
             else:
-                value = f' N-{sender}->{short_code}'
+                value = f' N-{sender}+{short_code}'
             if message.code == "append_entries":
-                value += f" t={message.term} i={message.prevLogIndex} lt={message.prevLogTerm}"
-                value += f" e={len(message.entries)} c={message.commitIndex}"
+                value += f" t-{message.term} i-{message.prevLogIndex} lt-{message.prevLogTerm}"
+                value += f" e-{len(message.entries)} c-{message.commitIndex}"
             elif message.code in ("request_vote", "pre_vote"):
-                value += f" t={message.term} li={message.prevLogIndex} lt={message.prevLogTerm}"
+                value += f" t-{message.term} li-{message.prevLogIndex} lt-{message.prevLogTerm}"
             elif message.code == "append_response":
-                value += f" ok={message.success} mi={message.maxIndex}"
+                value += f" ok-{message.success} mi-{message.maxIndex}"
             elif message.code in ("request_vote_response", "pre_vote_response"):
-                value += f" yes={message.vote} "
+                value += f" yes-{message.vote} "
             elif message.code in ("membership_change", "membership_change_response"):
-                value += f" op={message.op} n={message.target_uri} "
+                value += f" op-{message.op} n-{message.target_uri} "
                 if message.code == "membership_change_response":
-                    value += f"ok={message.ok} "
+                    value += f"ok-{message.ok} "
             elif message.code in ("transfer_power", "transfer_power_response"):
-                value += f" i={message.prevLogIndex}"
+                value += f" i-{message.prevLogIndex}"
                 if message.code == "transfer_power_response":
-                    value += "ok={message.success} "
+                    value += "ok-{message.success} "
             elif message.code in ("snapshot", "snapshot_response"):
-                value += f" i={message.prevLogIndex}"
+                value += f" i-{message.prevLogIndex}"
                 if message.code == "snapshot_response":
-                    value += "s={message.success} "
+                    value += "s-{message.success} "
             else:
                 raise Exception('no code for message type')
             return value
@@ -606,13 +606,13 @@ class TestTrace:
                         if last is None:
                             last_states[index] = None
                         if ns.term != last.term:
-                            d_t = f" t={ns.term}"
+                            d_t = f" t-{ns.term}"
                         if ns.log_rec.term != last.log_rec.term:
-                            d_lt = f" lt={ns.log_rec.term}"
+                            d_lt = f" lt-{ns.log_rec.term}"
                         if ns.log_rec.index != last.log_rec.index:
-                            d_li = f" li={ns.log_rec.index}"
+                            d_li = f" li-{ns.log_rec.index}"
                         if ns.commit_index != last.commit_index:
-                            d_ci = f" ci={ns.commit_index}"
+                            d_ci = f" ci-{ns.commit_index}"
                         if ns.on_quorum_net:
                             if not last.on_quorum_net:
                                 d_net = " n=1"
