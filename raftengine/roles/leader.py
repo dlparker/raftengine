@@ -175,7 +175,6 @@ class Leader(BaseRole):
                 # a copy once it gets caught up
                 self.logger.debug("%s not sending to %s, it ti %d < li %d", self.my_uri(), uri, tracker.nextIndex, log_record.index)
                 continue
-            tracker.lastSentIndex = log_record.index
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
             message.receiver = uri
             self.logger.info("broadcast command sending %s", message)
@@ -291,9 +290,7 @@ class Leader(BaseRole):
             if snap and snap.last_index >= send_index:
                 # start the snapshot send process for this node
                 await self.start_snapshot_send(uri)
-                tracker.lastSentIndex = snap.last_index
                 return
-        tracker.lastSentIndex = send_index
         rec = await self.log.read(send_index)
         rec.committed = False
         rec.applied = False
@@ -313,19 +310,6 @@ class Leader(BaseRole):
     async def send_catchup(self, message):
         uri = message.sender
         tracker = await self.cluster_ops.tracker_for_follower(uri)
-        # Due to asnyc nature of this code, it is possible for one
-        # message from the leader to get processed by the follower
-        # and trigger a reply before the previous message reply has
-        # been sent. In other words, there is no serialization
-        # guarantee unless the message transport mechanism is
-        # synchronous between message and reply. This code is not
-        # written to expect that feature, so it must deal with
-        # out of order replies.
-        if tracker.lastSentIndex  > message.maxIndex and False:
-            # out of order, don't use this message
-            # to continue catchup
-            self.logger.debug("%s not sending catchup, message already sent %s", self.my_uri(), message)
-            return
         tracker.matchIndex = message.maxIndex
         send_start_index = tracker.matchIndex + 1
         send_end_index = await self.log.get_last_index()
@@ -334,7 +318,6 @@ class Leader(BaseRole):
         if send_end_index - send_start_index > max_e:
             send_end_index = send_start_index + max_e
         tracker.nextIndex = send_end_index + 1
-        tracker.lastSentIndex = send_end_index
         entries = []
         for index in range(send_start_index, send_end_index + 1):
             rec = await self.log.read(index)

@@ -24,7 +24,6 @@ class SnapShotCursor:
 class FollowerTracker:
     uri: str 
     nextIndex: int = 0
-    lastSentIndex: int = 0
     matchIndex: int = 0
     msg_count: int = 0
     reply_count: int = 0
