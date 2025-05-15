@@ -13,9 +13,9 @@ from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace, get_current_test
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
-trace_to_csv = False
-digest_org = False
-digest_csv = False
+trace_to_csv = True
+digest_org = True
+digest_csv = True
 
 class PausingCluster:
 

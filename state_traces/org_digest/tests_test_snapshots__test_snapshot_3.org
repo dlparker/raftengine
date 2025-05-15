@@ -1,12 +1,10 @@
 * Test test_snapshot_3 from file tests/test_snapshots.py
 
 
-    Test the simplest snapshot process, at a follower in a quiet cluster. After
-    it is installed, have that node become the leader and make sure new commands
-    work.
+    Test the snapshot process when the leader is told to snapshot. It should
+    transfer power and then do the snapshot, then rejoin cluster.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
-    
     
 
 
