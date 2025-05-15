@@ -1,8 +1,0 @@
-  N-1   , N-1                          , N-1       , N-2   , N-2                          , N-2       , N-3   , N-3                          , N-3       , N-4  , N-4 , N-4   
-  Role  , Op                           , Delta     , Role  , Op                           , Delta     , Role  , Op                           , Delta     , Role , Op  , Delta 
-  N-1   , N-1 , N-1   , N-2   , N-2                                   , N-2   , N-3   , N-3 , N-3   , N-4   , N-4                                   , N-4   
-  Role  , Op  , Delta , Role  , Op                                    , Delta , Role  , Op  , Delta , Role  , Op                                    , Delta 
-  LEAD  ,     ,       , FLWR  ,                                       ,       , FLWR  ,     ,       , FLWR  , m_c->N-2 op=ADD n=mcpy://4            ,       
-  LEAD  ,     ,       , FLWR  , N-4->m_c op=ADD n=mcpy://4            ,       , FLWR  ,     ,       , FLWR  ,                                       ,       
-  LEAD  ,     ,       , FLWR  , m_cr->N-4 op=ADD n=mcpy://4 ok=False  ,       , FLWR  ,     ,       , FLWR  ,                                       ,       
-  LEAD  ,     ,       , FLWR  ,                                       ,       , FLWR  ,     ,       , FLWR  , N-2->m_cr op=ADD n=mcpy://4 ok=False  ,       
