@@ -4,7 +4,7 @@ import logging
 import time
 import json
 
-from raftengine.api.types import RoleName, OpDetail
+from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig
 from raftengine.api.hull_api import CommandResult
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.hull.event_control import EventControl
@@ -312,7 +312,12 @@ class Hull(HullAPI):
                                                 asyncio.create_task(self.exit_waiter(timeout, callback)))
         await asyncio.sleep(0)
         
-            
+    # Part of API 
+    async def update_settings(self, settings):
+        if self.role.role_name != "LEADER":
+            raise Exception("must only call at leader")
+        await self.role.do_update_settings(settings)
+        
     # Part of API 
     async def stop(self):
         await self.stop_role()

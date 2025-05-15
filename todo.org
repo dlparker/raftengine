@@ -17,7 +17,7 @@
    the follower sees the snapshot message and says "oh, all my state is bad, clear the log" and
    when snapshot tool sees new incoming snapshot it invalidates the current state?
    Leader stops sending broadcasts to server that is marked as receiving snapshot
-2. [] Need some way to re-install snapshot on restart. Maybe we just store the snapshot, minus
+2. [X] Need some way to re-install snapshot on restart. Maybe we just store the snapshot, minus
    the tool reference in the log, then when we pass the snapshot to the pilot for export it fills
    the tool reference. This should work as it does in memlog, just need to implement and test
    it with sqlite log.

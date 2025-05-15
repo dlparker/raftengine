@@ -9,7 +9,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.api.events import EventType, EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.types import NodeRec, ClusterConfig
+from raftengine.api.types import NodeRec, ClusterConfig, ClusterSettings
 from raftengine.hull.hull import Hull
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
@@ -21,7 +21,7 @@ from dev_tools.logging_ops import setup_logging
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level="error"
-#default_level="debug"
+default_level="debug"
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -1498,3 +1498,51 @@ async def test_remove_candidate_1(cluster_maker):
     assert len(ts_1.out_messages) == 1
     assert ts_1.out_messages[0].receiver == ts_2.uri
 
+async def test_update_settings(cluster_maker):
+    """
+    Basic test of updating cluster wide settings.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_update_settings.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Node 1 is leader, sending settings update")
+
+    orig_cc = await ts_1.hull.get_cluster_config()
+    cur_settings = orig_cc.settings
+    orig_value = cur_settings.max_entries_per_message
+    new_settings = ClusterSettings(**cur_settings.__dict__)
+    new_settings.max_entries_per_message += 1
+
+    with pytest.raises(Exception):
+        await ts_2.hull.update_settings(new_settings)
+        
+    await ts_1.hull.update_settings(new_settings)
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and cur_settings.max_entries_per_message == orig_value:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+        new_cc = await ts_1.hull.get_cluster_config()
+        cur_settings = new_cc.settings
+    assert (await ts_1.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
+
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+
+    assert (await ts_2.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
+    assert (await ts_3.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
+    

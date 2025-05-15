@@ -7,6 +7,7 @@ from raftengine.api.events import EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
+from raftengine.api.types import ClusterSettings, ClusterConfig
 
 @dataclass
 class CommandResult:
@@ -99,6 +100,19 @@ class HullAPI(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    async def get_cluster_config(self) -> ClusterConfig:
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def update_settings(self, settings:ClusterSettings) -> None:
+        """
+        Do a standard raft replication which changes the ClusterSettings portion
+        of the cluster config. Does not wait for completion, just queues the
+        changes and returns. If you care about ensuring that the chanages
+        are done, monitor the ClusterConfig for a few milliseconds to detect the update.
+        """
+        raise NotImplementedError
     @abc.abstractmethod
     async def stop(self) -> None:
         """

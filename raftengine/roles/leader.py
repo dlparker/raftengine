@@ -482,6 +482,9 @@ class Leader(BaseRole):
     async def do_node_exit(self, target_uri):
         return await self.cluster_ops.do_node_inout("REMOVE", target_uri, self)
     
+    async def do_update_settings(self, settings):
+        return await self.cluster_ops.do_update_settings(settings, self)
+    
     
 class CommandWaiter:
 

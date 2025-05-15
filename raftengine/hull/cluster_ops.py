@@ -129,7 +129,7 @@ class ClusterOps:
             await self.start_node_remove(target_uri)
             if message:
                 self.remove_message = message
-        elif op == "ADD":
+        elif op == ChangeOp.add:
             await self.start_node_add(target_uri) 
             # we need to start the catchup for this node
             tracker = await self.tracker_for_follower(target_uri)
@@ -142,6 +142,15 @@ class ClusterOps:
         if target_uri == self.my_uri():
             leader.exit_in_progress = True
 
+    async def do_update_settings(self, settings, leader):
+        stored_config = await self.log.get_cluster_config()
+        stored_config.settings = settings
+        command = dict(op="update_settings", config=stored_config, operand="")
+        encoded = json.dumps(command, default=lambda o:o.__dict__)
+        rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
+        rec_to_send = await self.log.append(rec)
+        await leader.broadcast_log_record(rec_to_send)
+        
     async def get_cluster_config_json_string(self):
         cc = await self.get_cluster_config()
         encoded = json.dumps(cc, default=lambda o:o.__dict__)
@@ -404,8 +413,10 @@ class ClusterOps:
         operand = cdict['operand']
         if op == "add_node":
             config = await self.start_node_add(operand)
-        if op == "remove_node":
+        elif op == "remove_node":
             config = await self.start_node_remove(operand)
+        elif op == "update_settings":
+            pass
         self.logger.debug(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
 
     async def handle_membership_change_log_commit(self, log_rec):
@@ -421,11 +432,16 @@ class ClusterOps:
             # leader committed record, means that the node is loaded and ready
             # to vote
             config = await self.finish_node_add(operand)
-        if op == "remove_node":
+        elif op == "remove_node":
             config = await self.finish_node_remove(operand)
             if operand == self.my_uri():
                 self.logger.warning("%s calling stop on self", self.my_uri())
                 await self.hull.note_exit_done(success=True)
+        elif op == "update_settings":
+            stored_config = await self.log.get_cluster_config()
+            stored_config.settings = ClusterSettings(stored_config.settings.__dict__)
+            res = await self.log.save_cluster_config(stored_config)
+            self.current_config = res
         self.logger.debug(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
             
     async def cluster_config_vote_passed(self, log_record, leader):
@@ -460,6 +476,11 @@ class ClusterOps:
             log_record.committed = True
             log_record.applied = True
             await self.log.replace(log_record)
+        elif op == "update_settings":
+            stored_config = await self.log.get_cluster_config()
+            stored_config.settings = ClusterSettings(stored_config.settings.__dict__)
+            res = await self.log.save_cluster_config(stored_config)
+            self.current_config = res
 
     async def tracker_for_follower(self, uri):
         tracker = self.follower_trackers.get(uri, None)
