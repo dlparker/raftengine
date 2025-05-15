@@ -18,93 +18,6 @@ from dev_tools.logging_ops import setup_logging
 setup_logging()
 logger = logging.getLogger("test_code")
 
-async def test_restart_during_heartbeat(cluster_maker):
-    """
-    This tests that the message problem logging mechanism works.
-
-    The test begins with a normal election. After it is complete, the leader sends out
-    heartbeat messages, but we delay delivery and then force the leader to resign.
-
-    We resume delivery, which results in the ex-leader receiving append response messages. Since
-    it is now a follower, these messages are rejected, and the fact is logged in the message
-    problem log. We check the log to make sure we have two entries, one for each follower.
-
-    Next we trigger the leader to start a new election, which it will win.
-
-    When the election is complete, we insert a generated vote response message into the
-    leader's input queue. It does not expect this so it rejects it and logs it. We check
-    to see that it is logged.
-
-    Note that both of these scenarios are common occurances. The purpose of this test is
-    to ensure that they are logged.
-
-    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
-    """
-    cluster = cluster_maker(3)
-    cluster.set_configs()
-    uri_1 = cluster.node_uris[0]
-    uri_2 = cluster.node_uris[1]
-    uri_3 = cluster.node_uris[2]
-
-    ts_1 = cluster.nodes[uri_1]
-    ts_2 = cluster.nodes[uri_2]
-    ts_3 = cluster.nodes[uri_3]
-
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_restart_during_heartbeat.__doc__)
-    await cluster.start()
-    await ts_3.start_campaign()
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-
-    assert ts_3.get_role_name() == "LEADER"
-    assert ts_1.get_leader_uri() == uri_3
-    assert ts_2.get_leader_uri() == uri_3
-
-    # Get the leader to send out heartbeats, but
-    # don't allow followers to get them yet, then
-    # demote leader and let the messages fly.
-    # The leader, now a follower should get a couple
-    # of reply messages that it doesn't expect, and
-    # should show up in hull log
-    cluster.test_trace.start_subtest("Node 3 is leader, getting it to sent heartbeats but not allowing delivery, then demoting leader")
-    ts_3.get_message_problem_history(clear=True)
-    await ts_3.send_heartbeats()
-    await cluster.deliver_all_pending(out_only=True)
-    assert len(ts_1.in_messages) == 1
-    assert len(ts_2.in_messages) == 1
-    logger.debug("about to demote %s %s", uri_3, ts_3.get_role())
-    await ts_3.do_demote_and_handle()
-    cluster.test_trace.start_subtest("Node 3 is demoted, now delivering pending messages and checking that the replies are reported as issuesw")
-    await cluster.deliver_all_pending()
-    hist = ts_3.get_message_problem_history()
-    assert len(hist) == 2
-
-    cluster.test_trace.start_subtest("Node 3 starting a new election")
-    await ts_3.start_campaign(authorized=True)
-    sequence = SNormalElection(cluster, 1)
-    await cluster.run_sequence(sequence)
-    assert ts_3.get_role_name() == "LEADER"
-    assert ts_1.get_leader_uri() == uri_3
-    assert ts_2.get_leader_uri() == uri_3
-    # now just poke a random message in there to get
-    # at the code that is very hard to arrange by
-    # tweaking roles, a vote response that isn't expected
-    # when the receiver is not a newly elected leader,
-    # with leftover votes coming in.
-    
-    cluster.test_trace.start_subtest("Generating extra vote repsonse message for Node 3 and checking that it is reported")
-    msg = RequestVoteResponseMessage(sender=uri_2, receiver=uri_3,
-                                     term=0, prevLogIndex=0, prevLogTerm=0, vote=False)
-    ts_3.in_messages.append(msg)
-    ts_3.get_message_problem_history(clear=True)
-    await ts_3.do_next_in_msg()
-    hist = ts_3.get_message_problem_history(clear=True)
-    assert len(hist) == 1
-    rep = hist[0]
-    assert json.dumps(rep['message'], default=lambda o:o.__dict__) == json.dumps(msg, default=lambda o:o.__dict__)
-
 async def test_slow_voter(cluster_maker):
     """
     This tests the rare case where a candidate starts a new election, sends requests, then for some
@@ -204,7 +117,6 @@ async def test_slow_voter(cluster_maker):
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
-
 
 async def test_message_errors(cluster_maker):
     """

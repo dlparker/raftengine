@@ -1,7 +1,7 @@
 """
 Configuration classes for setting up an instance of the class::`Server` class.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Type, Callable, Awaitable
 import os
 import json
@@ -20,9 +20,15 @@ class LocalConfig:
         uri: 
             Unique identifyer for this server, either directly
             serving as a comms endpoint or translatable to one
+        record_message_problems:
+            Whenever a message causes and error, the messages is recorded in a problem
+            history buffer if this flag is True. The records can be accessed and managed
+            by calling get_message_problem_history. Message errors also generate
+            an error event, so you can use that as a trigger to collect and clear the records.
     """
     working_dir: os.PathLike # where the server should run and place log files, data files, etc
-    uri: Any          # unique identifier of this server
+    uri: Any                 # unique identifier of this server
+    record_message_problems: bool = field(default=True)
 
 @dataclass
 class ClusterInitConfig:

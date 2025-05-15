@@ -53,7 +53,7 @@ class LeaderChangeEvent(Event):
     def __init__(self, new_leader:str):
         self.new_leader = new_leader
 
-class  MembershipChangeDoneEvent(Event):
+class MembershipChangeDoneEvent(Event):
 
     event_type = EventType.membership_change_complete
     

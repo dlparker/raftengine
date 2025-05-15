@@ -103,20 +103,17 @@ class BaseRole:
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.send_reject_append_response(message)
-        await self.hull.record_message_problem(message, problem)
 
     async def on_append_entries_response(self, message):
         problem = 'append_entries_response not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
 
     async def on_vote_request(self, message):
         problem = 'request_vote not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
         await self.send_reject_vote_response(message)
-        await self.hull.record_message_problem(message, problem)
 
     async def on_vote_response(self, message):
         if self.role_name == "LEADER" and message.term == await self.log.get_term():
@@ -125,7 +122,6 @@ class BaseRole:
         problem = 'request_vote_response not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
         
     async def on_pre_vote_request(self, message):
         if self.role_name == "LEADER" and not message.authorized:
@@ -164,7 +160,6 @@ class BaseRole:
         problem = 'pre_vote_response not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
         
     async def on_transfer_power_response(self, message):
         self.logger.info('%s transfer_power response requires no action, ignoring %s', self.my_uri(), str(message))
@@ -230,7 +225,6 @@ class BaseRole:
         problem = 'pre_membership_change_message not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
         await self.send_membership_change_response_message(message, ok=False)
 
     async def on_membership_change_response(self, message):
@@ -257,7 +251,6 @@ class BaseRole:
         problem = 'pre_membership_change_message not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
         await self.send_snapshot_response_message(message, success=False)
 
     async def on_snapshot_response_message(self, message):
@@ -265,7 +258,6 @@ class BaseRole:
         problem = 'snapshot response message not implemented in the class '
         problem += f'"{self.__class__.__name__}" at {self.my_uri()}, sending rejection'
         self.logger.warning(problem)
-        await self.hull.record_message_problem(message, problem)
         
     async def send_snapshot_response_message(self, message, success=True):
         response = SnapShotResponseMessage(sender=self.my_uri(),

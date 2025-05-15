@@ -3,8 +3,9 @@
 1. [X] Add cluster config as term start message data, that ensures that new node joining a cluster
    with no config changes applied can look up the correct config in the last term start.
 2. [X] Add logic to follower to apply cluster config as present in first term start log record
-3. [] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
+3. [X] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
    admin command, might want to generalize it that way so other commands are easy (e.g. logging control)
+4. [] build an example mangement interface for doing cluster ops such as config, snapshots.
    
 * Snapshots
 
@@ -25,15 +26,15 @@
      
    
 Events and errors rework:
-1. [] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
+1. [X] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.
-2. [] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
+2. [X] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
 3. [x] completely convert substate to events
 4. [x] Need to have self exit generate an event.
 
 
-1. [x] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
-2. [x] Need to figure out what it means to abort remove node. Reverse would only happen when leader crashes with
+1. [X] Need to update leader commit voting logic to not self count if exit_in_progress so that commit gets majority without
+2. [X] Need to figure out what it means to abort remove node. Reverse would only happen when leader crashes with
    uncommitted and followers don't have it yet, then election overwrites the index. So when leader restarts, it
    gets an overwrite from new leader on that record, and it has to undo the temporary change. It can't notify the
    original requester, because it does not have the info about who that was. 
@@ -41,9 +42,9 @@ Events and errors rework:
    are membership changed records, and undo the change. That's probably true for both types. It means follower can
    no longer just blindly delete, it has to inspect and dispose.
    Can a remove record hang the config forever? 
-3. [x] Need to update cluster change calls so that they only return when complete, like command runner. That way
+3. [X] Need to update cluster change calls so that they only return when complete, like command runner. That way
    caller can know that the change is complete. Consider a callback or event instead
-4. [x] Update follower remove op to wait for commit, and update leader to sent heartbeat to removing server. Follower logic
+4. [X] Update follower remove op to wait for commit, and update leader to sent heartbeat to removing server. Follower logic
    probably needs to ignore heatbeats unless commit equals the record index of the remove log entry. Avoid overly complex
    logic to prevent messing wwith ongoing log replication.
    
@@ -89,7 +90,6 @@ Events and errors rework:
 	 
 	 
 	 
-2. [] Think about building an example mangement interface for doing cluster ops such as config, snapshots.
  
 
 

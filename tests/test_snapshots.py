@@ -198,7 +198,7 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
     assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 2
         
-    # now make sure that the message interceptors work for out of sync messages
+    # Now make sure that the message interceptors work for out of sync messages
 
     msg = await ts_2.do_next_in_msg()
     while msg:
@@ -208,18 +208,16 @@ async def test_snapshot_2(cluster_maker):
     ts_2.get_message_problem_history(clear=True)
     ts_2.in_messages.append(ssm)
     await ts_2.do_next_in_msg()
-    res = ts_2.get_message_problem_history(clear=True)
-    assert res is not None
-    assert len(res) > 0
+    assert len(ts_2.out_messages) > 0
+    assert ts_2.out_messages[0].code == SnapShotResponseMessage.code
+    assert ts_2.out_messages[0].success is False
     
     ssmr = SnapShotResponseMessage(sender='mcpy://2', receiver='mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0,
                           offset=0, success=True)
-    ts_1.get_message_problem_history(clear=True)
     ts_1.in_messages.append(ssmr)
+    # just make sure it doesn't explode
     await ts_1.do_next_in_msg()
-    res = ts_1.get_message_problem_history(clear=True)
-    assert res is not None
-    assert len(res) > 0
+    
     
 async def test_snapshot_3(cluster_maker):
     """

@@ -317,8 +317,14 @@ class Hull(HullAPI):
         if self.role.role_name != "LEADER":
             raise Exception("must only call at leader")
         await self.role.do_update_settings(settings)
-        
-    # Part of API 
+    # Part of API
+    def get_message_problem_history(self, clear=False):
+        res =  self.message_problem_history
+        if clear:
+            self.message_problem_history = []
+        return res
+
+    # Part of API
     async def stop(self):
         await self.stop_role()
         if self.join_waiter_handle:
@@ -340,6 +346,12 @@ class Hull(HullAPI):
             self.role_async_handle.cancel()
             self.role_async_handle = None
 
+        
+    # Called by Role
+    async def record_message_problem(self, message, problem):
+        if self.local_config.record_message_problems:
+            rec = dict(problem=problem, message=message)
+            self.message_problem_history.append(rec)
             
     # Called by Role
     async def transfer_power(self, other_uri):
@@ -433,11 +445,6 @@ class Hull(HullAPI):
             self.role_async_handle = None
         
     # Called by Role
-    async def record_message_problem(self, message, problem):
-        rec = dict(problem=problem, message=message)
-        self.message_problem_history.append(rec)
-
-    # Called by Role
     async def record_op_detail(self, op_detail):
         if op_detail in [str(OpDetail.sending_catchup), str(OpDetail.sending_backdown)]:
             if EventType.resync_op in self.event_control.active_events:
@@ -445,10 +452,5 @@ class Hull(HullAPI):
         elif EventType.election_op in self.event_control.active_events:
             await self.event_control.emit_election_op(str(op_detail))
 
-    def get_message_problem_history(self, clear=False):
-        res =  self.message_problem_history
-        if clear:
-            self.message_problem_history = []
-        return res
 
 
