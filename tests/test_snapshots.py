@@ -12,9 +12,11 @@ from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.hull_config import ClusterInitConfig
 from dev_tools.memory_log import MemoryLog
+from dev_tools.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.logging_ops import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.pausing_server import setup_sqlite_log
 from dev_tools.operations import DictTotalsOps, SnapShot
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
@@ -36,8 +38,13 @@ async def test_dict_ops():
 
     class FakeServer:
 
-        def __init__(self):
-            self.log = MemoryLog()
+        def __init__(self, index, logc):
+            self.index = index
+            self.uri = "fake://index"
+            if logc == "SqliteLog":
+                self.log = setup_sqlite_log(self.uri)
+            else:
+                self.log = MemoryLog()
             self.ops = DictTotalsOps(self)
 
         async def process_command(self, command, serial):
@@ -46,30 +53,41 @@ async def test_dict_ops():
             await self.log.append(rec)
             await self.ops.process_command(command, serial)
 
-    fs1 = FakeServer()
-    ops1 = fs1.ops
     
-    for i in range(1, 11):
-        command = f'add {i} {random.randint(1,100)}'
-        await fs1.process_command(command, i)
-    assert len(ops1.totals) == 10
-    ss1 = await fs1.ops.take_snapshot()
-    assert len(ops1.snap_data) == 10
-
-    fs2 = FakeServer()
-    ops2 = fs2.ops
-    # this is what a pilot should do on a call to begin_snapshot_import
-    ss2 = await ops2.begin_snapshot_import(ss1.last_index, ss1.last_term)
+    for logc in [MemoryLog, SqliteLog]:
+        fs1 = FakeServer(1, logc)
+        ops1 = fs1.ops
     
-    offset = 0
-    done = False
+        for i in range(1, 11):
+            command = f'add {i} {random.randint(1,100)}'
+            await fs1.process_command(command, i)
+        assert len(ops1.totals) == 10
+        ss1 = await fs1.ops.take_snapshot()
+        await fs1.log.install_snapshot(ss1)
+        assert len(ops1.snap_data) == 10
+        assert await fs1.log.read(ss1.last_index) is None
+        assert await fs1.log.get_first_index() is None
+        assert await fs1.log.read(ss1.last_index + 1) is None
+        assert await fs1.log.get_last_index() == ss1.last_index
+        assert await fs1.log.get_last_term() == 1
+        assert len(ops1.snap_data) == 10
+        assert len(ops1.snap_data) == 10
+        
+        fs2 = FakeServer(2, logc)
+        ops2 = fs2.ops
+        # this is what a pilot should do on a call to begin_snapshot_import
+        ss2 = await ops2.begin_snapshot_import(ss1.last_index, ss1.last_term)
+        
+        offset = 0
+        done = False
 
-    while not done:
-        chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(offset)
-        await ss2.tool.load_snapshot_chunk(chunk)
-        offset = new_offset
-    for key in ops1.totals:
-        assert ops1.totals[key] == ops2.totals[key]
+        while not done:
+            chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(offset)
+            await ss2.tool.load_snapshot_chunk(chunk)
+            offset = new_offset
+        await fs2.log.install_snapshot(ss2)
+        for key in ops1.totals:
+            assert ops1.totals[key] == ops2.totals[key]
     
 async def test_snapshot_1(cluster_maker):
 
@@ -114,8 +132,6 @@ async def test_snapshot_1(cluster_maker):
     assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()
     assert ts_4.operations.totals == ts_1.operations.totals
 
-    
-    
 async def test_snapshot_2(cluster_maker):
     """
     Test the simplest snapshot process, at a follower in a quiet cluster. After
@@ -218,7 +234,7 @@ async def test_snapshot_3(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_2.__doc__)
+                                     test_doc_string=test_snapshot_3.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -315,7 +331,7 @@ async def test_snapshot_4(cluster_maker):
 
     cluster.test_trace.start_subtest("Starting election at node 1 of 3",
                                      test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_2.__doc__)
+                                     test_doc_string=test_snapshot_4.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -369,3 +385,79 @@ async def test_snapshot_4(cluster_maker):
     assert await ts_3.log.get_first_index() == await ts_2.log.get_first_index()
     assert await ts_3.log.get_first_index() > await ts_1.log.get_first_index()
     
+async def test_snapshot_5(cluster_maker, log_class=MemoryLog):
+    """
+    Test persistent snapshot process, snapshotting a follower in a quiet cluster. After
+    it is installed, have node that restart, then  become the leader and make sure new commands
+    work.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
+    """
+    cluster = cluster_maker(3, use_log=SqliteLog)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config, use_ops=DictTotalsOps)
+
+    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_snapshot_5.__doc__)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+
+    for x in range(1, 10):
+        command = f'add {x} {random.randint(1,100)}'
+        for ts in [ts_1, ts_2, ts_3]:
+            command_result = await cluster.run_command(command, 1)
+                
+    cluster.test_trace.start_subtest("Crashing node 3, running a command, then taking snapshot at node 2")
+    logger.debug(f"\ncrash 3, run command\n")
+    await ts_3.simulate_crash()
+    command_result = await cluster.run_command("add 1 1", 1)
+    last_index = await ts_2.log.get_last_index()
+    last_term = await ts_2.log.get_last_term()
+    rec = await ts_2.log.read(last_index)
+    logger.debug(f"\nnode 2 take snapshot\n")
+    ts_2_ss = await ts_2.take_snapshot()
+
+    # log should now be empty
+    assert await ts_2.log.read(last_index) is None
+    assert await ts_2.log.get_first_index() is None
+    assert await ts_2.log.read(last_index + 1) is None
+    assert await ts_2.log.get_last_index() == ts_2_ss.last_index
+    assert await ts_2.log.get_last_term() == 1
+
+    cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
+        
+    logger.debug(f"\nnode 2 election\n")
+    await ts_1.do_demote_and_handle()
+    await ts_2.start_campaign(authorized=True)
+    await cluster.run_election()
+    assert ts_2.hull.is_leader()
+    assert ts_1.hull.is_leader() is False
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
+    logger.debug(f"\nnode 2 leader\n")
+    assert await ts_2.log.get_last_term() == 2
+    assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 1
+    assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
+    term_start_rec = await ts_2.log.read()
+    assert term_start_rec is not None
+    assert term_start_rec.index == last_index + 1
+    assert term_start_rec.term == 2
+    assert await ts_2.log.get_last_index() == last_index + 1
+
+    cluster.test_trace.start_subtest("Restarting node 3, should be behind enough to need snapshot transfer")
+    logger.debug(f"\nrestert node 3\n")
+    await ts_3.recover_from_crash()
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert await ts_2.log.get_last_index() == await ts_3.log.get_last_index()
+    assert await ts_2.log.get_first_index() == await ts_3.log.get_first_index()
+        

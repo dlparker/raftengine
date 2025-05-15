@@ -210,13 +210,15 @@ class SPartialCommand(StdSequence):
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
                 break
+        if self.target_index is None:
+            raise Exception('cannot start command, no leader found')
         for uri in self.voters:
             node = self.network.nodes[uri]
             trigger = WhenHasAppliedIndex(self.target_index)
             self.logger.debug("set %s trigger for node %s", trigger, node)
             node.set_trigger(trigger)
             self.expected_count += 1
-        self.logger.debug("Setup normal command sequence, will run command at %s", node.uri)
+        self.logger.debug("Setup partial command sequence, will run command at %s for nodes %s", node.uri, self.voters)
 
     async def runner_wrapper(self, node):
         # wait until has commit index

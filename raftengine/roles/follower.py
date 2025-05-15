@@ -274,6 +274,8 @@ class Follower(BaseRole):
             if self.snapshot is None:
                 self.logger.debug("%s starting snapshot import %s", self.my_uri(), message)
                 self.snapshot = await self.hull.pilot.begin_snapshot_import(message.prevLogIndex, message.prevLogTerm)
+                config = message.clusterConfig
+                await self.cluster_ops.update_cluster_config_from_json_string(config)
             self.logger.debug("%s importing snapshot chunk %s", self.my_uri(), message)
             await self.snapshot.tool.load_snapshot_chunk(message.data)
             if message.done:

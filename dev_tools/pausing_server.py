@@ -68,6 +68,9 @@ class PausingServer(PilotAPI):
 
     async def simulate_crash(self):
         await self.hull.stop()
+        
+        if self.use_log == SqliteLog:
+            self.log.close()
         self.am_crashed = True
         self.network.isolate_server(self)
         self.in_messages = []
@@ -231,7 +234,7 @@ class PausingServer(PilotAPI):
 
     async def fake_command2(self, command):
         last_index = await self.log.get_last_index()
-        res = await self.operations.process_command(command, last_index + 1)
+        res,error = await self.operations.process_command(command, last_index + 1)
         rec = LogRec(index=last_index + 1, term=1, command=command, result=res, committed=True, applied=True)
         await self.log.append(rec)
         return rec

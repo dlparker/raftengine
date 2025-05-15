@@ -22,7 +22,8 @@ class Records:
         self.db = None
         self.term = -1
         self.voted_for = None
-        self.max_index = -1
+        self.max_index = None
+        self.snapshot = None
         # Don't call open from here, we may be in the wrong thread,
         # at least in testing. Maybe in real server if threading is used.
         # Let it get called when the running server is trying to use it.
@@ -52,6 +53,11 @@ class Records:
             sql = "replace into stats (dummy, max_index, term, voted_for)" \
                 " values (?,?,?,?)"
             cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+        sql = "select * from snapshot where snap_id == 1"
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        if row:
+           self.snapshot = SnapShot(last_index=row['last_index'], last_term=row['last_term'])
         
     def close(self) -> None:
         if self.db is None:  # pragma: no cover
@@ -62,7 +68,7 @@ class Records:
     def ensure_tables(self):
         cursor = self.db.cursor()
         schema =  "CREATE TABLE if not exists records " 
-        schema += "(rec_index INTEGER primary key, " 
+        schema += "(rec_index INTEGER PRIMARY KEY AUTOINCREMENT, " 
         schema += "code TEXT, " 
         schema += "command TEXT, " 
         schema += "result TEXT, "
@@ -74,8 +80,12 @@ class Records:
         schema += "applied BOOLEAN)" 
         cursor.execute(schema)
         schema = f"CREATE TABLE if not exists stats " \
-            "(dummy INTERGER primary key, max_index INTEGER," \
+            "(dummy INTERGER primary key, max_index INTEGER,"\
             " term INTEGER, voted_for TEXT)"
+        cursor.execute(schema)
+        schema = f"CREATE TABLE if not exists snapshot " \
+            "(snap_id INTERGER primary key,"\
+            " last_index INTERGER NULL, last_term INTEGER NULL)" 
         cursor.execute(schema)
         schema =  "CREATE TABLE if not exists nodes " 
         schema += "(uri TEXT PRIMARY KEY UNIQUE, " 
@@ -91,10 +101,6 @@ class Records:
         schema += "use_pre_vote BOOLEAN, "
         schema += "use_check_quorum BOOLEAN, "
         schema += "use_dynamic_config BOOLEAN) "
-        cursor.execute(schema)
-        schema = f"CREATE TABLE if not exists stats " \
-            "(dummy INTERGER primary key, max_index INTEGER," \
-            " term INTEGER, voted_for TEXT)"
         cursor.execute(schema)
         self.db.commit()
         cursor.close()
@@ -210,6 +216,8 @@ class Records:
         rec_data = cursor.fetchone()
         if rec_data is None:
             cursor.close()
+            if self.snapshot:
+                return self.snapshot.last_index
             return 0
         cursor.close()
         return rec_data['rec_index']
@@ -223,6 +231,8 @@ class Records:
         rec_data = cursor.fetchone()
         if rec_data is None:
             cursor.close()
+            if self.snapshot:
+                return self.snapshot.last_index
             return 0
         cursor.close()
         return rec_data['rec_index']
@@ -248,11 +258,11 @@ class Records:
             sql += " values (?,?,?)"
             cursor.execute(sql, [node.uri, node.is_adding, node.is_removing])
         sql = "insert or replace into settings (the_index, heartbeat_period, election_timeout_min,"
-        sql += "election_timeout_max, use_pre_vote, use_check_quorum, use_dynamic_config)"
-        sql += " values (?,?,?,?,?,?,?)"
+        sql += "election_timeout_max, max_entries_per_message, use_pre_vote, use_check_quorum, use_dynamic_config)"
+        sql += " values (?,?,?,?,?,?,?,?)"
         cs = config.settings
         cursor.execute(sql, [1, cs.heartbeat_period, cs.election_timeout_min, cs.election_timeout_max,
-                             cs.use_pre_vote, cs.use_check_quorum, cs.use_dynamic_config])
+                             cs.max_entries_per_message, cs.use_pre_vote, cs.use_check_quorum, cs.use_dynamic_config])
         self.db.commit()
         cursor.close()
     
@@ -283,6 +293,41 @@ class Records:
             nodes[rec.uri] = rec
         res = ClusterConfig(nodes=nodes, settings=settings)
         return res
+
+    def install_snapshot(self, snapshot):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        cursor = self.db.cursor()
+        sql = "replace into snapshot (snap_id, last_index, last_term) values (?,?,?)"
+        cursor.execute(sql, [1, snapshot.last_index, snapshot.last_term])
+        sql = "delete from records where rec_index <= ?"
+        cursor.execute(sql, [snapshot.last_index,])
+        cursor.close()
+        self.db.commit()
+        self.snapshot = snapshot
+
+    def get_snapshot(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        return self.snapshot
+
+    def get_first_index(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if not self.snapshot:
+            if self.max_index > 0:
+                return 1
+            return None
+        if self.max_index > self.snapshot.last_index:
+            return self.snapshot.last_index + 1
+        return None
+
+    def get_last_index(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if not self.snapshot:
+            return self.max_index
+        return max(self.max_index, self.snapshot.last_index)
     
 class SqliteLog(LogAPI):
 
@@ -374,13 +419,16 @@ class SqliteLog(LogAPI):
     async def get_last_index(self):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
-        return self.records.max_index
+        return self.records.get_last_index()
 
     async def get_last_term(self):
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         rec = self.records.read_entry()
         if rec is None:
+            snap = self.records.get_snapshot()
+            if snap:
+                return snap.last_term
             return 0
         return rec.term
 
@@ -410,17 +458,28 @@ class SqliteLog(LogAPI):
         return self.records.delete_all_from(index)
 
     async def save_cluster_config(self, config: ClusterConfig) -> None:
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
         return self.records.save_cluster_config(config)
     
     async def get_cluster_config(self) -> Optional[ClusterConfig]:  
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
         return self.records.get_cluster_config()
     
     async def install_snapshot(self, snapshot:SnapShot):
-        raise Exception('not done!')
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return self.records.install_snapshot(snapshot)
 
     async def get_first_index(self) -> int:
-        raise Exception('not done!')
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return self.records.get_first_index()
 
     async def get_snapshot(self) -> Optional[SnapShot]: 
-        return None
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return self.records.get_snapshot()
+
             

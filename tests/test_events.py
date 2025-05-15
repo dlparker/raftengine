@@ -15,7 +15,7 @@ from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level='error'
-default_level='debug'
+#default_level='debug'
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -127,8 +127,12 @@ async def test_event_handlers(cluster_maker):
     await cluster.deliver_all_pending()
 
     await asyncio.sleep(0)
-    
-    r_expecting = ['SENDING_BACKDOWN', 'SENDING_CATCHUP']
+
+    # heartbeat will get "no", so leader will try sending the one the most recent,
+    # but follower will say "no" to that one two, so leader will do the backdown op,
+    # which will send the first missed command, which will get "yes", so then
+    # the leader will catchup again
+    r_expecting = ['SENDING_CATCHUP', 'SENDING_BACKDOWN', 'SENDING_CATCHUP']
     for index, item in enumerate(r_expecting):
         assert item == resync_saves[index]
     assert resync_op_counter == len(r_expecting)

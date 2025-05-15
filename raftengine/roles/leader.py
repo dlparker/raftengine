@@ -173,6 +173,7 @@ class Leader(BaseRole):
                 # we don't send the new record unless the
                 # follower is up to date, it will get
                 # a copy once it gets caught up
+                self.logger.debug("%s not sending to %s, it ti %d < li %d", self.my_uri(), uri, tracker.nextIndex, log_record.index)
                 continue
             tracker.lastSentIndex = log_record.index
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
@@ -258,7 +259,8 @@ class Leader(BaseRole):
                 if not snap or snap.last_index < tracker.matchIndex:
                     log_rec = await self.log.read(tracker.matchIndex)
                     await self.record_commit_checker(log_rec)
-            return
+            if tracker.matchIndex == await self.log.get_last_index():
+                return
 
         await self.send_catchup(message)
         self.logger.debug('After catchup %s tracker.nextIndex = %d tracker.matchIndex = %d',
@@ -289,6 +291,7 @@ class Leader(BaseRole):
             if snap and snap.last_index >= send_index:
                 # start the snapshot send process for this node
                 await self.start_snapshot_send(uri)
+                tracker.lastSentIndex = snap.last_index
                 return
         tracker.lastSentIndex = send_index
         rec = await self.log.read(send_index)
@@ -318,9 +321,10 @@ class Leader(BaseRole):
         # synchronous between message and reply. This code is not
         # written to expect that feature, so it must deal with
         # out of order replies.
-        if tracker.lastSentIndex  > message.maxIndex:
+        if tracker.lastSentIndex  > message.maxIndex and False:
             # out of order, don't use this message
             # to continue catchup
+            self.logger.debug("%s not sending catchup, message already sent %s", self.my_uri(), message)
             return
         tracker.matchIndex = message.maxIndex
         send_start_index = tracker.matchIndex + 1

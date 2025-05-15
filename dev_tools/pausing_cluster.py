@@ -147,9 +147,11 @@ class PausingCluster:
         voters = []
         net = self.net_mgr.get_majority_network()
         for uri, node in net.nodes.items():
-            if node.block_messages:
+            if node.block_messages or node.am_crashed:
+                self.logger.debug("cluster run_command skipping node %s", node.uri)
                 continue
             voters.append(uri)
+        self.logger.debug("cluster running command at nodes %s", voters)
         sequence = SPartialCommand(self, command, voters=voters, timeout=timeout)
         res = await self.run_sequence(sequence)
         return res

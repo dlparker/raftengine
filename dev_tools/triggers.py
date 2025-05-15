@@ -228,6 +228,7 @@ class WhenHasAppliedIndex(PauseTrigger):
     # When the server has applied record with provided index
     def __init__(self, index):
         self.index = index
+        
 
     def __repr__(self):
         msg = f"{self.__class__.__name__} index={self.index}"
