@@ -1,3 +1,5 @@
 sphinx-rtd-theme>=1.0.0
 sphinx>=4.5.0
 sphinx-autodoc-typehints>=1.18.1
+sphinxcontrib-plantuml>=0.30
+graphviz>=0.20.3
