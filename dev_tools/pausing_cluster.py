@@ -13,10 +13,10 @@ from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace, get_current_test
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
+digest_org = True
+digest_csv = True
+part_digest_org = False
 trace_to_csv = False
-digest_org = False
-part_digest_org = True
-digest_csv = False
 
 class PausingCluster:
 
@@ -255,68 +255,60 @@ async def cluster_maker():
     if the_cluster is not None:
         await the_cluster.stop_auto_comms()
         if trace_to_csv or digest_org or digest_csv or part_digest_org:
+            if part_digest_org and digest_org:
+                raise Exception('part_digest_org and digest_org are mutually exclusive, choose one')
             full_name, tfile, test_name = get_current_test()
             # convert the full name to something that doesn't look like a file path
             x = full_name.split('::')
-            x = '_'.join(x)
-            x = x.split('/')
-            x = '_'.join(x)
-            x = x.split('.py')
-            x = '_'.join(x)
-            fstem = x
-            trace_dir = Path(Path(__file__).parent.parent.resolve(), "state_traces")
+            tpath = Path(x[0])
+            fstem = x[1]
+            trace_dir = Path(Path(__file__).parent.parent.resolve(), "test_data")
+            trace_dir = Path(trace_dir, tpath.stem, fstem)
             if not trace_dir.exists():
-                trace_dir.mkdir()
+                trace_dir.mkdir(parents=True)
         if trace_to_csv:
-            csvname = fstem + ".csv"
-            full_trace_dir = Path(trace_dir, "full_csv")
-            if not full_trace_dir.exists():
-                full_trace_dir.mkdir()
-            fpath = Path(full_trace_dir, csvname)
+            csvname = fstem + "_full.csv"
+            fpath = Path(trace_dir, csvname)
             csv_lines = the_cluster.test_trace.to_csv()
             with open(fpath, 'w') as f:
                 for line in csv_lines:
                     outline = ','.join(line)
                     f.write(outline + "\n")
         if digest_org or digest_csv:
-            org_lines = the_cluster.test_trace.to_condensed_org()
+            org_lines = the_cluster.test_trace.to_condensed_org(include_legend=True)
         if digest_org:
             orgname = fstem + ".org"
-            org_dir = Path(trace_dir, "org_digest")
-            if not org_dir.exists():
-                org_dir.mkdir()
-            fpath = Path(org_dir, orgname)
+            fpath = Path(trace_dir, orgname)
             if len(org_lines) > 0:
                 with open(fpath, 'w') as f:
                     for line in org_lines:
                         f.write(line + "\n")
-        if part_digest_org or digest_csv:
+        if part_digest_org:
             org_lines = the_cluster.test_trace.to_condensed_org(include_legend=False)
             orgname = fstem + ".org"
-            org_dir = Path(trace_dir, "part_org_digest")
-            if not org_dir.exists():
-                org_dir.mkdir()
-            fpath = Path(org_dir, orgname)
+            fpath = Path(trace_dir, orgname)
             if len(org_lines) > 0:
                 with open(fpath, 'w') as f:
                     for line in org_lines:
                         f.write(line + "\n")
         if digest_csv:
             csv_digest_name = fstem + ".csv"
-            csv_digest_dir = Path(trace_dir, "csv_digest")
-            if not csv_digest_dir.exists():
-                csv_digest_dir.mkdir()
-            fpath = Path(csv_digest_dir, csv_digest_name)
+            fpath = Path(trace_dir, csv_digest_name)
             if len(org_lines) > 0:
+                line_count = 0
                 with open(fpath, 'w') as f:
                     for line in org_lines:
                         tmp = line.strip("|").split("|")
                         # this test is pretty fuzzy might fail, but
                         # it is hard to know how many columns there are
-                        if len(tmp) < 10:
+                        if len(tmp) < 2:
                             continue
                         new_line = ",".join(tmp)
                         f.write(new_line + "\n")
+                        line_count += 1
+                if line_count == 0:
+                    breakpoint()
+                    print(org_lines)
 
 
         await the_cluster.cleanup()

@@ -507,11 +507,11 @@ class TestTrace:
             elif message.code in ("transfer_power", "transfer_power_response"):
                 value += f" i-{message.prevLogIndex}"
                 if message.code == "transfer_power_response":
-                    value += "ok-{message.success} "
+                    value += f" ok-{message.success} "
             elif message.code in ("snapshot", "snapshot_response"):
                 value += f" i-{message.prevLogIndex}"
                 if message.code == "snapshot_response":
-                    value += "s-{message.success} "
+                    value += f" s-{message.success} "
             else:
                 raise Exception('no code for message type')
             return value

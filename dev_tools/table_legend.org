@@ -4,10 +4,10 @@
 All the items in these legends labeled N-X are placeholders for actual node id values,
 actual values will be N-1, N-2, N-3, etc. up to the number of nodes in the cluster. Yes, One based, not zero.
 
-| Column Label | Description     | Details                                                                                        |
-| N-X Role     | Raft Role       | FLWR is Follower CNDI is Candidate LEAD is Leader                                                 |
-| N-X Op       | Activity        | Describes a traceable event at this node, see separate table below                             |
-| N-X Delta    | State change    | Describes any change in state since previous trace, see separate table below                   |
+| Column Label | Description  | Details                                                                      |
+| N-X Role     | Raft Role    | FLWR is Follower CNDI is Candidate LEAD is Leader                            |
+| N-X Op       | Activity     | Describes a traceable event at this node, see separate table below           |
+| N-X Delta    | State change | Describes any change in state since previous trace, see separate table below |
 
 
 ** "Op" Column detail legend

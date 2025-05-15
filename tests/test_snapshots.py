@@ -23,7 +23,7 @@ from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessag
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level='error'
-default_level='debug'
+#default_level='debug'
 setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
 
@@ -35,7 +35,6 @@ logger = logging.getLogger("test_code")
 # it won't be gathered, then remove it when I am sure there is no
 # more need for it.
 async def test_dict_ops():
-
     class FakeServer:
 
         def __init__(self, index, logc):
@@ -90,11 +89,20 @@ async def test_dict_ops():
             assert ops1.totals[key] == ops2.totals[key]
     
 async def test_snapshot_1(cluster_maker):
+    """
+    Tests the mechanisms in the dev_tools test support code that implement snapshot operations.
+    Doesn't do any snapshot work with the raft operations, just establishes that the "state machine"
+    snapshot creation and use works.
 
+    No raft operations are run, so the traces will contain only the node start trace.
+    """
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs(use_ops=DictTotalsOps)
 
+    cluster.test_trace.start_subtest("Starting 3 nodes",
+                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
+                                     test_doc_string=test_snapshot_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -222,7 +230,9 @@ async def test_snapshot_2(cluster_maker):
 async def test_snapshot_3(cluster_maker):
     """
     Test the snapshot process when the leader is told to snapshot. It should
-    transfer power and then do the snapshot, then rejoin cluster.
+    transfer power and then do the snapshot, then rejoin cluster. Also tests
+    that a node joining the cluster will get the snapshot installed during
+    pre-add log loading.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
@@ -296,8 +306,8 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
     
+    cluster.test_trace.start_subtest("Adding a node to and checking that it receives snapshot before joining")
     ts_4 = await cluster.add_node()
-    
     done_by_callback = None
     async def join_done(ok, new_uri):
         nonlocal done_by_callback
@@ -317,12 +327,23 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
 
-
 async def test_snapshot_4(cluster_maker):
     """
+    Tests that a node that is "slow" will get a snapshot installed when it falls behind
+    a leader that has a snapshot that extends beyond the slow node's log index.
+    It uses the dev_tools SqliteLog instead of the usual MemoryLog to ensure that nothing
+    about the snapshot operations fails after restart.
+
+    The process is to run an election, crash node 3, run another command so that node 1 (leader)
+    and node 2 are both ahead on log index. Next a snapshot is created at node 2, and then an
+    election is held to force node 2 to be leader. Next node 3 is restarted, and the details
+    of log values are checked to make sure that node 3 installed the snapshot before catching
+    up normally.
+    
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    
     """
-    cluster = cluster_maker(3)
+    cluster = cluster_maker(3, use_log=SqliteLog)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
@@ -337,78 +358,9 @@ async def test_snapshot_4(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+    cluster.test_trace.start_subtest("Node 1 is leader, runing commands ")
 
-    # The operations object maintains a dictionary of totals,
-    # so "add x 1" adds one to the "x" dictionary entry.
-    # We're going to use numbers as keys, and add a random value to
-    # each key, 10 times.
-    for i in range(10):
-        for x in range(1, 11):
-            command = f'add {x} {random.randint(1,100)}'
-            for ts in [ts_1, ts_2, ts_3]:
-                await ts.fake_command2(command)
-    assert len(ts_1.operations.totals) == 10
-    last_index = await ts_1.log.get_last_index()
-    last_term = await ts_1.log.get_last_term()
-    rec = await ts_1.log.read(last_index)
-    cluster.test_trace.start_subtest(f"Blocking {ts_3.uri} so it gets behind when next command is run, running command")
-    ts_3.block_network()
-    command = "add 1 1"
-    await ts_1.fake_command2(command)
-    await ts_2.fake_command2(command)
-    assert await ts_3.log.get_last_index() < await ts_2.log.get_last_index()
-    cluster.test_trace.start_subtest(f"{ts_3.uri} is behind {ts_2.uri}, making snapshot at {ts_2.uri}")
-    ts_2_ss = await ts_2.take_snapshot()
-    cluster.test_trace.start_subtest("Telling leader node (node 1) to resign and letting {ts_2.uri} get elected")
-
-    await ts_1.do_demote_and_handle()
-    await ts_2.start_campaign(authorized=True)
-    await cluster.run_election()
-    assert cluster.get_leader().uri == ts_2.uri
-    await ts_2.send_heartbeats()
-    await cluster.deliver_all_pending()
-
-    cluster.test_trace.start_subtest("{ts_2.uri} now leader, unblocking {ts_3.uri}, catchup message should cause snashot install")
-    ts_3.unblock_network()
-
-    await ts_2.send_heartbeats()
-    start_time = time.time()
-    while time.time() - start_time < 0.1 and await ts_3.log.get_last_index() < await ts_2.log.get_last_index():
-        await cluster.deliver_all_pending()
-        await asyncio.sleep(0.001)
-    
-    assert await ts_3.log.get_last_index() == await ts_2.log.get_last_index()
-    assert await ts_3.log.get_first_index() == await ts_2.log.get_first_index()
-    assert await ts_3.log.get_first_index() > await ts_1.log.get_first_index()
-    
-async def test_snapshot_5(cluster_maker, log_class=MemoryLog):
-    """
-    Test persistent snapshot process, snapshotting a follower in a quiet cluster. After
-    it is installed, have node that restart, then  become the leader and make sure new commands
-    work.
-
-    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
-    
-    """
-    cluster = cluster_maker(3, use_log=SqliteLog)
-    config = cluster.build_cluster_config(use_pre_vote=False)
-    cluster.set_configs(config, use_ops=DictTotalsOps)
-
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_5.__doc__)
-    await cluster.start()
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    
-    await ts_1.start_campaign()
-    await cluster.run_election()
-    await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
-
-    for x in range(1, 10):
+    for x in range(1, 6):
         command = f'add {x} {random.randint(1,100)}'
         for ts in [ts_1, ts_2, ts_3]:
             command_result = await cluster.run_command(command, 1)
@@ -457,4 +409,3 @@ async def test_snapshot_5(cluster_maker, log_class=MemoryLog):
     await cluster.deliver_all_pending()
     assert await ts_2.log.get_last_index() == await ts_3.log.get_last_index()
     assert await ts_2.log.get_first_index() == await ts_3.log.get_first_index()
-        
