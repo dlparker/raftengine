@@ -10,9 +10,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))
 
 
 # -- Project information -----------------------------------------------------
@@ -25,10 +25,11 @@ author = "Dennis Parker"
 # -- General configuration ---------------------------------------------------
 # -- General configuration
 
+#    "sphinx.ext.autodoc",
 extensions = [
     "sphinx.ext.duration",
     "sphinx.ext.doctest",
-    "sphinx.ext.autodoc",
+    "autodoc2",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     'sphinx.ext.graphviz'
@@ -62,5 +63,16 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-
 graphviz_dot = 'dot'
+
+# a trick to constrain the incusion of autodoc generated files
+#import mock
+#MOCK_MODULES = ['module_name']
+#for mod_name in MOCK_MODULES:
+#    sys.modules[mod_name] = mock.Mock()
+#autodoc_mock_imports = ['raftengine.hull','raftengine.hull', 'raftengine.messages', 'raftengine.roles']
+
+autodoc2_packages = [
+    {'path': "../../raftengine/api"},
+    {'path': "../../raftengine/hull"},
+]

@@ -9,17 +9,16 @@ Welcome to Raft Engine's documentation!
 .. toctree::
    :maxdepth: 4
    :caption: Contents:
-
+	     
    Test Trace Details: <tests/snapshots/index.rst>
    Conformance Checklist: <conformance_checklist.rst>
-   _autodoc/modules
+   apidocs/index
 
 Modules
 =======
 
-.. autosummary::
-   :toctree: _autodoc
-
+.. automodule:: raftengine.api
+		  
 Indices and tables
 ==================
 
