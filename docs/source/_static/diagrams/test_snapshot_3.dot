@@ -1,0 +1,11 @@
+digraph test_snapshot_3 {
+    rankdir=LR;
+    node [shape=box];
+    Leader [label="Leader"];
+    Follower1 [label="Follower 1"];
+    NewNode [label="New Node: FLWR"];
+    Leader -> Follower1 [label="m_c op=add"];
+    Leader -> NewNode [label="sn i-Y"];
+    NewNode -> NewNode [label="snr s-True"];
+    Leader -> NewNode [label="ae"];
+}

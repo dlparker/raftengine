@@ -10,8 +10,8 @@ Welcome to Raft Engine's documentation!
    :maxdepth: 4
    :caption: Contents:
 
-   Main Components: <components.rst>
-   Test Theory of Operations: <theory.rst>
+   Test Trace Details: <tests/snapshots/index.rst>
+   Conformance Checklist: <conformance_checklist.rst>
    _autodoc/modules
 
 Modules
