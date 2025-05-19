@@ -6,7 +6,7 @@ Test Snapshot 2
 Overview
 --------
 
-The ``test_snapshot_3`` test, from ``tests/test_snapshots.py``, validates the Raft protocol’s handling of a new node addition, where a snapshot is sent to initialize the node’s state. [Docstring: e.g., Tests snapshot load on new node add].
+The ``test_snapshot_2`` test, from ``tests/test_snapshots.py``, validates the Raft protocol’s snapshot installation for a lagging follower. The test simulates a follower whose log is behind the leader’s snapshot index, requiring a snapshot to catch up.
 
 Raft Protocol Mapping
 ---------------------
@@ -18,34 +18,33 @@ Raft Protocol Mapping
    * - Section
      - Component
      - Test Behavior
-   * - 6
-     - Membership Changes
-     - Leader sends ``m_c+N-X op=add`` to add a new node, using joint consensus.
    * - 7
      - Snapshots
-     - Leader sends ``sn+N-X i-Y`` to the new node, which installs it (``snr+N-X s-True``).
+     - Leader sends ``sn+N-2 i=90 t=1`` to lagging follower N-2, which installs it (``snr+N-2 s=True``).
    * - 5.3
      - Log Replication
-     - New node receives ``ae+N-X`` to sync post-snapshot.
+     - Follower N-2 receives ``ae+N-2 i=91 t=1`` post-snapshot, replying ``ae_reply+N-2 ok=True mi=91``.
 
 Key Operations
 --------------
 
-- Membership Change: ``m_c+N-X op=add n=N-Y``, ``m_cr+N-X ok-True``.
-- Snapshot: ``sn+N-X i-Y``, ``snr+N-X i-Y s-True``.
-- Log Replication: ``ae+N-X``, ``ae_reply+N-X ok-True mi-Z``.
+- Snapshot: ``sn+N-2 i=90 t=1``, ``snr+N-2 i=90 s=True`` (installs snapshot at index 90, term 1).
+- Log Replication: ``ae+N-2 i=91 t=1``, ``ae_reply+N-2 ok=True mi=91`` (replicates log entries post-snapshot).
 
-.. graphviz:: ../../_static/diagrams/test_snapshot_3.dot
-   :caption: State transitions for new node addition and snapshot installation.
+.. graphviz:: ../../_static/diagrams/test_snapshot_2.dot
+   :caption: State transitions for snapshot installation on lagging follower
+
+.. _test_snapshot_2_csv:
+
+  - :download:`Test Snapshot 2 Trace Table <../../_static/test_data/test_snapshot_2.csv>`
 
 Notes
 -----
 
-- Verifies Raft’s safety properties (Section 5.4) for membership changes.
-- Ensures consistent state for new nodes via snapshots.
+- Ensures snapshot installation for followers lagging behind the leader’s log (Section 7).
+- Validates post-snapshot log replication consistency (Section 5.3).
 
-.. graphviz:: ../../_static/diagrams/test_snapshot_3.dot
 .. seealso::
 
-   - :download:`Test Snapshot 3 Trace Table <../../_static/test_data/test_snapshot_3.csv>`
+   - :ref:`snapshot_process`
    - Ongaro’s thesis, `Consensus: Bridging Theory and Practice <https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14.pdf>`_.

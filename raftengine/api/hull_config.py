@@ -6,13 +6,13 @@ from typing import Any, Type, Callable, Awaitable
 import os
 import json
 from raftengine.api.log_api import LogAPI
-from raftengine.messages.base_message import BaseMessage
 
 @dataclass
 class LocalConfig:
     """
     Class used to supply details of the runtime configuration on the local machine to 
     the server code. 
+
     Args:
         working_dir:
             The location for the runtime to use as a working directory for output files 
@@ -25,6 +25,7 @@ class LocalConfig:
             history buffer if this flag is True. The records can be accessed and managed
             by calling get_message_problem_history. Message errors also generate
             an error event, so you can use that as a trigger to collect and clear the records.
+    
     """
     working_dir: os.PathLike # where the server should run and place log files, data files, etc
     uri: Any                 # unique identifier of this server
@@ -35,7 +36,7 @@ class ClusterInitConfig:
     """
     Class used to supply details of the initial cluster configuration to the server code.
     The same information will be augmented and the results store in the log as
-    raftengine.api.types.ClusterConfig. Once save in the log that version will be used
+    :py:class:`raftengine.api.types.ClusterConfig`. Once save in the log that version will be used
     and this initial config will no longer have any effect.
 
     Args:

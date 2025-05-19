@@ -23,24 +23,26 @@ author = "Dennis Parker"
 
 
 # -- General configuration ---------------------------------------------------
-# -- General configuration
 
-#    "sphinx.ext.autodoc",
 extensions = [
     "sphinx.ext.duration",
     "sphinx.ext.doctest",
-    "autodoc2",
-    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
-    'sphinx.ext.graphviz'
+    'sphinx.ext.graphviz',
+    'sphinxcontrib.plantuml',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosectionlabel',
+    'sphinx_debuginfo',
 ]
+plantuml = 'java -jar /home/dparker/bin/plantuml-lgpl-1.2025.2.jar'
+#plantuml = 'java -jar /home/dparker/bin/plantuml-1.2025.2.jar'
 intersphinx_mapping = {
     "rtd": ("https://docs.readthedocs.io/en/stable/", None),
     "python": ("https://docs.python.org/3/", None),
     "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
 }
 intersphinx_disabled_domains = ["std"]
-
 templates_path = ["_templates"]
 
 # -- Options for EPUB output
@@ -65,14 +67,24 @@ html_static_path = ["_static"]
 
 graphviz_dot = 'dot'
 
-# a trick to constrain the incusion of autodoc generated files
-#import mock
-#MOCK_MODULES = ['module_name']
-#for mod_name in MOCK_MODULES:
-#    sys.modules[mod_name] = mock.Mock()
-#autodoc_mock_imports = ['raftengine.hull','raftengine.hull', 'raftengine.messages', 'raftengine.roles']
-
-autodoc2_packages = [
-    {'path': "../../raftengine/api"},
-    {'path': "../../raftengine/hull"},
+suppress_warnings = [
+    'autosectionlabel.*',
 ]
+
+autodoc_member_order = 'bysource'
+
+# Napoleon settings
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = True
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = False
+napoleon_use_admonition_for_notes = False
+napoleon_use_admonition_for_references = False
+napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_rtype = True
+
+
+nitpicky = True

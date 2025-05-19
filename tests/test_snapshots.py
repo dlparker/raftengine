@@ -100,9 +100,6 @@ async def test_snapshot_1(cluster_maker):
     tconfig = cluster.build_cluster_config()
     cluster.set_configs(use_ops=DictTotalsOps)
 
-    cluster.test_trace.start_subtest("Starting 3 nodes",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_1.__doc__)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -153,9 +150,9 @@ async def test_snapshot_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_2.__doc__)
+    uses = ['election', 'command']
+    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, [])
+    
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -240,9 +237,9 @@ async def test_snapshot_3(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_3.__doc__)
+    uses = ['election', 'command']
+    focus = ['member_add', 'snapshot_send']
+    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, focus)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -347,9 +344,10 @@ async def test_snapshot_4(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_snapshot_4.__doc__)
+    uses = ['election', 'command']
+    focus = ['slow_follower', 'snapshot_replicate']
+    
+    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, focus)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

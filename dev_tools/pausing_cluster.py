@@ -10,11 +10,12 @@ from dev_tools.memory_log import MemoryLog
 from dev_tools.sequences import SPartialElection, SPartialCommand
 from dev_tools.network_sim import NetManager
 from dev_tools.pausing_server import PausingServer, SimpleOps
-from dev_tools.test_trace import TestTrace, get_current_test
+from dev_tools.test_trace import TestTrace
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
-digest_org = True
-digest_csv = True
+digest_org = False
+digest_rst = True
+digest_csv = False
 part_digest_org = False
 trace_to_csv = False
 
@@ -242,6 +243,18 @@ class PausingCluster:
         self.nodes = {}
         self.node_uris = []
 
+    async def save_traces(self):
+        if digest_org:
+            self.test_trace.save_org()
+        if digest_rst:
+            self.test_trace.save_rst()
+        if part_digest_org:
+            self.test_trace.save_org(partial=True)
+        if digest_csv: 
+            self.test_trace.save_digest_csv()
+        if trace_to_csv:
+            self.test_trace.save_csv()
+
 
 @pytest.fixture
 async def cluster_maker():
@@ -254,63 +267,7 @@ async def cluster_maker():
     yield make_cluster
     if the_cluster is not None:
         await the_cluster.stop_auto_comms()
-        if trace_to_csv or digest_org or digest_csv or part_digest_org:
-            if part_digest_org and digest_org:
-                raise Exception('part_digest_org and digest_org are mutually exclusive, choose one')
-            full_name, tfile, test_name = get_current_test()
-            # convert the full name to something that doesn't look like a file path
-            x = full_name.split('::')
-            tpath = Path(x[0])
-            fstem = x[1]
-            trace_dir = Path(Path(__file__).parent.parent.resolve(), "test_data")
-            trace_dir = Path(trace_dir, tpath.stem, fstem)
-            if not trace_dir.exists():
-                trace_dir.mkdir(parents=True)
-        if trace_to_csv:
-            csvname = fstem + "_full.csv"
-            fpath = Path(trace_dir, csvname)
-            csv_lines = the_cluster.test_trace.to_csv()
-            with open(fpath, 'w') as f:
-                for line in csv_lines:
-                    outline = ','.join(line)
-                    f.write(outline + "\n")
-        if digest_org or digest_csv:
-            org_lines = the_cluster.test_trace.to_condensed_org(include_legend=True)
-        if digest_org:
-            orgname = fstem + ".org"
-            fpath = Path(trace_dir, orgname)
-            if len(org_lines) > 0:
-                with open(fpath, 'w') as f:
-                    for line in org_lines:
-                        f.write(line + "\n")
-        if part_digest_org:
-            org_lines = the_cluster.test_trace.to_condensed_org(include_legend=False)
-            orgname = fstem + ".org"
-            fpath = Path(trace_dir, orgname)
-            if len(org_lines) > 0:
-                with open(fpath, 'w') as f:
-                    for line in org_lines:
-                        f.write(line + "\n")
-        if digest_csv:
-            csv_digest_name = fstem + ".csv"
-            fpath = Path(trace_dir, csv_digest_name)
-            if len(org_lines) > 0:
-                line_count = 0
-                with open(fpath, 'w') as f:
-                    for line in org_lines:
-                        tmp = line.strip("|").split("|")
-                        # this test is pretty fuzzy might fail, but
-                        # it is hard to know how many columns there are
-                        if len(tmp) < 2:
-                            continue
-                        new_line = ",".join(tmp)
-                        f.write(new_line + "\n")
-                        line_count += 1
-                if line_count == 0:
-                    breakpoint()
-                    print(org_lines)
-
-
+        await the_cluster.save_traces()
         await the_cluster.cleanup()
 
 

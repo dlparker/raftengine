@@ -2,6 +2,12 @@ import abc
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
+@dataclass
+class SnapShot:
+    last_index:int
+    last_term:int
+    tool:Optional["SnapShotToolAPI"] = field(default=None)
+
     
 class SnapShotToolAPI(abc.ABC):
 
@@ -15,10 +21,4 @@ class SnapShotToolAPI(abc.ABC):
         
     async def apply_snapshot(self):# pragma: no cover abstract
         await self.log.install_snapshot()
-
-@dataclass
-class SnapShot:
-    last_index:int
-    last_term:int
-    tool:Optional[SnapShotToolAPI] = field(default=None)
 

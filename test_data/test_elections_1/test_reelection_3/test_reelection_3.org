@@ -126,6 +126,14 @@
 |  CNDI  | N-3+vote yes-False          |           | CNDI  |                             |           | CNDI  |                             |           |
 |  CNDI  |                             |           | CNDI  | N-3+vote yes-False          |           | CNDI  |                             |           |
 |  CNDI  |                             |           | CNDI  |                             |           | CNDI  | N-2+vote yes-False          |           |
+|  CNDI  |                             |           | CNDI  |                             |           | CNDI  | p_v_r+N-1 t-2 li-1 lt-2     |           |
+|  CNDI  | N-3+p_v_r t-2 li-1 lt-2     |           | CNDI  |                             |           | CNDI  |                             |           |
+|  CNDI  | p_v+N-3 yes-False           |           | CNDI  |                             |           | CNDI  |                             |           |
+|  CNDI  |                             |           | CNDI  |                             |           | CNDI  | N-1+p_v yes-False           |           |
+|  CNDI  |                             |           | CNDI  |                             |           | CNDI  | p_v_r+N-2 t-2 li-1 lt-2     |           |
+|  CNDI  |                             |           | CNDI  | N-3+p_v_r t-2 li-1 lt-2     |           | CNDI  |                             |           |
+|  CNDI  |                             |           | CNDI  | p_v+N-3 yes-False           |           | CNDI  |                             |           |
+|  CNDI  |                             |           | CNDI  |                             |           | CNDI  | N-2+p_v yes-False           |           |
 |  CNDI  |                             |           | CNDI  | p_v_r+N-1 t-3 li-1 lt-2     |           | CNDI  |                             |           |
 |  CNDI  | N-2+p_v_r t-3 li-1 lt-2     |           | CNDI  |                             |           | CNDI  |                             |           |
 |  CNDI  | p_v+N-2 yes-True            |           | CNDI  |                             |           | CNDI  |                             |           |

@@ -93,11 +93,15 @@
   LEAD  ,                             ,       , FLWR  , ae_reply+N-1 ok-True mi-1   ,       , FLWR  ,     , n=2   
   LEAD  , N-2+ae_reply ok-True mi-1   ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
   LEAD  , ae+N-2 t-1 i-1 lt-1 e-0 c-1 ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
-  N-1   , N-1                       , N-1   , N-2   , N-2                         , N-2   , N-3   , N-3 , N-3   
-  Role  , Op                        , Delta , Role  , Op                          , Delta , Role  , Op  , Delta 
-  LEAD  ,                           ,       , FLWR  , N-1+ae t-1 i-1 lt-1 e-0 c-1 ,       , FLWR  ,     ,       
-  LEAD  ,                           ,       , FLWR  , ae_reply+N-1 ok-True mi-1   ,       , FLWR  ,     , n=2   
-  LEAD  , N-2+ae_reply ok-True mi-1 ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
+  N-1   , N-1                         , N-1   , N-2   , N-2                         , N-2   , N-3   , N-3 , N-3   
+  Role  , Op                          , Delta , Role  , Op                          , Delta , Role  , Op  , Delta 
+  LEAD  ,                             ,       , FLWR  , N-1+ae t-1 i-1 lt-1 e-0 c-1 ,       , FLWR  ,     ,       
+  LEAD  ,                             ,       , FLWR  , ae_reply+N-1 ok-True mi-1   ,       , FLWR  ,     , n=2   
+  LEAD  , N-2+ae_reply ok-True mi-1   ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
+  LEAD  , ae+N-2 t-1 i-1 lt-1 e-0 c-1 ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
+  LEAD  ,                             ,       , FLWR  , N-1+ae t-1 i-1 lt-1 e-0 c-1 ,       , FLWR  ,     , n=2   
+  LEAD  ,                             ,       , FLWR  , ae_reply+N-1 ok-True mi-1   ,       , FLWR  ,     , n=2   
+  LEAD  , N-2+ae_reply ok-True mi-1   ,       , FLWR  ,                             ,       , FLWR  ,     , n=2   
  Column Label , Description  , Details                                                                      
  N-X Role     , Raft Role    , FLWR is Follower CNDI is Candidate LEAD is Leader                            
  N-X Op       , Activity     , Describes a traceable event at this node, see separate table below           

@@ -1,24 +1,16 @@
-%.. Raft Engine documentation master file, created by
-   sphinx-quickstart on Wed May 25 14:35:03 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-Welcome to Raft Engine's documentation!
-========================================
+=========================
+Raft Engine documentation
+=========================
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
    :caption: Contents:
 	     
+   users_guide/index
    Test Trace Details: <tests/snapshots/index.rst>
    Conformance Checklist: <conformance_checklist.rst>
-   apidocs/index
-
-Modules
-=======
-
-.. automodule:: raftengine.api
-		  
+   modules
+   
 Indices and tables
 ==================
 
