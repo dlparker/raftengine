@@ -36,9 +36,7 @@ async def test_heartbeat_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.start_subtest("Initial election with timers on, then waiting for followers to get append entry messages",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_heartbeat_1.__doc__)
+    cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages", ['timer', 'heartbeat'], [])
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -90,9 +88,7 @@ async def test_heartbeat_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.start_subtest("Initial election with timers enabled",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_heartbeat_2.__doc__)
+    cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections", ['timer', 'heartbeat'], [])
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -141,9 +137,7 @@ async def test_lost_leader_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.start_subtest("Initial election with funky timer setup",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_lost_leader_1.__doc__)
+    cluster.test_trace.define_test("Testing timers causing lost leader condition and new election", ['timer', 'election'], [])
 
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
@@ -210,9 +204,7 @@ async def test_candidate_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_candidate_timeout_1.__doc__)
+    cluster.test_trace.define_test("Testing candidate timeout and new election start", ['timer', 'election'], [])
     await cluster.start(timers_disabled=True)
     await ts_1.start_campaign()
     await cluster.run_election()

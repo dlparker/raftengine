@@ -13,7 +13,7 @@ from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
-digest_org = False
+digest_org = True
 digest_rst = True
 digest_csv = False
 part_digest_org = False
@@ -244,6 +244,7 @@ class PausingCluster:
         self.node_uris = []
 
     async def save_traces(self):
+        await self.test_trace.test_done()
         if digest_org:
             self.test_trace.save_org()
         if digest_rst:

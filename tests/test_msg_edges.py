@@ -52,9 +52,7 @@ async def test_slow_voter(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_slow_voter.__doc__)
+    cluster.test_trace.define_test("Testing slow voter scenario in election", ['message', 'election'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -140,9 +138,7 @@ async def test_message_errors(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.start_subtest("Initial election, normal, then a couple of message processing error are inserted",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_message_errors.__doc__)
+    cluster.test_trace.define_test("Testing message processing errors", ['message', 'error'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -171,4 +167,3 @@ async def test_message_errors(cluster_maker):
     await ts_1.do_next_in_msg()
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
-    

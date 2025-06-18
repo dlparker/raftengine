@@ -23,6 +23,7 @@ async def test_bogus_pilot(cluster_maker):
     not implement PilotAPI
     """
     cluster = cluster_maker(3)
+    cluster.test_trace.define_test("Testing Hull constructor with invalid Pilot", [], [])
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
     uri_1 = cluster.node_uris[0]

@@ -21,9 +21,12 @@ logger = logging.getLogger("test_code")
 
         
 async def test_event_handlers(cluster_maker):
-    
+    """
+    Test the event handling system and the various defined events.
+    """
     cluster = cluster_maker(3)
     cluster.set_configs()
+    cluster.test_trace.define_test("Testing event handlers during election and command processing", ['event'], [])
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -170,9 +173,7 @@ async def test_message_errors(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.start_subtest("Initial election, normal, then a couple of message processing error are inserted",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_message_errors.__doc__)
+    cluster.test_trace.define_test("Testing event handling for message processing errors", ['event', 'error'], [])
 
     error_counter = 0
     class ErrorHandler(EventHandler):
@@ -218,6 +219,3 @@ async def test_message_errors(cluster_maker):
     assert error_counter == 2
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
-    
-    
-    

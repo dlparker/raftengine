@@ -56,9 +56,7 @@ async def test_command_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_command_1.__doc__)
+    cluster.test_trace.define_test("Testing basic command processing with detailed control", ['command'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -182,9 +180,7 @@ async def test_command_sqlite_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_command_sqlite_1.__doc__)
+    cluster.test_trace.define_test("Testing command operations with SQLite log", ['command'], [])
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -266,9 +262,7 @@ async def double_leader_inner(cluster, discard):
     #ts_1.operations.dump_state = True
     #ts_2.operations.dump_state = True
     #ts_3.operations.dump_state = True
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=double_leader_inner.__doc__)
+    cluster.test_trace.define_test("Testing command processing with dual leaders", ['command', 'election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -379,9 +373,7 @@ async def test_command_2_leaders_3(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_command_2_leaders_3.__doc__)
+    cluster.test_trace.define_test("Testing command redirect after leader partition", ['command', 'election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -450,9 +442,12 @@ async def test_command_after_heal_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
-    docstring = test_command_after_heal_1.__doc__
-    await inner_command_after_heal(cluster_maker, True, test_path_str, docstring)
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing command processing after network heal with pre-vote",
+                                   ['command', 'election'], [])
+    await inner_command_after_heal(cluster, False)
     
 async def test_command_after_heal_2(cluster_maker):
     """
@@ -465,23 +460,19 @@ async def test_command_after_heal_2(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
-    docstring = test_command_after_heal_2.__doc__
-    await inner_command_after_heal(cluster_maker, False, test_path_str, docstring)
-    
-async def inner_command_after_heal(cluster_maker, use_pre_vote, test_path_string, docstring):
-
-
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
+    config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing command processing after network heal without pre-vote",
+                                   ['command', 'election'], [])
+    await inner_command_after_heal(cluster, False)
+    
+async def inner_command_after_heal(cluster, use_pre_vote):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=test_path_string, test_doc_string=docstring)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -556,9 +547,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_follower_explodes_in_command.__doc__)
+    cluster.test_trace.define_test("Testing follower error during command execution", ['command'], [])
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -622,9 +611,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal, running one command in normal fashion after election",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_leader_explodes_in_command.__doc__)
+    cluster.test_trace.define_test("Testing leader error during command execution", ['command'], [])
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -681,9 +668,7 @@ async def test_long_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal, run one command, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_long_catchup.__doc__)
+    cluster.test_trace.define_test("Testing long catchup after network partition", ['command'], ['slow_follower'])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -772,9 +757,7 @@ async def test_full_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_full_catchup.__doc__)
+    cluster.test_trace.define_test("Testing full catchup after follower crash", ['command'], ['slow_follower'])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -830,9 +813,7 @@ async def test_follower_run_error(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_follower_run_error.__doc__)
+    cluster.test_trace.define_test("Testing follower error reporting during command execution", ['command'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -904,9 +885,7 @@ async def test_follower_rewrite_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_follower_rewrite_1.__doc__)
+    cluster.test_trace.define_test("Testing follower log rewrite after leader change", ['command', 'election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -988,5 +967,3 @@ async def test_follower_rewrite_1(cluster_maker):
     assert new_rec_3.command != orig_rec_2.command
     assert new_rec_3.command != orig_rec_3.command
     assert ts_1.operations.total == ts_2.operations.total
-
-

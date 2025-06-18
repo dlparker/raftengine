@@ -48,9 +48,7 @@ async def test_stepwise_election_1(cluster_maker):
     await ts_3.change_cluster_config(cfg)
 
 
-    cluster.test_trace.start_subtest("Starting election at node 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_stepwise_election_1.__doc__)
+    cluster.test_trace.define_test("Testing stepwise election control with 3 nodes", ['election'], [])
     # using node 3 to make sure I don't have some sort of unintentional dependence on using node 1
     await cluster.start()
     await ts_3.start_campaign()
@@ -140,9 +138,7 @@ async def test_run_to_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.start_subtest("Initial election, using fill sequence control",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_run_to_election_1.__doc__)
+    cluster.test_trace.define_test("Testing election with sequence control and triggers", ['election'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -217,9 +213,7 @@ async def test_election_timeout_1(cluster_maker):
     ncc = await ts_3.change_cluster_config(cfg)
     assert ncc.settings.election_timeout_max == 0.011
     
-    cluster.test_trace.start_subtest("Initial election with timers manipulated to ensure node 3 will win",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_election_timeout_1.__doc__)
+    cluster.test_trace.define_test("Testing election with manipulated timeouts", ['election'], [])
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -343,9 +337,7 @@ async def test_election_vote_once_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_election_vote_once_1.__doc__)
+    cluster.test_trace.define_test("Testing single vote per term in election", ['election'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -443,9 +435,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_election_candidate_too_slow_1.__doc__)
+    cluster.test_trace.define_test("Testing election with candidate term conflict", ['election'], [])
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -530,9 +520,11 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
-    docstring = test_election_candidate_log_too_old_1.__doc__
-    await inner_candidate_log_too_old(cluster_maker, False, test_path_str, docstring)
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing election with outdated candidate log (no pre-vote)", ['election'], [])
+    await inner_candidate_log_too_old(cluster, False)
     
 async def test_election_candidate_log_too_old_2(cluster_maker):
     """
@@ -547,23 +539,17 @@ async def test_election_candidate_log_too_old_2(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str = str('/'.join(Path(__file__).parts[-2:]))
-    docstring = test_election_candidate_log_too_old_2.__doc__
-    await inner_candidate_log_too_old(cluster_maker, True, test_path_str, docstring)
-
-async def inner_candidate_log_too_old(cluster_maker, use_pre_vote, test_path_string, docstring):
-    
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
+    config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing election with outdated candidate log (with pre-vote)", ['election'], [])
+    await inner_candidate_log_too_old(cluster, True)
 
+async def inner_candidate_log_too_old(cluster, use_pre_vote):
+    
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
         
-
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=test_path_string, test_doc_string=docstring)
-
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -631,9 +617,7 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_election_candidate_term_too_old_1.__doc__)
+    cluster.test_trace.define_test("Testing election with outdated candidate term", ['election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -677,9 +661,11 @@ async def test_failed_first_election_1(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-    docstring = test_failed_first_election_1.__doc__
-    await inner_failed_first_election(cluster_maker, False, test_path_str, docstring)
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing election failure due to crashed leader (without pre-vote)", ['election'], [])
+    await inner_failed_first_election(cluster, False)
 
 async def test_failed_first_election_2(cluster_maker):
     """
@@ -692,21 +678,16 @@ async def test_failed_first_election_2(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-    docstring = test_failed_first_election_1.__doc__
-    await inner_failed_first_election(cluster_maker, False, test_path_str, docstring)
-    
-async def inner_failed_first_election(cluster_maker, use_pre_vote, test_path_string, docstring):
-
     cluster = cluster_maker(3)
-    config = cluster.build_cluster_config(use_pre_vote=use_pre_vote)
+    config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
+    cluster.test_trace.define_test("Testing election failure due to crashed leader (with pre-vote)", ['election'], [])
+    await inner_failed_first_election(cluster, True)
+    
+async def inner_failed_first_election(cluster, use_pre_vote):
+
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-        
-    cluster.test_trace.start_subtest("Starting election that should fail",
-                                     test_path_str=test_path_string, test_doc_string=docstring)
-
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -741,6 +722,7 @@ async def inner_failed_first_election(cluster_maker, use_pre_vote, test_path_str
     logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
     logger.debug("ts_1 term %d", await ts_1.log.get_term())
     logger.debug("ts_2 term %d", await ts_1.log.get_term())
+    cluster.test_trace.start_subtest("Candidate requested votes")
 
     # let just these messages go
     ts_3.set_trigger(WhenAllMessagesForwarded())
@@ -805,7 +787,7 @@ async def inner_failed_first_election(cluster_maker, use_pre_vote, test_path_str
     assert await ts_3.log.get_last_term() > 1
     
     logger.info("-------- Old leader has new first log rec, test passed ------")
-
+    
 async def test_power_transfer_1(cluster_maker):
     """
     Tests to check function of transfer of power.
@@ -825,9 +807,7 @@ async def test_power_transfer_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_power_transfer_1.__doc__)
+    cluster.test_trace.define_test("Testing power transfer in election", ['election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -875,9 +855,7 @@ async def test_power_transfer_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_power_transfer_2.__doc__)
+    cluster.test_trace.define_test("Testing power transfer with outdated target node", ['election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -946,9 +924,7 @@ async def test_power_transfer_fails_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.start_subtest("Initial election, normal",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_power_transfer_fails_1.__doc__)
+    cluster.test_trace.define_test("Testing power transfer failure due to timeout", ['election'], [])
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)

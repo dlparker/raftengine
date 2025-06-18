@@ -54,9 +54,7 @@ async def test_empty_log_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.start_subtest("Initial election, normal but not using timers",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_empty_log_1.__doc__)
+    cluster.test_trace.define_test("Testing leader recovery with empty log", ['log', 'recovery'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -128,9 +126,7 @@ async def test_empty_log_2(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.start_subtest("Initial election, normal with timers disabled",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_empty_log_2.__doc__)
+    cluster.test_trace.define_test("Testing follower recovery with empty log", ['log', 'recovery'], [])
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -155,4 +151,3 @@ async def test_empty_log_2(cluster_maker):
     assert await ts_2.log.get_last_index() == 1
     await cluster.stop_auto_comms()
     logger.debug('------------------------ Follower caught up ---')
-

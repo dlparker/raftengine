@@ -126,6 +126,12 @@ class TestTrace:
             ns.save_event = None
         self.trace_lines.append(tl)
 
+    async def test_done(self):
+        if self.test_rec:
+            cw = self.test_rec.last_wrap()
+            if cw and cw.end_pos is None:
+                cw.end_pos=len(self.trace_lines)-1
+        
     async def add_node(self, node):
         ns = self.node_states[node.uri] = await self.create_node_state(node)
 
@@ -178,31 +184,9 @@ class TestTrace:
         self.test_rec.wraps[start_pos] = nw
 
     def end_subtest(self):
-        breakpoint()
         cw = self.test_rec.last_wrap()
         cw.end_pos = len(self.trace_lines)
-        self.test_rec.end_pos = cs.end_pos
-        
-    def old_start_subtest(self, description, test_path_str=None, test_doc_string=None):
-        if warn_no_docstring and test_path_str:
-            if test_doc_string is None or test_doc_string.strip() == "":
-                print(f'\n\n{"-"*100}\n\n')
-                print(f'Test {test_path_str} has no docstring')
-                print(f'\n\n{"-"*100}\n\n')
-        old_st = self.current_wrap
-        if old_st and old_st.end_pos is None:
-            old_st.end_pos=len(self.trace_lines)-1,
-        st = TableWrap(start_pos=len(self.trace_lines),
-                          description=description,
-                          test_path=test_path_str,
-                          test_doc_string=test_doc_string)
-        self.current_wrap = st
-        self.table_wraps[st.start_pos] = st
-
-    def old_end_subtest(self):
-        cw = self.current_wrap
-        cw.end_pos = len(self.trace_lines)
-        self.current_wrap = None
+        self.test_rec.end_pos = cw.end_pos
 
     async def save_trace_line(self):
         # We write a new trace line for any change to any node, and each
@@ -477,41 +461,12 @@ class TestTrace:
             csv_lines.append(cols)
         return csv_lines
 
-    def old_wrap_table(self, start_pos):
-        if start_pos not in self.table_wraps:
-            # we don't have instructions from the test code, so we just
-            # make it up
-            try:
-                full_name, tfile, test_name = get_current_test()
-            except Exception:
-                test_name = "not in test, name unknown"
-            wrap =  TableWrap(start_pos=start_pos,
-                               description=test_name)
-        else:
-            wrap = self.table_wraps[start_pos]
-
-        wrap.lines = []
-        wrap.lines.append(wrap)
-        pos = start_pos + 1
-        while pos < len(self.trace_lines):
-            wrap.lines.append(self.trace_lines[pos])
-            if pos == wrap.end_pos:
-                return wrap
-            if pos in self.table_wraps:
-                # this pos is the start of another table
-                # nobody called end for this table
-                wrap.end_pos = pos - 1
-                return wrap
-            pos += 1
-        wrap.end_pos = pos - 1
-        return wrap
-
     def wrap_table(self, start_pos):
         wrap = None
-        for pos, test_rec in self.test_recs.items():
+        for pos, test_wrap in self.test_rec.wraps.items():
             if pos <= start_pos:
-                if start_pos in test_recs.wraps:
-                    wrap = test_rec.wraps[start_pos]
+                if start_pos in self.test_rec.wraps:
+                    wrap = self.test_rec.wraps[start_pos]
                     break
         if wrap is None:
             raise Exception(f'start position {start_pos} not found in test_recs')
@@ -534,6 +489,8 @@ class TestTrace:
     def to_condensed_tables(self, include_index=False):
         tables = []
         table = self.wrap_table(0)
+        if table.end_pos is None:
+            breakpoint()
         table.count_nodes(self.trace_lines)
         tables.append(table)
         while table.end_pos + 1 < len(self.trace_lines):
@@ -932,7 +889,12 @@ class TraceCondenser:
         table.count_nodes(self.trace.trace_lines)
         tables.append(table)
         while table.end_pos + 1 < len(self.trace.trace_lines):
-            table = test_rec.wraps[table.end_pos + 1]
+            try:
+                table = test_rec.wraps[table.end_pos + 1]
+            except KeyError:
+                nw = TableWrap(description="generated", start_pos=table.end_pos + 1)
+                nw.end_pos = len(self.trace.trace_lines)
+                test_rec.wraps[table.end_pos + 1] = table = nw
             table.count_nodes(self.trace.trace_lines)
             tables.append(table)
             if table.end_pos is None:
@@ -1119,25 +1081,4 @@ class TraceCondenser:
                 rows.append(cols)
         test_rec.condensed_tables = tables
 
-    def wrap_table(self, start_pos):
-        wrap = None
-        test_rec = self.trace.test_rec
-        if start_pos not in test_rec.wraps:
-            raise Exception(f'start position {start_pos} not found in test_rec')
-        wrap = test_rec.wraps[start_pos]
-        wrap.lines = []
-        wrap.lines.append(wrap)
-        pos = start_pos + 1
-        while pos < len(self.trace.trace_lines):
-            wrap.lines.append(self.trace.trace_lines[pos])
-            if pos == wrap.end_pos:
-                return wrap
-            if pos in test_rec.wraps:
-                # this pos is the start of another table
-                # nobody called end for this table
-                wrap.end_pos = pos - 1
-                return wrap
-            pos += 1
-        wrap.end_pos = pos - 1
-        return wrap
 

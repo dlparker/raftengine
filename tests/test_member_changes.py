@@ -55,6 +55,8 @@ async def test_member_change_messages(cluster_maker):
     """
     Test some basic features of the messages classes used to coordinate membership changes.
     """
+    cluster = cluster_maker(1)
+    cluster.test_trace.define_test("Testing membership change message operations", ['membership'], [])
     m1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', ChangeOp.add, target_uri="mcpy://4")
     r1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', ChangeOp.add, target_uri="mcpy://4", ok=True)
     
@@ -77,6 +79,8 @@ async def test_cluster_config_ops(cluster_maker):
     Tests the cluster configuration operations and their database operations used to track
     the progress of membership change operations. No message or timer operations are involved.
     """
+    cluster = cluster_maker(1)
+    cluster.test_trace.define_test("Testing cluster configuration operations for membership changes", ['membership'], [])
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -145,9 +149,7 @@ async def test_remove_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_follower_1.__doc__)
+    cluster.test_trace.define_test("Testing removal of a follower from the cluster", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -203,9 +205,7 @@ async def test_remove_leader_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_leader_1.__doc__)
+    cluster.test_trace.define_test("Testing removal of the leader from the cluster", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -241,9 +241,7 @@ async def test_add_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_1.__doc__)
+    cluster.test_trace.define_test("Testing addition of a follower with a short log", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -283,9 +281,7 @@ async def test_add_follower_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_2.__doc__)
+    cluster.test_trace.define_test("Testing addition of a follower with a long log", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -370,9 +366,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_2_rounds_1.__doc__)
+    cluster.test_trace.define_test("Testing addition of a follower with multiple log catch-up rounds", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -483,9 +477,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_3_rounds_1.__doc__)
+    cluster.test_trace.define_test("Testing addition of a follower with three log catch-up rounds", ['membership'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -615,9 +607,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_too_many_rounds_1.__doc__)
+    cluster.test_trace.define_test("Testing abort of follower addition due to too many log catch-up rounds", ['membership', 'error'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -802,9 +792,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_round_2_timeout_1.__doc__)
+    cluster.test_trace.define_test("Testing timeout during second round of follower log loading", ['membership', 'timeout'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -968,9 +956,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_reverse_add_follower_1.__doc__)
+    cluster.test_trace.define_test("Testing reversal of follower addition due to leader crash", ['membership', 'error'], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1176,9 +1162,7 @@ async def test_reverse_remove_follower_1(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_reverse_remove_follower_1.__doc__)
+    cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with timeout", ['membership', 'error', 'timeout'], [])
 
     done_by_callback = None
     done_by_event = None
@@ -1225,9 +1209,7 @@ async def test_reverse_remove_follower_2(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_reverse_remove_follower_2.__doc__)
+    cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with stop before timeout", ['membership', 'error'], [])
 
     done_by_callback = None
     done_by_event = None
@@ -1286,9 +1268,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
     cluster = cluster_maker(5)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_reverse_remove_follower_3.__doc__)
+    cluster.test_trace.define_test("Testing reversal of follower removal due to network partition and election", ['membership', 'error'], [])
 
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -1376,9 +1356,7 @@ async def test_add_follower_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_timeout_1.__doc__)
+    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1424,9 +1402,8 @@ async def test_add_follower_errors_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_add_follower_errors_1.__doc__)
+    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
+                                  
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1469,9 +1446,7 @@ async def test_remove_candidate_1(cluster_maker):
 
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_remove_candidate_1.__doc__)
+    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1508,9 +1483,7 @@ async def test_update_settings(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.start_subtest("Starting election at node 1 of 3",
-                                     test_path_str=str('/'.join(Path(__file__).parts[-2:])),
-                                     test_doc_string=test_update_settings.__doc__)
+    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1544,4 +1517,3 @@ async def test_update_settings(cluster_maker):
 
     assert (await ts_2.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
     assert (await ts_3.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
-    

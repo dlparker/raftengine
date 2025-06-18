@@ -35,6 +35,9 @@ logger = logging.getLogger("test_code")
 # it won't be gathered, then remove it when I am sure there is no
 # more need for it.
 async def test_dict_ops():
+    """
+    Tests dictionary operations for snapshot functionality without Raft operations.
+    """
     class FakeServer:
 
         def __init__(self, index, logc):
@@ -99,6 +102,7 @@ async def test_snapshot_1(cluster_maker):
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs(use_ops=DictTotalsOps)
+    cluster.test_trace.define_test("Testing snapshot mechanisms in dev_tools", ['snapshot'], [])
 
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -150,8 +154,7 @@ async def test_snapshot_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    uses = ['election', 'command']
-    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, [])
+    cluster.test_trace.define_test("Testing simplest snapshot process at a follower", ['snapshot', 'election', 'command'], [])
     
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -237,9 +240,7 @@ async def test_snapshot_3(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    uses = ['election', 'command']
-    focus = ['member_add', 'snapshot_send']
-    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, focus)
+    cluster.test_trace.define_test("Testing snapshot process when leader is told to snapshot", ['snapshot', 'election', 'command'], ['member_add', 'snapshot_send'])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -344,10 +345,7 @@ async def test_snapshot_4(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    uses = ['election', 'command']
-    focus = ['slow_follower', 'snapshot_replicate']
-    
-    cluster.test_trace.define_test("Starting election at node 1 of 3", uses, focus)
+    cluster.test_trace.define_test("Testing snapshot installation on a slow follower", ['snapshot', 'election', 'command'], ['slow_follower', 'snapshot_replicate'])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
