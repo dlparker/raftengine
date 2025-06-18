@@ -48,11 +48,12 @@ class TestFeatures:
         self.used = []
         self.focused = []
         global features_loaded
+        global features_obj
         if not features_loaded:
-            features = RaftFeatures()
-            self.features = features
-            RaftUseDefs(features)
+            features_obj = RaftFeatures()
+            RaftUseDefs(features_obj)
             features_loaded = True
+        self.features = features_obj
         
     def add_used(self, short):
         self.used.append(short)
