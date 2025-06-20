@@ -7,7 +7,7 @@ Raft Engine documentation
    :caption: Contents:
 	     
    users_guide/index
-   Test Trace Details: <tests/snapshots/index.rst>
+   Test Trace Details: <tests/index.rst>
    Conformance Checklist: <conformance_checklist.rst>
    modules
    

@@ -351,7 +351,7 @@ async def test_pre_election_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
 
-    cluster.test_trace.define_test("Testing election with pre-vote enabled", ['election'], [])
+    cluster.test_trace.define_test("Testing election with pre-vote enabled", [], ['election'])
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

@@ -36,6 +36,7 @@ extensions = [
     'sphinx_debuginfo',
 ]
 plantuml = 'java -jar /home/dparker/bin/plantuml-lgpl-1.2025.2.jar'
+#plantuml_output_format = 'svg_img'
 #plantuml = 'java -jar /home/dparker/bin/plantuml-1.2025.2.jar'
 intersphinx_mapping = {
     "rtd": ("https://docs.readthedocs.io/en/stable/", None),

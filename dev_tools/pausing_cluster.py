@@ -18,6 +18,7 @@ digest_rst = True
 digest_csv = False
 part_digest_org = False
 trace_to_csv = False
+trace_to_json = True
 
 class PausingCluster:
 
@@ -249,12 +250,15 @@ class PausingCluster:
             self.test_trace.save_org()
         if digest_rst:
             self.test_trace.save_rst()
+            self.test_trace.save_plantuml()
         if part_digest_org:
             self.test_trace.save_org(partial=True)
         if digest_csv: 
             self.test_trace.save_digest_csv()
         if trace_to_csv:
             self.test_trace.save_csv()
+        if trace_to_json:
+            self.test_trace.save_json()
 
 
 @pytest.fixture

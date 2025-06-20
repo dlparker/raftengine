@@ -1,5 +1,6 @@
 import os
 import inspect
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -366,6 +367,7 @@ class TestTrace:
                 all_rows.append(lline)
         return all_rows
 
+
     def to_csv(self):
         cols = []
         cols.append('event')
@@ -687,7 +689,14 @@ class TestTrace:
         if not trace_dir.exists():
             trace_dir.mkdir(parents=True)
         return trace_dir, test_name
-    
+
+    def save_json(self):
+        data = json.dumps(self.trace_lines, default=lambda o:o.__dict__, indent=4)
+        trace_dir, test_name = self.save_preamble("json")
+        trace_path = Path(trace_dir, test_name + ".json")
+        with open(trace_path, 'w') as f:
+            f.write(data)
+
     def save_org(self, partial=False):
         if len(self.trace_lines) == 0 or self.test_rec is None:
             return
@@ -746,6 +755,163 @@ class TestTrace:
             with open(trace_path, 'w') as f:
                 for line in rst_lines:
                     f.write(line + "\n")
+
+    def save_plantuml(self):
+        """
+        Generate a PlantUML sequence diagram and RST thesis mapping from raw trace_lines.
+        Saves to captures/test_traces/plantuml/<test_file>/<test_name>.puml 
+        """
+        if len(self.trace_lines) == 0 or self.test_rec is None:
+            return
+
+        trace_dir, test_name = self.save_preamble("plantuml")
+        trace_path = Path(trace_dir, f"{test_name}.puml")
+        rst_path = Path(trace_dir.parent, "rst", f"{test_name}_thesis.rst")
+
+        # Generate PlantUML
+        puml_lines = self._generate_plantuml()
+        if puml_lines:
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(trace_path, 'w') as f:
+                f.write("\n".join(puml_lines))
+
+    def _generate_plantuml(self) -> list:
+        """
+        Generate PlantUML sequence diagram lines from trace_lines.
+        """
+        puml = [
+            "@startuml",
+            "!pragma ratio 0.7",
+            "skinparam dpi 150",
+            "skinparam monochrome false",
+            "skinparam sequence {",
+            "  ArrowColor Black",
+            "  ActorBorderColor Black",
+            "  LifeLineBorderColor Black",
+            "  ParticipantFontSize 12",
+            "  Padding 10",
+            "}",
+            "skinparam legend {",
+            "  BackgroundColor #F5F5F5",
+            "  FontSize 11",
+            "}",
+            f'title PreVote Election Sequence ({self.test_rec.test_name})',
+            ""
+        ]
+
+        # Track unique nodes
+        nodes = set()
+        for line in self.trace_lines:
+            for ns in line:
+                nodes.add(ns.uri)
+        nodes = sorted(nodes)  # e.g., ['mcpy://1', 'mcpy://2', 'mcpy://3']
+        for i, uri in enumerate(nodes, 1):
+            puml.append(f'participant "Node {i} (N-{i})" as n{i} order {i*10} #Lightgreen')
+
+        # Track phases and states
+        current_phase = None
+        role_changes = {uri: "FOLLOWER" for uri in nodes}
+        state = {uri: {"t": 0, "li": 0, "lt": 0, "ci": 0} for uri in nodes}
+        phase_map = {
+            "Testing election with pre-vote enabled": "PreVote Phase",
+            "Node 1 is now leader": "Voting Phase",
+            "Node 1 should get success replies": "TERM_START Propagation"
+        }
+
+        # Process events
+        for line_idx, line in enumerate(self.trace_lines):
+            # Determine phase from test_rec.wraps
+            phase = None
+            for pos, wrap in self.test_rec.wraps.items():
+                if wrap.start_pos <= line_idx <= (wrap.end_pos or float('inf')):
+                    phase = phase_map.get(wrap.description, wrap.description)
+                    break
+            if phase and phase != current_phase:
+                puml.append("")
+                puml.append(f"== {phase} ==")
+                current_phase = phase
+
+            # Process node states
+            for ns in line:
+                node_id = ns.uri.split("/")[-1]
+                node_alias = f"n{node_id}"
+
+                # Role change
+                if ns.save_event == SaveEvent.role_changed and ns.role_name != role_changes[ns.uri]:
+                    puml.append(f'{node_alias} -> {node_alias}: NEW ROLE ({ns.role_name})')
+                    puml.append(f'note left of {node_alias}: Role: {role_changes[ns.uri]} → {ns.role_name}')
+                    role_changes[ns.uri] = ns.role_name
+
+                # Message operation
+                if ns.save_event == SaveEvent.message_op and ns.message_action in ("sent", "handled_in"):
+                    msg = ns.message
+                    sender_id = msg.sender.split("/")[-1]
+                    receiver_id = msg.receiver.split("/")[-1]
+                    sender_alias = f"n{sender_id}"
+                    receiver_alias = f"n{receiver_id}"
+
+                    if msg.code == "pre_vote":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: p_v_r t-{msg.term} li-{msg.prevLogIndex} lt-{msg.prevLogTerm}')
+                    elif msg.code == "pre_vote_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: p_v yes-{msg.vote}')
+                    elif msg.code == "request_vote":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: poll t-{msg.term} li-{msg.prevLogIndex} lt-{msg.prevLogTerm}')
+                    elif msg.code == "request_vote_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: vote yes-{msg.vote}')
+                    elif msg.code == "append_entries":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: ae t-{msg.term} i-{msg.prevLogIndex} lt-{msg.prevLogTerm} e-{len(msg.entries)} c-{msg.commitIndex}')
+                    elif msg.code == "append_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: ae_reply ok-{msg.success} mi-{msg.maxIndex}')
+                    elif msg.code == "membership_change":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: m_c op-{msg.op} n-{msg.target_uri.split("/")[-1]}')
+                    elif msg.code == "membership_change_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: m_cr ok-{msg.ok}')
+                    elif msg.code == "transfer_power":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: t_p i-{msg.prevLogIndex}')
+                    elif msg.code == "transfer_power_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: t_pr ok-{msg.success}')
+                    elif msg.code == "snapshot":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: sn i-{msg.prevLogIndex}')
+                    elif msg.code == "snapshot_response":
+                        puml.append(f'{sender_alias} -> {receiver_alias}: snr s-{msg.success}')
+
+                # State changes
+                if ns.log_rec and ns.log_rec.index != state[ns.uri]["li"]:
+                    state[ns.uri]["li"] = ns.log_rec.index
+                    state[ns.uri]["lt"] = ns.log_rec.term
+                    puml.append(f'note {"left" if node_id == "1" else "right"} of {node_alias}: Last Index: li-{state[ns.uri]["li"]}; Last Term: lt-{state[ns.uri]["lt"]}')
+                if ns.commit_index != state[ns.uri]["ci"]:
+                    state[ns.uri]["ci"] = ns.commit_index
+                    puml.append(f'note {"left" if node_id == "1" else "right"} of {node_alias}: Commit Index: ci-{state[ns.uri]["ci"]}')
+                if ns.term != state[ns.uri]["t"]:
+                    state[ns.uri]["t"] = ns.term
+                    puml.append(f'note {"left" if node_id == "1" else "right"} of {node_alias}: Term: t-{state[ns.uri]["t"]}')
+
+        puml.extend([
+            "",
+            "legend right",
+            '  <#GhostWhite,#GhostWhite>|      |= __Legend__ |',
+            '  |<#Lightgreen>| Raft Engine Node |',
+            '  |FLWR| Follower Role |',
+            '  |CNDI| Candidate Role |',
+            '  |LEAD| Leader Role |',
+            '  |p_v_r| PreVote Request |',
+            '  |p_v| PreVote Response |',
+            '  |poll| Request Vote |',
+            '  |vote| Vote Response |',
+            '  |ae| Append Entries (TERM_START) |',
+            '  |ae_reply| Append Entries Response |',
+            '  |m_c| Membership Change |',
+            '  |m_cr| Membership Change Response |',
+            '  |t_p| Transfer Power |',
+            '  |t_pr| Transfer Power Response |',
+            '  |sn| Snapshot |',
+            '  |snr| Snapshot Response |',
+            "endlegend",
+            "@enduml"
+        ])
+        return puml
+
 
 class OrgFormatter:
 

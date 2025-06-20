@@ -1,0 +1,67 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title PreVote Election Sequence (test_pre_election_1)
+
+participant "Node 1 (N-1)" as n1 order 10 #Lightgreen
+participant "Node 2 (N-2)" as n2 order 20 #Lightgreen
+participant "Node 3 (N-3)" as n3 order 30 #Lightgreen
+
+== Initialization ==
+note left of n1: All nodes start as FLWR
+n1 -> n1: STARTED
+n2 -> n2: STARTED
+n3 -> n3: STARTED
+
+== PreVote Phase ==
+n1 -> n1: NEW ROLE (CNDI)
+note left of n1: Role: FLWR → CNDI
+n1 -> n2: p_v_r t-1 li-0 lt-0
+n1 -> n3: p_v_r t-1 li-0 lt-0
+n2 -> n1: p_v yes-True
+n3 -> n1: p_v yes-True
+note left of n1: PreVote granted (t-1)
+
+== Voting Phase ==
+n1 -> n2: poll t-1 li-0 lt-1
+n1 -> n3: poll t-1 li-0 lt-1
+n2 -> n1: vote yes-True
+n3 -> n1: vote yes-True
+n1 -> n1: NEW ROLE (LEAD)
+note left of n1: Role: CNDI → LEAD\nTerm: t-1\nLast Index: li-1\nLast Term: lt-1
+
+== TERM_START Log Propagation ==
+n1 -> n2: ae t-1 i-0 lt-0 e-1 c-0
+n1 -> n3: ae t-1 i-0 lt-0 e-1 c-0
+n2 -> n1: ae_reply ok-True mi-1
+n3 -> n1: ae_reply ok-True mi-1
+note left of n1: Commit Index: ci-1
+note right of n2: Last Index: li-1\nLast Term: lt-1
+note right of n3: Last Index: li-1\nLast Term: lt-1
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Engine Node |
+  |FLWR| Follower Role |
+  |CNDI| Candidate Role |
+  |LEAD| Leader Role |
+  |p_v_r| PreVote Request |
+  |p_v| PreVote Response |
+  |poll| Request Vote |
+  |vote| Vote Response |
+  |ae| Append Entries (TERM_START) |
+  |ae_reply| Append Entries Response |
+endlegend
+@enduml

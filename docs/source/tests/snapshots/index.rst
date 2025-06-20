@@ -11,7 +11,7 @@ This section documents tests from ``tests/test_snapshots.py``, focusing on Raftâ
    * - Test
      - Description
    * - :ref:`test_snapshot_2`
-     - [Docstring: e.g., Tests snapshot recovery after partition].
+     - Validates snapshot installation for a lagging follower.
    * - :ref:`test_snapshot_3`
      - Tests snapshot installation for a new node added to the cluster.
    * - :ref:`test_snapshot_4`
@@ -21,4 +21,6 @@ This section documents tests from ``tests/test_snapshots.py``, focusing on Raftâ
 .. toctree::
    :maxdepth: 1
 
+   test_snapshot_2
+   test_snapshot_3
    test_snapshot_4
