@@ -928,7 +928,7 @@ class OrgFormatter:
         all_rows.append("")
         all_rows.append(self.test_rec.test_doc_string)
         all_rows.append("")
-        if len(self.test_rec.used_raft) > 0 or len(self.test_rec.focused_raft) > 0:
+        if False and len(self.test_rec.used_raft) > 0 or len(self.test_rec.focused_raft) > 0:
             tf = TestFeatures(self.test_rec.test_name)
             for used in self.test_rec.used_raft:
                 tf.add_used(used)
@@ -936,6 +936,29 @@ class OrgFormatter:
                 tf.add_focused(focused)
             for row in tf.org_format():
                 all_rows.append(row)
+        features_map_path =  Path(Path(__file__).parent, "feature_docs",
+                                  f"{self.test_rec.test_path}",
+                                  f"{self.test_rec.test_name}_features.json")
+        if features_map_path.exists():
+            with open(features_map_path) as f:
+                buff = f.read()
+            fmap = json.loads(buff)
+            def do_map(dirname):
+                dirpath = Path(Path(__file__).parent, "feature_docs", dirname)
+                mb_path = Path(dirpath, 'main_body.org')
+                with open(mb_path) as f:
+                    buff = f.read()
+                for row in buff.split('\n'):
+                    all_rows.append(row)
+
+            done = []
+            for dirname in fmap['focused']:
+                do_map(dirname)
+                done.append(dirname)
+            for dirname in fmap['uses']:
+                if dirname not in done:
+                    do_map(dirname)
+                
         if include_legend:
             all_rows.append("")
             all_rows.append(" *[[condensed Trace Table Legend][Table legend]] located after last table in file*")
