@@ -102,7 +102,6 @@ class PausingCluster:
         del self.nodes[node_uri]
 
     async def start(self, only_these=None, timers_disabled=True):
-        await self.test_trace.start()
         for uri, node in self.nodes.items():
             await node.start()
             if timers_disabled:

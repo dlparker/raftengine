@@ -36,7 +36,7 @@ async def test_heartbeat_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages", ['timer', 'heartbeat'], [])
+    await cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -88,7 +88,7 @@ async def test_heartbeat_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections", ['timer', 'heartbeat'], [])
+    await cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -98,7 +98,7 @@ async def test_heartbeat_2(cluster_maker):
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
-    cluster.test_trace.start_subtest(f"Node 3 is leader, starting auto comms and waiting for {election_timeout_max * 2}")
+    await cluster.test_trace.start_subtest(f"Node 3 is leader, starting auto comms and waiting for {election_timeout_max * 2}")
     await cluster.start_auto_comms()
     # make sure running for a time exceeding the timeout does not
     # cause a leader lost situation
@@ -137,7 +137,7 @@ async def test_lost_leader_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing timers causing lost leader condition and new election", ['timer', 'election'], [])
+    await cluster.test_trace.define_test("Testing timers causing lost leader condition and new election")
 
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
@@ -149,7 +149,7 @@ async def test_lost_leader_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
     await ts_3.do_demote_and_handle(None)
 
-    cluster.test_trace.start_subtest("Node 3 is leader, waiting for someone to timeout and start an election")
+    await cluster.test_trace.start_subtest("Node 3 is leader, waiting for someone to timeout and start an election")
     # Test that election starts in appoximately the leader_lost timeout
     start_time = time.time()
     fraction = election_timeout_max/10.0
@@ -204,7 +204,7 @@ async def test_candidate_timeout_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing candidate timeout and new election start", ['timer', 'election'], [])
+    await cluster.test_trace.define_test("Testing candidate timeout and new election start")
     await cluster.start(timers_disabled=True)
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -216,13 +216,13 @@ async def test_candidate_timeout_1(cluster_maker):
     # Now arrange another election and make sure that the candidate
     # experiences a timeout, no votes in required time. It should
     # incr the term and retry so we can monitor by term value
-    cluster.test_trace.start_subtest("Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower")
+    await cluster.test_trace.start_subtest("Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower")
     orig_term = await ts_2.log.get_term()
     ts_1.block_network()
     # we don't want ts_3 to vote yes, so block it too
     ts_3.block_network()
     await ts_1.do_demote_and_handle(None)
-    cluster.test_trace.start_subtest("Starting auto comms, enabling timers at node 2 and it to start election")
+    await cluster.test_trace.start_subtest("Starting auto comms, enabling timers at node 2 and it to start election")
     await cluster.start_auto_comms()
     await ts_2.enable_timers()
     start_time = time.time()
@@ -232,7 +232,7 @@ async def test_candidate_timeout_1(cluster_maker):
         await asyncio.sleep(fraction)
     term_now = await ts_2.log.get_term()
     assert term_now != orig_term
-    cluster.test_trace.start_subtest("Node 2 started election, waiting for it to timeout")
+    await cluster.test_trace.start_subtest("Node 2 started election, waiting for it to timeout")
     if term_now == orig_term + 1:
         # not done yet, just running as candidate for first time,
         start_time = time.time()
@@ -242,7 +242,7 @@ async def test_candidate_timeout_1(cluster_maker):
     final_term = await ts_2.log.get_term()
     assert final_term == orig_term + 2
 
-    cluster.test_trace.start_subtest("Node 2 election timeout detected, enabling other nodes to let election finish")
+    await cluster.test_trace.start_subtest("Node 2 election timeout detected, enabling other nodes to let election finish")
     ts_1.unblock_network()
     ts_3.unblock_network()
     # now make sure it can win

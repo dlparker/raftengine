@@ -48,7 +48,7 @@ async def test_stepwise_election_1(cluster_maker):
     await ts_3.change_cluster_config(cfg)
 
 
-    cluster.test_trace.define_test("Testing stepwise election control with 3 nodes", ['election'], [])
+    await cluster.test_trace.define_test("Testing stepwise election control with 3 nodes", logger=logger)
     # using node 3 to make sure I don't have some sort of unintentional dependence on using node 1
     await cluster.start()
     await ts_3.start_campaign()
@@ -105,7 +105,7 @@ async def test_stepwise_election_1(cluster_maker):
     ts_3.set_trigger(WhenAllInMessagesHandled())
     await ts_3.run_till_triggers()
     ts_3.clear_triggers()
-    cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record")
+    await cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record")
     # Let all the messages fly until delivered
     await cluster.deliver_all_pending()
     assert ts_3.get_role_name() == "LEADER"
@@ -138,7 +138,7 @@ async def test_run_to_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.define_test("Testing election with sequence control and triggers", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with sequence control and triggers", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -149,7 +149,7 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion pause test completed starting reelection")
-    cluster.test_trace.start_subtest("Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete")
+    await cluster.test_trace.start_subtest("Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -171,7 +171,7 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
-    cluster.test_trace.start_subtest("Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat")
+    await cluster.test_trace.start_subtest("Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat")
 
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -213,7 +213,7 @@ async def test_election_timeout_1(cluster_maker):
     ncc = await ts_3.change_cluster_config(cfg)
     assert ncc.settings.election_timeout_max == 0.011
     
-    cluster.test_trace.define_test("Testing election with manipulated timeouts", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with manipulated timeouts", logger=logger)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -230,7 +230,7 @@ async def test_election_timeout_1(cluster_maker):
                 f2 = ts
 
     logger.info("\n\n-------- Initial election completion, starting reelection\n\n")
-    cluster.test_trace.start_subtest(f"{leader.uri} is leader know demoting it, timer values equal, poking node other node to start election ")
+    await cluster.test_trace.start_subtest(f"{leader.uri} is leader know demoting it, timer values equal, poking node other node to start election ")
     # now have leader resign, by telling it to become follower
     await leader.do_demote_and_handle(None)
     assert leader.get_role_name() == "FOLLOWER"
@@ -277,7 +277,7 @@ async def test_election_timeout_1(cluster_maker):
                 f2 = ts
     logger.info("-------- Re-election timeout test done")
 
-    cluster.test_trace.start_subtest("Node {leader.uri} is leader, testing election timeout interaction with stop flag")
+    await cluster.test_trace.start_subtest("Node {leader.uri} is leader, testing election timeout interaction with stop flag")
 
     # Do the same sequence, only this time set the stopped flag on the
     # candidate to make sure the election timeout does not start another
@@ -337,7 +337,7 @@ async def test_election_vote_once_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.define_test("Testing single vote per term in election", ['election'], [])
+    await cluster.test_trace.define_test("Testing single vote per term in election", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -348,7 +348,7 @@ async def test_election_vote_once_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
-    cluster.test_trace.start_subtest("Node 3 is leader, forcing it to resign, making it and node 2 start election")
+    await cluster.test_trace.start_subtest("Node 3 is leader, forcing it to resign, making it and node 2 start election")
 
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
@@ -358,7 +358,7 @@ async def test_election_vote_once_1(cluster_maker):
     await ts_2.do_leader_lost()
     await ts_3.do_leader_lost()
 
-    cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 2 only, and reply with a yes vote")
+    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 2 only, and reply with a yes vote")
     # now let the remainging follower see only the vote request from 
     # one candidate, so let one of them send their two messages
     msg1 = await ts_2.do_next_out_msg()
@@ -372,7 +372,7 @@ async def test_election_vote_once_1(cluster_maker):
     assert vote_yes_msg.vote == True
     await ts_2.do_next_in_msg()
 
-    cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 3, which should get a no response")
+    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 3, which should get a no response")
     # now let the other candidate send requests
     msg3 = await ts_3.do_next_out_msg()
     msg4 = await ts_3.do_next_out_msg()
@@ -387,7 +387,7 @@ async def test_election_vote_once_1(cluster_maker):
 
     # now it should just finish, everybody should know what to do
 
-    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    await cluster.test_trace.start_subtest("Allowing full election run to complete")
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -435,7 +435,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.define_test("Testing election with candidate term conflict", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with candidate term conflict", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -447,7 +447,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
-    cluster.test_trace.start_subtest("Node 3 is leader, pushing it and node 2 to start elections, but holding messages")
+    await cluster.test_trace.start_subtest("Node 3 is leader, pushing it and node 2 to start elections, but holding messages")
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -459,7 +459,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     await ts_3.log.set_term(term + 1)
     await ts_3.do_leader_lost()
 
-    cluster.test_trace.start_subtest("Delivering request votes from node 2 and allowing node 1 to send yes, but holding it in node 2's queue")
+    await cluster.test_trace.start_subtest("Delivering request votes from node 2 and allowing node 1 to send yes, but holding it in node 2's queue")
     # Let the low term one send vote request first,
     # then before it receives any replies let the second
     # one send requests.
@@ -476,7 +476,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     logger.debug("-------- First candidate is now has yes vote pending ---")
     # save the pending yes vote and let the other candidate's votes in
     # instead
-    cluster.test_trace.start_subtest("Removing node 1's yes vote from queue and allowing node 3 (term 2) to sent request vote messages")
+    await cluster.test_trace.start_subtest("Removing node 1's yes vote from queue and allowing node 3 (term 2) to sent request vote messages")
     saved_vote = ts_2.in_messages.pop(0)
     # now let the second candidate requests in to the first one.
     # which should accept the new candidate because of the higher
@@ -490,7 +490,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.get_role_name() == "FOLLOWER"
     logger.debug("-------- First candidate has accepted second candidate and resigned ")
 
-    cluster.test_trace.start_subtest("Node 2 has resigned, replacing node 1's yes vote in queue and allowing election to proceed to completion")
+    await cluster.test_trace.start_subtest("Node 2 has resigned, replacing node 1's yes vote in queue and allowing election to proceed to completion")
     
     # Push the out of date vote back on to what used
     # to be the old candidate, just for completeness.
@@ -523,7 +523,7 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing election with outdated candidate log (no pre-vote)", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with outdated candidate log (no pre-vote)", logger=logger)
     await inner_candidate_log_too_old(cluster, False)
     
 async def test_election_candidate_log_too_old_2(cluster_maker):
@@ -542,7 +542,7 @@ async def test_election_candidate_log_too_old_2(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing election with outdated candidate log (with pre-vote)", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with outdated candidate log (with pre-vote)", logger=logger)
     await inner_candidate_log_too_old(cluster, True)
 
 async def inner_candidate_log_too_old(cluster, use_pre_vote):
@@ -560,7 +560,7 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
 
     logger.info("-------- Initial election completion, crashing follower and running command ")
 
-    cluster.test_trace.start_subtest("Election done, Node 1 is leader, crashing node 3 and then running a command")
+    await cluster.test_trace.start_subtest("Election done, Node 1 is leader, crashing node 3 and then running a command")
     await ts_3.simulate_crash()
 
     # now advance the commit index
@@ -570,7 +570,7 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
     # once we arrange the election the right way
     logger.info("-------- Command complete,  starting messed up re-election")
     # demote leader to follower
-    cluster.test_trace.start_subtest("Forcing leader to resign, restarting crashed node and forcing it into election")
+    await cluster.test_trace.start_subtest("Forcing leader to resign, restarting crashed node and forcing it into election")
     await ts_1.do_demote_and_handle(None)
     # restart the crashed server, which now has out of date log
     await ts_3.recover_from_crash()
@@ -617,7 +617,7 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing election with outdated candidate term", ['election'], [])
+    await cluster.test_trace.define_test("Testing election with outdated candidate term", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -628,7 +628,7 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
 
     logger.info("-------- Initial election completion, crashing follower and running command ")
 
-    cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election")
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election")
     await ts_1.simulate_crash()
 
     await ts_3.start_campaign(authorized=True)
@@ -636,7 +636,7 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     # demote leader to follower
     assert ts_3.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_3
-    cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term")
+    await cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term")
     await ts_1.recover_from_crash()
     assert await ts_1.get_term() < await ts_3.get_term()
     await ts_1.start_campaign(authorized=True)
@@ -664,7 +664,7 @@ async def test_failed_first_election_1(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing election failure due to crashed leader (without pre-vote)", ['election'], [])
+    await cluster.test_trace.define_test("Testing election failure due to crashed leader (without pre-vote)", logger=logger)
     await inner_failed_first_election(cluster, False)
 
 async def test_failed_first_election_2(cluster_maker):
@@ -681,7 +681,7 @@ async def test_failed_first_election_2(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing election failure due to crashed leader (with pre-vote)", ['election'], [])
+    await cluster.test_trace.define_test("Testing election failure due to crashed leader (with pre-vote)", logger=logger)
     await inner_failed_first_election(cluster, True)
     
 async def inner_failed_first_election(cluster, use_pre_vote):
@@ -722,7 +722,7 @@ async def inner_failed_first_election(cluster, use_pre_vote):
     logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
     logger.debug("ts_1 term %d", await ts_1.log.get_term())
     logger.debug("ts_2 term %d", await ts_1.log.get_term())
-    cluster.test_trace.start_subtest("Candidate requested votes")
+    await cluster.test_trace.start_subtest("Candidate requested votes")
 
     # let just these messages go
     ts_3.set_trigger(WhenAllMessagesForwarded())
@@ -807,7 +807,7 @@ async def test_power_transfer_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.define_test("Testing power transfer in election", ['election'], [])
+    await cluster.test_trace.define_test("Testing power transfer in election", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -818,7 +818,7 @@ async def test_power_transfer_1(cluster_maker):
 
     logger.info("-------- Initial election completion, doing power transfer")
 
-    cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election")
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election")
 
     await ts_1.transfer_power(ts_2.uri)
     await asyncio.sleep(0.0001)
@@ -826,7 +826,7 @@ async def test_power_transfer_1(cluster_maker):
     await asyncio.sleep(0.0001)
     await cluster.deliver_all_pending()
     assert ts_2.get_role_name() != "FOLLOWER"
-    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    await cluster.test_trace.start_subtest("Allowing full election run to complete")
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -855,7 +855,7 @@ async def test_power_transfer_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.define_test("Testing power transfer with outdated target node", ['election'], [])
+    await cluster.test_trace.define_test("Testing power transfer with outdated target node", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -877,7 +877,7 @@ async def test_power_transfer_2(cluster_maker):
     for i in range(0, 3):
         command_result = await ts_1.run_command("add 1")
 
-    cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer")
+    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer")
 
     logger.info("-------- Buncho commands run, doing recover and transfer")
     await ts_2.recover_from_crash()
@@ -886,7 +886,7 @@ async def test_power_transfer_2(cluster_maker):
     while time.time() - start_time < 1.0 and ts_2.get_role_name() == "FOLLOWER":
         await asyncio.sleep(0.0001)
     assert ts_2.get_role_name() != "FOLLOWER"
-    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    await cluster.test_trace.start_subtest("Allowing full election run to complete")
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -924,7 +924,7 @@ async def test_power_transfer_fails_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
 
-    cluster.test_trace.define_test("Testing power transfer failure due to timeout", ['election'], [])
+    await cluster.test_trace.define_test("Testing power transfer failure due to timeout", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -941,7 +941,7 @@ async def test_power_transfer_fails_1(cluster_maker):
         command_result = await ts_1.run_command("add 1")
     await cluster.stop_auto_comms()
 
-    cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and blocking it and trying doing power transfer")
+    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and blocking it and trying doing power transfer")
 
     logger.info("-------- Buncho commands run, doing recover")
     await ts_2.recover_from_crash()
@@ -956,7 +956,7 @@ async def test_power_transfer_fails_1(cluster_maker):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.0001)
     assert ts_1.hull.role.accepting_commands
-    cluster.test_trace.start_subtest("Allowing full election run to complete")
+    await cluster.test_trace.start_subtest("Allowing full election run to complete")
 
     ts_2.unblock_network()
     await cluster.start_auto_comms()

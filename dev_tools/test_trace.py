@@ -68,12 +68,14 @@ class TestRec:
 class TableWrap:
     start_pos: int
     description: str
+    is_prep: Optional[bool] = False
     test_path: Optional[str] = None
     test_doc_string: Optional[str] = None
     end_pos: Optional[int] = None
     lines: Optional[list] = None
     condensed: Optional[list] = None
     max_nodes: Optional[int] = None
+    features: Optional[list] = field(default_factory=list)
 
     def count_nodes(self, lines):
         max_nodes = 0
@@ -118,6 +120,7 @@ class TestTrace:
         self.table_wraps = {}
         self.test_rec = None
         self.current_wrap = None
+        self.test_logger = None
 
     async def start(self):
         tl = []
@@ -162,7 +165,7 @@ class TestTrace:
         ns.voted_for  = await node.log.get_voted_for()
         return ns
 
-    def define_test(self, description, used_raft, focused_raft):
+    async def define_test(self, description, logger=None, used_raft=None, focused_raft=None):
         if len(self.trace_lines) > 0:
             raise Exception('must call define_test before starting traced activitities')
         full_name, test_file, test_name = get_current_test()
@@ -170,24 +173,65 @@ class TestTrace:
         func = get_function_from_frame(frame)
         doc_string = func.__doc__
         start_pos = 0
+        if used_raft is None:
+            used_raft = []
+        if focused_raft is None:
+            focused_raft = []
         self.test_rec = TestRec(test_name=test_name, test_path=test_file, description=description,
                                    test_doc_string=doc_string, used_raft=used_raft, focused_raft=focused_raft,
                                    start_pos=start_pos)
-        nw = TableWrap(description=description, start_pos=start_pos)
+        nw = TableWrap(description=description, start_pos=start_pos, is_prep=True)
         self.test_rec.wraps[start_pos] = nw
+        self.test_logger = logger
+        if self.test_logger:
+            self.test_logger.info("Starting test %s:%s::%s", test_file, test_name, description)
+        await self.start()
 
-    def start_subtest(self, description):
+    async def start_test_prep(self, description, features=None):
+        await self.start_subtest(description, features=features, is_prep=True)
+        
+    async def start_subtest(self, description, features=None, is_prep=False):
         cw = self.test_rec.last_wrap()
+        if len(self.trace_lines) == 1:
+            # We have a special case, when there is a wrap because we made one
+            # in "define_test", but the only event in it is the 'node started' event.
+            # In that case we want to just continue with the wrap, but rename it
+            cw.description = description
+            cw.is_prep = is_prep
+            cw.features = features
+            if self.test_logger:
+                if is_prep:
+                    self.test_logger.info("Preparing test conditions by %s", description)
+                else:
+                    self.test_logger.info("Starting subtest %s", description)
+            return
         if cw and cw.end_pos is None:
-            cw.end_pos=len(self.trace_lines)-1
+            await self.end_subtest()
         start_pos = len(self.trace_lines)
-        nw = TableWrap(start_pos=start_pos, description=description)
-        self.test_rec.wraps[start_pos] = nw
+        if features is None:
+            features = {'used': [], 'tested': []}
 
-    def end_subtest(self):
+        nw = TableWrap(start_pos=start_pos, description=description, is_prep=is_prep, features=features)
+        self.test_rec.wraps[start_pos] = nw
+        if self.test_logger:
+            if is_prep:
+                self.test_logger.info("Ppreparing test conditions by %s", description)
+            else:
+                self.test_logger.info("Starting subtest %s", description)
+
+    async def end_subtest(self):
+        # Sometimes this gets called on a single, empty wrap because
+        # one was created by define test, but a new wrap was created
+        # before any events were logged.
+        #
         cw = self.test_rec.last_wrap()
-        cw.end_pos = len(self.trace_lines)
+        cw.end_pos = len(self.trace_lines) - 1
         self.test_rec.end_pos = cw.end_pos
+        if self.test_logger:
+            if cw.is_prep:
+                self.test_logger.info("Done with test prep %s", cw.description)
+            else:
+                self.test_logger.info("Done with subtest %s", cw.description)
 
     async def save_trace_line(self):
         # We write a new trace line for any change to any node, and each
@@ -195,6 +239,7 @@ class TestTrace:
         # This is not efficient, but it cannot result in confusion about
         # order
         tl = []
+        save_event = None
         for uri,node in self.cluster.nodes.items():
             # nodes can get added after startup
             if uri not in self.node_states:
@@ -205,7 +250,11 @@ class TestTrace:
             ns = self.node_states[uri]
             ns = await self.update_node_state(node, ns)
             tl.append(deepcopy(ns))
+            if ns.save_event and save_event is None:
+                save_event = ns.save_event
         self.trace_lines.append(tl)
+        if self.test_logger and False:
+            self.test_logger.info("event %s", save_event)
 
     async def note_role_changed(self, node):
         ns = self.node_states[node.uri]
@@ -928,36 +977,6 @@ class OrgFormatter:
         all_rows.append("")
         all_rows.append(self.test_rec.test_doc_string)
         all_rows.append("")
-        if False and len(self.test_rec.used_raft) > 0 or len(self.test_rec.focused_raft) > 0:
-            tf = TestFeatures(self.test_rec.test_name)
-            for used in self.test_rec.used_raft:
-                tf.add_used(used)
-            for focused in self.test_rec.focused_raft:
-                tf.add_focused(focused)
-            for row in tf.org_format():
-                all_rows.append(row)
-        features_map_path =  Path(Path(__file__).parent, "feature_docs",
-                                  f"{self.test_rec.test_path}",
-                                  f"{self.test_rec.test_name}_features.json")
-        if features_map_path.exists():
-            with open(features_map_path) as f:
-                buff = f.read()
-            fmap = json.loads(buff)
-            def do_map(dirname):
-                dirpath = Path(Path(__file__).parent, "feature_docs", dirname)
-                mb_path = Path(dirpath, 'main_body.org')
-                with open(mb_path) as f:
-                    buff = f.read()
-                for row in buff.split('\n'):
-                    all_rows.append(row)
-
-            done = []
-            for dirname in fmap['focused']:
-                do_map(dirname)
-                done.append(dirname)
-            for dirname in fmap['uses']:
-                if dirname not in done:
-                    do_map(dirname)
                 
         if include_legend:
             all_rows.append("")
@@ -1015,14 +1034,6 @@ class RstFormatter:
         all_rows.append("")
         all_rows.append(self.test_rec.test_doc_string)
         all_rows.append("")
-        if len(self.test_rec.used_raft) > 0 or len(self.test_rec.focused_raft) > 0:
-            tf = TestFeatures(self.test_rec.test_name)
-            for used in self.test_rec.used_raft:
-                tf.add_used(used)
-            for focused in self.test_rec.focused_raft:
-                tf.add_focused(focused)
-            for row in tf.rst_format():
-                all_rows.append(row)
         if include_legend:
             all_rows.append("")
             all_rows.append("- See :ref:`Trace Table Legend` for help interpreting table contents")
@@ -1037,10 +1048,19 @@ class RstFormatter:
                 for col_index, col in enumerate(row):
                     this_width =  len(str(col))
                     col_widths[col_index] = max(col_widths[col_index], this_width)
-            
+
             all_rows.append(f"{table.description}".rstrip('\n'))
             all_rows.append("_"*len(table.description))
             all_rows.append("")
+            if table.features:
+                for feature in table.features['used']:
+                    all_rows.append(f"Raft feature used: {feature.name}")
+                    all_rows.append(f"           branch: {feature.target_branch}")
+                for feature in table.features['tested']:
+                    all_rows.append(f"Raft feature tested: {feature.name}")
+                    all_rows.append(f"           branch: {feature.target_branch}")
+                all_rows.append("")
+                all_rows.append("")
             trows = []
             liner = "+-"
             for cindex, cwidth in enumerate(col_widths):

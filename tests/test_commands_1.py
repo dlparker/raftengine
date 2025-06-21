@@ -5,8 +5,7 @@ import pytest
 import time
 import traceback
 from pathlib import Path
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.api.log_api import LogRec
 from dev_tools.memory_log import MemoryLog
 
@@ -56,7 +55,7 @@ async def test_command_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    cluster.test_trace.define_test("Testing basic command processing with detailed control", ['command'], [])
+    await cluster.test_trace.define_test("Testing basic command processing with detailed control", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -68,7 +67,7 @@ async def test_command_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit")
+    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit")
     command_result = await ts_3.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
@@ -77,7 +76,7 @@ async def test_command_1(cluster_maker):
     # followers will see the commitIndex is higher
     # and apply and locally commit
     await cluster.stop_auto_comms()
-    cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat")
+    await cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat")
     await ts_3.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.log.get_term()
@@ -101,12 +100,12 @@ async def test_command_1(cluster_maker):
     logger.debug('------------------------ Correct command done')
 
     await cluster.stop_auto_comms()
-    cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect")
+    await cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect")
     command_result = await ts_1.run_command("add 1")
     assert command_result.redirect == uri_3
     logger.debug('------------------------ Correct redirect (follower) done')
     
-    cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
+    await cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
     orig_term =  await ts_1.get_term() 
     await ts_1.do_leader_lost()
     assert ts_1.get_role_name() == "CANDIDATE"
@@ -114,7 +113,7 @@ async def test_command_1(cluster_maker):
     assert command_result.retry is not None
     logger.debug('------------------------ Correct retry (candidate) done')
     # get the leader to send it a heartbeat while it is a candidate
-    cluster.test_trace.start_subtest("Pushing Leader to send heartbeats, after forcing candidate's term back down")
+    await cluster.test_trace.start_subtest("Pushing Leader to send heartbeats, after forcing candidate's term back down")
     # cleanup traces of attempt to start election
     logger.debug('------------------------ forcing candidate term down')
     ts_1.clear_all_msgs()
@@ -131,7 +130,7 @@ async def test_command_1(cluster_maker):
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
-    cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower")
+    await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower")
     await ts_1.simulate_crash()
     logger.debug('------------------------ Running command ---')
     sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
@@ -147,7 +146,7 @@ async def test_command_1(cluster_maker):
     await cluster.deliver_all_pending()
     await ts_3.send_heartbeats()
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up")
+    await cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up")
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     await ts_1.recover_from_crash()
     await ts_3.send_heartbeats()
@@ -161,7 +160,6 @@ async def test_command_1(cluster_maker):
     await cluster.deliver_all_pending()
     logger.debug('------------------------ Tardy follower caught up ---')
     cluster.test_trace.end_subtest()
-    cluster.test_trace.to_condensed_org()
 
 async def test_command_sqlite_1(cluster_maker):
     """
@@ -180,7 +178,7 @@ async def test_command_sqlite_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
-    cluster.test_trace.define_test("Testing command operations with SQLite log", ['command'], [])
+    await cluster.test_trace.define_test("Testing command operations with SQLite log", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -262,7 +260,7 @@ async def double_leader_inner(cluster, discard):
     #ts_1.operations.dump_state = True
     #ts_2.operations.dump_state = True
     #ts_3.operations.dump_state = True
-    cluster.test_trace.define_test("Testing command processing with dual leaders", ['command', 'election'], [])
+    await cluster.test_trace.define_test("Testing command processing with dual leaders", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -345,7 +343,6 @@ async def test_command_2_leaders_2(cluster_maker):
     cluster = cluster_maker(3)
     await double_leader_inner(cluster, False)    
 
-
 async def test_command_2_leaders_3(cluster_maker):
     """
 
@@ -373,7 +370,7 @@ async def test_command_2_leaders_3(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     
-    cluster.test_trace.define_test("Testing command redirect after leader partition", ['command', 'election'], [])
+    await cluster.test_trace.define_test("Testing command redirect after leader partition", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -445,8 +442,8 @@ async def test_command_after_heal_1(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing command processing after network heal with pre-vote",
-                                   ['command', 'election'], [])
+    await cluster.test_trace.define_test("Testing command processing after network heal with pre-vote")
+    await cluster.start()
     await inner_command_after_heal(cluster, False)
     
 async def test_command_after_heal_2(cluster_maker):
@@ -463,8 +460,8 @@ async def test_command_after_heal_2(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing command processing after network heal without pre-vote",
-                                   ['command', 'election'], [])
+    await cluster.start()
+    await cluster.test_trace.define_test("Testing command processing after network heal without pre-vote")
     await inner_command_after_heal(cluster, False)
     
 async def inner_command_after_heal(cluster, use_pre_vote):
@@ -473,7 +470,6 @@ async def inner_command_after_heal(cluster, use_pre_vote):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
     
@@ -547,7 +543,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing follower error during command execution", ['command'], [])
+    await cluster.test_trace.define_test("Testing follower error during command execution")
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -562,7 +558,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
-    cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command")
+    await cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command")
 
     # The node 3 follower will blow up trying to apply command, so
     # we use the test control sequence that allows us to specify
@@ -579,7 +575,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 1
 
-    cluster.test_trace.start_subtest("Second command succeed, but not at node3. Disarming bomb and sending hearbeats, should cause run and commit")
+    await cluster.test_trace.start_subtest("Second command succeed, but not at node3. Disarming bomb and sending hearbeats, should cause run and commit")
     # clear the trigger and run heartbeats, node 3 should rerun command and succeed
     ts_3.operations.explode = False
     await ts_1.send_heartbeats()
@@ -611,7 +607,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing leader error during command execution", ['command'], [])
+    await cluster.test_trace.define_test("Testing leader error during command execution")
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -636,7 +632,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert command_result is not None
     assert command_result.error is not None
     
-    cluster.test_trace.start_subtest("Leader node 1 returned an error from command request, clearing trigger and sending heartbeats to retry")
+    await cluster.test_trace.start_subtest("Leader node 1 returned an error from command request, clearing trigger and sending heartbeats to retry")
     ts_1.operations.explode = False
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -644,7 +640,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     while time.time() - start_time < 0.1 and ts_1.operations.total < 2:
         await asyncio.sleep(0.0001)
     assert ts_1.operations.total == 2
-    cluster.test_trace.start_subtest("Leader node 1 retry succeeded, now need another heartbeat to trigger followers to apply and commit")
+    await cluster.test_trace.start_subtest("Leader node 1 retry succeeded, now need another heartbeat to trigger followers to apply and commit")
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_2.operations.total == 2
@@ -668,7 +664,7 @@ async def test_long_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing long catchup after network partition", ['command'], ['slow_follower'])
+    await cluster.test_trace.define_test("Testing long catchup after network partition")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -691,7 +687,7 @@ async def test_long_catchup(cluster_maker):
 
     cfg = ts_1.cluster_init_config
     loop_limit = cfg.max_entries_per_message * 2 + 2
-    cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
     
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
@@ -730,7 +726,7 @@ async def test_long_catchup(cluster_maker):
             logger.setLevel(old_value)
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
-    cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up")
+    await cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up")
     #await cluster.deliver_all_pending()
     await cluster.unsplit()
     logger.info('---------!!!!!!! starting comms')
@@ -757,7 +753,7 @@ async def test_full_catchup(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing full catchup after follower crash", ['command'], ['slow_follower'])
+    await cluster.test_trace.define_test("Testing full catchup after follower crash")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -771,7 +767,7 @@ async def test_full_catchup(cluster_maker):
     # follower and make sure that
     # the catchup process gets them all the messages
 
-    cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3, then running two commands")
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3, then running two commands")
     logger.info('---------!!!!!!! stopping comms')
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, starting command loop', uri_3)
@@ -785,7 +781,7 @@ async def test_full_catchup(cluster_maker):
     logger.debug('------------------------ Correct command 2 done')
 
 
-    cluster.test_trace.start_subtest("Recovering node 3, then sending heartbeat which should result in catchup")
+    await cluster.test_trace.start_subtest("Recovering node 3, then sending heartbeat which should result in catchup")
     await ts_3.recover_from_crash(save_log=False, save_ops=False)
     logger.info('------------------ restarting follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     assert ts_3.operations.total != ts_1.operations.total
@@ -813,7 +809,7 @@ async def test_follower_run_error(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing follower error reporting during command execution", ['command'], [])
+    await cluster.test_trace.define_test("Testing follower error reporting during command execution")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -831,7 +827,7 @@ async def test_follower_run_error(cluster_maker):
     # should go through without problem.
 
     logger.info('---------!!!!!!! spliting network ')
-    cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3  and running a command")
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3  and running a command")
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, running', uri_3)
     
@@ -841,7 +837,7 @@ async def test_follower_run_error(cluster_maker):
     logger.debug('------------------------ Correct command 1 done')
 
     logger.info('------------------ restarted follower %s to hit error running command', uri_3)
-    cluster.test_trace.start_subtest("Setting return error trigger on node 3, recovering it, and running heartbeats")
+    await cluster.test_trace.start_subtest("Setting return error trigger on node 3, recovering it, and running heartbeats")
     ts_3.operations.return_error = True
     await ts_3.recover_from_crash()
     logger.info('---------!!!!!!! starting comms')
@@ -885,7 +881,7 @@ async def test_follower_rewrite_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
 
-    cluster.test_trace.define_test("Testing follower log rewrite after leader change", ['command', 'election'], [])
+    await cluster.test_trace.define_test("Testing follower log rewrite after leader change")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -951,7 +947,7 @@ async def test_follower_rewrite_1(cluster_maker):
     orig_rec_2 = await ts_1.log.read(first_relevant_index) # the first record is start term record
     orig_rec_3 = await ts_1.log.read(first_relevant_index + 1)
     logger.debug('------------------------ Unblocking ex-leader, should overwrite logs ---')
-    cluster.test_trace.start_subtest("Reconnecting old leader as follower, now it should have log records that have to be purged, sending heartbeats")
+    await cluster.test_trace.start_subtest("Reconnecting old leader as follower, now it should have log records that have to be purged, sending heartbeats")
     ts_1.unblock_network() # discards missed messages
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()

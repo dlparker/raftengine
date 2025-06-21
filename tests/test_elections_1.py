@@ -43,9 +43,10 @@ async def test_election_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    cluster.test_trace.define_test("Testing basic election happy path with 3 nodes", ['election'], [])
+    await cluster.test_trace.define_test("Testing basic election happy path with 3 nodes")
     await cluster.start()
 
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     # tell first one to start election, should send request vote messages to other two
     await ts_1.start_campaign()
     await cluster.deliver_all_pending(out_only=True)
@@ -69,7 +70,7 @@ async def test_election_1(cluster_maker):
     await ts_1.do_next_in_msg()
     assert ts_1.get_role_name() == "LEADER"
 
-    cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
+    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
 
     # leader should send append_entries to everyone else in cluster,
     # check for delivery pending
@@ -80,7 +81,7 @@ async def test_election_1(cluster_maker):
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     
-    cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
+    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
     # now deliver those, we should get two replies at first one,
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()
@@ -108,7 +109,7 @@ async def test_election_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing basic election with 5 nodes", ['election'], [])
+    await cluster.test_trace.define_test("Testing basic election with 5 nodes")
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
@@ -117,7 +118,7 @@ async def test_election_2(cluster_maker):
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "LEADER"
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     # append entries, then responses
     await cluster.deliver_all_pending()
     assert ts_2.get_leader_uri() == uri_1
@@ -140,7 +141,7 @@ async def test_reelection_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing hard-triggered reelection with 3 nodes", ['election'], [])
+    await cluster.test_trace.define_test("Testing hard-triggered reelection with 3 nodes")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -154,7 +155,7 @@ async def test_reelection_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
-    cluster.test_trace.start_subtest("Node 1 is leader, demoting it and triggering leader_lost at node 2")
+    await cluster.test_trace.start_subtest("Node 1 is leader, demoting it and triggering leader_lost at node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
     assert ts_1.get_role_name() == "FOLLOWER"
@@ -179,7 +180,7 @@ async def test_reelection_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing hard-triggered reelection with 5 nodes", ['election'], [])
+    await cluster.test_trace.define_test("Testing hard-triggered reelection with 5 nodes")
     await cluster.start()
     
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -196,7 +197,7 @@ async def test_reelection_2(cluster_maker):
     assert ts_4.get_leader_uri() == uri_1
     assert ts_5.get_leader_uri() == uri_1
 
-    cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
+    await cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
     logger.debug("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
@@ -271,7 +272,7 @@ async def test_reelection_3(cluster_maker):
     await ts_3.change_cluster_config(cfg)
 
 
-    cluster.test_trace.define_test("Testing reelection with split votes and timeouts", ['election'], [])
+    await cluster.test_trace.define_test("Testing reelection with split votes and timeouts")
     await cluster.start(timers_disabled=False)
     # give ts_3 time to timeout and start campaign
     start_time = time.time()
@@ -287,7 +288,7 @@ async def test_reelection_3(cluster_maker):
     assert leader == ts_3
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
-    cluster.test_trace.start_subtest("Election complete, node 3 won as expected, setting up re-election to have node 2 win")
+    await cluster.test_trace.start_subtest("Election complete, node 3 won as expected, setting up re-election to have node 2 win")
 
     logger.warning('setting up re-election')
     # tell leader to resign and manually trigger elections on all the
@@ -351,7 +352,7 @@ async def test_pre_election_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
 
-    cluster.test_trace.define_test("Testing election with pre-vote enabled", [], ['election'])
+    await cluster.test_trace.define_test("Testing election with pre-vote enabled")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -399,7 +400,7 @@ async def test_pre_election_1(cluster_maker):
     await ts_1.do_next_in_msg()
     assert ts_1.get_role_name() == "LEADER"
 
-    cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
+    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
 
     # leader should send append_entries to everyone else in cluster,
     # check for delivery pending
@@ -410,7 +411,7 @@ async def test_pre_election_1(cluster_maker):
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     
-    cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
+    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
     # now deliver those, we should get two replies at first one,
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()
@@ -436,7 +437,7 @@ async def test_pre_vote_reject_1(cluster_maker):
     cluster = cluster_maker(3)
     cluster.set_configs()
 
-    cluster.test_trace.define_test("Testing pre-vote rejection after normal election", ['election'], [])
+    await cluster.test_trace.define_test("Testing pre-vote rejection after normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -453,7 +454,7 @@ async def test_pre_vote_reject_1(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
 
 
-    cluster.test_trace.start_subtest("Node 3 starting campaign, should get no votes only")
+    await cluster.test_trace.start_subtest("Node 3 starting campaign, should get no votes only")
     await ts_3.start_campaign()
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_1.in_messages) == 1

@@ -1,7 +1,61 @@
+from dataclasses import dataclass, field
 from collections import defaultdict
+from typing import Optional
+from copy import deepcopy
+import logging
 features_loaded = False
 features_obj = None
 
+
+registry = None
+
+@dataclass
+class FeatureDefinition:
+    name: str
+    target_branch: Optional[str] = None
+    branches: Optional[dict['FeatureBranch']] = field(default_factory=dict)
+    
+@dataclass
+class FeatureBranch:
+    feature: FeatureDefinition
+    path: str
+    parent: Optional['FeatureBranch'] = None
+    children: Optional[dict['FeatureBranch']] = field(default_factory=dict)
+
+class FeatureRegistry:
+    def __init__(self):
+        self.features = dict()
+        self.logger = logging.getLogger("FeatureRegistry")
+
+    def get_raft_feature(self, name, branch_path=None):
+        feat = self.features.get(name, None)
+        if not feat:
+            feat = FeatureDefinition(name=name)
+            self.features[name] = feat
+            self.logger.debug("created feature definition for %s", name)
+        # We want to return a tuned feature definition, one that only has the requested branch elements.
+        if branch_path is not None:
+            cur_path = []
+            for branch_name in branch_path.split('.'):
+                cur_path.append(branch_name)
+                cur_id = ".".join(cur_path)
+                if cur_id not in feat.branches:
+                    parent = None
+                    if len(cur_path) > 1:
+                        par_id = ".".join(cur_path[:-1])
+                        parent = feat.branches[par_id]
+                    fb = FeatureBranch(feat, cur_id,  parent)
+                    feat.branches[cur_id] = fb
+                    self.logger.debug("created feature branch definition for %s->%s", name, cur_id)
+        f_copy = deepcopy(feat)
+        f_copy.target_branch = branch_path
+        return f_copy
+
+if not registry:    
+    registry = FeatureRegistry()
+
+
+    
 class FeatureDesc:
 
     def __init__(self, short, medium=None, full=None, links=None):
