@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 from raftengine.api.log_api import LogRec
-from dev_tools.features import TestFeatures
 
 warn_no_docstring = True
 
@@ -52,8 +51,6 @@ class TestRec:
     test_doc_string: str
     start_pos: int
     end_pos: Optional[int] = field(default=None)
-    used_raft: list[str] = field(default_factory=list)
-    focused_raft: list[str] = field(default_factory=list)
     wraps: dict[int, 'TableWrap'] = field(default_factory=dict)
     condensed_tables: list = field(default=None)
     
@@ -165,7 +162,7 @@ class TestTrace:
         ns.voted_for  = await node.log.get_voted_for()
         return ns
 
-    async def define_test(self, description, logger=None, used_raft=None, focused_raft=None):
+    async def define_test(self, description, logger=None):
         if len(self.trace_lines) > 0:
             raise Exception('must call define_test before starting traced activitities')
         full_name, test_file, test_name = get_current_test()
@@ -173,13 +170,8 @@ class TestTrace:
         func = get_function_from_frame(frame)
         doc_string = func.__doc__
         start_pos = 0
-        if used_raft is None:
-            used_raft = []
-        if focused_raft is None:
-            focused_raft = []
         self.test_rec = TestRec(test_name=test_name, test_path=test_file, description=description,
-                                   test_doc_string=doc_string, used_raft=used_raft, focused_raft=focused_raft,
-                                   start_pos=start_pos)
+                                   test_doc_string=doc_string, start_pos=start_pos)
         nw = TableWrap(description=description, start_pos=start_pos, is_prep=True)
         self.test_rec.wraps[start_pos] = nw
         self.test_logger = logger
