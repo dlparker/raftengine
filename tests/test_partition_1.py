@@ -47,7 +47,7 @@ async def test_partition_1(cluster_maker):
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
-    cluster.test_trace.define_test("Testing basic network partitioning and recovery", ['partition'], [])
+    await cluster.test_trace.define_test("Testing basic network partitioning and recovery", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -63,7 +63,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('-------- Election done, saving a command record')
 
-    cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit, check follower's final state")
+    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit, check follower's final state")
     
     await cluster.start_auto_comms()
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -86,7 +86,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Everbody has first record, partitioning network to isolate nodes 2 and 3')
 
-    cluster.test_trace.start_subtest("Partitioning the network to isolate nodes 2 and 3")
+    await cluster.test_trace.start_subtest("Partitioning the network to isolate nodes 2 and 3")
     # the partition sets were chosen to make the traces easier to follow
     part1 = {uri_1: ts_1,
              uri_4: ts_4,
@@ -96,7 +96,7 @@ async def test_partition_1(cluster_maker):
     await cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
-    cluster.test_trace.start_subtest("Running two commands, only nodes 1, 4 and 5 should participate")
+    await cluster.test_trace.start_subtest("Running two commands, only nodes 1, 4 and 5 should participate")
     sequence3 = SNormalCommand(cluster, "add 1", 1)
     command_result = await cluster.run_sequence(sequence3)
     assert command_result is not None
@@ -128,7 +128,7 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Now healing partition and looking for sync ----')
     await cluster.stop_auto_comms()
-    cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats")
+    await cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats")
     await cluster.unsplit()
     logger.info('--------- Sending heartbeats ----')
     await ts_1.send_heartbeats()
@@ -154,7 +154,7 @@ async def test_partition_1(cluster_maker):
         assert msg.sender in [uri_4, uri_5]
     # so know we can let are behind the times ones respond
 
-    cluster.test_trace.start_subtest("Nodes 4 and 5 have processed heartbeats, now nodes 2 and 3 should do so")
+    await cluster.test_trace.start_subtest("Nodes 4 and 5 have processed heartbeats, now nodes 2 and 3 should do so")
     logger.debug('--------- 2 and 3 should be pending, doing message sequence on one then other ')
     for node in [ts_2, ts_3]:
         msg = await node.do_next_in_msg() 
@@ -229,7 +229,7 @@ async def test_partition_2_leader(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
-    cluster.test_trace.define_test("Testing leader isolation and recovery in network partition", ['partition', 'leader'], [])
+    await cluster.test_trace.define_test("Testing leader isolation and recovery in network partition", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -238,7 +238,7 @@ async def test_partition_2_leader(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    cluster.test_trace.start_subtest("Election complete, running a command ")
+    await cluster.test_trace.start_subtest("Election complete, running a command ")
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
     command_result = await cluster.run_command("add 1", 1)
@@ -255,32 +255,32 @@ async def test_partition_2_leader(cluster_maker):
     # leader and it should update everything.
 
 
-    cluster.test_trace.start_subtest("Command complete, partitioning leader ")
+    await cluster.test_trace.start_subtest("Command complete, partitioning leader ")
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
     logger.info('---------!!!!!!! stopping comms')
-    cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
+    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
-    cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ")
+    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Letting old leader re-join majority network")
+    await cluster.test_trace.start_subtest("Letting old leader re-join majority network")
     await cluster.unsplit()
     logger.info('------------------------ Sending heartbeats from out of date leader')
-    cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign")
+    await cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign")
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "FOLLOWER"
     # let ex-leader catch up
-    cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader")
+    await cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader")
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.operations.total == 2
@@ -319,7 +319,7 @@ async def test_partition_3_leader(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
-    cluster.test_trace.define_test("Testing leader isolation with check quorum logic", ['partition', 'leader'], [])
+    await cluster.test_trace.define_test("Testing leader isolation with check quorum logic", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -328,7 +328,7 @@ async def test_partition_3_leader(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    cluster.test_trace.start_subtest("Election complete, partitioning leader")
+    await cluster.test_trace.start_subtest("Election complete, partitioning leader")
     logger.info('------------------------ Election done, partitioning')
 
     part1 = {uri_1: ts_1}
@@ -336,13 +336,13 @@ async def test_partition_3_leader(cluster_maker):
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
-    cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
+    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
-    cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ")
+    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ")
 
     await ts_1.enable_timers() # resets
     wait_time = (election_timeout_max + heartbeat_period) * 2.0
@@ -351,7 +351,7 @@ async def test_partition_3_leader(cluster_maker):
         await asyncio.sleep(heartbeat_period/4.0)
     assert ts_1.get_role_name() != "LEADER"
     
-    cluster.test_trace.start_subtest("Old leader resigned on check quorum, healing network and waiting for it to rejoin")
+    await cluster.test_trace.start_subtest("Old leader resigned on check quorum, healing network and waiting for it to rejoin")
     await ts_2.enable_timers() # resets
     await ts_3.enable_timers() # resets
     await cluster.unsplit()
@@ -395,7 +395,7 @@ async def test_partition_3_follower(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
-    cluster.test_trace.define_test("Testing follower isolation with leader quorum intact", ['partition', 'follower'], [])
+    await cluster.test_trace.define_test("Testing follower isolation with leader quorum intact", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -404,14 +404,14 @@ async def test_partition_3_follower(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    cluster.test_trace.start_subtest("Election complete, partitioning one follower")
+    await cluster.test_trace.start_subtest("Election complete, partitioning one follower")
     logger.info('------------------------ Election done, partitioning one follower')
 
     part1 = {uri_1: ts_1, uri_2: ts_2}
     part2 = {uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
-    cluster.test_trace.start_subtest("Leader has quorum, enabling timers and waiting long enough ")
+    await cluster.test_trace.start_subtest("Leader has quorum, enabling timers and waiting long enough ")
 
     await ts_1.enable_timers() # resets
     await ts_2.enable_timers() # resets

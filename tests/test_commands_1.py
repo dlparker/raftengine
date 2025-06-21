@@ -189,7 +189,7 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    cluster.test_trace.start_subtest("Run command and check results at all nodes")
+    await cluster.test_trace.start_subtest("Run command and check results at all nodes")
     command_result = await cluster.run_command("add 1", 1)
     
     assert ts_1.operations.total == 1
@@ -270,7 +270,7 @@ async def double_leader_inner(cluster, discard):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
-    cluster.test_trace.start_subtest("Running command normally")
+    await cluster.test_trace.start_subtest("Running command normally")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -278,7 +278,7 @@ async def double_leader_inner(cluster, discard):
 
     logger.info('---------!!!!!!! stopping auto comms')
     await cluster.stop_auto_comms()
-    cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
+    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election at node 2')
     await ts_2.start_campaign(authorized=True)
@@ -297,7 +297,7 @@ async def double_leader_inner(cluster, discard):
         # Will discard the messages that were blocked 
         # so it looks like the network was broken
         # during that time.
-        cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period")
+        await cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period")
         logger.info('------------------ Telling old leader to rejoin network with messages lost')
         ts_1.unblock_network()
         logger.info('---------!!!!!!! starting comms')
@@ -317,7 +317,7 @@ async def double_leader_inner(cluster, discard):
         # that Raft is meant to handle. They might be unlikely,
         # but they are possible.
         logger.info('------------------ Telling old leader to rejoin network with messages still in queues')
-        cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages")
+        await cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages")
 
         ts_1.unblock_network(deliver=True)
         await cluster.deliver_all_pending()
@@ -325,7 +325,7 @@ async def double_leader_inner(cluster, discard):
     logger.debug('------------------ Command AppendEntries should get rejected -')
 
     
-    cluster.test_trace.start_subtest("New leader sending heartbeats")
+    await cluster.test_trace.start_subtest("New leader sending heartbeats")
     logger.info('\n\n sending heartbeat, so old leader can catch up date\n\n')
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -380,7 +380,7 @@ async def test_command_2_leaders_3(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
-    cluster.test_trace.start_subtest("Running command normally")
+    await cluster.test_trace.start_subtest("Running command normally")
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -394,7 +394,7 @@ async def test_command_2_leaders_3(cluster_maker):
 
     logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
-    cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
+    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.start_campaign(authorized=True)
@@ -404,7 +404,7 @@ async def test_command_2_leaders_3(cluster_maker):
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
 
-    cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected")
+    await cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected")
     
     # can't use cluster command runner here, it will connect to the actual leader
     command_result = None
@@ -477,14 +477,14 @@ async def inner_command_after_heal(cluster, use_pre_vote):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
-    cluster.test_trace.start_subtest("Node 1 is leader, splitting network to isolate it")
+    await cluster.test_trace.start_subtest("Node 1 is leader, splitting network to isolate it")
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
     #logger.info('-------------- Split network done, starting election of %s', uri_2)
     # now ts_2 and ts_3 are alone, have ts_2
-    cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats")
+    await cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats")
     await ts_2.start_campaign()
     assert ts_2.get_role_name() == "CANDIDATE"
     last_term = await ts_2.log.get_term()
@@ -624,7 +624,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
-    cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command")
+    await cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command")
 
     # now arrange for leader to blow up.
     ts_1.operations.explode = True
@@ -847,7 +847,7 @@ async def test_follower_run_error(cluster_maker):
         await cluster.deliver_all_pending()
     assert ts_3.operations.reported_error
     logger.info('------------------------ Error as expected, removing error insertion and trying again')
-    cluster.test_trace.start_subtest("Node 3 reported error, removing trigger and running heartbeats to retry")
+    await cluster.test_trace.start_subtest("Node 3 reported error, removing trigger and running heartbeats to retry")
     ts_3.operations.return_error = False
     await ts_1.send_heartbeats()
     start_time = time.time()
@@ -893,7 +893,7 @@ async def test_follower_rewrite_1(cluster_maker):
     running_total = 0
     last_index = await ts_1.log.get_last_index()
 
-    cluster.test_trace.start_subtest("Node 1 is leader, blocking network traffic to it like a partition and sending two commands")
+    await cluster.test_trace.start_subtest("Node 1 is leader, blocking network traffic to it like a partition and sending two commands")
     logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
     logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
@@ -904,12 +904,12 @@ async def test_follower_rewrite_1(cluster_maker):
     assert await ts_1.log.get_last_index() == last_index + 2
     logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
-    cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
+    await cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_2.get_role_name() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
-    cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader")
+    await cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader")
     # we do this now so that the cluster run_command method will not get confused
     # about which server is the leader
     await ts_1.do_demote_and_handle(None)

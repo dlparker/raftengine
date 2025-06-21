@@ -54,7 +54,7 @@ async def test_empty_log_1(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.define_test("Testing leader recovery with empty log", ['log', 'recovery'], [])
+    await cluster.test_trace.define_test("Testing leader recovery with empty log", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -68,7 +68,7 @@ async def test_empty_log_1(cluster_maker):
     # enough to get two full and one partial append_entries catchups.
     loop_limit = cfg.max_entries_per_message * 2 + 2
     await cluster.start_auto_comms()
-    cluster.test_trace.start_subtest(f"Node 1 is leader, running {loop_limit} commands to fill log")
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, running {loop_limit} commands to fill log")
     for i in range(loop_limit):
         command_result = await cluster.run_command("add 1", 1)
     await cluster.stop_auto_comms()
@@ -76,7 +76,7 @@ async def test_empty_log_1(cluster_maker):
     assert ts_1.operations.total == loop_limit
     # Now "crash" the leader, run an election, then have
     # the leader come up with an empty log
-    cluster.test_trace.start_subtest("Crashing leader node 1, clearing its log, restarting it, then letting timers run until catchup done")
+    await cluster.test_trace.start_subtest("Crashing leader node 1, clearing its log, restarting it, then letting timers run until catchup done")
     await ts_1.simulate_crash()
 
     await cluster.start_auto_comms()
@@ -126,7 +126,7 @@ async def test_empty_log_2(cluster_maker):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    cluster.test_trace.define_test("Testing follower recovery with empty log", ['log', 'recovery'], [])
+    await cluster.test_trace.define_test("Testing follower recovery with empty log", logger=logger)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -136,7 +136,7 @@ async def test_empty_log_2(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
-    cluster.test_trace.start_subtest("Node 1 is leader, crashing and recovering node 2 with an empty log then waiting for it to catch up")
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing and recovering node 2 with an empty log then waiting for it to catch up")
     # Now "crash" the a follower and clear its log
     await ts_2.simulate_crash()
     await ts_2.recover_from_crash(save_log=False)

@@ -26,10 +26,9 @@ async def test_event_handlers(cluster_maker):
     """
     cluster = cluster_maker(3)
     cluster.set_configs()
-    cluster.test_trace.define_test("Testing event handlers during election and command processing", ['event'], [])
+    await cluster.test_trace.define_test("Testing event handlers during election and command processing", logger=logger)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    logger = logging.getLogger("test_code")
 
     role_change_counter = 0
     term_change_counter = 0
@@ -173,7 +172,7 @@ async def test_message_errors(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.define_test("Testing event handling for message processing errors", ['event', 'error'], [])
+    await cluster.test_trace.define_test("Testing event handling for message processing errors", logger=logger)
 
     error_counter = 0
     class ErrorHandler(EventHandler):

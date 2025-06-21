@@ -102,7 +102,7 @@ async def test_snapshot_1(cluster_maker):
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs(use_ops=DictTotalsOps)
-    cluster.test_trace.define_test("Testing snapshot mechanisms in dev_tools", ['snapshot'], [])
+    await cluster.test_trace.define_test("Testing snapshot mechanisms in dev_tools", logger=logger)
 
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -154,7 +154,7 @@ async def test_snapshot_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.define_test("Testing simplest snapshot process at a follower", ['snapshot', 'election', 'command'], [])
+    await cluster.test_trace.define_test("Testing simplest snapshot process at a follower", logger=logger)
     
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -162,7 +162,7 @@ async def test_snapshot_2(cluster_maker):
     
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.
@@ -186,7 +186,7 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.get_last_index() == ts_2_ss.last_index
     assert await ts_2.log.get_last_term() == 1
 
-    cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
+    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
         
     await ts_1.do_demote_and_handle()
     await ts_2.start_campaign(authorized=True)
@@ -240,7 +240,7 @@ async def test_snapshot_3(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.define_test("Testing snapshot process when leader is told to snapshot", ['snapshot', 'election', 'command'], ['member_add', 'snapshot_send'])
+    await cluster.test_trace.define_test("Testing snapshot process when leader is told to snapshot", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -249,7 +249,7 @@ async def test_snapshot_3(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.
@@ -264,10 +264,10 @@ async def test_snapshot_3(cluster_maker):
     last_index = await ts_1.log.get_last_index()
     last_term = await ts_1.log.get_last_term()
     rec = await ts_1.log.read(last_index)
-    cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot but blocking net, should fail because it can't transfer power")
+    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot but blocking net, should fail because it can't transfer power")
     with pytest.raises(Exception):
         ts_1_ss = await ts_1.take_snapshot(timeout=0.05)
-    cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot, should make it transfer power")
+    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot, should make it transfer power")
     await cluster.start_auto_comms()
     ts_1_ss = await ts_1.take_snapshot()
     await cluster.stop_auto_comms()
@@ -289,13 +289,13 @@ async def test_snapshot_3(cluster_maker):
     assert await new_leader.log.get_last_index() == ts_1_ss.last_index + 1
     assert await new_leader.log.get_last_term() == 2
 
-    cluster.test_trace.start_subtest("Node 1 has snapshot and empty log, {new_leader.uri} is leader, running command")
+    await cluster.test_trace.start_subtest("Node 1 has snapshot and empty log, {new_leader.uri} is leader, running command")
         
     command_result = await cluster.run_command("add 1 1", 1)
     assert await ts_1.log.get_first_index() == ts_1_ss.last_index + 1
     assert await ts_1.log.get_last_index() == ts_1_ss.last_index + 2
         
-    cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
+    await cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
     await new_leader.do_demote_and_handle()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -304,7 +304,7 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
     
-    cluster.test_trace.start_subtest("Adding a node to and checking that it receives snapshot before joining")
+    await cluster.test_trace.start_subtest("Adding a node to and checking that it receives snapshot before joining")
     ts_4 = await cluster.add_node()
     done_by_callback = None
     async def join_done(ok, new_uri):
@@ -345,7 +345,7 @@ async def test_snapshot_4(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
-    cluster.test_trace.define_test("Testing snapshot installation on a slow follower", ['snapshot', 'election', 'command'], ['slow_follower', 'snapshot_replicate'])
+    await cluster.test_trace.define_test("Testing snapshot installation on a slow follower", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -354,14 +354,14 @@ async def test_snapshot_4(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Node 1 is leader, runing commands ")
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands ")
 
     for x in range(1, 6):
         command = f'add {x} {random.randint(1,100)}'
         for ts in [ts_1, ts_2, ts_3]:
             command_result = await cluster.run_command(command, 1)
                 
-    cluster.test_trace.start_subtest("Crashing node 3, running a command, then taking snapshot at node 2")
+    await cluster.test_trace.start_subtest("Crashing node 3, running a command, then taking snapshot at node 2")
     logger.debug(f"\ncrash 3, run command\n")
     await ts_3.simulate_crash()
     command_result = await cluster.run_command("add 1 1", 1)
@@ -378,7 +378,7 @@ async def test_snapshot_4(cluster_maker):
     assert await ts_2.log.get_last_index() == ts_2_ss.last_index
     assert await ts_2.log.get_last_term() == 1
 
-    cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
+    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
         
     logger.debug(f"\nnode 2 election\n")
     await ts_1.do_demote_and_handle()
@@ -398,7 +398,7 @@ async def test_snapshot_4(cluster_maker):
     assert term_start_rec.term == 2
     assert await ts_2.log.get_last_index() == last_index + 1
 
-    cluster.test_trace.start_subtest("Restarting node 3, should be behind enough to need snapshot transfer")
+    await cluster.test_trace.start_subtest("Restarting node 3, should be behind enough to need snapshot transfer")
     logger.debug(f"\nrestert node 3\n")
     await ts_3.recover_from_crash()
     await ts_2.send_heartbeats()

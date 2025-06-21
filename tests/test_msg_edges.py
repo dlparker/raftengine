@@ -52,7 +52,7 @@ async def test_slow_voter(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.define_test("Testing slow voter scenario in election", ['message', 'election'], [])
+    await cluster.test_trace.define_test("Testing slow voter scenario in election", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -67,7 +67,7 @@ async def test_slow_voter(cluster_maker):
     # candidate to retry, which will up the term, then let
     # the old votes flow in. They should get ignored
     # and the election should succeed
-    cluster.test_trace.start_subtest("Node 3 is leader, demoting and ensuring vote requests are delivered, but responses not accepted yet")
+    await cluster.test_trace.start_subtest("Node 3 is leader, demoting and ensuring vote requests are delivered, but responses not accepted yet")
     await ts_3.do_demote_and_handle(None)
     await ts_3.do_leader_lost()
     await ts_3.do_next_out_msg()
@@ -79,7 +79,7 @@ async def test_slow_voter(cluster_maker):
     assert len(ts_1.out_messages) == 1
     assert len(ts_2.out_messages) == 1
     old_term = await ts_3.log.get_term()
-    cluster.test_trace.start_subtest("Starting another election at node 3, whose term is now 3 and checking that pending messages are stale")
+    await cluster.test_trace.start_subtest("Starting another election at node 3, whose term is now 3 and checking that pending messages are stale")
     await ts_3.start_campaign()
     assert old_term + 1 == await ts_3.log.get_term()
     # this should be a stale vote
@@ -98,7 +98,7 @@ async def test_slow_voter(cluster_maker):
     # then two outs from them to get their new votes
     # then two ins to candiate and the first one should
     # settle the election
-    cluster.test_trace.start_subtest("Allowing some messages for second election, checking that term is correct")
+    await cluster.test_trace.start_subtest("Allowing some messages for second election, checking that term is correct")
     new_term = await ts_3.log.get_term()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
@@ -110,7 +110,7 @@ async def test_slow_voter(cluster_maker):
     msg = await ts_1.do_next_out_msg()
     assert msg.term == new_term
     assert msg.vote == True
-    cluster.test_trace.start_subtest("Allowing remainging messages for normal election to complete")
+    await cluster.test_trace.start_subtest("Allowing remainging messages for normal election to complete")
     await cluster.deliver_all_pending()
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
@@ -138,7 +138,7 @@ async def test_message_errors(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    cluster.test_trace.define_test("Testing message processing errors", ['message', 'error'], [])
+    await cluster.test_trace.define_test("Testing message processing errors", logger=logger)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)

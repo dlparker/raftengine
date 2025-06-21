@@ -56,7 +56,7 @@ async def test_member_change_messages(cluster_maker):
     Test some basic features of the messages classes used to coordinate membership changes.
     """
     cluster = cluster_maker(1)
-    cluster.test_trace.define_test("Testing membership change message operations", ['membership'], [])
+    await cluster.test_trace.define_test("Testing membership change message operations", logger=logger)
     m1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', ChangeOp.add, target_uri="mcpy://4")
     r1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', ChangeOp.add, target_uri="mcpy://4", ok=True)
     
@@ -80,7 +80,7 @@ async def test_cluster_config_ops(cluster_maker):
     the progress of membership change operations. No message or timer operations are involved.
     """
     cluster = cluster_maker(1)
-    cluster.test_trace.define_test("Testing cluster configuration operations for membership changes", ['membership'], [])
+    await cluster.test_trace.define_test("Testing cluster configuration operations for membership changes", logger=logger)
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -149,14 +149,14 @@ async def test_remove_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing removal of a follower from the cluster", ['membership'], [])
+    await cluster.test_trace.define_test("Testing removal of a follower from the cluster", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself.")
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself.")
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
     removed = None
@@ -205,14 +205,14 @@ async def test_remove_leader_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing removal of the leader from the cluster", ['membership'], [])
+    await cluster.test_trace.define_test("Testing removal of the leader from the cluster", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, telling it to exit the cluster")
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to exit the cluster")
 
     logger.debug("\n\n\nRemoving leader node 1\n\n\n")
     await ts_1.exit_cluster()
@@ -241,14 +241,14 @@ async def test_add_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing addition of a follower with a short log", ['membership'], [])
+    await cluster.test_trace.define_test("Testing addition of a follower with a short log", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
+    await cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -281,14 +281,14 @@ async def test_add_follower_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing addition of a follower with a long log", ['membership'], [])
+    await cluster.test_trace.define_test("Testing addition of a follower with a long log", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
@@ -338,7 +338,7 @@ async def test_add_follower_2(cluster_maker):
                 done_by_event = False
 
     logger.debug("\n\nStarting join from node 4\n\n")
-    cluster.test_trace.start_subtest("Records inserted, starting add of node 4")
+    await cluster.test_trace.start_subtest("Records inserted, starting add of node 4")
     await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -366,14 +366,14 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing addition of a follower with multiple log catch-up rounds", ['membership'], [])
+    await cluster.test_trace.define_test("Testing addition of a follower with multiple log catch-up rounds", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via direct insert")
+    await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via direct insert")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -442,7 +442,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
-    cluster.test_trace.start_subtest("New node has added all first round records, but leader not yet informed, adding new records")
+    await cluster.test_trace.start_subtest("New node has added all first round records, but leader not yet informed, adding new records")
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking commands\n")
     await ts_1.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now\n")
@@ -477,14 +477,14 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing addition of a follower with three log catch-up rounds", ['membership'], [])
+    await cluster.test_trace.define_test("Testing addition of a follower with three log catch-up rounds", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4")
+    await cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -553,7 +553,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
-    cluster.test_trace.start_subtest("Node 4 caught up, adding new records before letting leader know that")
+    await cluster.test_trace.start_subtest("Node 4 caught up, adding new records before letting leader know that")
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command to start a round\n")
     last_index = await ts_4.log.get_last_index()
     await ts_1.fake_command("add", 1)
@@ -569,7 +569,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     assert ts_4.out_messages[0].code == AppendResponseMessage.get_code()
 
     # poised to finish round 2, add more commands to force round 3, and make it enough to take > 1 message
-    cluster.test_trace.start_subtest("Node 4 caught up on roudn 2, adding new records before letting leader know that")
+    await cluster.test_trace.start_subtest("Node 4 caught up on roudn 2, adding new records before letting leader know that")
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per*2)
     for i in range(limit):
@@ -607,14 +607,14 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing abort of follower addition due to too many log catch-up rounds", ['membership', 'error'], [])
+    await cluster.test_trace.define_test("Testing abort of follower addition due to too many log catch-up rounds", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -706,11 +706,11 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
             await ts_4.do_next_in_msg()
 
             
-    cluster.test_trace.start_subtest("Starting a loop of round update and inserted new rounds")
+    await cluster.test_trace.start_subtest("Starting a loop of round update and inserted new rounds")
     for i in range(1, 11):
         await buy_another_round(i)
         
-    cluster.test_trace.start_subtest("Leader is about to get another cycle of round complete but records pending, should abort")
+    await cluster.test_trace.start_subtest("Leader is about to get another cycle of round complete but records pending, should abort")
     # poised to finish round 9, forcing another round should force abort
     await ts_4.do_next_out_msg()
     
@@ -792,7 +792,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing timeout during second round of follower log loading", ['membership', 'timeout'], [])
+    await cluster.test_trace.define_test("Testing timeout during second round of follower log loading", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -802,7 +802,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 
     msg_per = await ts_1.hull.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
-    cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records")
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records")
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
             await ts.fake_command("add", 1)
@@ -843,7 +843,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
     await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
-    cluster.test_trace.start_subtest("Node 4 created, telling it to start_and_join, waiting for append entries sequences")
+    await cluster.test_trace.start_subtest("Node 4 created, telling it to start_and_join, waiting for append entries sequences")
     await ts_4.start_and_join(leader.uri, join_done, timeout=100.0)
 
     ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -876,14 +876,14 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     assert ts_4.operations.total == limit - 1
 
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command\n")
-    cluster.test_trace.start_subtest("Node 4 has caught up its log, but last append response is paused before delivery to leader, adding log record")
+    await cluster.test_trace.start_subtest("Node 4 has caught up its log, but last append response is paused before delivery to leader, adding log record")
     await ts_1.fake_command("add", 1)
     await ts_2.fake_command("add", 1)
     await ts_3.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now, but blocking node 4 so timeout should happen\n")
 
     # let leader run until timeout causes send of member change response, but don't let it deliver
-    cluster.test_trace.start_subtest("Blocking comms at node 4, running network ops and Waiting for leader to timeout and notify node 4")
+    await cluster.test_trace.start_subtest("Blocking comms at node 4, running network ops and Waiting for leader to timeout and notify node 4")
     ts_1.set_trigger(WhenMessageOut(MembershipChangeResponseMessage.get_code(), flush_when_done=False))
     ts_4.block_network()
     await ts_1.run_till_triggers()
@@ -907,7 +907,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     cc = await ts_1.hull.cluster_ops.get_cluster_config()
     assert ts_4.uri not in cc.nodes
     assert cc.pending_node is None
-    cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal")
+    await cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal")
 
     # trying to add node again should work
     await ts_4.stop()
@@ -956,14 +956,14 @@ async def test_reverse_add_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Testing reversal of follower addition due to leader crash", ['membership', 'error'], [])
+    await cluster.test_trace.define_test("Testing reversal of follower addition due to leader crash", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, running a command then adding node 4 and starting the join")
+    await cluster.test_trace.start_subtest("Node 1 is leader, running a command then adding node 4 and starting the join")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1027,7 +1027,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     # 
     assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
-    cluster.test_trace.start_subtest("Node 4 up to date and leader saved membership change log record, crashing leader and running election")
+    await cluster.test_trace.start_subtest("Node 4 up to date and leader saved membership change log record, crashing leader and running election")
 
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
@@ -1044,7 +1044,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     # now restart the old leader, send a heart beat from new leader, hold old leader before
     # processing message, check to see that it has temporary add (restored from log). Then
     # let it process message and make sure it discards add.
-    cluster.test_trace.start_subtest("Node 2 is now leader, restarting crashed old leader and sending heartbeats")
+    await cluster.test_trace.start_subtest("Node 2 is now leader, restarting crashed old leader and sending heartbeats")
     await ts_1.recover_from_crash()
     await ts_2.send_heartbeats(target_only=ts_1.uri)
     ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
@@ -1078,7 +1078,7 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 3")
+    await cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 3")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1104,7 +1104,7 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
 
     # now crash the leader, no changes at followers yet, so leader's record
     # should get overwritten on restart
-    cluster.test_trace.start_subtest("Leader has saved membership change log but not replicated it, crashing leader and running election")
+    await cluster.test_trace.start_subtest("Leader has saved membership change log but not replicated it, crashing leader and running election")
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
     sequence = SPartialElection(cluster, [ts_2.uri, ts_3.uri], 1)
@@ -1120,7 +1120,7 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
     # now restart the old leader, send a heart beat from new leader, hold old leader before
     # processing message, check to see that it has temporary add (restored from log). Then
     # let it process message and make sure it discards add.
-    cluster.test_trace.start_subtest("Log state verified, restarting crashed lerader and sending heartbeats from new leader")
+    await cluster.test_trace.start_subtest("Log state verified, restarting crashed lerader and sending heartbeats from new leader")
     await ts_1.recover_from_crash()
     await ts_2.send_heartbeats(target_only=ts_1.uri)
     ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
@@ -1142,7 +1142,7 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
     
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None
-    cluster.test_trace.start_subtest("Old leader cluster membership as original confirmed, running final checks")
+    await cluster.test_trace.start_subtest("Old leader cluster membership as original confirmed, running final checks")
 
 async def test_reverse_remove_follower_1(cluster_maker):
     """
@@ -1162,7 +1162,7 @@ async def test_reverse_remove_follower_1(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with timeout", ['membership', 'error', 'timeout'], [])
+    await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with timeout", logger=logger)
 
     done_by_callback = None
     done_by_event = None
@@ -1209,7 +1209,7 @@ async def test_reverse_remove_follower_2(cluster_maker):
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with stop before timeout", ['membership', 'error'], [])
+    await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with stop before timeout", logger=logger)
 
     done_by_callback = None
     done_by_event = None
@@ -1268,7 +1268,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
     cluster = cluster_maker(5)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    cluster.test_trace.define_test("Testing reversal of follower removal due to network partition and election", ['membership', 'error'], [])
+    await cluster.test_trace.define_test("Testing reversal of follower removal due to network partition and election", logger=logger)
 
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -1276,7 +1276,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 5")
+    await cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 5")
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1303,7 +1303,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
     assert await ts_1.log.get_last_index() > await ts_4.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_5.log.get_last_index()
 
-    cluster.test_trace.start_subtest("Leader has saved member change log record, splitting network, delivering pending, starting election")
+    await cluster.test_trace.start_subtest("Leader has saved member change log record, splitting network, delivering pending, starting election")
     part1 = {uri_1: ts_1, uri_5: ts_5}
     part2 = {uri_2: ts_2,
              uri_3: ts_3,
@@ -1333,7 +1333,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
     assert await ts_1.log.get_last_term() != await ts_4.log.get_last_term()
 
     # now heal network, send a heart beat from new leader, let things run until settled and check conditions
-    cluster.test_trace.start_subtest("Log state verified, healing partition and triggering heartbeats")
+    await cluster.test_trace.start_subtest("Log state verified, healing partition and triggering heartbeats")
     await cluster.unsplit()
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -1356,14 +1356,14 @@ async def test_add_follower_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
+    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, starting node 4 join but setting timeout low and sisabling messages")
+    await cluster.test_trace.start_subtest("Node 1 is leader, starting node 4 join but setting timeout low and sisabling messages")
     
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1402,7 +1402,7 @@ async def test_add_follower_errors_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
+    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
                                   
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -1410,7 +1410,7 @@ async def test_add_follower_errors_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
     
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1446,14 +1446,14 @@ async def test_remove_candidate_1(cluster_maker):
 
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
+    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to become a candidate and then immediately start exiting")
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to become a candidate and then immediately start exiting")
     
     #ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1483,7 +1483,7 @@ async def test_update_settings(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    cluster.test_trace.define_test("Starting election at node 1 of 3", [], [])
+    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1492,7 +1492,7 @@ async def test_update_settings(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    cluster.test_trace.start_subtest("Node 1 is leader, sending settings update")
+    await cluster.test_trace.start_subtest("Node 1 is leader, sending settings update")
 
     orig_cc = await ts_1.hull.get_cluster_config()
     cur_settings = orig_cc.settings
