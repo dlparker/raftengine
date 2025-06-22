@@ -11,6 +11,7 @@ from raftengine.messages.append_entries import AppendResponseMessage
 from dev_tools.sequences import SPartialCommand
 import time
 from dev_tools.features import registry
+import json 
 
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.logging_ops import setup_logging
@@ -186,7 +187,7 @@ async def test_feature_defs_3(cluster_maker):
 
     await cluster.test_trace.define_test("Testing state machine command propagation with 3 nodes", logger=logger)
     await cluster.start()
-    f_election = registry.get_raft_feature("leader election", "all_yes_votes.without_pre_vote")
+    f_election = registry.get_raft_feature("leader election", "all_yes_votes.with_pre_vote")
     spec = dict(used=[f_election,], tested=[])
     await cluster.test_trace.start_test_prep("Running normal election till fully replicated", features=spec)
     await ts_1.start_campaign()
@@ -266,7 +267,7 @@ async def test_feature_defs_3(cluster_maker):
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
-    f_command_min_nodes = registry.get_raft_feature("state machine command", "minimul_node_count")
+    f_command_min_nodes = registry.get_raft_feature("state machine command", "minimal_node_count")
     spec = dict(used=[], tested=[f_command_min_nodes,])
     await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower",
                                            features=spec)
@@ -304,3 +305,5 @@ async def test_feature_defs_3(cluster_maker):
     logger.debug('------------------------ Tardy follower caught up ---')
     await cluster.test_trace.end_subtest()
     
+async def test_regy_report():
+    pass

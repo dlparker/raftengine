@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from typing import Optional
 from copy import deepcopy
 import sqlite3
+import json
 import logging
 from pathlib import Path
 features_loaded = False
@@ -17,22 +18,104 @@ def bool_converter(value):
 @dataclass
 class FeatureDefinition:
     name: str
+    # the target_branch propert is only used during trace build, and is ephemeral
     target_branch: Optional['FeatureBranch'] = None
     branches: Optional[dict['FeatureBranch']] = field(default_factory=dict)
 
     def get_name_snake(self):
         return "_".join((self.name).split(' '))
+
+    def to_dict(self):
+        data = dict(self.__dict__)
+        data['branches'] = []
+        del data['target_branch']
+        for b in self.branches:
+            if isinstance(b, dict):
+                data['branches'].append(b.to_dict())
+            else:
+                data['branches'].append(b)
+        return data
     
 @dataclass
 class FeatureBranch:
     feature: FeatureDefinition
     path: str
-    parent: Optional['FeatureBranch'] = None
-    children: Optional[dict['FeatureBranch']] = field(default_factory=dict)
 
     def get_path_snake(self):
         return "_".join((self.path).split(' '))
+
+    def to_dict(self):
+        data = dict(self.__dict__)
+        data['feature'] = self.feature.name
+        return data
     
+@dataclass
+class BranchMap:
+    branch: FeatureBranch
+    test_path: str
+    ref_mode: str
+
+    def to_dict(self):
+        data = dict(self.__dict__)
+        data['branch'] = self.branch.to_dict()
+        return data
+    
+@dataclass
+class FeatureMap:
+    feature: FeatureDefinition
+    test_path: str
+    ref_mode: str
+    branches: Optional[list[BranchMap]] = field(default_factory=list)
+
+    def to_dict(self):
+        data = dict(self.__dict__)
+        data['branches'] = []
+        for b in self.branches:
+            data['branches'].append(b.to_dict())
+        return data
+        
+@dataclass
+class FeatureTestMapItem:
+    test_path: str
+    ref_mode:str
+    feature: FeatureDefinition
+    
+    def to_dict(self):
+        data = dict(self.__dict__)
+        data['feature'] = self.feature.to_dict()
+        return data
+    
+@dataclass
+class FeatureTestMapItem:
+    test_path: str
+    ref_mode:str
+    branch: str
+    
+@dataclass
+class FeatureTestMap:
+    feature: FeatureDefinition
+    tests: dict[str, FeatureTestMapItem] = field(default_factory=dict)
+
+    def to_dict(self):
+        data = dict(feature=self.feature.to_dict())
+        dd = data['tests'] = dict()
+        for name in self.tests:
+            dd[name] = []
+        for name, test in self.tests.items():
+            dd[name].append(asdict(test))
+        return data
+        
+class CustomObjectEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, 'to_dict') and callable(obj.to_dict):
+            return obj.to_dict()
+        # Let the base class default method raise the TypeError for other types
+        try:
+            data = json.JSONEncoder.default(self, obj)
+        except TypeError:
+            data = json.JSONEncoder.default(self, obj.__dict__)
+        return data
+   
 class FeatureRegistry:
     
     def __init__(self, db_path=None):
@@ -50,14 +133,14 @@ class FeatureRegistry:
         self.ensure_tables()
         self.reload_from_db()
 
-    def get_raft_feature(self, name, branch_path=None):
+    def get_raft_feature(self, name, branch_path):
         # API
         feat = self.features.get(name, None)
         if not feat:
             feat = self.add_feature(name)
         # We want to return a tuned feature definition, one that only has the requested branch elements.
-        branch = None
-        if branch_path is not None and branch_path not in feat.branches:
+        branch = feat.branches.get(branch_path)
+        if branch is None:
             branch = self.add_feature_branch(feat, branch_path)
         f_copy = deepcopy(feat)
         f_copy.target_branch = deepcopy(branch)
@@ -83,12 +166,7 @@ class FeatureRegistry:
             cur_id = ".".join(cur_path)
             if len(full_path) > len(cur_path) and cur_id not in feature.branches:
                 self.add_feature_branch(feature, cur_id)
-        if len(full_path) > 1:
-            par_id = ".".join(full_path[:-1])
-            parent = feature.branches[par_id]
-        else:
-            parent = None
-        branch = FeatureBranch(feature, cur_id,  parent)
+        branch = FeatureBranch(feature, cur_id)
         feature.branches[cur_id] = branch
         self.build_feature_branch_file(branch)
         self.db_add_feature_branch(branch)
@@ -140,16 +218,8 @@ class FeatureRegistry:
         cursor.execute(sql, [feature_branch.feature.name,])
         row = cursor.fetchone()
         feature_id = row[0]
-        parent_id = None
-        if feature_branch.parent is not None:
-            sql = "select branch_id from feature_branches where path = ?"
-            params = [feature_branch.parent.path,]
-            cursor.execute(sql, params)
-            row = cursor.fetchone()
-            if row:
-                parent_id = row[0]
-        sql = "insert into feature_branches (path, feature_id, parent_branch_id) values (?, ?, ?)"
-        params = [feature_branch.path, feature_id, parent_id]
+        sql = "insert into feature_branches (path, feature_id) values (?, ?)"
+        params = [feature_branch.path, feature_id]
         cursor.execute(sql, params)
         self.db.commit()
         cursor.close()
@@ -157,13 +227,8 @@ class FeatureRegistry:
     def reload_from_db(self):
         cursor = self.db.cursor()
         cursor2 = self.db.cursor()
-        cursor3 = self.db.cursor()
         sql = "select * from features"
 
-        # this code depends on reading things in the right order
-        # so that a branch that has a parent will always be read
-        # after the parent has been read, so it will already
-        # be present in memory
         cursor.execute(sql)
         for row in cursor.fetchall():
             feat = FeatureDefinition(name=row['name'])
@@ -172,15 +237,100 @@ class FeatureRegistry:
             cursor2.execute(sql2, [row['feature_id'],])
             for row in cursor2.fetchall():
                 path = row['path']
-                if row['parent_branch_id'] is None:
-                    parent = None
-                else:
-                    sql3 = "select * from feature_branches where branch_id = ?"
-                    cursor3.execute(sql3, [row['parent_branch_id'],])
-                    row = cursor3.fetchone()
-                    parent = feat.branches[row['path']] 
-                feat.branches[path] = FeatureBranch(feat, path, parent)
+                feat.branches[path] = FeatureBranch(feat, path)
+
+    def old_get_feature_maps_as_json(self):
+        return json.dumps(self.get_feature_maps(), cls=CustomObjectEncoder, indent=4)
+
         
+    def old_get_feature_maps(self, json_format=False):
+        if len(self.features) == 0:
+            self.reload_from_db()
+        cursor = self.db.cursor()
+        feature_maps = []
+
+        # Query feature_test_mappings to get all feature-to-test relationships
+        sql = """
+            SELECT ftm.mapping_id, ftm.feature_id, ftm.test_id, ftm.relationship, 
+                   t.test_id_path, f.name
+            FROM feature_test_mappings ftm
+            JOIN tests t ON ftm.test_id = t.test_id
+            JOIN features f ON ftm.feature_id = f.feature_id
+        """
+        cursor.execute(sql)
+
+        # Group mappings by feature to create one FeatureMap per feature-test pair
+        for row in cursor.fetchall():
+            feature_name = row['name']
+            test_path = row['test_id_path']
+            relationship = row['relationship']
+
+            # Get the FeatureDefinition from the registry
+            feature = self.features.get(feature_name)
+            if not feature:
+                continue  # Skip if feature not found in registry
+
+            # Create FeatureMap
+            feature_map = FeatureMap(
+                feature=feature,
+                test_path=test_path,
+                ref_mode=relationship,
+                branches=[]
+            )
+            feature_maps.append(feature_map)
+            # Query feature_branches for this feature
+            sql_branches = """
+                SELECT path
+                FROM feature_branches
+                WHERE feature_id = ?
+            """
+            cursor.execute(sql_branches, [row['feature_id']])
+
+            # Create BranchMap for each branch
+            for branch_row in cursor.fetchall():
+                branch_path = branch_row['path']
+                branch = feature.branches.get(branch_path)
+                if branch:
+                    branch_map = BranchMap(
+                        branch=branch,
+                        test_path=test_path,
+                        ref_mode=relationship
+                    )
+                    feature_map.branches.append(branch_map)
+
+        return feature_maps
+
+    def get_feature_maps_as_json(self):
+        return json.dumps(self.get_feature_maps(), cls=CustomObjectEncoder, indent=4)
+
+    def get_feature_maps(self):
+        if len(self.features) == 0:
+            self.reload_from_db()
+        cursor = self.db.cursor()
+        feature_maps = []
+        for feature in self.features.values():
+            ftm = FeatureTestMap(feature)
+            feature_maps.append(ftm)
+            for branch in feature.branches.values():
+                ftm.tests[branch.path] = []
+                sql = "select btm.branch_id as bid,"
+                sql = "select br.path as bpath,"
+                sql += " btm.test_id as tid,"
+                sql += " t.test_id_path as tpath,"
+                sql += " btm.relationship as rel"
+                sql += " from branch_test_mappings as btm"
+                sql += " join tests t on btm.test_id = t.test_id"
+                sql += " join feature_branches br on btm.branch_id = br.branch_id"
+                sql += " where br.path = ?"
+                cursor.execute(sql, [branch.path,])
+                for row in cursor.fetchall():
+                    ftmi = FeatureTestMapItem(row['tpath'], row['rel'], branch.path)
+                    if branch.path not in ftm.tests:
+                        ftm.tests[branch.path] = []
+                    ftm.tests[branch.path].append(ftmi)
+        return feature_maps
+
+                
     def db_save_test_feature(self, feature, mode, test_name, test_path, subtest=None):
         cursor = self.db.cursor()
         sql = "select feature_id from features where name = ?"
@@ -215,7 +365,7 @@ class FeatureRegistry:
             cursor.execute(sql, [branch_id, test_id, mode])
         self.db.commit()
         cursor.close()
-        
+
     def ensure_tables(self):
         cursor = self.db.cursor()
         cursor.execute("""
@@ -229,9 +379,7 @@ class FeatureRegistry:
                 branch_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
                 feature_id INTEGER NOT NULL,
-                parent_branch_id INTEGER NULL,
-                FOREIGN KEY (feature_id) REFERENCES features(feature_id),
-                FOREIGN KEY (parent_branch_id) REFERENCES feature_branches(parent_branch_id)
+                FOREIGN KEY (feature_id) REFERENCES features(feature_id)
             )
         """)
         cursor.execute("""
