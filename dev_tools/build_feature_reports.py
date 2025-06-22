@@ -2,8 +2,8 @@
 from features import registry
 
 def main():
-    #maps_json = registry.get_feature_maps_as_json()
-    #print(maps_json)
+    maps_json = registry.get_feature_maps_as_json()
+    print(maps_json)
     maps = registry.get_feature_maps()
     #nfrom pprint import pprint
     #pprint(maps)

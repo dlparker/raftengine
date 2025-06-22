@@ -101,8 +101,9 @@ class FeatureTestMap:
         dd = data['tests'] = dict()
         for name in self.tests:
             dd[name] = []
-        for name, test in self.tests.items():
-            dd[name].append(asdict(test))
+        for name, item_list in self.tests.items():
+            for item in item_list:
+                dd[name].append(asdict(item))
         return data
         
 class CustomObjectEncoder(json.JSONEncoder):
@@ -238,67 +239,6 @@ class FeatureRegistry:
             for row in cursor2.fetchall():
                 path = row['path']
                 feat.branches[path] = FeatureBranch(feat, path)
-
-    def old_get_feature_maps_as_json(self):
-        return json.dumps(self.get_feature_maps(), cls=CustomObjectEncoder, indent=4)
-
-        
-    def old_get_feature_maps(self, json_format=False):
-        if len(self.features) == 0:
-            self.reload_from_db()
-        cursor = self.db.cursor()
-        feature_maps = []
-
-        # Query feature_test_mappings to get all feature-to-test relationships
-        sql = """
-            SELECT ftm.mapping_id, ftm.feature_id, ftm.test_id, ftm.relationship, 
-                   t.test_id_path, f.name
-            FROM feature_test_mappings ftm
-            JOIN tests t ON ftm.test_id = t.test_id
-            JOIN features f ON ftm.feature_id = f.feature_id
-        """
-        cursor.execute(sql)
-
-        # Group mappings by feature to create one FeatureMap per feature-test pair
-        for row in cursor.fetchall():
-            feature_name = row['name']
-            test_path = row['test_id_path']
-            relationship = row['relationship']
-
-            # Get the FeatureDefinition from the registry
-            feature = self.features.get(feature_name)
-            if not feature:
-                continue  # Skip if feature not found in registry
-
-            # Create FeatureMap
-            feature_map = FeatureMap(
-                feature=feature,
-                test_path=test_path,
-                ref_mode=relationship,
-                branches=[]
-            )
-            feature_maps.append(feature_map)
-            # Query feature_branches for this feature
-            sql_branches = """
-                SELECT path
-                FROM feature_branches
-                WHERE feature_id = ?
-            """
-            cursor.execute(sql_branches, [row['feature_id']])
-
-            # Create BranchMap for each branch
-            for branch_row in cursor.fetchall():
-                branch_path = branch_row['path']
-                branch = feature.branches.get(branch_path)
-                if branch:
-                    branch_map = BranchMap(
-                        branch=branch,
-                        test_path=test_path,
-                        ref_mode=relationship
-                    )
-                    feature_map.branches.append(branch_map)
-
-        return feature_maps
 
     def get_feature_maps_as_json(self):
         return json.dumps(self.get_feature_maps(), cls=CustomObjectEncoder, indent=4)
