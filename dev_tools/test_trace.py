@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from raftengine.api.log_api import LogRec
+from dev_tools.features import registry as feature_regy
 
 warn_no_docstring = True
 
@@ -190,6 +191,7 @@ class TestTrace:
             # In that case we want to just continue with the wrap, but rename it
             cw.description = description
             cw.is_prep = is_prep
+            features = await self.mark_test_features(description, features)
             cw.features = features
             if self.test_logger:
                 if is_prep:
@@ -200,16 +202,32 @@ class TestTrace:
         if cw and cw.end_pos is None:
             await self.end_subtest()
         start_pos = len(self.trace_lines)
-        if features is None:
-            features = {'used': [], 'tested': []}
+
+        features = await self.mark_test_features(description, features)
 
         nw = TableWrap(start_pos=start_pos, description=description, is_prep=is_prep, features=features)
         self.test_rec.wraps[start_pos] = nw
         if self.test_logger:
             if is_prep:
-                self.test_logger.info("Ppreparing test conditions by %s", description)
+                self.test_logger.info("Preparing test conditions by %s", description)
             else:
                 self.test_logger.info("Starting subtest %s", description)
+
+    async def mark_test_features(self, description, features):
+        
+        if features is None:
+            return {'used': [], 'tested': []}
+        else:
+            for feature in features['used']:
+                feature_regy.add_test_to_feature(feature, 'uses',
+                                                 self.test_rec.test_name, self.test_rec.test_path,
+                                                 description)
+            for feature in features['tested']:
+                feature_regy.add_test_to_feature(feature, 'tests',
+                                                 self.test_rec.test_name, self.test_rec.test_path,
+                                                 description)
+        return features
+        
 
     async def end_subtest(self):
         # Sometimes this gets called on a single, empty wrap because
@@ -1046,11 +1064,13 @@ class RstFormatter:
             all_rows.append("")
             if table.features:
                 for feature in table.features['used']:
-                    all_rows.append(f"Raft feature used: {feature.name}")
-                    all_rows.append(f"           branch: {feature.target_branch}")
+                    all_rows.append(f"Raft feature used: {feature.get_name_snake()}")
+                    if feature.target_branch:
+                        all_rows.append(f"           branch: {feature.target_branch.get_path_snake()}")
                 for feature in table.features['tested']:
-                    all_rows.append(f"Raft feature tested: {feature.name}")
-                    all_rows.append(f"           branch: {feature.target_branch}")
+                    all_rows.append(f"Raft feature tested: {feature.get_name_snake()}")
+                    if feature.target_branch:
+                        all_rows.append(f"           branch: {feature.target_branch.get_path_snake()}")
                 all_rows.append("")
                 all_rows.append("")
             trows = []
