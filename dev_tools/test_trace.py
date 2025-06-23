@@ -9,40 +9,9 @@ from typing import Optional
 
 from raftengine.api.log_api import LogRec
 from dev_tools.features import registry as feature_regy
+from dev_tools.trace_data import SaveEvent, NodeState, TableWrap, TestTraceData, write_trace_file
 
 warn_no_docstring = True
-
-class SaveEvent(str, Enum):
-    message_op = "MESSAGE_OP"
-    role_changed = "ROLE_CHANGED"
-    crashed = "CRASHED"
-    recovered = "RECOVERED"
-    started = "STARTED"
-    net_partition = "NET_PARTITION"
-    partition_healed = "PARTITION_HEALED"
-    command_started = "COMMAND_STARTED"
-    command_finished = "COMMAND_FINISHED"
-
-    def __str__(self):
-        return self.value
-
-@dataclass
-class NodeState:
-    save_event: SaveEvent
-    uri: str
-    log_rec: LogRec
-    commit_index: int
-    term: int
-    role_name: str
-    on_quorum_net: bool = True
-    is_paused: bool = False
-    is_crashed: bool = False
-    leader_id: Optional[str] = None
-    voted_for: Optional[str] = None
-    message_action: Optional[str] = None
-    message: Optional[str] = None
-    elapsed_time: Optional[float] = None  # only valid for message handled
-
 
 @dataclass
 class TestRec:
@@ -52,7 +21,7 @@ class TestRec:
     test_doc_string: str
     start_pos: int
     end_pos: Optional[int] = field(default=None)
-    wraps: dict[int, 'TableWrap'] = field(default_factory=dict)
+    wraps: dict[int, TableWrap] = field(default_factory=dict)
     condensed_tables: list = field(default=None)
     
     def last_wrap(self):
@@ -62,26 +31,6 @@ class TestRec:
         keys.sort()
         return self.wraps[keys[-1]]
     
-@dataclass
-class TableWrap:
-    start_pos: int
-    description: str
-    is_prep: Optional[bool] = False
-    test_path: Optional[str] = None
-    test_doc_string: Optional[str] = None
-    end_pos: Optional[int] = None
-    lines: Optional[list] = None
-    condensed: Optional[list] = None
-    max_nodes: Optional[int] = None
-    features: Optional[list] = field(default_factory=list)
-
-    def count_nodes(self, lines):
-        max_nodes = 0
-        for line in lines:
-            max_nodes = max(max_nodes, len(line))
-        self.max_nodes = max_nodes
-        return max_nodes
-            
 
 def get_current_test():
     full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]
@@ -115,7 +64,7 @@ class TestTrace:
         self.cluster = cluster
         self.node_states = {}
         self.trace_lines = []
-        self.table_wraps = {}
+        #self.table_wraps = {}
         self.test_rec = None
         self.current_wrap = None
         self.test_logger = None
@@ -538,7 +487,7 @@ class TestTrace:
             wrap.lines.append(self.trace_lines[pos])
             if pos == wrap.end_pos:
                 return wrap
-            if pos in self.table_wraps:
+            if pos in self.table_rec.wraps:
                 # this pos is the start of another table
                 # nobody called end for this table
                 wrap.end_pos = pos - 1
@@ -750,11 +699,13 @@ class TestTrace:
         return trace_dir, test_name
 
     def save_json(self):
-        data = json.dumps(self.trace_lines, default=lambda o:o.__dict__, indent=4)
         trace_dir, test_name = self.save_preamble("json")
         trace_path = Path(trace_dir, test_name + ".json")
-        with open(trace_path, 'w') as f:
-            f.write(data)
+        ttd = TestTraceData(self.trace_lines, self.test_rec.wraps)
+        write_trace_file(ttd, trace_path)
+        #data = json.dumps(self.trace_lines, default=lambda o:o.__dict__, indent=4)
+        #with open(trace_path, 'w') as f:
+        #f.write(data)
 
     def save_org(self, partial=False):
         if len(self.trace_lines) == 0 or self.test_rec is None:
