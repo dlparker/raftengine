@@ -719,7 +719,7 @@ class TestTrace:
         trace_dir, test_name = self.save_preamble(prefix)
         trace_path = Path(trace_dir, test_name + ".org")
         TraceCondenser(self).condense()
-        org_lines = OrgFormatter(self).format()
+        org_lines = OrgFormatter(self).format(include_legend)
         if len(org_lines) > 0:
             with open(trace_path, 'w') as f:
                 for line in org_lines:
