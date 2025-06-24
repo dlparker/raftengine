@@ -56,8 +56,19 @@ class TableWrap:
     lines: Optional[list] = None
     condensed: Optional[list] = None
     max_nodes: Optional[int] = None
-    features: Optional[list] = field(default_factory=list)
+    features: Optional[dict] = None
 
+    def __post_init__(self):
+        if self.features:
+            for key in ('used', 'tested'):
+                if len(self.features[key]) > 0:
+                    i1 = self.features[key][0]
+                    if not isinstance(i1, str):
+                        newl = []
+                        for item in self.features[key]:
+                            newl.append(str(item))
+                        self.features[key] = newl
+    
     def count_nodes(self, lines):
         max_nodes = 0
         for line in lines:

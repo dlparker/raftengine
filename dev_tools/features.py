@@ -25,6 +25,12 @@ class FeatureDefinition:
     def get_name_snake(self):
         return "_".join((self.name).split(' '))
 
+    def __str__(self):
+        res = self.get_name_snake()
+        if self.target_branch:
+            res += '.' + self.target_branch.path
+        return res
+    
     def to_dict(self):
         data = dict(self.__dict__)
         data['branches'] = []

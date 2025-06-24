@@ -159,7 +159,7 @@ async def test_command_1(cluster_maker):
     await cluster.deliver_all_pending()
     await cluster.deliver_all_pending()
     logger.debug('------------------------ Tardy follower caught up ---')
-    cluster.test_trace.end_subtest()
+    await cluster.test_trace.end_subtest()
 
 async def test_command_sqlite_1(cluster_maker):
     """

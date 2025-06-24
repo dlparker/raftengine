@@ -195,7 +195,7 @@ async def test_partition_1(cluster_maker):
 
     assert ts_2.operations.total == 3
     assert ts_3.operations.total == 3
-    cluster.test_trace.end_subtest()
+    await cluster.test_trace.end_subtest()
 
 async def test_partition_2_leader(cluster_maker):
     """
@@ -284,7 +284,7 @@ async def test_partition_2_leader(cluster_maker):
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.operations.total == 2
-    cluster.test_trace.end_subtest()
+    await cluster.test_trace.end_subtest()
     logger.info('------------------------ Leadership change correctly detected')
 
 
@@ -364,7 +364,7 @@ async def test_partition_3_leader(cluster_maker):
         
     assert await ts_1.log.get_last_index() == expected_index
     assert ts_1.get_leader_uri() == uri_2
-    cluster.test_trace.end_subtest()
+    await cluster.test_trace.end_subtest()
     logger.info('------------------------ Leadership change correctly detected')
     
 async def test_partition_3_follower(cluster_maker):
@@ -422,4 +422,4 @@ async def test_partition_3_follower(cluster_maker):
         await asyncio.sleep(heartbeat_period/4.0)
     assert ts_1.get_role_name() == "LEADER"
     
-    cluster.test_trace.end_subtest()
+    await cluster.test_trace.end_subtest()

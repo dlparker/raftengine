@@ -23,7 +23,8 @@ class TestRec:
     end_pos: Optional[int] = field(default=None)
     wraps: dict[int, TableWrap] = field(default_factory=dict)
     condensed_tables: list = field(default=None)
-    
+
+        
     def last_wrap(self):
         if len(self.wraps) < 1:
             return None
@@ -163,7 +164,8 @@ class TestTrace:
                 self.test_logger.info("Starting subtest %s", description)
 
     async def mark_test_features(self, description, features):
-        
+        used = []
+        tested = []
         if features is None:
             return {'used': [], 'tested': []}
         else:
@@ -171,12 +173,13 @@ class TestTrace:
                 feature_regy.add_test_to_feature(feature, 'uses',
                                                  self.test_rec.test_name, self.test_rec.test_path,
                                                  description)
+                used.append(str(feature))
             for feature in features['tested']:
                 feature_regy.add_test_to_feature(feature, 'tests',
                                                  self.test_rec.test_name, self.test_rec.test_path,
                                                  description)
-        return features
-        
+                tested.append(str(feature))
+        return {'used': used, 'tested': tested}
 
     async def end_subtest(self):
         # Sometimes this gets called on a single, empty wrap because
@@ -481,13 +484,13 @@ class TestTrace:
         if wrap is None:
             raise Exception(f'start position {start_pos} not found in test_recs')
         wrap.lines = []
-        wrap.lines.append(wrap)
+        #wrap.lines.append(wrap)
         pos = start_pos + 1
         while pos < len(self.trace_lines):
             wrap.lines.append(self.trace_lines[pos])
             if pos == wrap.end_pos:
                 return wrap
-            if pos in self.table_rec.wraps:
+            if pos in self.test_rec.wraps:
                 # this pos is the start of another table
                 # nobody called end for this table
                 wrap.end_pos = pos - 1
@@ -499,8 +502,6 @@ class TestTrace:
     def to_condensed_tables(self, include_index=False):
         tables = []
         table = self.wrap_table(0)
-        if table.end_pos is None:
-            breakpoint()
         table.count_nodes(self.trace_lines)
         tables.append(table)
         while table.end_pos + 1 < len(self.trace_lines):
@@ -699,6 +700,8 @@ class TestTrace:
         return trace_dir, test_name
 
     def save_json(self):
+        if self.test_rec is None:
+            return
         trace_dir, test_name = self.save_preamble("json")
         trace_path = Path(trace_dir, test_name + ".json")
         ttd = TestTraceData(self.trace_lines, self.test_rec.wraps)
@@ -1015,13 +1018,9 @@ class RstFormatter:
             all_rows.append("")
             if table.features:
                 for feature in table.features['used']:
-                    all_rows.append(f"Raft feature used: {feature.get_name_snake()}")
-                    if feature.target_branch:
-                        all_rows.append(f"           branch: {feature.target_branch.get_path_snake()}")
+                    all_rows.append(f"Raft feature used: {str(feature)}")
                 for feature in table.features['tested']:
-                    all_rows.append(f"Raft feature tested: {feature.get_name_snake()}")
-                    if feature.target_branch:
-                        all_rows.append(f"           branch: {feature.target_branch.get_path_snake()}")
+                    all_rows.append(f"Raft feature tested: {str(feature)}")
                 all_rows.append("")
                 all_rows.append("")
             trows = []
