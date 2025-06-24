@@ -273,6 +273,17 @@ async def cluster_maker():
         await the_cluster.stop_auto_comms()
         await the_cluster.save_traces()
         await the_cluster.cleanup()
+        tasks = asyncio.all_tasks(asyncio.get_event_loop())
+        tasks = [t for t in tasks if not t.done()]
+        for task in tasks:
+            task.cancel()
+
+        # Wait for all tasks to complete, ignoring any CancelledErrors                                  
+        try:
+            await asyncio.wait(tasks)
+        except asyncio.exceptions.CancelledError:
+            pass
+        
 
 
 
