@@ -132,6 +132,9 @@ class FeatureRegistry:
             self.db = None
             return
         self.db_path = Path(db_path)
+        ppath = self.db_path.parent
+        if not ppath.exists():
+            ppath.mkdir(parents=True)
         sqlite3.register_converter('BOOLEAN', bool_converter)
         self.db = sqlite3.connect(self.db_path,
                                   detect_types=sqlite3.PARSE_DECLTYPES |
