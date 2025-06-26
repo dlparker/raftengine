@@ -1,0 +1,41 @@
+* Variant Setup Checklist
+
+  This checklist ensures consistent setup for each experiment variant.
+
+  - [X] Prepare project environment
+    - [X] Verify system prerequisites (e.g., required software versions, dependencies like Git, Python, Emacs, etc.).
+    - [X] Checkout branch "ai_trials_1_base" and ensure it’s up-to-date with the latest commits.
+    - [X] Verify the Raft library repository (https://github.com/dlparker/raftengine.git) is cloned and accessible.
+  - [X] Document variant configuration
+    - [X] Add an entry to the variants file (`ai_experiments/plan/variants.org`) with a unique name (e.g., "grok-3.cline.mcp-set-1.trial-1").
+      - Ensure the name follows the convention: `<agent>.<interface>.mcp-set-<N>.trial-<M>`.
+      - Include details: agent name/version, API endpoint (if applicable), mcp-set configuration reference, trial number, and date started.
+    - [X] If using mcp servers, reference the specific configuration in `mcp-sets.org` (e.g., server name, version, IP, authentication details).
+    - [X] For "mcp-set-0" (no mcp servers), explicitly note that no mcp configuration is used.
+  - [X] Create a git branch for the trial
+    - [X] Name the branch consistently (e.g., `trial/grok-3.cline.mcp-set-1.trial-1`).
+    - [X] Ensure the branch is created from "ai_trials_1_base" to maintain a clean starting point.
+  - [X] Set up tracking infrastructure
+    - [X] Create a tracking directory (e.g., `ai_experiments/tracking/grok-3.cline.mcp-set-1.trial-1`).
+    - [X] Initialize a cost tracking file (`cost_tracking.org` or `.json`) in the tracking directory.
+      - Specify the format (e.g., table with columns: timestamp, API calls, token usage, estimated cost).
+      - If the API provides a dashboard or queryable endpoint, note the method for retrieving cost data.
+      - Include a step to snapshot initial cost data before starting the trial.
+    - [X] Create a log file (`trial_log.org`) for recording setup steps, errors, and observations.
+  - [X] Prepare trial plan document
+    - [X] Create a plan document (`plan.org`) in the tracking directory, detailing:
+      - Overview of the trial’s goals and scope.
+      - Specific agent/API configurations (e.g., model version, temperature, max tokens).
+      - Special instructions for the agent or API (e.g., prompt engineering guidelines, context size limits).
+      - Reference to the mcp-set configuration, if applicable.
+    - [ ] Ensure the plan document includes a section for expected deliverables (e.g., code changes, test results).
+  - [ ] Create action checklists
+    - [ ] Generate a `checklist.org` file in the tracking directory for each planned action (referenced from the Planned Actions File).
+    - [ ] Ensure each checklist references the corresponding prompt and expected outcome.
+  - [ ] Validate setup
+    - [ ] Run a test command to verify the environment (e.g., compile the Raft library, run existing tests).
+    - [ ] Confirm that the agent/API is accessible and responds to a simple query.
+    - [ ] If using mcp servers, verify connectivity and configuration.
+  - [ ] Record setup completion
+    - [ ] Commit the initial setup files to the trial branch.
+    - [ ] Note the setup completion timestamp in the trial log.

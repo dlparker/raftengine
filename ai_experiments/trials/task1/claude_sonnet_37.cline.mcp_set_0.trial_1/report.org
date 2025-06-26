@@ -1,0 +1,22 @@
+* General observations
+
+Claude sonnet3 did this task perfectly, preserving my crappy logic. The refactor was done
+correctly and then it worked hard to validate the results, mulitple passes, figured out
+how to find the output files despite lack of clear direction, tolerated unimportant
+differences in the json output file, figured out the business about table legend in the
+.org file. Masterful
+
+* Prompt1 report
+
+** prompt used
+
+in ./prompt1.txt
+
+** agent reponse plan mode
+
+** code changes
+
+** test results
+ 
+** observations
+

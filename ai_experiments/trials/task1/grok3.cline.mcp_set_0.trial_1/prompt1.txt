@@ -1,0 +1,28 @@
+
+Files to examine:
+dev_tools/trace_data.py
+ai_experiments/trails/grok3.cline.mcp_set_0.trial_1/test_election_1.json
+ai_experiments/trails/grok3.cline.mcp_set_0.trial_1/test_election_1.org
+
+File to Modify
+dev_tools/trace_condenser.py
+
+Description of the desired change:
+
+   1. Split the condenser logic into Three classes:
+      1. TraceFilter - processes trace_lines and decides which lines
+	 to include in results, returns result list with only those lines
+	 using same logic current found in TraceCondenser.condense()
+      2. Shorthand - turns lists of NodeState objects into string versions
+	 of the data as using the same technique as the current TraceCondenser.condense() method does
+      3. A modified version of TraceCondenser that processes each TestSection by using TraceFilter
+	 and Shorthand. Instances of these should be created as properties of the
+	 class. In future revisions other classes that perform the same functions differently
+	 will be optional possibilities. The results of these operations should be stored
+	 in the TestSection condensed property just as it is currently.
+      4. dev_tools/test_trace.py should be updated to call the new condenser.
+      5. the run_test.sh shell script should be used to re-run the target test the json and
+	 org capture files produced should match the originals
+
+
+	 ./run_test.sh tests/test_elections_1.py::test_election_1

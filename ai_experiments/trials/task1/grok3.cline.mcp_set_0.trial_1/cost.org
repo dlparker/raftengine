@@ -1,0 +1,6 @@
+* Cost Tracking
+| Timestamp        | Prompt      | Input Tokens | Output Tokens | Estimated Cost |
+|------------------+-------------+--------------+---------------+----------------|
+| 2025-06-23 12:00 | prompt1.txt | 368.0k       | 5.8k          | $1.1916        |
+
+

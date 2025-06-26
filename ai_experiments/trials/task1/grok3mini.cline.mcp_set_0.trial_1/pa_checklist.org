@@ -1,0 +1,32 @@
+* Planned Action Checklist: <Action ID>
+  This checklist guides the execution of a single planned action.
+
+  - [X] Prepare prompt
+    - [X] Retrieve the generic prompt from the Planned Actions File.
+    - [X] If needed, modify the prompt for the variant (e.g., add agent-specific instructions).
+    - [X] Save the final prompt in the tracking directory (`prompts/<action_id>.org`).
+    - [X] Validate the prompt by reviewing it for clarity and completeness.
+  - [X] Prepare report document
+    - [X] Create a report file (`reports/<action_id>.org`) in the tracking directory.
+    - [X] Include sections for: prompt used, agent response, code changes, test results, and observations.
+  - [X] Execute the action
+    - [X] Run the prompt with the selected agent/API.
+    - [X] For each attempt:
+      - [X] Save the agent’s response in the report file.
+      - [X] If the changes are accepted:
+        - [X] Apply the changes to the codebase.
+        - [X] Run tests to verify functionality.
+        - [X] Commit the changes to the trial branch with a descriptive message.
+        - [X] Record the degree of completeness (e.g., 100% if fully successful, 50% if partial).
+        - [X] Update the cost tracking file with any new API usage data.
+      - [X] If the changes are not accepted:
+        - [X] Record the reason (e.g., “Incorrect implementation”, “Test failure”, “Prompt unclear”).
+        - [X] If minor tweak needed, adjust the prompt and retry (return to “Execute the action”).
+        - [X] If major issue, create a new planned action:
+          - [] Add the new action to the Planned Actions File.
+          - [] Generate a new checklist for the action.
+          - [] Link the new action to the current one in the report for traceability.
+  - [] Finalize action
+    - [ ] Summarize the outcome in the report (success, partial success, failure).
+    - [ ] Update the variants file with the action’s results (e.g., completeness, issues encountered).
+    - [ ] Commit the report and any updated files to the trial branch.
