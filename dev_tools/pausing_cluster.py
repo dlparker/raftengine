@@ -16,9 +16,9 @@ from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 digest_org = False
 digest_rst = False
 digest_csv = False
-part_digest_org = False
+part_digest_org = True
 trace_to_csv = False
-trace_to_json = False
+trace_to_json = True
 
 class PausingCluster:
 

@@ -257,7 +257,19 @@ class NodeStateShortestFormat(NodeStateFormat):
 
     def __init__(self, node_state, prev_state=None):
         super().__init__(node_state, prev_state)
+        # Register all message formatters
         self.message_formatter_map['append_entries'] = AppendEntriesShortestFormat
+        self.message_formatter_map['append_response'] = AppendResponseShortestFormat
+        self.message_formatter_map['request_vote'] = RequestVoteShortestFormat
+        self.message_formatter_map['request_vote_response'] = RequestVoteResponseShortestFormat
+        self.message_formatter_map['pre_vote'] = PreVoteShortestFormat
+        self.message_formatter_map['pre_vote_response'] = PreVoteResponseShortestFormat
+        self.message_formatter_map['membership_change'] = MembershipChangeShortestFormat
+        self.message_formatter_map['membership_change_response'] = MembershipChangeResponseShortestFormat
+        self.message_formatter_map['transfer_power'] = TransferPowerShortestFormat
+        self.message_formatter_map['transfer_power_response'] = TransferPowerResponseShortestFormat
+        self.message_formatter_map['snapshot'] = SnapshotShortestFormat
+        self.message_formatter_map['snapshot_response'] = SnapshotResponseShortestFormat
 
     def format(self):
         data = self.prep_format()
@@ -275,5 +287,183 @@ class AppendEntriesShortestFormat(MessageFormat):
         res += f" t-{self.message.term} i-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
         res += f" e-{len(self.message.entries)} c-{self.message.commitIndex}"
         return res
+
+class AppendResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "append_response":
+            raise Exception(f'not an append_response message {str(self.message)}')
+
+    def format(self):
+        # Use same logic as ShorthandType1.message_to_trace for append_response
+        short_code = "ae_reply"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        # For append_response, we always show incoming messages (N-sender+code)
+        value = f'N-{sender}+{short_code}'
+        value += f" ok-{self.message.success} mi-{self.message.maxIndex}"
+        return value
+
+class RequestVoteShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "request_vote":
+            raise Exception(f'not a request_vote message {str(self.message)}')
+
+    def format(self):
+        short_code = "poll"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'{short_code}+N-{target}'
+        value += f" t-{self.message.term} li-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
+        return value
+
+class RequestVoteResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "request_vote_response":
+            raise Exception(f'not a request_vote_response message {str(self.message)}')
+
+    def format(self):
+        short_code = "vote"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'N-{sender}+{short_code}'
+        value += f" yes-{self.message.vote}"
+        return value
+
+class PreVoteShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "pre_vote":
+            raise Exception(f'not a pre_vote message {str(self.message)}')
+
+    def format(self):
+        short_code = "p_v_r"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'{short_code}+N-{target}'
+        value += f" t-{self.message.term} li-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
+        return value
+
+class PreVoteResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "pre_vote_response":
+            raise Exception(f'not a pre_vote_response message {str(self.message)}')
+
+    def format(self):
+        short_code = "p_v"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'N-{sender}+{short_code}'
+        value += f" yes-{self.message.vote}"
+        return value
+
+class MembershipChangeShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "membership_change":
+            raise Exception(f'not a membership_change message {str(self.message)}')
+
+    def format(self):
+        short_code = "m_c"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'{short_code}+N-{target}'
+        value += f" op-{self.message.op} n-{self.message.target_uri}"
+        return value
+
+class MembershipChangeResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "membership_change_response":
+            raise Exception(f'not a membership_change_response message {str(self.message)}')
+
+    def format(self):
+        short_code = "m_cr"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'N-{sender}+{short_code}'
+        value += f" op-{self.message.op} n-{self.message.target_uri} ok-{self.message.ok}"
+        return value
+
+class TransferPowerShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "transfer_power":
+            raise Exception(f'not a transfer_power message {str(self.message)}')
+
+    def format(self):
+        short_code = "t_p"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'{short_code}+N-{target}'
+        value += f" i-{self.message.prevLogIndex}"
+        return value
+
+class TransferPowerResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "transfer_power_response":
+            raise Exception(f'not a transfer_power_response message {str(self.message)}')
+
+    def format(self):
+        short_code = "t_pr"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'N-{sender}+{short_code}'
+        value += f" i-{self.message.prevLogIndex} ok-{self.message.success}"
+        return value
+
+class SnapshotShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "snapshot":
+            raise Exception(f'not a snapshot message {str(self.message)}')
+
+    def format(self):
+        short_code = "sn"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'{short_code}+N-{target}'
+        value += f" i-{self.message.prevLogIndex}"
+        return value
+
+class SnapshotResponseShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "snapshot_response":
+            raise Exception(f'not a snapshot_response message {str(self.message)}')
+
+    def format(self):
+        short_code = "snr"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        value = f'N-{sender}+{short_code}'
+        value += f" i-{self.message.prevLogIndex} s-{self.message.success}"
+        return value
 
 
