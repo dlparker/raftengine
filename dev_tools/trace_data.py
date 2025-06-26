@@ -3,6 +3,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 import json
+from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
+from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
+from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
+from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
+from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 from raftengine.api.log_api import LogRec
 
 class SaveEvent(str, Enum):
@@ -46,7 +52,7 @@ class NodeState:
         return cls(**copy_of)
         
 @dataclass
-class TableWrap:
+class TestSection:
     start_pos: int
     description: str
     is_prep: Optional[bool] = False
@@ -78,9 +84,36 @@ class TableWrap:
             
 class TestTraceData:
 
-    def __init__(self, lines, wraps):
+    def __init__(self, test_name, test_path, test_doc_string, lines, sections):
+        self.test_name = test_name
+        self.test_path = test_path
+        self.test_doc_string = test_doc_string
         self.trace_lines = lines
-        self.table_wraps = wraps
+        self.test_sections = sections
+
+    def last_section(self):
+        if len(self.test_sections) < 1:
+            return None
+        keys = list(self.test_sections.keys())
+        keys.sort()
+        return self.test_sections[keys[-1]]
+
+def decode_message(mdict):
+    # we don't always need these reconstitued from save json,
+    # so we make it easy for code that needs them to do it.
+    mtypes = [AppendEntriesMessage,AppendResponseMessage,
+              RequestVoteMessage,RequestVoteResponseMessage,
+              PreVoteMessage,PreVoteResponseMessage,
+              TransferPowerMessage,TransferPowerResponseMessage,
+              MembershipChangeMessage,MembershipChangeResponseMessage,
+              SnapShotMessage,SnapShotResponseMessage,]
+    message = None
+    for mtype in mtypes:
+        if mdict['code'] == mtype.get_code():
+            message = mtype.from_dict(mdict)
+    if message is None:
+        raise Exception('Message is not decodeable as a raft type')
+    return message
 
 
 def write_trace_file(trace_data, filepath):
@@ -103,11 +136,14 @@ def read_trace_file(filepath):
         for item in inline:
             outline.append(NodeState.from_dict(item))
         lines.append(outline)
-    wraps = {}
-    for pos,inwrap in in_data['table_wraps'].items():
-        wraps[pos] = TableWrap(**inwrap)
+    sections = {}
+    for pos,insection in in_data['test_sections'].items():
+        sections[pos] = TestSection(**insection)
 
-    return TestTraceData(lines=lines, wraps=wraps)
+    return TestTraceData(in_data['test_name'],
+                         in_data['test_path'],
+                         in_data['test_doc_string'],
+                         lines=lines, sections=sections)
             
         
     
