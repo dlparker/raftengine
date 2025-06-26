@@ -271,6 +271,98 @@ class NodeStateShortestFormat(NodeStateFormat):
         self.message_formatter_map['snapshot'] = SnapshotShortestFormat
         self.message_formatter_map['snapshot_response'] = SnapshotResponseShortestFormat
 
+    def shorten_role(self):
+        """Convert role to shortened form like ShorthandType1.shorten_role"""
+        if self.node_state.role_name == "FOLLOWER":
+            return 'FLWR'
+        elif self.node_state.role_name == "CANDIDATE":
+            return 'CNDI'
+        elif self.node_state.role_name == "LEADER":
+            return 'LEAD'
+        return 'FLWR'
+
+    def prep_format(self):
+        """Override to use shortened role and legacy-style delta format"""
+        # Use shortened role
+        self.role = self.shorten_role()
+        
+        # Handle op field - messages use formatters, other events use short_event
+        self.op = None
+        if self.node_state.save_event:
+            if self.node_state.save_event == SaveEvent.message_op:
+                if self.node_state.message:
+                    if isinstance(self.node_state.message, dict):
+                        code = self.node_state.message['code']
+                    else:
+                        code = self.node_state.message.code
+                    mf = self.message_formatter_map.get(code, self.message_formatter_map['default'])
+                    self.op = mf(self.node_state.message).format()
+            else:
+                # Use ShorthandType1.short_event for non-message events
+                self.op = ShorthandType1.short_event(self.node_state)
+        
+        # Build delta using exact legacy logic from Shorthand.shorten_node_states
+        self.delta = self.build_legacy_delta()
+        
+        result = dict(role=self.role,
+                      op=self.op,
+                      delta=self.delta)
+        return result
+
+    def build_legacy_delta(self):
+        """Build delta dictionary using exact logic from Shorthand.shorten_node_states"""
+        from raftengine.api.log_api import LogRec
+        
+        # Initialize delta values (empty strings by default)
+        d_t = ""
+        d_lt = ""
+        d_li = ""
+        d_ci = ""
+        d_net = ""
+        
+        # Handle fake log_rec if None (copied from legacy code)
+        if self.node_state.log_rec is None:
+            self.node_state.log_rec = LogRec()
+        
+        # Special case: PARTITION_HEALED at first position (pos == 0)
+        # Since we don't have position context, we'll check if it's PARTITION_HEALED and no prev_state
+        if str(self.node_state.save_event) == "PARTITION_HEALED" and self.prev_state is None:
+            d_net = ShorthandType1.shorten_net_id(1)
+        
+        # Only calculate deltas if we have a previous state
+        if self.prev_state is not None:
+            # Handle case where prev_state might not have log_rec
+            if self.prev_state.log_rec is None:
+                self.prev_state.log_rec = LogRec()
+            
+            # Check for changes and apply ShorthandType1 formatting
+            if self.node_state.term != self.prev_state.term:
+                d_t = ShorthandType1.shorten_term(self.node_state)
+            if self.node_state.log_rec.term != self.prev_state.log_rec.term:
+                d_lt = ShorthandType1.shorten_rec_term(self.node_state)
+            if self.node_state.log_rec.index != self.prev_state.log_rec.index:
+                d_li = ShorthandType1.shorten_rec_index(self.node_state)
+            if self.node_state.commit_index != self.prev_state.commit_index:
+                d_ci = ShorthandType1.shorten_commit_index(self.node_state)
+            
+            # Network state logic
+            if self.node_state.on_quorum_net:
+                if not self.prev_state.on_quorum_net:
+                    d_net = ShorthandType1.shorten_net_id(1)
+            else:
+                d_net = ShorthandType1.shorten_net_id(2)
+        
+        # Build dictionary with legacy-style keys and values
+        delta_dict = {
+            "term": d_t,
+            "log_last_term": d_lt, 
+            "last_index": d_li,
+            "commit_index": d_ci,
+            "network_id": d_net
+        }
+        
+        return delta_dict
+
     def format(self):
         data = self.prep_format()
         return json.dumps(data)
