@@ -43,11 +43,9 @@ def test_formatters_for_test(test_file_part, test_name_part):
                 
                 prev_state = state_history.get(node_index, None)
                 nsf = NodeStateShortestFormat(ns, prev_state)
-                formatted = nsf.format()
+                data = nsf.format()
                 
                 # Extract just the op part for comparison
-                import json
-                data = json.loads(formatted)
                 if data['op'] and data['op'] != 'null':
                     print(f"Message type: {code:20} | Formatted: {data['op']}")
             

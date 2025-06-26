@@ -1,0 +1,16 @@
+ The cleanup we have been working on is prep for adding the next level
+of validation of the library's implementation of Raft. I have started
+a mechansim for tracking which raft features are used tests,
+specifically in marked subtest sections of the tests. The tracking is
+implemented mainly in dev_tools/features.py and in
+dev_tools/test_trace.py. There is some embryonic usage in the
+tests/test_random_code.py. The idea is that I need to fillow the
+pattern used in the tests in that file to mark all the subtests with
+similar info. I also need to make sure all the prep operations are
+separated from the actual test operations. I don't have a predefined
+list of the names of raft features and feature branches, I intend to
+build those up organically as I update the test marking.
+
+      Once I have all the feature and branch definitions I will write .rst
+document fragments that will be inserted into the .rst versions of
+generated files we've been dealing with.

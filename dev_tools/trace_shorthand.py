@@ -225,7 +225,14 @@ class NodeStateFormat:
                 else:
                     code = self.node_state.message.code
                 mf = self.message_formatter_map.get(code, self.message_formatter_map['default'])
-                self.op = mf(self.node_state.message).format()
+                # Pass node_state to message formatter for directional formatting
+                try:
+                    # Try to pass node_state for formatters that need it
+                    formatter = mf(self.node_state.message, self.node_state)
+                except TypeError:
+                    # Fallback for formatters that don't accept node_state
+                    formatter = mf(self.node_state.message)
+                self.op = formatter.format()
         self.delta = {}
         if self.node_state.log_rec:
             log_state  = dict(last_index=self.node_state.log_rec.index,
@@ -296,7 +303,14 @@ class NodeStateShortestFormat(NodeStateFormat):
                     else:
                         code = self.node_state.message.code
                     mf = self.message_formatter_map.get(code, self.message_formatter_map['default'])
-                    self.op = mf(self.node_state.message).format()
+                    # Pass node_state to message formatter for directional formatting
+                    try:
+                        # Try to pass node_state for formatters that need it
+                        formatter = mf(self.node_state.message, self.node_state)
+                    except TypeError:
+                        # Fallback for formatters that don't accept node_state
+                        formatter = mf(self.node_state.message)
+                    self.op = formatter.format()
             else:
                 # Use ShorthandType1.short_event for non-message events
                 self.op = ShorthandType1.short_event(self.node_state)
@@ -364,21 +378,34 @@ class NodeStateShortestFormat(NodeStateFormat):
         return delta_dict
 
     def format(self):
-        data = self.prep_format()
-        return json.dumps(data)
+        """Return formatted data as dictionary"""
+        return self.prep_format()
+    
+    def format_json(self):
+        """Return formatted data as JSON string (backwards compatibility)"""
+        return json.dumps(self.format())
         
 class AppendEntriesShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "append_entries":
             raise Exception(f'not an append_entries message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
-        res = "ae"
-        res += f" t-{self.message.term} i-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
-        res += f" e-{len(self.message.entries)} c-{self.message.commitIndex}"
-        return res
+        short_code = "ae"
+        target = self.message.receiver.split("/")[-1]
+        sender = self.message.sender.split("/")[-1]
+        
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
+        value += f" t-{self.message.term} i-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
+        value += f" e-{len(self.message.entries)} c-{self.message.commitIndex}"
+        return value
 
 class AppendResponseShortestFormat(MessageFormat):
 
@@ -400,161 +427,211 @@ class AppendResponseShortestFormat(MessageFormat):
 
 class RequestVoteShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "request_vote":
             raise Exception(f'not a request_vote message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "poll"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'{short_code}+N-{target}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" t-{self.message.term} li-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
         return value
 
 class RequestVoteResponseShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "request_vote_response":
             raise Exception(f'not a request_vote_response message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "vote"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'N-{sender}+{short_code}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" yes-{self.message.vote}"
         return value
 
 class PreVoteShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "pre_vote":
             raise Exception(f'not a pre_vote message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "p_v_r"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'{short_code}+N-{target}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" t-{self.message.term} li-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
         return value
 
 class PreVoteResponseShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "pre_vote_response":
             raise Exception(f'not a pre_vote_response message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "p_v"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'N-{sender}+{short_code}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" yes-{self.message.vote}"
         return value
 
 class MembershipChangeShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "membership_change":
             raise Exception(f'not a membership_change message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "m_c"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'{short_code}+N-{target}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" op-{self.message.op} n-{self.message.target_uri}"
         return value
 
 class MembershipChangeResponseShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "membership_change_response":
             raise Exception(f'not a membership_change_response message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "m_cr"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'N-{sender}+{short_code}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" op-{self.message.op} n-{self.message.target_uri} ok-{self.message.ok}"
         return value
 
 class TransferPowerShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "transfer_power":
             raise Exception(f'not a transfer_power message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "t_p"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'{short_code}+N-{target}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" i-{self.message.prevLogIndex}"
         return value
 
 class TransferPowerResponseShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "transfer_power_response":
             raise Exception(f'not a transfer_power_response message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "t_pr"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'N-{sender}+{short_code}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" i-{self.message.prevLogIndex} ok-{self.message.success}"
         return value
 
 class SnapshotShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "snapshot":
             raise Exception(f'not a snapshot message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "sn"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'{short_code}+N-{target}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" i-{self.message.prevLogIndex}"
         return value
 
 class SnapshotResponseShortestFormat(MessageFormat):
 
-    def __init__(self, inmessage):
+    def __init__(self, inmessage, node_state=None):
         super().__init__(inmessage)
         if self.message.code != "snapshot_response":
             raise Exception(f'not a snapshot_response message {str(self.message)}')
+        self.node_state = node_state
 
     def format(self):
         short_code = "snr"
         target = self.message.receiver.split("/")[-1]
         sender = self.message.sender.split("/")[-1]
         
-        value = f'N-{sender}+{short_code}'
+        # Use same direction logic as legacy ShorthandType1.message_to_trace
+        if self.node_state and self.message.sender == self.node_state.uri:
+            value = f'{short_code}+N-{target}'
+        else:
+            value = f'N-{sender}+{short_code}'
         value += f" i-{self.message.prevLogIndex} s-{self.message.success}"
         return value
 
