@@ -116,34 +116,6 @@ def decode_message(mdict):
     return message
 
 
-def write_trace_file(trace_data, filepath):
-    rdata = json.dumps(trace_data, default=lambda o:o.__dict__, indent=4)
-    with open(filepath, 'w') as f:
-        f.write(rdata)
-
-    tmp = read_trace_file(filepath)
-        
-def read_trace_file(filepath):
-
-    with open(filepath, 'r') as f:
-        buff = f.read()
-
-    in_data = json.loads(buff)
-
-    lines = []
-    for inline in in_data['trace_lines']:
-        outline = []
-        for item in inline:
-            outline.append(NodeState.from_dict(item))
-        lines.append(outline)
-    sections = {}
-    for pos,insection in in_data['test_sections'].items():
-        sections[pos] = TestSection(**insection)
-
-    return TestTraceData(in_data['test_name'],
-                         in_data['test_path'],
-                         in_data['test_doc_string'],
-                         lines=lines, sections=sections)
             
         
     

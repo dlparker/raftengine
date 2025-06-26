@@ -1,3 +1,4 @@
+import json
 from raftengine.api.log_api import LogRec
 from dev_tools.trace_data import SaveEvent, decode_message
 
@@ -188,4 +189,88 @@ class ShorthandType1:
     @staticmethod
     def shorten_net_id(nid):
         return f"n={nid}"
-    
+
+class MessageFormat:
+
+    def __init__(self, inmessage):
+        if isinstance(inmessage, dict):
+            self.message = decode_message(inmessage)
+        else:
+            self.message = inmessage
+
+    def prep_format(self):
+        return self.message.__dict__
+                  
+    def format(self):
+        return str(self.message)
+
+class NodeStateFormat:
+
+    def __init__(self, node_state, prev_state=None):
+        self.node_state = node_state
+        self.prev_state = prev_state
+        self.role = None
+        self.op = None
+        self.delta = None
+        self.message_formatter_map = {}
+        self.message_formatter_map['default'] = MessageFormat
+
+    def prep_format(self):
+        self.role = self.node_state.role_name
+        if self.node_state.save_event:
+            self.op = self.node_state.save_event
+            if self.node_state.message:
+                mf = self.message_formatter_map.get(self.node_state.message.code,
+                                                    self.message_formatter_map['default'])
+                self.op = mf(self.node_state.message).format()
+        self.delta = {}
+        if self.node_state.log_rec:
+            log_state  = dict(last_index=self.node_state.log_rec.index,
+                              last_term=self.node_state.log_rec.term,
+                              term=self.node_state.term,
+                              commit_index=self.node_state.commit_index,
+                              leader_id= self.node_state.leader_id)
+            if self.prev_state and self.prev_state.log_rec:
+                prev_log_state = dict(last_index=self.prev_state.log_rec.index,
+                                      last_term=self.prev_state.log_rec.term,
+                                      term=self.prev_state.term,
+                                      commit_index=self.prev_state.commit_index,
+                                      leader_id= self.prev_state.leader_id)
+                for key in [key for key in log_state if log_state[key] != prev_log_state[key]]:
+                    self.delta[key] = log_state[key]
+            else:
+                self.delta = log_state
+        result = dict(role=self.role,
+                      op=self.op,
+                      delta=self.delta)
+        return result
+        
+    def format(self):
+        data = self.prep_format()
+        return json.dumps(data)
+        
+
+class NodeStateShortestFormat(NodeStateFormat):
+
+    def __init__(self, node_state, prev_state=None):
+        super().__init__(node_state, prev_state)
+        self.message_formatter_map['append_entries'] = AppendEntriesShortestFormat
+
+    def format(self):
+        data = self.prep_format()
+        return json.dumps(data)
+        
+class AppendEntriesShortestFormat(MessageFormat):
+
+    def __init__(self, inmessage):
+        super().__init__(inmessage)
+        if self.message.code != "append_entries":
+            raise Exception(f'not an append_entries message {str(self.message)}')
+
+    def format(self):
+        res = "ae"
+        res += f" t-{self.message.term} i-{self.message.prevLogIndex} lt-{self.message.prevLogTerm}"
+        res += f" e-{len(self.message.entries)} c-{self.message.commitIndex}"
+        return res
+
+

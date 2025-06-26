@@ -5,7 +5,7 @@ from typing import Optional
 import json
 
 from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData
-from dev_tools.trace_shorthand import Shorthand, ShorthandType1
+from dev_tools.trace_shorthand import Shorthand, ShorthandType1, NodeStateFormat
 from dev_tools.trace_formatters import CSVFullFormatter, OrgFormatter, RstFormatter, PUMLFormatter
 
 class TraceOutput:
@@ -114,6 +114,22 @@ class TraceOutput:
         with open(filepath, 'w') as f:
             f.write(rdata)
 
+    def write_verbose_trace_file(self, filepath):
+        outlines = []
+        state_history = {}
+        for line in self.test_data.trace_lines:
+            out_line = []
+            for node_index,ns in enumerate(line):
+                prev_state = state_history.get(node_index, None)
+                nsf = NodeStateFormat(ns, prev_state)
+                out_line.append(nsf.format())
+                state_history[node_index] = ns
+            outlines.append(out_line)
+        with open(filepath, 'w') as f:
+            for index,ol in enumerate(outlines):
+                f.write(f'- {index} -\n')
+                for ni in ol:
+                    f.write(f"{ni}\n")
     @classmethod
     def from_json_file(cls, filepath):
         with open(filepath, 'r') as f:

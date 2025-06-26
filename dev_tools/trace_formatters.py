@@ -431,3 +431,4 @@ class PUMLFormatter:
         ])
 
         return puml
+
