@@ -9,7 +9,7 @@ from typing import Optional
 
 from raftengine.api.log_api import LogRec
 from dev_tools.features import registry as feature_regy
-from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData, write_trace_file as write_json_trace_file
+from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData
 from dev_tools.trace_output import TraceOutput
 
 warn_no_docstring = True

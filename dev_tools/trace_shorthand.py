@@ -220,8 +220,11 @@ class NodeStateFormat:
         if self.node_state.save_event:
             self.op = self.node_state.save_event
             if self.node_state.message:
-                mf = self.message_formatter_map.get(self.node_state.message.code,
-                                                    self.message_formatter_map['default'])
+                if isinstance(self.node_state.message, dict):
+                    code = self.node_state.message['code']
+                else:
+                    code = self.node_state.message.code
+                mf = self.message_formatter_map.get(code, self.message_formatter_map['default'])
                 self.op = mf(self.node_state.message).format()
         self.delta = {}
         if self.node_state.log_rec:
