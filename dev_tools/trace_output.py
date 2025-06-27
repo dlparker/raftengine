@@ -5,7 +5,7 @@ from typing import Optional
 import json
 
 from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData
-from dev_tools.trace_shorthand import Shorthand, ShorthandType1, NodeStateFormat
+from dev_tools.trace_shorthand import NodeStateFormat
 from dev_tools.trace_formatters import CSVFullFormatter, OrgFormatter, RstFormatter, PUMLFormatter
 
 class TraceOutput:
@@ -13,25 +13,11 @@ class TraceOutput:
     def __init__(self, test_data: TestTraceData):
         self.test_data = test_data
         self.trace_filter = TableTraceFilter()
-        self.shorthand_class = ShorthandType1
         self.condensed_sections = []
         self.filtered = None
 
     def set_trace_filter(self, trace_filter):
         self.trace_filter = trace_filter
-
-    def make_shorthand_table(self, section):
-        # this is a small list, efficiency is unimportant
-        filtered = self.get_table_events()
-        indecies = filtered.get(section.start_pos, None)
-        if indecies is None:
-            raise Exception(f'no section starts at line position {section_start_pos}')
-
-        filtered_trace = []
-        for index in indecies:
-            filtered_trace.append(self.test_data.trace_lines[index])
-        sh = Shorthand(section, filtered_trace)
-        return sh.shorten_node_states(self.shorthand_class)
                 
     def get_table_events(self):
         if self.filtered:

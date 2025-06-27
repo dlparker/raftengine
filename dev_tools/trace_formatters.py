@@ -1,6 +1,7 @@
 from pathlib import Path
 from dev_tools.trace_data import decode_message, SaveEvent
 from dev_tools.trace_shorthand import NodeStateShortestFormat
+from dev_tools.readable_message_formatters import READABLE_MESSAGE_FORMATTERS, ReadableMessageFormat
 
 class CSVFullFormatter:
 
@@ -456,8 +457,8 @@ class RstFormatter:
 
 class PUMLFormatter:
     """
-    Newm version of PUMLFormatter that uses NodeStateShortestFormat for consistent message processing.
-    Produces identical PlantUML output to the original PUMLFormatter.
+    Enhanced PlantUML formatter that produces human-readable sequence diagrams.
+    Uses readable message formatters instead of abbreviated shorthand for better clarity.
     """
 
     def __init__(self, trace_output):
@@ -465,7 +466,7 @@ class PUMLFormatter:
 
     def format(self, section):
         """
-        Generate PlantUML sequence diagram lines from trace_lines using NodeStateShortestFormat.
+        Generate readable PlantUML sequence diagram lines from trace_lines.
         """
         puml = [
             "@startuml",
@@ -483,31 +484,26 @@ class PUMLFormatter:
             "  BackgroundColor #F5F5F5",
             "  FontSize 11",
             "}",
-            f'title PreVote Election Sequence ({self.trace_output.test_data.test_name})',
+            f'title Raft Consensus Sequence ({self.trace_output.test_data.test_name})',
             ""
         ]
 
-        # Track unique nodes (same as legacy)
+        # Track unique nodes
         nodes = set()
         for line in self.trace_output.test_data.trace_lines[section.start_pos:section.end_pos+1]:
             for ns in line:
                 nodes.add(ns.uri)
         nodes = sorted(nodes)  # e.g., ['mcpy://1', 'mcpy://2', 'mcpy://3']
         for i, uri in enumerate(nodes, 1):
-            puml.append(f'participant "Node {i} (N-{i})" as n{i} order {i*10} #Lightgreen')
+            puml.append(f'participant "Node {i}" as n{i} order {i*10} #Lightgreen')
 
-        # Track phases and states (same as legacy)
-        current_phase = None
+        # Track phases and states
         role_changes = {uri: "FOLLOWER" for uri in nodes}
-        state = {uri: {"t": 0, "li": 0, "lt": 0, "ci": 0} for uri in nodes}
         
-        # Track state history for NodeStateShortestFormat
+        # Track state history for message processing  
         state_histories = {}
 
-        # Collect all events first for repetition detection
-        all_events = []
-        
-        # Process events using modernized approach
+        # Process events
         for line_idx, line in enumerate(self.trace_output.test_data.trace_lines[section.start_pos:section.end_pos+1]):
             # Process node states
             for node_index, ns in enumerate(line):
@@ -517,18 +513,12 @@ class PUMLFormatter:
                 # Get previous state for this node
                 prev_state = state_histories.get(node_index, None)
 
-                # Role change (same logic as legacy)
+                # Role change with descriptive text
                 if ns.save_event == SaveEvent.role_changed and ns.role_name != role_changes[ns.uri]:
-                    event = {
-                        'type': 'role_change',
-                        'line': f'{node_alias} -> {node_alias}: NEW ROLE ({ns.role_name})',
-                        'note': f'note left of {node_alias}: Role: {role_changes[ns.uri]} → {ns.role_name}',
-                        'pattern': f'role_change_{node_alias}_{ns.role_name}'
-                    }
-                    all_events.append(event)
+                    puml.append(f'{node_alias} -> {node_alias}: Becomes {ns.role_name}')
                     role_changes[ns.uri] = ns.role_name
 
-                # Message operation using NodeStateShortestFormat
+                # Message operation using readable formatters
                 if ns.save_event == SaveEvent.message_op and ns.message_action in ("sent", "handled_in"):
                     msg = ns.message
                     sender_id = msg.sender.split("/")[-1]
@@ -536,239 +526,77 @@ class PUMLFormatter:
                     sender_alias = f"n{sender_id}"
                     receiver_alias = f"n{receiver_id}"
 
-                    # Use NodeStateShortestFormat to get consistent message formatting
-                    nsf = NodeStateShortestFormat(ns, prev_state)
-                    formatted_data = nsf.format()
-                    
-                    # Convert the formatted op to PlantUML syntax
-                    if formatted_data['op']:
-                        puml_line = self.convert_shorthand_to_puml(formatted_data['op'], sender_alias, receiver_alias, msg)
-                        if puml_line:
-                            # Extract message type for pattern matching
-                            msg_type = self.extract_message_type(puml_line)
-                            event = {
-                                'type': 'message',
-                                'line': puml_line,
-                                'pattern': f'{msg_type}_{sender_alias}_{receiver_alias}',
-                                'msg_type': msg_type,
-                                'sender': sender_alias,
-                                'receiver': receiver_alias
-                            }
-                            all_events.append(event)
+                    # Use readable message formatter
+                    readable_msg = self.format_message_readable(msg, ns)
+                    if readable_msg:
+                        puml.append(f"{sender_alias} -> {receiver_alias}: {readable_msg}")
 
-                # State changes (modernized using NodeStateShortestFormat delta)
+                # State changes with descriptive text
                 if prev_state is not None:
                     nsf = NodeStateShortestFormat(ns, prev_state)
                     formatted_data = nsf.format()
                     delta = formatted_data['delta']
                     
-                    # Check for state changes using delta
+                    # Generate readable state change notes
+                    state_notes = []
                     if delta.get('last_index'):
                         li_value = delta['last_index'].replace('li-', '') if delta['last_index'] else '0'
                         lt_value = delta['log_last_term'].replace('lt-', '') if delta.get('log_last_term') else '0'
-                        event = {
-                            'type': 'state_change',
-                            'line': f'note {"left" if node_id == "1" else "right"} of {node_alias}: Last Index: li-{li_value}; Last Term: lt-{lt_value}',
-                            'pattern': f'last_index_{node_alias}'
-                        }
-                        all_events.append(event)
+                        state_notes.append(f"Log: index={li_value}, term={lt_value}")
                     
                     if delta.get('commit_index'):
                         ci_value = delta['commit_index'].replace('ci-', '') if delta['commit_index'] else '0'
-                        event = {
-                            'type': 'state_change',
-                            'line': f'note {"left" if node_id == "1" else "right"} of {node_alias}: Commit Index: ci-{ci_value}',
-                            'pattern': f'commit_index_{node_alias}'
-                        }
-                        all_events.append(event)
+                        state_notes.append(f"Commit: index={ci_value}")
                     
                     if delta.get('term'):
                         t_value = delta['term'].replace('t-', '') if delta['term'] else '0'
-                        event = {
-                            'type': 'state_change',
-                            'line': f'note {"left" if node_id == "1" else "right"} of {node_alias}: Term: t-{t_value}',
-                            'pattern': f'term_{node_alias}'
-                        }
-                        all_events.append(event)
+                        state_notes.append(f"Term: {t_value}")
+                    
+                    # Add state change notes
+                    for note in state_notes:
+                        position = "left" if node_id == "1" else "right"
+                        puml.append(f'note {position} of {node_alias}: {note}')
 
                 # Update state history
                 state_histories[node_index] = ns
-        
-        # Detect and condense repetitions
-        condensed_events = self.condense_repetitions(all_events)
-        
-        # Add condensed events to PUML
-        for event in condensed_events:
-            if event['type'] == 'role_change':
-                puml.append(event['line'])
-                if 'note' in event:
-                    puml.append(event['note'])
-            elif event['type'] == 'condensed_repetition':
-                puml.extend(event['lines'])
-            else:
-                puml.append(event['line'])
 
+        # Simplified legend - much smaller since messages are self-explanatory
         puml.extend([
             "",
             "legend right",
             '  <#GhostWhite,#GhostWhite>|      |= __Legend__ |',
-            '  |<#Lightgreen>| Raft Engine Node |',
-            '  |FLWR| Follower Role |',
-            '  |CNDI| Candidate Role |',
-            '  |LEAD| Leader Role |',
-            '  |p_v_r| PreVote Request |',
-            '  |p_v| PreVote Response |',
-            '  |poll| Request Vote |',
-            '  |vote| Vote Response |',
-            '  |ae| Append Entries (TERM_START) |',
-            '  |ae_reply| Append Entries Response |',
-            '  |m_c| Membership Change |',
-            '  |m_cr| Membership Change Response |',
-            '  |t_p| Transfer Power |',
-            '  |t_pr| Transfer Power Response |',
-            '  |sn| Snapshot |',
-            '  |snr| Snapshot Response |',
+            '  |<#Lightgreen>| Raft Node |',
+            '  |FOLLOWER| Follower Role |',
+            '  |CANDIDATE| Candidate Role |',
+            '  |LEADER| Leader Role |',
             "endlegend",
             "@enduml"
         ])
 
         return puml
 
-    def convert_shorthand_to_puml(self, shorthand_op, sender_alias, receiver_alias, msg):
+    def format_message_readable(self, message, node_state):
         """
-        Convert NodeStateShortestFormat operation string to PlantUML sequence diagram syntax.
-        
-        Input: "ae+N-2 t-1 i-0 lt-0 e-1 c-0" or "N-1+ae_reply ok-True mi-1"
-        Output: "n1 -> n2: ae t-1 i-0 lt-0 e-1 c-0"
-        """
-        if not shorthand_op:
-            return None
-
-        # Parse the shorthand operation
-        if '+' not in shorthand_op:
-            return None
-            
-        parts = shorthand_op.split(' ', 1)
-        direction_part = parts[0]
-        params_part = parts[1] if len(parts) > 1 else ""
-        
-        # Determine direction and message type
-        if direction_part.startswith('N-'):
-            # Incoming message: "N-1+ae_reply" -> sender to receiver
-            direction = f"{sender_alias} -> {receiver_alias}"
-            msg_type = direction_part.split('+')[1]
-        else:
-            # Outgoing message: "ae+N-2" -> sender to receiver  
-            direction = f"{sender_alias} -> {receiver_alias}"
-            msg_type = direction_part.split('+')[0]
-        
-        # Map message types to PlantUML display
-        msg_display_map = {
-            'ae': 'ae',
-            'ae_reply': 'ae_reply', 
-            'poll': 'poll',
-            'vote': 'vote',
-            'p_v_r': 'p_v_r',
-            'p_v': 'p_v',
-            'm_c': 'm_c',
-            'm_cr': 'm_cr',
-            't_p': 't_p',
-            't_pr': 't_pr',
-            'sn': 'sn',
-            'snr': 'snr'
-        }
-        
-        display_type = msg_display_map.get(msg_type, msg_type)
-        
-        # Build final PlantUML line
-        if params_part:
-            return f"{direction}: {display_type} {params_part}"
-        else:
-            return f"{direction}: {display_type}"
-
-    def extract_message_type(self, puml_line):
-        """Extract message type from PlantUML line for pattern matching"""
-        # Example: "n1 -> n2: ae t-1 i-0 lt-0 e-1 c-0" -> "ae"
-        if ': ' in puml_line:
-            content = puml_line.split(': ', 1)[1]
-            return content.split(' ')[0]
-        return "unknown"
-
-    def condense_repetitions(self, events, min_repetitions=3):
-        """
-        Detect and condense repeated message patterns.
+        Format a message using readable formatters.
         
         Args:
-            events: List of event dictionaries
-            min_repetitions: Minimum number of repetitions to condense
+            message: The message object
+            node_state: The node state for context
             
         Returns:
-            List of condensed events
+            Readable string representation of the message
         """
-        if len(events) < min_repetitions:
-            return events
+        if isinstance(message, dict):
+            message = decode_message(message)
         
-        condensed = []
-        i = 0
+        code = message.code
+        formatter_class = READABLE_MESSAGE_FORMATTERS.get(code, ReadableMessageFormat)
         
-        while i < len(events):
-            current_event = events[i]
-            
-            # Only condense message events
-            if current_event['type'] != 'message':
-                condensed.append(current_event)
-                i += 1
-                continue
-            
-            # Look for repeated patterns
-            repetition_info = self.find_repetition_sequence(events, i, min_repetitions)
-            
-            if repetition_info:
-                # Found a repetition sequence
-                start_idx, end_idx, pattern, count = repetition_info
-                first_event = events[start_idx]
-                last_event = events[end_idx - 1]
-                
-                # Create condensed representation
-                condensed_event = {
-                    'type': 'condensed_repetition',
-                    'lines': [
-                        first_event['line'],
-                        f"note over {first_event['sender']}, {first_event['receiver']}: ... {count-2} more {first_event['msg_type']} messages ...",
-                        last_event['line']
-                    ]
-                }
-                condensed.append(condensed_event)
-                i = end_idx
-            else:
-                # No repetition, keep original event
-                condensed.append(current_event)
-                i += 1
+        try:
+            # Try to pass node_state for formatters that need it
+            formatter = formatter_class(message, node_state)
+        except TypeError:
+            # Fallback for formatters that don't accept node_state
+            formatter = formatter_class(message)
         
-        return condensed
-
-    def find_repetition_sequence(self, events, start_idx, min_repetitions):
-        """
-        Find if there's a repeated sequence starting at start_idx.
-        
-        Returns:
-            Tuple of (start_idx, end_idx, pattern, count) if repetition found, None otherwise
-        """
-        if start_idx >= len(events):
-            return None
-        
-        base_pattern = events[start_idx]['pattern']
-        count = 1
-        
-        # Count consecutive events with same pattern
-        for i in range(start_idx + 1, len(events)):
-            if (events[i]['type'] == 'message' and 
-                events[i]['pattern'] == base_pattern):
-                count += 1
-            else:
-                break
-        
-        if count >= min_repetitions:
-            return (start_idx, start_idx + count, base_pattern, count)
-        
-        return None
+        return formatter.format()
