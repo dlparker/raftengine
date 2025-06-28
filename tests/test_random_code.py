@@ -10,11 +10,12 @@ from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from raftengine.messages.append_entries import AppendResponseMessage
 from dev_tools.sequences import SPartialCommand
 import time
-from dev_tools.features import registry
 import json 
 
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.logging_ops import setup_logging
+from dev_tools.features import FeatureRegistry
+registry = FeatureRegistry.get_registry()
 
 
 #setup_logging(extra_logging)

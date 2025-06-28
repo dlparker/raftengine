@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from raftengine.api.log_api import LogRec
-from dev_tools.features import registry as feature_regy
+from dev_tools.features import FeatureRegistry
 from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData
 from dev_tools.trace_output import TraceOutput
 
@@ -69,6 +69,7 @@ class TestTrace:
         #self.test_sections = {}
         self.test_rec = None
         self.test_logger = None
+        self.feature_registry = FeatureRegistry.get_registry()
 
     async def start(self):
         tl = []
@@ -126,7 +127,10 @@ class TestTrace:
         start_pos = 0
         self.test_rec = TestRec(test_name=test_name, test_path=test_file, description=description,
                                    test_doc_string=doc_string, start_pos=start_pos)
-        section = TestSection(description=description, start_pos=start_pos, is_prep=True)
+        section = TestSection(index=len(self.test_rec.sections),
+                              description=description, start_pos=start_pos, is_prep=True)
+        trr = self.feature_registry.test_run_records
+        trr.record_test(test_name, test_file, description, doc_string, [section,])
         self.test_rec.sections[start_pos] = section
         self.test_logger = logger
         if self.test_logger:
@@ -137,50 +141,53 @@ class TestTrace:
         await self.start_subtest(description, features=features, is_prep=True)
         
     async def start_subtest(self, description, features=None, is_prep=False):
-        cw = self.test_rec.last_section()
+        trr = self.feature_registry.test_run_records
+        section = self.test_rec.last_section()
         if len(self.trace_lines) == 1:
             # We have a special case, when there is a section because we made one
             # in "define_test", but the only event in it is the 'node started' event.
             # In that case we want to just continue with the section, but rename it
-            cw.description = description
-            cw.is_prep = is_prep
-            features = await self.mark_test_features(description, features)
-            cw.features = features
+            section.description = description
+            section.is_prep = is_prep
+            trr.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
+            features = await self.mark_test_features(section, features)
+            section.features = features
             if self.test_logger:
                 if is_prep:
                     self.test_logger.info("Preparing test conditions by %s", description)
                 else:
                     self.test_logger.info("Starting subtest %s", description)
             return
-        if cw and cw.end_pos is None:
+        if section and section.end_pos is None:
             await self.end_subtest()
         start_pos = len(self.trace_lines)
 
-        features = await self.mark_test_features(description, features)
-
-        section = TestSection(start_pos=start_pos, description=description, is_prep=is_prep, features=features)
-        self.test_rec.sections[start_pos] = section
+        section = TestSection(index=len(self.test_rec.sections),
+                              start_pos=start_pos, description=description, is_prep=is_prep)
+        trr.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
+        section.features = await self.mark_test_features(section, features)
+        
         if self.test_logger:
             if is_prep:
                 self.test_logger.info("Preparing test conditions by %s", description)
             else:
                 self.test_logger.info("Starting subtest %s", description)
 
-    async def mark_test_features(self, description, features):
+    async def mark_test_features(self, section, features):
         used = []
         tested = []
         if features is None:
             return {'used': [], 'tested': []}
         else:
             for feature in features['used']:
-                feature_regy.add_test_to_feature(feature, 'uses',
+                self.feature_registry.add_test_to_feature(feature, 'uses',
                                                  self.test_rec.test_name, self.test_rec.test_path,
-                                                 description)
+                                                 section)
                 used.append(str(feature))
             for feature in features['tested']:
-                feature_regy.add_test_to_feature(feature, 'tests',
+                self.feature_registry.add_test_to_feature(feature, 'tests',
                                                  self.test_rec.test_name, self.test_rec.test_path,
-                                                 description)
+                                                 section)
                 tested.append(str(feature))
         return {'used': used, 'tested': tested}
 
@@ -189,14 +196,14 @@ class TestTrace:
         # one was created by define test, but a new section was created
         # before any events were logged.
         #
-        cw = self.test_rec.last_section()
-        cw.end_pos = len(self.trace_lines) - 1
-        self.test_rec.end_pos = cw.end_pos
+        section = self.test_rec.last_section()
+        section.end_pos = len(self.trace_lines) - 1
+        self.test_rec.end_pos = section.end_pos
         if self.test_logger:
-            if cw.is_prep:
-                self.test_logger.info("Done with test prep %s", cw.description)
+            if section.is_prep:
+                self.test_logger.info("Done with test prep %s", section.description)
             else:
-                self.test_logger.info("Done with subtest %s", cw.description)
+                self.test_logger.info("Done with subtest %s", section.description)
 
     async def save_trace_line(self):
         # We write a new trace line for any change to any node, and each
@@ -348,6 +355,12 @@ class TestTrace:
         trace_dir, test_name, to = self.save_preamble("json")
         trace_path = Path(trace_dir, test_name + ".json")
         to.write_json_file(trace_path)
+
+    def save_features(self):
+        trace_dir = Path(Path(__file__).parent.parent.resolve(), "captures", "features")
+        if not trace_dir.exists():
+            trace_dir.mkdir(parents=True)
+        self.feature_registry.save_maps(Path(trace_dir, "maps.json"))
 
     def save_org(self, partial=False):
         if len(self.trace_lines) == 0 or self.test_rec is None:

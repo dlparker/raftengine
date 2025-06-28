@@ -53,11 +53,12 @@ class NodeState:
         
 @dataclass
 class TestSection:
+    index: int
     start_pos: int
     description: str
     is_prep: Optional[bool] = False
-    test_path: Optional[str] = None
-    test_doc_string: Optional[str] = None
+    #test_path: Optional[str] = None
+    #test_doc_string: Optional[str] = None
     end_pos: Optional[int] = None
     lines: Optional[list] = None
     condensed: Optional[list] = None

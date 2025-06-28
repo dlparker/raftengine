@@ -13,13 +13,6 @@ from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace
 from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
 
-digest_org = True
-digest_rst = True
-digest_csv = True
-part_digest_org = True
-trace_to_csv = True
-trace_to_json = True
-
 class PausingCluster:
 
     def __init__(self, node_count, use_log=MemoryLog):
@@ -245,19 +238,8 @@ class PausingCluster:
 
     async def save_traces(self):
         await self.test_trace.test_done()
-        if digest_org:
-            self.test_trace.save_org()
-        if digest_rst:
-            self.test_trace.save_rst()
-            self.test_trace.save_plantuml()
-        if part_digest_org:
-            self.test_trace.save_org(partial=True)
-        if digest_csv: 
-            self.test_trace.save_digest_csv()
-        if trace_to_csv:
-            self.test_trace.save_csv()
-        if trace_to_json:
-            self.test_trace.save_json()
+        self.test_trace.save_json()
+        self.test_trace.save_features()
 
 
 @pytest.fixture
