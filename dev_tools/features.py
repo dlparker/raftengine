@@ -176,10 +176,6 @@ class FeatureRegistry:
         dir_path = Path(files_root, feature.get_name_snake())
         if not dir_path.exists():
             dir_path.mkdir(parents=True)
-        org_path = Path(dir_path, feature.get_name_snake() + "_narative.org")
-        if not org_path.exists():
-            with open(org_path, 'w') as f:
-                f.write(" *TBD*\n")
         rst_path = Path(dir_path, feature.get_name_snake() + "_narative.rst")
         if not rst_path.exists():
             with open(rst_path, 'w') as f:
@@ -192,10 +188,6 @@ class FeatureRegistry:
         dir_path = Path(f_dir_path, "branches")
         if not dir_path.exists():
             dir_path.mkdir()
-        org_path = Path(dir_path, branch.get_path_snake() + "_narative.org")
-        if not org_path.exists():
-            with open(org_path, 'w') as f:
-                f.write(" *TBD*\n")
         rst_path = Path(dir_path, branch.get_path_snake() + "_narative.rst")
         if not rst_path.exists():
             with open(rst_path, 'w') as f:
