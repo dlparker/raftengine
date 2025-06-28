@@ -165,6 +165,7 @@ class TestTrace:
         section = TestSection(index=len(self.test_rec.sections),
                               start_pos=start_pos, description=description, is_prep=is_prep)
         trr.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
+        self.test_rec.sections[start_pos] = section
         section.features = await self.mark_test_features(section, features)
         
         if self.test_logger:
@@ -355,13 +356,16 @@ class TestTrace:
         trace_dir, test_name, to = self.save_preamble("json")
         trace_path = Path(trace_dir, test_name + ".json")
         to.write_json_file(trace_path)
+        self.save_rst()
+        self.save_org()
 
     def save_features(self):
         trace_dir = Path(Path(__file__).parent.parent.resolve(), "captures", "features")
         if not trace_dir.exists():
             trace_dir.mkdir(parents=True)
         self.feature_registry.save_maps(Path(trace_dir, "maps.json"))
-
+        
+        
     def save_org(self, partial=False):
         if len(self.trace_lines) == 0 or self.test_rec is None:
             return

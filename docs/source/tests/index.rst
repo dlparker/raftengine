@@ -13,5 +13,6 @@ during test execution.
 	     
    Election Test Set 1: <test_elections_1/index.rst>
    Snapshot Test Set: <snapshots/index.rst>
+   Random code: <test_random_code/index.rst>
    Trace Table Legend: <table_legend.rst>
 

@@ -6,6 +6,7 @@ Snapshot Process
 Overview
 --------
 
+
 The Raft snapshot process, as defined in Section 7 of Diego Ongaro’s
 thesis, compacts logs by saving the application state up to a log
 index, enabling lagging or new nodes to catch up. In raftengine,

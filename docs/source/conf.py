@@ -12,6 +12,7 @@
 #
 import os
 import sys
+from pathlib import Path
 sys.path.insert(0, os.path.abspath('../..'))
 
 
@@ -29,11 +30,12 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
-    'sphinx.ext.graphviz',
-    'sphinxcontrib.plantuml',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosectionlabel',
-    'sphinx_debuginfo',
+    "sphinx.ext.graphviz",
+    "sphinxcontrib.plantuml",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosectionlabel",
+    "sphinx_debuginfo",
+    "sphinx_collapse",
 ]
 plantuml = 'java -jar /home/dparker/bin/plantuml-lgpl-1.2025.2.jar'
 #plantuml_output_format = 'svg_img'
@@ -87,5 +89,6 @@ napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = True
 
+source_dir = str(Path(__file__).parent)
 
 nitpicky = True
