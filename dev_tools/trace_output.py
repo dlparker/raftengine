@@ -7,7 +7,7 @@ import json
 from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceData
 from dev_tools.trace_shorthand import NodeStateFormat
 from dev_tools.trace_formatters import CSVFullFormatter, OrgFormatter, RstFormatter, PUMLFormatter
-from dev_tools.test_def_db import TestRunRecords
+from dev_tools.feature_db import FeatureDB
 from dev_tools.features import registry as feature_regy
 
 class TraceOutput:

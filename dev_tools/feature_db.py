@@ -5,14 +5,14 @@ import logging
 def bool_converter(value):
     return bool(int(value))
 
-class TestRunRecords:
+class FeatureDB:
 
     def __init__(self):
-        dirpath = Path(Path(__file__).parent, 'test_run_data')
+        dirpath = Path(Path(__file__).parent.parent, 'captures', "features")
         if not dirpath.exists():
-            dirpath.mkdir()
-        self.db_path = Path(dirpath, "test_run.db")
-        self.logger = logging.getLogger("test_db")
+            dirpath.mkdir(parents=True)
+        self.db_path = Path(dirpath, "features.db")
+        self.logger = logging.getLogger("features_db")
         ppath = self.db_path.parent
         if not ppath.exists():
             ppath.mkdir(parents=True)

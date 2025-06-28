@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from dev_tools.test_def_db import TestRunRecords
+from dev_tools.feature_db import FeatureDB
 
 features_loaded = False
 features_obj = None
@@ -121,8 +121,8 @@ class FeatureRegistry:
     def __init__(self):
         self.features = dict()
         self.logger = logging.getLogger("FeatureRegistry")
-        self.test_run_records = TestRunRecords()
-        self.test_run_records.reload_features_from_db(self)
+        self.feature_db = FeatureDB()
+        self.feature_db.reload_features_from_db(self)
 
     @classmethod
     def get_registry(cls):
@@ -145,13 +145,13 @@ class FeatureRegistry:
         return f_copy
 
     def add_test_to_feature(self, feature, mode, test_name, test_path, section):
-        self.test_run_records.save_test_feature(feature, mode, test_name, test_path, section)
+        self.feature_db.save_test_feature(feature, mode, test_name, test_path, section)
         
     def add_feature(self, name, skip_db_op=False):
         feat = FeatureDefinition(name=name)
         self.features[name] = feat
         if not skip_db_op:
-            self.test_run_records.add_feature(feat)
+            self.feature_db.add_feature(feat)
         self.build_feature_file(feat)
         self.logger.debug("created feature definition for %s", name)
         return feat
@@ -168,7 +168,7 @@ class FeatureRegistry:
         feature.branches[cur_id] = branch
         self.build_feature_branch_file(branch)
         if not skip_db_op:
-            self.test_run_records.add_feature_branch(branch)
+            self.feature_db.add_feature_branch(branch)
         self.logger.debug("created feature branch definition for %s->%s", feature.name, branch_path)
         return branch
     
@@ -204,7 +204,7 @@ class FeatureRegistry:
         return dir_path
 
     def get_feature_to_test_maps(self):
-        f_map_data = self.test_run_records.get_branch_maps()
+        f_map_data = self.feature_db.get_branch_maps()
         res = []
         by_feature = {}
         for item in f_map_data:
@@ -223,7 +223,7 @@ class FeatureRegistry:
         return res
 
     def get_test_to_feature_maps(self):
-        f_map_data = self.test_run_records.get_branch_maps(order='test')
+        f_map_data = self.feature_db.get_branch_maps(order='test')
         res = []
         by_test = {}
         for item in f_map_data:

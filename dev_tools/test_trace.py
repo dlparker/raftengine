@@ -129,7 +129,7 @@ class TestTrace:
                                    test_doc_string=doc_string, start_pos=start_pos)
         section = TestSection(index=len(self.test_rec.sections),
                               description=description, start_pos=start_pos, is_prep=True)
-        trr = self.feature_registry.test_run_records
+        trr = self.feature_registry.feature_db
         trr.record_test(test_name, test_file, description, doc_string, [section,])
         self.test_rec.sections[start_pos] = section
         self.test_logger = logger
@@ -141,7 +141,7 @@ class TestTrace:
         await self.start_subtest(description, features=features, is_prep=True)
         
     async def start_subtest(self, description, features=None, is_prep=False):
-        trr = self.feature_registry.test_run_records
+        trr = self.feature_registry.feature_db
         section = self.test_rec.last_section()
         if len(self.trace_lines) == 1:
             # We have a special case, when there is a section because we made one
