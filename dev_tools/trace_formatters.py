@@ -1,6 +1,7 @@
 from pathlib import Path
 from dev_tools.trace_data import decode_message, SaveEvent
 from dev_tools.trace_shorthand import NodeStateShortestFormat
+from dev_tools.features import FeatureRegistry
 from dev_tools.readable_message_formatters import READABLE_MESSAGE_FORMATTERS, ReadableMessageFormat
 
 class CSVFullFormatter:
@@ -284,8 +285,9 @@ class RstFormatter:
         filter_sections = self.trace_output.get_table_events()
         all_rows = []
         
-        # Header section (identical to original RST format)
+
         all_rows.append(f".. _{self.trace_output.test_data.test_name}:")
+        all_rows.append("")
         s1 = f"Test {self.trace_output.test_data.test_name} from file {self.trace_output.test_data.test_path}"
         all_rows.append(s1)
         all_rows.append("="*len(s1))
@@ -309,13 +311,27 @@ class RstFormatter:
             
             # Features section (if present)
             if section.features:
-                for feature in section.features['used']:
-                    all_rows.append(f"Raft feature used: {str(feature)}")
-                for feature in section.features['tested']:
-                    all_rows.append(f"Raft feature tested: {str(feature)}")
+                for mode in ('tested', 'used'):
+                    for fnum, feature_string in enumerate(section.features[mode]):
+                        if fnum == 0:
+                            all_rows.append(f"Raft features {mode}:\n")
+                        plist = str(feature_string).split('.')
+                        froot = plist[0]
+                        regy = FeatureRegistry.get_registry()
+                        feature = regy.features[froot]
+                        all_rows.append(f".. include:: /tests/features/{feature.get_name_snake()}/short.rst")
+                        all_rows.append("")
+                        all_rows.append(f".. collapse:: {feature.get_name_snake()} details (click to expand)")
+                        all_rows.append("")
+                        all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/features.rst")
+                        all_rows.append("")
+                        all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/narative.rst")
+                        all_rows.append("")
                 all_rows.append("")
                 all_rows.append("")
             
+            all_rows.append(f".. collapse:: trace table (click to expand)")
+            all_rows.append("")
             # Create headers (same as original)
             hrows = []
             hrow = []
@@ -378,14 +394,22 @@ class RstFormatter:
                 trows.append(str_line)
             
             # Assemble table with proper RST borders
+            spacer = " "*3
             for index, row in enumerate(trows):
                 if index == 2:
-                    all_rows.append(divider)  # Separator after headers
+                    all_rows.append(spacer + divider)  # Separator after headers
                 else:
-                    all_rows.append(liner)    # Regular borders
-                all_rows.append(row)
-            all_rows.append(liner)  # Final border
+                    all_rows.append(spacer + liner)    # Regular borders
+                all_rows.append(spacer + row)
+            all_rows.append(spacer + liner)  # Final border
             all_rows.append("")
+            all_rows.append("")
+            all_rows.append("")
+            all_rows.append(f".. collapse:: trace sequence diagram (click to expand)")
+            all_rows.append("")
+            x = f"/tests/diagrams/{self.trace_output.test_data.test_path}/{self.trace_output.test_data.test_name}.puml"
+            all_rows.append(f"   .. plantuml:: {x}")
+            all_rows.append("          :scale: 100%")
             all_rows.append("")
             all_rows.append("")
             

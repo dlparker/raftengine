@@ -1,4 +1,4 @@
-.. state_machine_command:
+:orphan:
 
 State Machine Commands
 ======================

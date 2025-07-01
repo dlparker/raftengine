@@ -95,7 +95,7 @@ async def test_feature_defs_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    f_election = registry.get_raft_feature("leader election", "all_yes_votes.without_pre_vote")
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
     
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
@@ -132,7 +132,7 @@ async def test_feature_defs_2(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 
-    f_election = registry.get_raft_feature("leader election", "all_yes_votes.with_pre_vote")
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
     
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
@@ -188,7 +188,7 @@ async def test_feature_defs_3(cluster_maker):
 
     await cluster.test_trace.define_test("Testing state machine command propagation with 3 nodes", logger=logger)
     await cluster.start()
-    f_election = registry.get_raft_feature("leader election", "all_yes_votes.with_pre_vote")
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
     spec = dict(used=[f_election,], tested=[])
     await cluster.test_trace.start_test_prep("Running normal election till fully replicated", features=spec)
     await ts_1.start_campaign()
@@ -199,7 +199,7 @@ async def test_feature_defs_3(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
-    f_normal_command = registry.get_raft_feature("state machine command", "all_in_sync")
+    f_normal_command = registry.get_raft_feature("state_machine_command", "all_in_sync")
     spec = dict(used=[], tested=[f_normal_command])
     await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit", features=spec)
     await cluster.start_auto_comms()
@@ -236,7 +236,7 @@ async def test_feature_defs_3(cluster_maker):
     logger.debug('------------------------ Correct command done')
 
     await cluster.stop_auto_comms()
-    f_command_redirect = registry.get_raft_feature("state machine command", "request_redirect")
+    f_command_redirect = registry.get_raft_feature("state_machine_command", "request_redirect")
     spec = dict(used=[], tested=[f_command_redirect,])
     await cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect", features=spec)
     command_result = await ts_3.run_command("add 1")
@@ -268,7 +268,7 @@ async def test_feature_defs_3(cluster_maker):
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
-    f_command_min_nodes = registry.get_raft_feature("state machine command", "minimal_node_count")
+    f_command_min_nodes = registry.get_raft_feature("state_machine_command", "minimal_node_count")
     spec = dict(used=[], tested=[f_command_min_nodes,])
     await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower",
                                            features=spec)
@@ -287,7 +287,7 @@ async def test_feature_defs_3(cluster_maker):
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    f_rep_on_rejoin = registry.get_raft_feature("state machine command", "apply_on_delayed_replication")
+    f_rep_on_rejoin = registry.get_raft_feature("state_machine_command", "apply_on_delayed_replication")
     f_slow_backdown = registry.get_raft_feature("log_replication", "slow_follower_backdown")
     spec = dict(used=[f_slow_backdown,], tested=[f_rep_on_rejoin,])
     await cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up",

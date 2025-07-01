@@ -179,15 +179,17 @@ class FeatureRegistry:
         rst_path = Path(dir_path, "narative.rst")
         if not rst_path.exists():
             with open(rst_path, 'w') as f:
-                f.write(f".. {feature.get_name_snake()}:\n\n")
+                f.write(f":orphan:\n\n")
                 f.write(" **TBD**\n")
         short_path = Path(dir_path, "short.rst")
         if not short_path.exists():
             with open(short_path, 'w') as f:
+                f.write(f":orphan:\n\n")
                 f.write(" **TBD**\n")
         features_path = Path(dir_path, "features.rst")
         if not features_path.exists():
             with open(features_path, 'w') as f:
+                f.write(f":orphan:\n\n")
                 f.write("* **section short desc**: section x.y.z\n")
                 f.write("* **like next line**: section x.y.z\n")
                 f.write("* **log replication**: section 3.5\n")
@@ -204,6 +206,7 @@ class FeatureRegistry:
         nar_path = Path(branch_path, "narative.rst")
         if not nar_path.exists():
             with open(nar_path, 'w') as f:
+                f.write(f":orphan:\n\n")
                 line = f"{branch.feature.get_name_snake()}.{branch.get_path_snake()}"
                 line_len = len(line)
                 f.write(line + "\n")
@@ -212,10 +215,12 @@ class FeatureRegistry:
         short_path = Path(branch_path, "short.rst")
         if not short_path.exists():
             with open(short_path, 'w') as f:
+                f.write(f":orphan:\n\n")
                 f.write(" **TBD**\n")
         features_path = Path(branch_path, "features.rst")
         if not features_path.exists():
             with open(features_path, 'w') as f:
+                f.write(f":orphan:\n\n")
                 f.write("* **section short desc**: section x.y.z\n")
                 f.write("* **like next line**: section x.y.z\n")
                 f.write("* **log replication**: section 3.5\n")
