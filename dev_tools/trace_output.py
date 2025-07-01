@@ -8,7 +8,6 @@ from dev_tools.trace_data import SaveEvent, NodeState, TestSection, TestTraceDat
 from dev_tools.trace_shorthand import NodeStateFormat
 from dev_tools.trace_formatters import CSVFullFormatter, OrgFormatter, RstFormatter, PUMLFormatter
 from dev_tools.feature_db import FeatureDB
-from dev_tools.features import registry as feature_regy
 
 class TraceOutput:
 
@@ -17,6 +16,7 @@ class TraceOutput:
         self.trace_filter = TableTraceFilter()
         self.condensed_sections = []
         self.filtered = None
+        self.feature_db = FeatureDB()
 
     def set_trace_filter(self, trace_filter):
         self.trace_filter = trace_filter
@@ -42,16 +42,6 @@ class TraceOutput:
         self.filtered = results
         return self.filtered
 
-    def filter_and_shorten_trace(self):
-        lines = []
-        keys = list(self.test_sections.keys())
-        keys.sort()
-        for key in keys:
-            section = self.test_data.test_sections[key]
-            short = self.make_shorthand_table(section)
-            lines.extend(short)
-        return lines
-        
     def filter_trace(self):
         lines = []
         for sec_lines in self.get_table_events().values():
@@ -59,12 +49,15 @@ class TraceOutput:
                 lines.append(self.test_data.trace_lines[pos])
         return lines
         
-    def write_csv_file(self, filepath, digest=False):
+    def write_csv_file(self, digest=False):
         if not digest:
             formatter = CSVFullFormatter(self.test_data.trace_lines)
+            filetype = "csv"
         else:
             formatter = CSVFullFormatter(self.filter_trace())
+            filetype = "digest_csv"
             
+        filepath = self.get_trace_file_path(filetype)
         csv_lines = formatter.to_csv()
         if len(csv_lines) > 1:
             with open(filepath, 'w') as f:
@@ -72,32 +65,44 @@ class TraceOutput:
                     outline = ','.join(line)
                     f.write(outline + "\n")
 
-    def write_org_file(self, filepath, include_legend=True):
+    def write_org_file(self, include_legend=True):
         if include_legend:
-            prefix = "org"
+            filetype = "org"
         else:
-            prefix = "no_legend_org"
+            filetype = "no_legend_org"
+        filepath = self.get_trace_file_path(filetype)
         org_lines = OrgFormatter(self).format(include_legend)
         if len(org_lines) > 0:
             with open(filepath, 'w') as f:
                 for line in org_lines:
                     f.write(line + "\n")
 
-    def write_rst_file(self, filepath):
+    def write_rst_file(self):
+        filepath = self.get_trace_file_path('rst')
         org_lines = RstFormatter(self).format()
         if len(org_lines) > 0:
             with open(filepath, 'w') as f:
                 for line in org_lines:
                     f.write(line + "\n")
 
-    def write_section_puml_file(self, section, filepath):
+    def write_section_puml_file(self, section_index):
+        keys = list(self.test_data.test_sections.keys())
+        keys.sort()
+        try:
+            poskey = keys[section_index]
+        except IndexError:
+            print(f"no section {section_index} for {self.test_data.test_path} {self.test_data.test_name}")
+            return None
+        section = self.test_data.test_sections[poskey]
+        filepath = self.get_trace_file_path('plantuml', section_index)
         puml = PUMLFormatter(self).format(section)
         if len(puml) > 0:
             with open(filepath, 'w') as f:
                 for line in puml:
                     f.write(line + "\n")
         
-    def write_json_file(self, filepath):
+    def write_json_file(self):
+        filepath = self.get_trace_file_path('json')
         rdata = json.dumps(self.test_data, default=lambda o:o.__dict__, indent=4)
         with open(filepath, 'w') as f:
             f.write(rdata)
@@ -118,6 +123,35 @@ class TraceOutput:
                 f.write(f'- {index} -\n')
                 for ni in ol:
                     f.write(f"{ni}\n")
+
+    def get_trace_file_path(self, filetype, section_number=None):
+        path = self.trace_file_path(filetype, self.test_data.test_path, self.test_data.test_name, section_number)
+        parent = path.parent
+        if not parent.exists():
+            parent.mkdir(parents=True)
+        return path
+
+    @staticmethod
+    def trace_file_path(filetype, test_path, test_name, section_number=None):
+        options = {'org': 'org',
+                   'no_legend_org': 'org',
+                   'rst': 'rst',
+                   'json': 'json',
+                   'csv': 'csv',
+                   'digest_csv': 'csv',
+                   'plantuml': 'puml'}
+        if filetype not in options:
+            raise Exception(f"{filetype} not in {options}")
+        if filetype == "plantuml" and not isinstance(section_number, int):
+            raise Exception(f"plantuml file paths required an integer section number")
+        test_file_path = test_path
+        tdir = Path(Path(__file__).parent.parent.resolve(), "captures", "test_traces")
+        trace_dir = Path(tdir, filetype, Path(test_file_path).stem)
+        if section_number:
+            return Path(trace_dir, test_name + f"_{section_number}." + options[filetype])
+        else:
+            return Path(trace_dir, test_name + "." + options[filetype])
+    
     @classmethod
     def from_json_file(cls, filepath):
         with open(filepath, 'r') as f:

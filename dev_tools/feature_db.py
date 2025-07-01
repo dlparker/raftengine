@@ -42,13 +42,48 @@ class FeatureDB:
             values = [test_name, test_path, id_path, description, doc_string]
             cursor.execute(sql, values)
             tid = cursor.lastrowid
+        
         for section in sections:
-            sql = "insert or replace into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
-            values = [tid, section.index, section.description, section.is_prep]
-            cursor.execute(sql, values)
-            sid = cursor.lastrowid
+            sql = "select section_id from test_sections where test_id = ? and section_index = ?"
+            cursor.execute(sql, [tid, section.index,])
+            row = cursor.fetchone()
+            if row is None:
+                sql = "insert into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
+                values = [tid, section.index, section.description, section.is_prep]
+                cursor.execute(sql, values)
+            else:
+                sql = "update test_sections set description = ?, is_prep = ? where section_id = ?"
+                values = [section.description, section.is_prep, row['section_id']]
+                cursor.execute(sql, values)
         self.db.commit()
 
+    def get_test_records(self):
+        cursor = self.db.cursor()
+        sel = "select * from tests"
+        cursor.execute(sel)
+        res = []
+        for row in cursor.fetchall():
+            res.append(dict(row))
+        cursor.close()
+        return res
+    
+    def get_test_section_records(self, test_path, test_name):
+        cursor = self.db.cursor()
+        id_path =  Path(test_path).stem + "." + test_name
+        sql = "select test_id from tests where id_path = ?"
+        cursor.execute(sql, [id_path,])
+        row = cursor.fetchone()
+        if row is None:
+            raise Exception(f"no record of {test_id_path}")
+        tid = row[0]
+        sql = "select * from test_sections where test_id = ? order by section_index"
+        cursor.execute(sql, [tid,])
+        res = []
+        for row in cursor.fetchall():
+            res.append(dict(row))
+        cursor.close()
+        return res
+    
     def record_test_section(self, test_name, test_path, section):
         cursor = self.db.cursor()
         id_path =  Path(test_path).stem + "." + test_name
@@ -58,9 +93,17 @@ class FeatureDB:
         if row is None:
             raise Exception(f"no record of {id_path}")
         tid = row[0]
-        sql = "insert or replace into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
-        values = [tid, section.index, section.description, section.is_prep]
-        cursor.execute(sql, values)
+        sql = "select section_id from test_sections where test_id = ? and section_index = ?"
+        cursor.execute(sql, [tid, section.index,])
+        row = cursor.fetchone()
+        if row is None:
+            sql = "insert into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
+            values = [tid, section.index, section.description, section.is_prep]
+            cursor.execute(sql, values)
+        else:
+            sql = "update test_sections set description = ?, is_prep = ? where section_id = ?"
+            values = [section.description, section.is_prep, row['section_id']]
+            cursor.execute(sql, values)
         self.db.commit()
         
     def save_test_feature(self, feature, mode, test_name, test_path, section):

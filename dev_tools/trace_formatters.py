@@ -520,7 +520,10 @@ class PUMLFormatter:
 
                 # Message operation using readable formatters
                 if ns.save_event == SaveEvent.message_op and ns.message_action in ("sent", "handled_in"):
-                    msg = ns.message
+                    if isinstance(ns.message, dict):
+                        msg = decode_message(ns.message)
+                    else:
+                        msg = ns.message
                     sender_id = msg.sender.split("/")[-1]
                     receiver_id = msg.receiver.split("/")[-1]
                     sender_alias = f"n{sender_id}"

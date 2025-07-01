@@ -117,7 +117,7 @@ class TestTrace:
         ns.voted_for  = await node.log.get_voted_for()
         return ns
 
-    async def define_test(self, description, logger=None):
+    async def define_test(self, description, logger=None, section_is_prep=True):
         if len(self.trace_lines) > 0:
             raise Exception('must call define_test before starting traced activitities')
         full_name, test_file, test_name = get_current_test()
@@ -129,8 +129,8 @@ class TestTrace:
                                    test_doc_string=doc_string, start_pos=start_pos)
         section = TestSection(index=len(self.test_rec.sections),
                               description=description, start_pos=start_pos, is_prep=True)
-        trr = self.feature_registry.feature_db
-        trr.record_test(test_name, test_file, description, doc_string, [section,])
+        fdb = self.feature_registry.feature_db
+        fdb.record_test(test_name, test_file, description, doc_string, [])
         self.test_rec.sections[start_pos] = section
         self.test_logger = logger
         if self.test_logger:
@@ -141,33 +141,23 @@ class TestTrace:
         await self.start_subtest(description, features=features, is_prep=True)
         
     async def start_subtest(self, description, features=None, is_prep=False):
-        trr = self.feature_registry.feature_db
+        fdb = self.feature_registry.feature_db
         section = self.test_rec.last_section()
-        if len(self.trace_lines) == 1:
+        if len(self.trace_lines) > 1:
+            if section and section.end_pos is None:
+                await self.end_subtest()
+            start_pos = len(self.trace_lines)
+            section = TestSection(index=len(self.test_rec.sections),
+                                  start_pos=start_pos, description=description, is_prep=is_prep)
+            self.test_rec.sections[start_pos] = section
+        else:
             # We have a special case, when there is a section because we made one
             # in "define_test", but the only event in it is the 'node started' event.
             # In that case we want to just continue with the section, but rename it
             section.description = description
             section.is_prep = is_prep
-            trr.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
-            features = await self.mark_test_features(section, features)
-            section.features = features
-            if self.test_logger:
-                if is_prep:
-                    self.test_logger.info("Preparing test conditions by %s", description)
-                else:
-                    self.test_logger.info("Starting subtest %s", description)
-            return
-        if section and section.end_pos is None:
-            await self.end_subtest()
-        start_pos = len(self.trace_lines)
-
-        section = TestSection(index=len(self.test_rec.sections),
-                              start_pos=start_pos, description=description, is_prep=is_prep)
-        trr.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
-        self.test_rec.sections[start_pos] = section
+        fdb.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
         section.features = await self.mark_test_features(section, features)
-        
         if self.test_logger:
             if is_prep:
                 self.test_logger.info("Preparing test conditions by %s", description)
@@ -334,30 +324,19 @@ class TestTrace:
         ns.message = None
         ns.message_action = None
 
-    def save_preamble(self, prefix):
+    def save_json(self):
+        if self.test_rec is None:
+            return
         full_name, tfile, test_name = get_current_test()
         x = full_name.split('::')
         test_file_path = Path(x[0])
         test_name = x[1]
-        trace_dir = Path(Path(__file__).parent.parent.resolve(), "captures", "test_traces")
-        trace_dir = Path(trace_dir, prefix, test_file_path.stem)
-        if not trace_dir.exists():
-            trace_dir.mkdir(parents=True)
         ttd = TestTraceData(self.test_rec.test_name,
                             self.test_rec.test_path,
                             self.test_rec.test_doc_string,
                             self.trace_lines, self.test_rec.sections)
         to = TraceOutput(ttd)
-        return trace_dir, test_name, to
-
-    def save_json(self):
-        if self.test_rec is None:
-            return
-        trace_dir, test_name, to = self.save_preamble("json")
-        trace_path = Path(trace_dir, test_name + ".json")
-        to.write_json_file(trace_path)
-        self.save_rst()
-        self.save_org()
+        to.write_json_file()
 
     def save_features(self):
         trace_dir = Path(Path(__file__).parent.parent.resolve(), "captures", "features")
@@ -366,46 +345,5 @@ class TestTrace:
         self.feature_registry.save_maps(Path(trace_dir, "maps.json"))
         
         
-    def save_org(self, partial=False):
-        if len(self.trace_lines) == 0 or self.test_rec is None:
-            return
-        if partial:
-            prefix = "no_legend_org"
-            include_legend = False
-        else:
-            prefix = "org"
-            include_legend = True
-        trace_dir, test_name, to = self.save_preamble(prefix)
-        trace_path = Path(trace_dir, test_name + ".org")
-        to.write_org_file(trace_path, include_legend)
-
-    def save_digest_csv(self):
-        if len(self.trace_lines) == 0 or self.test_rec is None:
-            return
-        trace_dir, test_name, to = self.save_preamble("digest_csv")
-        trace_path = Path(trace_dir, test_name + ".csv")
-        to.write_csv_file(trace_path, digest=True)
-        
-    def save_csv(self):
-        if len(self.trace_lines) == 0 or self.test_rec is None:
-            return
-        trace_dir, test_name, to = self.save_preamble("csv")
-        trace_path = Path(trace_dir, test_name + ".csv")
-        to.write_csv_file(trace_path, digest=False)
-
-    def save_rst(self):
-        if len(self.trace_lines) == 0 or self.test_rec is None:
-            return
-        trace_dir, test_name, to = self.save_preamble("rst")
-        trace_path = Path(trace_dir, test_name + ".rst")
-        to.write_rst_file(trace_path)
-
-    def save_plantuml(self):
-        if len(self.trace_lines) == 0 or self.test_rec is None:
-            return
-        trace_dir, test_name, to = self.save_preamble("plantuml")
-        for sec_num, section in enumerate(to.test_data.test_sections.values()):
-            trace_path = Path(trace_dir, f"{test_name}_section_{sec_num+1}.puml")
-            to.write_section_puml_file(section, trace_path)
 
 
