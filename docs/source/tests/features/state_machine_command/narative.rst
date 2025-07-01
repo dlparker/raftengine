@@ -3,12 +3,6 @@
 State Machine Commands
 ======================
 
-Thesis references
------------------
-* **Log replication**: section 3.5
-* **Persistence**: section 3.8
-* **Client Interaction**: section 6
-
 
 The term "state machine" in the Raft thesis probably requires a somewhat liberal interpretation. In terms
 of how the Raft algorithm views the "application" that is the focus of all this activity, that is correct.

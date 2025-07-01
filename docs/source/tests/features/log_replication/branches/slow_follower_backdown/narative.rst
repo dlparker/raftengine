@@ -1,12 +1,5 @@
-.. log_replication.slow_follower_backdown:
-
-Log replication -> slow follower backdown
-=========================================
-
-Thesis references
------------------
-* **Log replication**: section 3.5
-
+log_replication.slow_follower_backdown
+--------------------------------------
 
 When a leader sends an append entries message to a follower it includes the index of the last log record and the term
 of that record, and the follower compares those values to its own last log record. There are a variety of scenarios

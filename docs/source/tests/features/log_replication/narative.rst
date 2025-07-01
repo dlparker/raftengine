@@ -1,14 +1,6 @@
 .. log_replication:
 
 
-Log replication
-===============
-
-Thesis references
------------------
-* **Log replication**: section 3.5
-* **Commit vs Apply**: section 3.8
-
 This is the central feature of the Raft algorithm. The election process guarantees that there is only one leader
 node in a cluster, and that it has all the log records that are committed in the cluster. That allows it to
 replicated new log entries using the commit protocl defined in the thesis.
@@ -34,8 +26,4 @@ that the new state has been persisted if needed.
 
 There is a similar wrinkle involving followers: they only commit the record when they see that the leader
 has already committed the record, and afterwords they apply it. 
-
-
-
-
 

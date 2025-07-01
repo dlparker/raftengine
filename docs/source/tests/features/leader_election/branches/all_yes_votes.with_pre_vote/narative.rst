@@ -1,14 +1,5 @@
-.. leader_election.all_yes_votes.with_pre_vote:
-
-Leader election -> All nodes vote yes: using PreVote extension
-==============================================================
-
-Thesis references
------------------
-* **Leader election**: section 3.4
-* **Election restrictions**: section 3.6
-* **PreVote**: section 9.6
-
+leader_election.all_yes_votes.with_pre_vote
+-------------------------------------------
 
 This feature branch is the logic that applies when an election is held and all the non-candidate nodes accept the
 candidate's bid on the first round of voting. That means that the candidate's term is greater than the follower's
@@ -24,3 +15,4 @@ the PreVote when it has been in contact with the leader within less time than th
 
 This library uses this extension by default, but allows it to be disabled in the cluster config so only some tests
 use this feature. It is often disabled for testing because it simplifies test development.
+

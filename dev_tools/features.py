@@ -14,7 +14,7 @@ features_obj = None
 
 registry = None
 
-files_root = Path(Path(__file__).parent.parent, 'captures', 'features', 'autodocs')
+files_root = Path(Path(__file__).parent.parent, 'captures', 'features', 'docs',)
                  
 def bool_converter(value):
     return bool(int(value))
@@ -176,11 +176,21 @@ class FeatureRegistry:
         dir_path = Path(files_root, feature.get_name_snake())
         if not dir_path.exists():
             dir_path.mkdir(parents=True)
-        rst_path = Path(dir_path, feature.get_name_snake() + "_narative.rst")
+        rst_path = Path(dir_path, "narative.rst")
         if not rst_path.exists():
             with open(rst_path, 'w') as f:
                 f.write(f".. {feature.get_name_snake()}:\n\n")
                 f.write(" **TBD**\n")
+        short_path = Path(dir_path, "short.rst")
+        if not short_path.exists():
+            with open(short_path, 'w') as f:
+                f.write(" **TBD**\n")
+        features_path = Path(dir_path, "features.rst")
+        if not features_path.exists():
+            with open(features_path, 'w') as f:
+                f.write("* **section short desc**: section x.y.z\n")
+                f.write("* **like next line**: section x.y.z\n")
+                f.write("* **log replication**: section 3.5\n")
         return dir_path
     
     def build_feature_branch_file(self, branch):
@@ -188,12 +198,28 @@ class FeatureRegistry:
         dir_path = Path(f_dir_path, "branches")
         if not dir_path.exists():
             dir_path.mkdir()
-        rst_path = Path(dir_path, branch.get_path_snake() + "_narative.rst")
-        if not rst_path.exists():
-            with open(rst_path, 'w') as f:
-                f.write(f".. {branch.feature.get_name_snake()}.{branch.get_path_snake()}:\n\n")
+        branch_path = Path(dir_path, branch.get_path_snake())
+        if not branch_path.exists():
+            branch_path.mkdir()
+        nar_path = Path(branch_path, "narative.rst")
+        if not nar_path.exists():
+            with open(nar_path, 'w') as f:
+                line = f"{branch.feature.get_name_snake()}.{branch.get_path_snake()}"
+                line_len = len(line)
+                f.write(line + "\n")
+                f.write("-"*line_len + "\n")
+                f.write("\n\n**TBD**\n")
+        short_path = Path(branch_path, "short.rst")
+        if not short_path.exists():
+            with open(short_path, 'w') as f:
                 f.write(" **TBD**\n")
-        return dir_path
+        features_path = Path(branch_path, "features.rst")
+        if not features_path.exists():
+            with open(features_path, 'w') as f:
+                f.write("* **section short desc**: section x.y.z\n")
+                f.write("* **like next line**: section x.y.z\n")
+                f.write("* **log replication**: section 3.5\n")
+        return branch_path
 
     def get_feature_to_test_maps(self):
         f_map_data = self.feature_db.get_branch_maps()

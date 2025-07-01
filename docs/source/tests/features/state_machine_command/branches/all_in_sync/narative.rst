@@ -1,12 +1,5 @@
-.. state_machine_command.all_in_sync:
-
-State Machine Commands -> all in sync
-=====================================
-
-Thesis references
------------------
-* **Log replication**: section 3.5
-   
+state_machine_command.all_in_sync
+---------------------------------
 
 The simplest case of log replication should hopefully be the scenario for the vast majority of
 real operations for any actual application using this library. The leadership is settled, all the
@@ -25,3 +18,4 @@ expires. However, most of the tests disable heartbeats, and the test usually wan
 log states of the nodes once the command is committed and applied, so the standard command
 runner logic in the test support code automatically tells the leader to send a heartbeat
 after it applies the command.
+
