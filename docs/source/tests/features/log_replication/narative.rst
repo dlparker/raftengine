@@ -1,4 +1,4 @@
-:orphan:
+
 
 This is the central feature of the Raft algorithm. The election process guarantees that there is only one leader
 node in a cluster, and that it has all the log records that are committed in the cluster. That allows it to

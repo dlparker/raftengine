@@ -1,4 +1,4 @@
-:orphan:
+
    
 * **Log replication**: section 3.5
 * **Persistence**: section 3.8

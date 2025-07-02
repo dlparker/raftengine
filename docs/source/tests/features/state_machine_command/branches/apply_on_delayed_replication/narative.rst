@@ -1,4 +1,4 @@
-:orphan:
+
 
 state_machine_command.apply_on_delayed_replication
 --------------------------------------------------

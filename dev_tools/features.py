@@ -24,7 +24,7 @@ class FeatureDefinition:
     name: str
     # the target_branch propert is only used during trace build, and is ephemeral
     target_branch: Optional['FeatureBranch'] = None
-    branches: Optional[dict['FeatureBranch']] = field(default_factory=dict)
+    branches: Optional[dict[str, 'FeatureBranch']] = field(default_factory=dict)
 
     def get_name_snake(self):
         return "_".join((self.name).split(' '))

@@ -312,25 +312,44 @@ class RstFormatter:
             # Features section (if present)
             if section.features:
                 for mode in ('tested', 'used'):
+                    done = []
                     for fnum, feature_string in enumerate(section.features[mode]):
+                        plist = str(feature_string).split('.')
                         if fnum == 0:
                             all_rows.append(f"Raft features {mode}:\n")
-                        plist = str(feature_string).split('.')
-                        froot = plist[0]
-                        regy = FeatureRegistry.get_registry()
-                        feature = regy.features[froot]
-                        all_rows.append(f".. include:: /tests/features/{feature.get_name_snake()}/short.rst")
-                        all_rows.append("")
-                        all_rows.append(f".. collapse:: {feature.get_name_snake()} details (click to expand)")
-                        all_rows.append("")
-                        all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/features.rst")
-                        all_rows.append("")
-                        all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/narative.rst")
-                        all_rows.append("")
+                            froot = plist[0]
+                            regy = FeatureRegistry.get_registry()
+                            feature = regy.features[froot]
+                            all_rows.append(f".. include:: /tests/features/{feature.get_name_snake()}/short.rst")
+                            all_rows.append("")
+                            all_rows.append(f".. collapse:: {feature.get_name_snake()} details (click to toggle view)")
+                            all_rows.append("")
+                            all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/features.rst")
+                            all_rows.append("")
+                            all_rows.append(f"   .. include:: /tests/features/{feature.get_name_snake()}/narative.rst")
+                            all_rows.append("")
+                            all_rows.append("")
+                        cur_path = []
+                        for b_name in plist[1:]:
+                            cur_path.append(b_name)
+                            if b_name not in done:
+                                branch = feature.branches['.'.join(cur_path)]
+                                partial = f"{feature.get_name_snake()}/branches/{'.'.join(cur_path)}"
+                                all_rows.append(".. include..  :: /tests/features/{partial}/short.rst")
+                                all_rows.append("")
+                                all_rows.append(f".. collapse:: {partial} details (click to toggle view)")
+                                all_rows.append("")
+                                all_rows.append(f"   .. include:: /tests/features/{partial}/features.rst")
+                                all_rows.append("")
+                                all_rows.append(f"   .. include:: /tests/features/{partial}/narative.rst")
+                                all_rows.append("")
+                                all_rows.append("")
+                                done.append(b_name)
+                        
                 all_rows.append("")
                 all_rows.append("")
             
-            all_rows.append(f".. collapse:: trace table (click to expand)")
+            all_rows.append(f".. collapse:: section {section.index + 1} trace table (click to toggle view)")
             all_rows.append("")
             # Create headers (same as original)
             hrows = []
@@ -405,9 +424,9 @@ class RstFormatter:
             all_rows.append("")
             all_rows.append("")
             all_rows.append("")
-            all_rows.append(f".. collapse:: trace sequence diagram (click to expand)")
+            all_rows.append(f".. collapse:: trace sequence diagram (click to toggle view)")
             all_rows.append("")
-            x = f"/tests/diagrams/{self.trace_output.test_data.test_path}/{self.trace_output.test_data.test_name}.puml"
+            x = f"/tests/diagrams/{self.trace_output.test_data.test_path}/{self.trace_output.test_data.test_name}_{section.index + 1}.puml"
             all_rows.append(f"   .. plantuml:: {x}")
             all_rows.append("          :scale: 100%")
             all_rows.append("")

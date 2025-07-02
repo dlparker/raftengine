@@ -37,15 +37,34 @@ Raft features used:
 
 .. include:: /tests/features/leader_election/short.rst
 
-.. collapse:: leader_election details (click to expand)
+.. collapse:: leader_election details (click to toggle view)
 
    .. include:: /tests/features/leader_election/features.rst
 
    .. include:: /tests/features/leader_election/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /tests/features/{partial}/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
+
+
+
+
+.. collapse:: section 1 trace table (click to toggle view)
 
    +------+-----------------------------+-----------+------+-----------------------------+-----------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1       | N-2  | N-2                         | N-2       | N-3  | N-3                         | N-3       |
@@ -109,9 +128,9 @@ Raft features used:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_1.puml
           :scale: 100%
 
 
@@ -122,15 +141,25 @@ Raft features tested:
 
 .. include:: /tests/features/state_machine_command/short.rst
 
-.. collapse:: state_machine_command details (click to expand)
+.. collapse:: state_machine_command details (click to toggle view)
 
    .. include:: /tests/features/state_machine_command/features.rst
 
    .. include:: /tests/features/state_machine_command/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: state_machine_command/branches/all_in_sync details (click to toggle view)
+
+   .. include:: /tests/features/state_machine_command/branches/all_in_sync/features.rst
+
+   .. include:: /tests/features/state_machine_command/branches/all_in_sync/narative.rst
+
+
+
+
+.. collapse:: section 2 trace table (click to toggle view)
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3   |
@@ -168,9 +197,9 @@ Raft features tested:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_2.puml
           :scale: 100%
 
 
@@ -181,15 +210,25 @@ Raft features tested:
 
 .. include:: /tests/features/state_machine_command/short.rst
 
-.. collapse:: state_machine_command details (click to expand)
+.. collapse:: state_machine_command details (click to toggle view)
 
    .. include:: /tests/features/state_machine_command/features.rst
 
    .. include:: /tests/features/state_machine_command/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: state_machine_command/branches/request_redirect details (click to toggle view)
+
+   .. include:: /tests/features/state_machine_command/branches/request_redirect/features.rst
+
+   .. include:: /tests/features/state_machine_command/branches/request_redirect/narative.rst
+
+
+
+
+.. collapse:: section 3 trace table (click to toggle view)
 
    +------+-----+-------+------+-----+-------+------+-----------+-------+
    | N-1  | N-1 | N-1   | N-2  | N-2 | N-2   | N-3  | N-3       | N-3   |
@@ -203,9 +242,9 @@ Raft features tested:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_3.puml
           :scale: 100%
 
 
@@ -214,7 +253,7 @@ _______________________________________________________________________________
 
 
 
-.. collapse:: trace table (click to expand)
+.. collapse:: section 4 trace table (click to toggle view)
 
    +------+-----+-------+------+-----+-------+------+-----------+-------+
    | N-1  | N-1 | N-1   | N-2  | N-2 | N-2   | N-3  | N-3       | N-3   |
@@ -230,9 +269,9 @@ _______________________________________________________________________________
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_4.puml
           :scale: 100%
 
 
@@ -241,7 +280,7 @@ ___________________________________________________________________________
 
 
 
-.. collapse:: trace table (click to expand)
+.. collapse:: section 5 trace table (click to toggle view)
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3   |
@@ -273,9 +312,9 @@ ___________________________________________________________________________
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_5.puml
           :scale: 100%
 
 
@@ -286,15 +325,25 @@ Raft features tested:
 
 .. include:: /tests/features/state_machine_command/short.rst
 
-.. collapse:: state_machine_command details (click to expand)
+.. collapse:: state_machine_command details (click to toggle view)
 
    .. include:: /tests/features/state_machine_command/features.rst
 
    .. include:: /tests/features/state_machine_command/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: state_machine_command/branches/minimal_node_count details (click to toggle view)
+
+   .. include:: /tests/features/state_machine_command/branches/minimal_node_count/features.rst
+
+   .. include:: /tests/features/state_machine_command/branches/minimal_node_count/narative.rst
+
+
+
+
+.. collapse:: section 6 trace table (click to toggle view)
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3   | N-3   |
@@ -362,9 +411,9 @@ Raft features tested:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_6.puml
           :scale: 100%
 
 
@@ -375,25 +424,45 @@ Raft features tested:
 
 .. include:: /tests/features/state_machine_command/short.rst
 
-.. collapse:: state_machine_command details (click to expand)
+.. collapse:: state_machine_command details (click to toggle view)
 
    .. include:: /tests/features/state_machine_command/features.rst
 
    .. include:: /tests/features/state_machine_command/narative.rst
 
+
+.. include..  :: /tests/features/{partial}/short.rst
+
+.. collapse:: state_machine_command/branches/apply_on_delayed_replication details (click to toggle view)
+
+   .. include:: /tests/features/state_machine_command/branches/apply_on_delayed_replication/features.rst
+
+   .. include:: /tests/features/state_machine_command/branches/apply_on_delayed_replication/narative.rst
+
+
 Raft features used:
 
 .. include:: /tests/features/log_replication/short.rst
 
-.. collapse:: log_replication details (click to expand)
+.. collapse:: log_replication details (click to toggle view)
 
    .. include:: /tests/features/log_replication/features.rst
 
    .. include:: /tests/features/log_replication/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: log_replication/branches/slow_follower_backdown details (click to toggle view)
+
+   .. include:: /tests/features/log_replication/branches/slow_follower_backdown/features.rst
+
+   .. include:: /tests/features/log_replication/branches/slow_follower_backdown/narative.rst
+
+
+
+
+.. collapse:: section 7 trace table (click to toggle view)
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3       |
@@ -437,9 +506,9 @@ Raft features used:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_3_7.puml
           :scale: 100%
 
 

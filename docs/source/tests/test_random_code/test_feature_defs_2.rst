@@ -28,15 +28,34 @@ Raft features tested:
 
 .. include:: /tests/features/leader_election/short.rst
 
-.. collapse:: leader_election details (click to expand)
+.. collapse:: leader_election details (click to toggle view)
 
    .. include:: /tests/features/leader_election/features.rst
 
    .. include:: /tests/features/leader_election/narative.rst
 
 
+.. include..  :: /tests/features/{partial}/short.rst
 
-.. collapse:: trace table (click to expand)
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /tests/features/{partial}/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
+
+
+
+
+.. collapse:: section 1 trace table (click to toggle view)
 
    +------+-----------------------------+-----------+------+-----------------------------+-----------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1       | N-2  | N-2                         | N-2       | N-3  | N-3                         | N-3       |
@@ -100,9 +119,9 @@ Raft features tested:
 
 
 
-.. collapse:: trace sequence diagram (click to expand)
+.. collapse:: trace sequence diagram (click to toggle view)
 
-   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_2.puml
+   .. plantuml:: /tests/diagrams/test_random_code/test_feature_defs_2_1.puml
           :scale: 100%
 
 
