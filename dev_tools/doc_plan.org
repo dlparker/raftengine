@@ -191,7 +191,7 @@ Raft features used:
 
 
 
-** TODO
+** TODO tool needed
 Automate current manual steps, but be careful not to overwrite and lose manual edits.
 
 copy captures/test_traces/rst/test_path*/test_name*.rst to docs/source/developer/tests/[elections|commands|snapshots|etc]
@@ -202,27 +202,16 @@ check captures/docs/* and see if there are matching files in docs/source/develop
 and if so *DO NOT OVERWRITE*. if file does not exist in target complain to get human to write it.
 
    
-** TODO
-
-There are first drafts of the needed files for the three tests
-in test_random_code.py, they can be found in docs/source/developer/tests/features in
-a directory structure matching the layout of captures/features/docs.
 
 ** TODO
-There should be a command line tool, or possibly an option to the
-build_docs.py script that checks to see if the actual doc tree
-version of a file exists to match the generated files in
-captures/features/docs and prints out a list of the missing
-files as a guide to the work remaining.
 
-
-
-
-
-** TODO
 Much work remains to be done to choose the feature definitions needed for remaining
 tests, something like 73 or 74 tests out of the 77 in the suite (not counting the
 ones in tests/test_random_code.py, which are temporary). This will most likely
 have to be done by a human rather than an LLM/Agent combination, as so much is
 uspoken but expected about the results.
 
+
+There are first drafts of the needed feature fragment files for the three tests in
+test_random_code.py, they can be found in docs/source/developer/tests/features in
+a directory structure matching the layout of captures/features/docs.

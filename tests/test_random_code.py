@@ -132,7 +132,6 @@ async def test_feature_defs_2(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 
-    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
     
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
@@ -141,9 +140,12 @@ async def test_feature_defs_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing basic election happy path with 3 nodes, with PreVote", logger=logger)
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
     spec = dict(used=[], tested=[f_election,])
-    await cluster.test_trace.start_subtest("Transporting pre-votes, votes and append-entries unitl TERM_START is applied to all node",
-                                           features=spec)
+    description = "Transporting pre-votes and votes until leader is elected, then "
+    description += " transporting append-entries until TERM_START record is applied to all nodes."
+    await cluster.test_trace.start_subtest(title="Doing message transport until new leader wins",
+                                           description=description, features=spec)
     await cluster.start()
     
     await ts_1.start_campaign()
@@ -306,5 +308,3 @@ async def test_feature_defs_3(cluster_maker):
     logger.debug('------------------------ Tardy follower caught up ---')
     await cluster.test_trace.end_subtest()
     
-async def test_regy_report():
-    pass

@@ -142,7 +142,11 @@ class OrgFormatter:
             # Build table with same structure as original
             max_chars = 0
             trows = []
-            trows.append(f"** {section.title}")
+            all_rows.append(f"** {section.title}")
+            if section.description:
+                all_rows.append(f"\n{section.description}")
+            all_rows.append("")
+            all_rows.append("")
             
             # Create headers (identical to original)
             hrows = []
@@ -215,7 +219,7 @@ class OrgFormatter:
         """
         # Get filtered indices using same logic as legacy
         filter_sections = self.trace_output.get_table_events()
-        if section.start_pos not in filter_sections:
+        if section.index not in filter_sections:
             return []
         
         filtered_indices = filter_sections[section.index]
@@ -308,6 +312,9 @@ class RstFormatter:
             hline = f"Section {section.index+1}: {section.title}".rstrip('\n')
             all_rows.append(hline)
             all_rows.append("="*len(hline))
+            all_rows.append("")
+            if section.description:
+                all_rows.append(f"\n{section.description}")
             all_rows.append("")
             
             # Features section (if present)
