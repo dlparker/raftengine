@@ -24,16 +24,17 @@ class TestRec:
     end_pos: Optional[int] = field(default=None)
     sections: dict[int, TestSection] = field(default_factory=dict)
     condensed_tables: list = field(default=None)
-
         
-    def last_section(self):
-        if len(self.sections) < 1:
+    def section_at_pos(self, pos):
+        for section in sections.values():
+            if section.start_pos == pos:
+                return section
+            
+    def get_last_section(self):
+        if len(self.sections) == 0:
             return None
-        keys = list(self.sections.keys())
-        keys.sort()
-        return self.sections[keys[-1]]
+        return self.sections[list(self.sections.keys())[-1]]
     
-
 def get_current_test():
     full_name = os.environ.get('PYTEST_CURRENT_TEST').split(' ')[0]
     test_file = full_name.split("::")[0].split('/')[-1].split('.py')[0]
@@ -66,7 +67,6 @@ class TestTrace:
         self.cluster = cluster
         self.node_states = {}
         self.trace_lines = []
-        #self.test_sections = {}
         self.test_rec = None
         self.test_logger = None
         self.feature_registry = FeatureRegistry.get_registry()
@@ -81,12 +81,12 @@ class TestTrace:
 
     async def test_done(self):
         if self.test_rec:
-            cw = self.test_rec.last_section()
-            if cw and cw.start_pos >= len(self.trace_lines):
-                del self.test_rec.sections[cw.start_pos]
+            section = self.test_rec.get_last_section()
+            if section and section.start_pos >= len(self.trace_lines):
+                del self.test_rec.sections[section.index]
                 return
-            if cw and cw.end_pos is None:
-                cw.end_pos=len(self.trace_lines)-1
+            if section and section.end_pos is None:
+                section.end_pos=len(self.trace_lines)-1
         
     async def add_node(self, node):
         ns = self.node_states[node.uri] = await self.create_node_state(node)
@@ -131,7 +131,7 @@ class TestTrace:
                               description=description, start_pos=start_pos, is_prep=True)
         fdb = self.feature_registry.feature_db
         fdb.record_test(test_name, test_file, description, doc_string, [])
-        self.test_rec.sections[start_pos] = section
+        self.test_rec.sections[len(self.test_rec.sections)] = section
         self.test_logger = logger
         if self.test_logger:
             self.test_logger.info("Starting test %s:%s::%s", test_file, test_name, description)
@@ -142,20 +142,13 @@ class TestTrace:
         
     async def start_subtest(self, description, features=None, is_prep=False):
         fdb = self.feature_registry.feature_db
-        section = self.test_rec.last_section()
-        if len(self.trace_lines) > 1:
-            if section and section.end_pos is None:
-                await self.end_subtest()
-            start_pos = len(self.trace_lines)
-            section = TestSection(index=len(self.test_rec.sections),
-                                  start_pos=start_pos, description=description, is_prep=is_prep)
-            self.test_rec.sections[start_pos] = section
-        else:
-            # We have a special case, when there is a section because we made one
-            # in "define_test", but the only event in it is the 'node started' event.
-            # In that case we want to just continue with the section, but rename it
-            section.description = description
-            section.is_prep = is_prep
+        section = self.test_rec.get_last_section()
+        if section and section.end_pos is None:
+            await self.end_subtest()
+        start_pos = len(self.trace_lines)
+        section = TestSection(index=len(self.test_rec.sections),
+                              start_pos=start_pos, description=description, is_prep=is_prep)
+        self.test_rec.sections[section.index] = section
         fdb.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
         section.features = await self.mark_test_features(section, features)
         if self.test_logger:
@@ -187,7 +180,7 @@ class TestTrace:
         # one was created by define test, but a new section was created
         # before any events were logged.
         #
-        section = self.test_rec.last_section()
+        section = self.test_rec.get_last_section()
         section.end_pos = len(self.trace_lines) - 1
         self.test_rec.end_pos = section.end_pos
         if self.test_logger:

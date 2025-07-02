@@ -22,8 +22,7 @@ do not apply to this library, because it does not provide an RPC or messaging me
 to have that service provided through the PilotAPI and HullAPI classes. There are some features of the
 library that can help with implementing the section 6 features.
 
-Command Execution
------------------
+**Comand Exectution**
 
 When a client wants a state machine command to be executed by the cluster, the server application it is talking
 to should submit that request to the HullAPI run_command method. If the server is the cluster leader, then

@@ -2,7 +2,7 @@ raftengine.api package
 ======================
 
 API modules
-----------
+-----------
 
 .. toctree::
    :maxdepth: 1

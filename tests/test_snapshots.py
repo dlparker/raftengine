@@ -155,7 +155,7 @@ async def test_snapshot_2(cluster_maker):
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing simplest snapshot process at a follower", logger=logger)
-    
+    await cluster.test_trace.start_test_prep("Running election to elect node 1")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -225,6 +225,7 @@ async def test_snapshot_2(cluster_maker):
     ts_1.in_messages.append(ssmr)
     # just make sure it doesn't explode
     await ts_1.do_next_in_msg()
+    await cluster.test_trace.end_subtest()
     
     
 async def test_snapshot_3(cluster_maker):
@@ -241,6 +242,7 @@ async def test_snapshot_3(cluster_maker):
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing snapshot process when leader is told to snapshot", logger=logger)
+    await cluster.test_trace.start_test_prep("Running election to elect node 1")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -346,6 +348,7 @@ async def test_snapshot_4(cluster_maker):
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing snapshot installation on a slow follower", logger=logger)
+    await cluster.test_trace.start_test_prep("Running election to elect node 1")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

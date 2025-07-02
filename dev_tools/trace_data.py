@@ -93,11 +93,9 @@ class TestTraceData:
         self.test_sections = sections
 
     def last_section(self):
-        if len(self.test_sections) < 1:
+        if len(self.test_sections) == 0:
             return None
-        keys = list(self.test_sections.keys())
-        keys.sort()
-        return self.test_sections[keys[-1]]
+        return self.test_sections[list(self.test_sections.keys())[-1]]
 
 def decode_message(mdict):
     # we don't always need these reconstitued from save json,

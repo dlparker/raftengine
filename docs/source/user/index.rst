@@ -1,5 +1,5 @@
 User Documentation
-=================
+==================
 
 This guide helps you integrate Raftengine into server projects.
 

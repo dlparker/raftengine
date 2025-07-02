@@ -135,8 +135,8 @@ class OrgFormatter:
             all_rows.append("")
 
         # Process each section
-        for start_pos, filtered in filter_sections.items():
-            section = self.trace_output.test_data.test_sections[start_pos]
+        for index, filtered in filter_sections.items():
+            section = self.trace_output.test_data.test_sections[index]
             condensed_table = self.make_new_shorthand_table(section)
             
             # Build table with same structure as original
@@ -218,12 +218,12 @@ class OrgFormatter:
         if section.start_pos not in filter_sections:
             return []
         
-        filtered_indices = filter_sections[section.start_pos]
+        filtered_indices = filter_sections[section.index]
         
         # Convert indices to actual trace lines (same as legacy does)
         filtered_trace = []
-        for index in filtered_indices:
-            filtered_trace.append(self.trace_output.test_data.trace_lines[index])
+        for pos in filtered_indices:
+            filtered_trace.append(self.trace_output.test_data.trace_lines[pos])
         
         # Track state history for each node
         state_histories = {}
@@ -297,8 +297,11 @@ class RstFormatter:
         all_rows.append("")
                 
         # Process each section
-        for start_pos, filtered in filter_sections.items():
-            section = self.trace_output.test_data.test_sections[start_pos]
+        for index, filtered in filter_sections.items():
+            section = self.trace_output.test_data.test_sections[index]
+            if section.start_pos == section.end_pos:
+                # empty, ignore it
+                continue
             condensed_table = self.make_new_shorthand_table(section)
             
             # Section header
@@ -376,11 +379,10 @@ class RstFormatter:
             for row in hrows:
                 for col_index, col in enumerate(row):
                     col_widths[col_index] = max(col_widths[col_index], len(str(col)))
-            
             for row in condensed_table:
                 for col_index, col in enumerate(row):
                     col_widths[col_index] = max(col_widths[col_index], len(str(col)))
-            
+                    
             # Build RST table borders
             liner = "+"
             for cindex, cwidth in enumerate(col_widths):
@@ -410,6 +412,10 @@ class RstFormatter:
             for row in condensed_table:
                 str_line = "|"
                 for col_index, col in enumerate(row):
+                    str_line += f" {col:{col_widths[col_index]}s} |"
+                while col_index < len(col_widths) - 1:
+                    col_index += 1
+                    col = ''
                     str_line += f" {col:{col_widths[col_index]}s} |"
                 trows.append(str_line)
             
@@ -447,12 +453,12 @@ class RstFormatter:
         if section.start_pos not in filter_sections:
             return []
         
-        filtered_indices = filter_sections[section.start_pos]
+        filtered_indices = filter_sections[section.index]
         
         # Convert indices to actual trace lines (same as legacy does)
         filtered_trace = []
-        for index in filtered_indices:
-            filtered_trace.append(self.trace_output.test_data.trace_lines[index])
+        for pos in filtered_indices:
+            filtered_trace.append(self.trace_output.test_data.trace_lines[pos])
         
         # Track state history for each node
         state_histories = {}

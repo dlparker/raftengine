@@ -30,15 +30,10 @@ class TraceOutput:
         if last_section.end_pos is None:
             last_section.end_pos = len(self.trace_lines) - 1
         results = {}
-        keys = list(self.test_data.test_sections.keys())
-        keys.sort()
-        for key in keys:
-            section = self.test_data.test_sections[key]
-            section.count_nodes(self.test_data.trace_lines)
+        for section in self.test_data.test_sections.values():
+            max_nodes = section.count_nodes(self.test_data.trace_lines)
             show = self.trace_filter.filter_events(self.test_data.trace_lines, section.start_pos, section.end_pos)
-            # we can use the "start_pos" property of a section
-            # as an ID, as it will be unique
-            results[section.start_pos] = show
+            results[section.index] = show
         self.filtered = results
         return self.filtered
 
@@ -86,14 +81,7 @@ class TraceOutput:
                     f.write(line + "\n")
 
     def write_section_puml_file(self, section_index):
-        keys = list(self.test_data.test_sections.keys())
-        keys.sort()
-        try:
-            poskey = keys[section_index]
-        except IndexError:
-            print(f"no section {section_index} for {self.test_data.test_path} {self.test_data.test_name}")
-            return None
-        section = self.test_data.test_sections[poskey]
+        section = self.test_data.test_sections[section_index]
         filepath = self.get_trace_file_path('plantuml', section_index)
         puml = PUMLFormatter(self).format(section)
         if len(puml) > 0:
@@ -166,8 +154,8 @@ class TraceOutput:
                 outline.append(NodeState.from_dict(item))
             lines.append(outline)
         sections = {}
-        for pos,insection in in_data['test_sections'].items():
-            sections[int(pos)] = TestSection(**insection)
+        for index,insection in in_data['test_sections'].items():
+            sections[int(index)] = TestSection(**insection)
 
         td = TestTraceData(in_data['test_name'],
                            in_data['test_path'],
@@ -187,6 +175,7 @@ class TableTraceFilter:
     
     def filter_events(self, trace_lines, start_pos, end_pos):
         """Filter trace lines to determine which events should be shown in condensed output"""
+
         events_to_show = []
         for section_pos, line in enumerate(trace_lines[start_pos: end_pos + 1]):
             full_pos = section_pos + start_pos # position in full trace stack
