@@ -95,6 +95,7 @@ class TraceOutput:
             return None
         section = self.test_data.test_sections[poskey]
         filepath = self.get_trace_file_path('plantuml', section_index)
+        print(f'section {section_index} path is {filepath}')
         puml = PUMLFormatter(self).format(section)
         if len(puml) > 0:
             with open(filepath, 'w') as f:
@@ -124,15 +125,15 @@ class TraceOutput:
                 for ni in ol:
                     f.write(f"{ni}\n")
 
-    def get_trace_file_path(self, filetype, section_number=None):
-        path = self.trace_file_path(filetype, self.test_data.test_path, self.test_data.test_name, section_number)
+    def get_trace_file_path(self, filetype, section_index=None):
+        path = self.trace_file_path(filetype, self.test_data.test_path, self.test_data.test_name, section_index)
         parent = path.parent
         if not parent.exists():
             parent.mkdir(parents=True)
         return path
 
     @staticmethod
-    def trace_file_path(filetype, test_path, test_name, section_number=None):
+    def trace_file_path(filetype, test_path, test_name, section_index=None):
         options = {'org': 'org',
                    'no_legend_org': 'org',
                    'rst': 'rst',
@@ -142,13 +143,13 @@ class TraceOutput:
                    'plantuml': 'puml'}
         if filetype not in options:
             raise Exception(f"{filetype} not in {options}")
-        if filetype == "plantuml" and not isinstance(section_number, int):
+        if filetype == "plantuml" and not isinstance(section_index, int):
             raise Exception(f"plantuml file paths required an integer section number")
         test_file_path = test_path
         tdir = Path(Path(__file__).parent.parent.resolve(), "captures", "test_traces")
         trace_dir = Path(tdir, filetype, Path(test_file_path).stem)
-        if section_number:
-            return Path(trace_dir, test_name + f"_{section_number}." + options[filetype])
+        if section_index is not None:
+            return Path(trace_dir, test_name + f"_{section_index+1}." + options[filetype])
         else:
             return Path(trace_dir, test_name + "." + options[filetype])
     

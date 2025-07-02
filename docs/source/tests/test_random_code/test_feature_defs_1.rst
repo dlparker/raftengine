@@ -1,5 +1,6 @@
 .. _test_feature_defs_1:
 
+===================================================
 Test test_feature_defs_1 from file test_random_code
 ===================================================
 
@@ -17,11 +18,8 @@ Test test_feature_defs_1 from file test_random_code
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
-
-- See :ref:`Trace Table Legend` for help interpreting table contents
-
-Transporting votes and append-entries unitl TERM_START is applied to all node
-_____________________________________________________________________________
+Section 1: Transporting votes and append-entries unitl TERM_START is applied to all node
+=============================================================================
 
 Raft features tested:
 
@@ -55,6 +53,8 @@ Raft features tested:
 
 
 .. collapse:: section 1 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-----------+------+-----------------------------+-----------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1       | N-2  | N-2                         | N-2       | N-3  | N-3                         | N-3       |

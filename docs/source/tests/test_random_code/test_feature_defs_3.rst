@@ -1,5 +1,6 @@
 .. _test_feature_defs_3:
 
+===================================================
 Test test_feature_defs_3 from file test_random_code
 ===================================================
 
@@ -27,11 +28,8 @@ Test test_feature_defs_3 from file test_random_code
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
-
-- See :ref:`Trace Table Legend` for help interpreting table contents
-
-Running normal election till fully replicated
-_____________________________________________
+Section 1: Running normal election till fully replicated
+=============================================
 
 Raft features used:
 
@@ -65,6 +63,8 @@ Raft features used:
 
 
 .. collapse:: section 1 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-----------+------+-----------------------------+-----------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1       | N-2  | N-2                         | N-2       | N-3  | N-3                         | N-3       |
@@ -134,8 +134,8 @@ Raft features used:
           :scale: 100%
 
 
-Run one command, normal sequence till leader commit
-___________________________________________________
+Section 2: Run one command, normal sequence till leader commit
+===================================================
 
 Raft features tested:
 
@@ -160,6 +160,8 @@ Raft features tested:
 
 
 .. collapse:: section 2 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3   |
@@ -203,8 +205,8 @@ Raft features tested:
           :scale: 100%
 
 
-Trying to run command at follower, looking for redirect
-_______________________________________________________
+Section 3: Trying to run command at follower, looking for redirect
+=======================================================
 
 Raft features tested:
 
@@ -230,6 +232,8 @@ Raft features tested:
 
 .. collapse:: section 3 trace table (click to toggle view)
 
+   - See :ref:`Trace Table Legend` for help interpreting table contents
+
    +------+-----+-------+------+-----+-------+------+-----------+-------+
    | N-1  | N-1 | N-1   | N-2  | N-2 | N-2   | N-3  | N-3       | N-3   |
    +------+-----+-------+------+-----+-------+------+-----------+-------+
@@ -248,12 +252,14 @@ Raft features tested:
           :scale: 100%
 
 
-Pushing one follower to candidate, then trying command to it, looking for retry
-_______________________________________________________________________________
+Section 4: Pushing one follower to candidate, then trying command to it, looking for retry
+===============================================================================
 
 
 
 .. collapse:: section 4 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----+-------+------+-----+-------+------+-----------+-------+
    | N-1  | N-1 | N-1   | N-2  | N-2 | N-2   | N-3  | N-3       | N-3   |
@@ -275,12 +281,14 @@ _______________________________________________________________________________
           :scale: 100%
 
 
-Pushing Leader to send heartbeats, after forcing candidate's term back down
-___________________________________________________________________________
+Section 5: Pushing Leader to send heartbeats, after forcing candidate's term back down
+===========================================================================
 
 
 
 .. collapse:: section 5 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3   |
@@ -318,8 +326,8 @@ ___________________________________________________________________________
           :scale: 100%
 
 
-Crashing one follower, then running command to ensure it works with only one follower
-_____________________________________________________________________________________
+Section 6: Crashing one follower, then running command to ensure it works with only one follower
+=====================================================================================
 
 Raft features tested:
 
@@ -344,6 +352,8 @@ Raft features tested:
 
 
 .. collapse:: section 6 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-------+-------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3   | N-3   |
@@ -417,8 +427,8 @@ Raft features tested:
           :scale: 100%
 
 
-Recovering follower, then pushing hearbeat to get it to catch up
-________________________________________________________________
+Section 7: Recovering follower, then pushing hearbeat to get it to catch up
+================================================================
 
 Raft features tested:
 
@@ -463,6 +473,8 @@ Raft features used:
 
 
 .. collapse:: section 7 trace table (click to toggle view)
+
+   - See :ref:`Trace Table Legend` for help interpreting table contents
 
    +------+-----------------------------+-------+------+-----------------------------+-------+------+-----------------------------+-----------+
    | N-1  | N-1                         | N-1   | N-2  | N-2                         | N-2   | N-3  | N-3                         | N-3       |

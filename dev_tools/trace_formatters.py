@@ -289,24 +289,21 @@ class RstFormatter:
         all_rows.append(f".. _{self.trace_output.test_data.test_name}:")
         all_rows.append("")
         s1 = f"Test {self.trace_output.test_data.test_name} from file {self.trace_output.test_data.test_path}"
+        all_rows.append("="*len(s1))
         all_rows.append(s1)
         all_rows.append("="*len(s1))
         all_rows.append("")
         all_rows.append(self.trace_output.test_data.test_doc_string)
         all_rows.append("")
                 
-        all_rows.append("")
-        all_rows.append("- See :ref:`Trace Table Legend` for help interpreting table contents")
-        all_rows.append("")
-
         # Process each section
         for start_pos, filtered in filter_sections.items():
             section = self.trace_output.test_data.test_sections[start_pos]
             condensed_table = self.make_new_shorthand_table(section)
             
             # Section header
-            all_rows.append(f"{section.description}".rstrip('\n'))
-            all_rows.append("_"*len(section.description))
+            all_rows.append(f"Section {section.index+1}: {section.description}".rstrip('\n'))
+            all_rows.append("="*len(section.description))
             all_rows.append("")
             
             # Features section (if present)
@@ -351,6 +348,9 @@ class RstFormatter:
             
             all_rows.append(f".. collapse:: section {section.index + 1} trace table (click to toggle view)")
             all_rows.append("")
+            all_rows.append("   - See :ref:`Trace Table Legend` for help interpreting table contents")
+            all_rows.append("")
+
             # Create headers (same as original)
             hrows = []
             hrow = []
@@ -527,7 +527,7 @@ class PUMLFormatter:
             "  BackgroundColor #F5F5F5",
             "  FontSize 11",
             "}",
-            f'title Raft Consensus Sequence ({self.trace_output.test_data.test_name})',
+            f'title Raft Consensus Sequence ({self.trace_output.test_data.test_name} Section {section.index+1})',
             ""
         ]
 
