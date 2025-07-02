@@ -74,7 +74,7 @@ The "rst" and "plantuml" are to be combined with other information such as raft 
 to produce a page in the project's documentation tree for each test.
 
 
-* Feature definition process
+** Feature definition process
 
 If a test is up to date with the new feature definition tools it works with the TestTrace class to mark
 each test section to indicate which raft features it uses and/or tests. The marking process also
@@ -100,7 +100,7 @@ state_machine_command.apply_on_delayed_replication
 
 These name and the concepts they represent are arbitrary and derive from the structure of
 the individual tests that use them. For example, the test test_feature_defs_3 in
-tests/test_random_codde.py uses the following feature branches:
+tests/test_random_code.py uses the following feature branches:
 
 +----------------------------------------------------+---------------+--------------+
 |                        path                        | section_index | relationship |
@@ -117,65 +117,95 @@ The test calls the FeatureRegistry to get or create the features and branches it
 needs, then passes these to the TestTrace class to mark the subtests (sections)
 with the used or tested feature branches.
 
-** TODO
-Much work remains to be done to choose the feature definitions needed for remaining
-tests, something like 73 or 74 tests out of the 77 in the suite (not counting the
-ones in tests/test_random_code.py, which are temporary). This will most likely
-have to be done by a human rather than an LLM/Agent combination, as so much is
-uspoken but expected about the results.
 
+** Feature document fragments
 
-* Feature document fragments
-
-When a feature is used in a test, the auto generation of the rst format test report
-currently places a simple line in the file at the section heading refering to the
-feature. Something like this  (in captures/test_traces/rst/test_random_code/test_feature_defs_3.rst)
-
-Raft feature used: log_replication.slow_follower_backdown
-Raft feature tested: state_machine_command.apply_on_delayed_replication
-
-This is a placeholder. The goal is to replace these lines with text that has been
-prepared by a combination of manual and automatic file creation.
+When a feature is used or tested in a test, and then dev_tools/build_docs.py
+is run, the auto generation of the rst format test report inserts references
+to rst fragment files that document features. 
 
 When a feature or branch is added to the database during a test run, the
 FeatureRegistry ensures that each feature and path has a set of stub
 files in the captures/features/doc tree. These represent the file
 targets that will be inserted into the generated rst files.
 
-For example, if you run the test tests/test_random_code.py::test_feature_defs_1
-the run iteself will produce these files:
+As an  example, if you run the test tests/test_random_code.py::test_feature_defs_3
+the following lines will execute:
 
+.. code-block:: python
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    spec = dict(used=[f_election,], tested=[])
+    await cluster.test_trace.start_test_prep("Running normal election till fully replicated", features=spec)
+
+The results of these calls will be reflected in the features database in captures/features/features.db
+and in the json trace file captures/test_traces/json/test_random_code/test_feature_defs_3.json that
+is created at the end of the test run.
+
+When the dev_tools/build_docs.py tool is run it loads the test trace,
+looks up features used in the test, and ensures that the there are
+stub file created for each of the document fragements expected in
+the doc tree. The following is an incomplete list of the files
+so created for test_random_code.py::test_feature_defs_3
+ 
 captures/features/docs/leader_election/narative.rst
 captures/features/docs/leader_election/features.rst
 captures/features/docs/leader_election/short.rst
 captures/features/docs/leader_election/branches/all_yes_votes/narative.rst
 captures/features/docs/leader_election/branches/all_yes_votes/features.rst
 captures/features/docs/leader_election/branches/all_yes_votes/short.rst
+captures/features/docs/leader_election/branches/all_yes_votes/with_pre_vote/narative.rst
+captures/features/docs/leader_election/branches/all_yes_votes/with_pre_vote/features.rst
+captures/features/docs/leader_election/branches/all_yes_votes/with_pre_vote/short.rst
+
+The dev_tools/build_docs.py tool also generates the rst file for the test
+in captures/test_traces/rst/test_random_code/test_feature_defs_3.rst
+and includes references to the fragment files:
+
+Raft features used:
+
+.. include:: /developer/tests/features/leader_election/short.rst
+
+.. collapse:: leader_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/features.rst
+
+   .. include:: /developer/tests/features/leader_election/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
+
+
 
 ** TODO
-When the dev_tools/build_docs.py tool is run the current code needs
-to be modified. It currently includes lines as explained in the first
-part of this section. It needs to be modified to produce includes
-for each of the feature files.
+Automate current manual steps, but be careful not to overwrite and lose manual edits.
 
-The new references should look like this for the above test
+copy captures/test_traces/rst/test_path*/test_name*.rst to docs/source/developer/tests/[elections|commands|snapshots|etc]
 
-TESTS:
+copy captures/test_traces/plantuml/test_path*/test_name*.puml to docs/source/developer/tests/diagrams/test_path
 
-.. include:: /tests/features/leader_election/short.rst
+check captures/docs/* and see if there are matching files in docs/source/developer/test/features
+and if so *DO NOT OVERWRITE*. if file does not exist in target complain to get human to write it.
 
-.. collapse::  "leader_election" details (click to expand)
    
-   .. include:: /tests/features/leader_election/narative.rst
-   
-   .. include:: /tests/features/leader_election/features.rst
-
-The same sort of structure should be used to include the texts
-for the features and branches used but not tested by the
-section.
+** TODO
 
 There are first drafts of the needed files for the three tests
-in test_random_code.py, they can be found in docs/source/tests/features in
+in test_random_code.py, they can be found in docs/source/developer/tests/features in
 a directory structure matching the layout of captures/features/docs.
 
 ** TODO
@@ -188,4 +218,11 @@ files as a guide to the work remaining.
 
 
 
+
+** TODO
+Much work remains to be done to choose the feature definitions needed for remaining
+tests, something like 73 or 74 tests out of the 77 in the suite (not counting the
+ones in tests/test_random_code.py, which are temporary). This will most likely
+have to be done by a human rather than an LLM/Agent combination, as so much is
+uspoken but expected about the results.
 

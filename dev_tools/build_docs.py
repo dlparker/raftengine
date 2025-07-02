@@ -27,7 +27,14 @@ def main():
         to.write_csv_file(digest=True)
         for section in registry.feature_db.get_test_section_records(test['path'], test['name']):
             to.write_section_puml_file(section['section_index'])
-        
+
+        for tfm in registry.get_test_to_feature_maps():
+            if tfm.test_id_path == Path(test['path']).stem  + '.' + test['name']:
+                for ftmi in tfm.maps:
+                    feature = registry.features[ftmi.feature]
+                    branch = feature.branches[ftmi.branch]
+                    registry.build_feature_branch_file(branch)
+            
 
 if __name__=="__main__":
     main()

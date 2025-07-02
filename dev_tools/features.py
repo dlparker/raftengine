@@ -152,7 +152,6 @@ class FeatureRegistry:
         self.features[name] = feat
         if not skip_db_op:
             self.feature_db.add_feature(feat)
-        self.build_feature_file(feat)
         self.logger.debug("created feature definition for %s", name)
         return feat
     
@@ -166,7 +165,6 @@ class FeatureRegistry:
                 self.add_feature_branch(feature, cur_id, skip_db_op)
         branch = FeatureBranch(feature, cur_id)
         feature.branches[cur_id] = branch
-        self.build_feature_branch_file(branch)
         if not skip_db_op:
             self.feature_db.add_feature_branch(branch)
         self.logger.debug("created feature branch definition for %s->%s", feature.name, branch_path)

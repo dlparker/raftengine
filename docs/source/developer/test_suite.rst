@@ -8,4 +8,4 @@ Test Suite
    :maxdepth: 1
 
 	     
-   Snapshot Tests: <tests/snapshots/index.rst>	      
+   Random Code Tests: <tests/random_code/index.rst>	      

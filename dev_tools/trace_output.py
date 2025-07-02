@@ -95,7 +95,6 @@ class TraceOutput:
             return None
         section = self.test_data.test_sections[poskey]
         filepath = self.get_trace_file_path('plantuml', section_index)
-        print(f'section {section_index} path is {filepath}')
         puml = PUMLFormatter(self).format(section)
         if len(puml) > 0:
             with open(filepath, 'w') as f:
