@@ -48,6 +48,7 @@ async def test_partition_1(cluster_maker):
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
     await cluster.test_trace.define_test("Testing basic network partitioning and recovery", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -230,6 +231,7 @@ async def test_partition_2_leader(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.test_trace.define_test("Testing leader isolation and recovery in network partition", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -320,6 +322,7 @@ async def test_partition_3_leader(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.test_trace.define_test("Testing leader isolation with check quorum logic", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -396,6 +399,7 @@ async def test_partition_3_follower(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.test_trace.define_test("Testing follower isolation with leader quorum intact", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()

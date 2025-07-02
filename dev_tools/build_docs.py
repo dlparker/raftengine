@@ -18,7 +18,9 @@ def main():
         print(f"{test['path']}, {test['name']}")
         jfilepath = TraceOutput.trace_file_path("json", test['path'], test['name'])
         if not jfilepath.exists():
+            print("!"*120)
             print(f'file {jfilepath} not found!!!')
+            print("!"*120)
             continue
         to = TraceOutput.from_json_file(jfilepath)
         to.write_org_file()
@@ -27,7 +29,14 @@ def main():
         to.write_csv_file()
         to.write_csv_file(digest=True)
         for section in registry.feature_db.get_test_section_records(test['path'], test['name']):
-            to.write_section_puml_file(section['section_index'])
+            try:
+                to.write_section_puml_file(section['section_index'])
+            except KeyError:
+                print("!"*120)
+                print(f"can't write puml file for section {section['section_index']} prolly no data")
+                print("!"*120)
+                continue
+            print(f"wrote puml for section {section['section_index']}")
 
         for tfm in registry.get_test_to_feature_maps():
             if tfm.test_id_path == Path(test['path']).stem  + '.' + test['name']:

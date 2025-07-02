@@ -56,6 +56,7 @@ async def test_command_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.test_trace.define_test("Testing basic command processing with detailed control", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -179,6 +180,7 @@ async def test_command_sqlite_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.test_trace.define_test("Testing command operations with SQLite log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -261,6 +263,7 @@ async def double_leader_inner(cluster, discard):
     #ts_2.operations.dump_state = True
     #ts_3.operations.dump_state = True
     await cluster.test_trace.define_test("Testing command processing with dual leaders", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -371,6 +374,7 @@ async def test_command_2_leaders_3(cluster_maker):
     logger = logging.getLogger("test_code")
     
     await cluster.test_trace.define_test("Testing command redirect after leader partition", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -443,6 +447,7 @@ async def test_command_after_heal_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing command processing after network heal with pre-vote")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await inner_command_after_heal(cluster, False)
     
@@ -462,6 +467,7 @@ async def test_command_after_heal_2(cluster_maker):
     cluster.set_configs(config)
     await cluster.start()
     await cluster.test_trace.define_test("Testing command processing after network heal without pre-vote")
+    await cluster.test_trace.start_test_prep("Normal election")
     await inner_command_after_heal(cluster, False)
     
 async def inner_command_after_heal(cluster, use_pre_vote):
@@ -544,6 +550,7 @@ async def test_follower_explodes_in_command(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower error during command execution")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -608,6 +615,7 @@ async def test_leader_explodes_in_command(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing leader error during command execution")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -665,6 +673,7 @@ async def test_long_catchup(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing long catchup after network partition")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -754,6 +763,7 @@ async def test_full_catchup(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing full catchup after follower crash")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -810,6 +820,7 @@ async def test_follower_run_error(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower error reporting during command execution")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -882,6 +893,7 @@ async def test_follower_rewrite_1(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower log rewrite after leader change")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()

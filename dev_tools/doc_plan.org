@@ -192,16 +192,27 @@ Raft features used:
 
 
 ** TODO tool needed
+
 Automate current manual steps, but be careful not to overwrite and lose manual edits.
 
 copy captures/test_traces/rst/test_path*/test_name*.rst to docs/source/developer/tests/[elections|commands|snapshots|etc]
+
+Need to define the relationship between the test names and the directory where they belong in docs/source/developer/tests/,
+can probably be a table or json, here's a partial table
+
+| Test file name      | Doc dir                                |
+| test_elections_1.py | docs/source/developer/tests/elections  |
+| test_elections_2.py | docs/source/developer/tests/elections  |
+| test_commands_1.py  | docs/source/developer/tests/commands   |
+| test_partions_1.py  | docs/source/developer/tests/partitions |
+| test_snapshots.py   | docs/source/developer/tests/snapshots  |
+| ...                 |  ...                                   |
 
 copy captures/test_traces/plantuml/test_path*/test_name*.puml to docs/source/developer/tests/diagrams/test_path
 
 check captures/docs/* and see if there are matching files in docs/source/developer/test/features
 and if so *DO NOT OVERWRITE*. if file does not exist in target complain to get human to write it.
 
-   
 
 ** TODO
 

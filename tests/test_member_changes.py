@@ -57,6 +57,7 @@ async def test_member_change_messages(cluster_maker):
     """
     cluster = cluster_maker(1)
     await cluster.test_trace.define_test("Testing membership change message operations", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     m1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', ChangeOp.add, target_uri="mcpy://4")
     r1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', ChangeOp.add, target_uri="mcpy://4", ok=True)
     
@@ -81,6 +82,7 @@ async def test_cluster_config_ops(cluster_maker):
     """
     cluster = cluster_maker(1)
     await cluster.test_trace.define_test("Testing cluster configuration operations for membership changes", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -150,6 +152,7 @@ async def test_remove_follower_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing removal of a follower from the cluster", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -206,6 +209,7 @@ async def test_remove_leader_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing removal of the leader from the cluster", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -242,6 +246,7 @@ async def test_add_follower_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with a short log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -282,6 +287,7 @@ async def test_add_follower_2(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with a long log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -367,6 +373,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with multiple log catch-up rounds", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -478,6 +485,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with three log catch-up rounds", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -608,6 +616,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing abort of follower addition due to too many log catch-up rounds", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -793,6 +802,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing timeout during second round of follower log loading", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -957,6 +967,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing reversal of follower addition due to leader crash", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1163,6 +1174,7 @@ async def test_reverse_remove_follower_1(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with timeout", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
 
     done_by_callback = None
     done_by_event = None
@@ -1210,6 +1222,7 @@ async def test_reverse_remove_follower_2(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with stop before timeout", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
 
     done_by_callback = None
     done_by_event = None
@@ -1269,6 +1282,7 @@ async def test_reverse_remove_follower_3(cluster_maker):
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to network partition and election", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
 
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -1357,6 +1371,7 @@ async def test_add_follower_timeout_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1403,6 +1418,7 @@ async def test_add_follower_errors_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
                                   
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -1447,6 +1463,7 @@ async def test_remove_candidate_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1484,6 +1501,7 @@ async def test_update_settings(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

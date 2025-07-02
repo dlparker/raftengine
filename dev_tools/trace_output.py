@@ -27,6 +27,8 @@ class TraceOutput:
         # If the test called end_subtest for each section, they
         # will all have end_pos set, else the last one
         last_section = self.test_data.last_section()
+        if last_section is None:
+            return {}
         if last_section.end_pos is None:
             last_section.end_pos = len(self.trace_lines) - 1
         results = {}

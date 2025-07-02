@@ -55,6 +55,7 @@ async def test_empty_log_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.test_trace.define_test("Testing leader recovery with empty log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -127,6 +128,7 @@ async def test_empty_log_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.test_trace.define_test("Testing follower recovery with empty log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()

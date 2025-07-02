@@ -49,6 +49,7 @@ async def test_stepwise_election_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing stepwise election control with 3 nodes", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     # using node 3 to make sure I don't have some sort of unintentional dependence on using node 1
     await cluster.start()
     await ts_3.start_campaign()
@@ -139,6 +140,7 @@ async def test_run_to_election_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing election with sequence control and triggers", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -214,6 +216,7 @@ async def test_election_timeout_1(cluster_maker):
     assert ncc.settings.election_timeout_max == 0.011
     
     await cluster.test_trace.define_test("Testing election with manipulated timeouts", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -338,6 +341,7 @@ async def test_election_vote_once_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing single vote per term in election", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -436,6 +440,7 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.test_trace.define_test("Testing election with candidate term conflict", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -550,6 +555,7 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
         
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -618,6 +624,7 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing election with outdated candidate term", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering one three to start election")
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -688,6 +695,7 @@ async def inner_failed_first_election(cluster, use_pre_vote):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    await cluster.test_trace.start_subtest("Command triggering node three to start election")
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -808,6 +816,7 @@ async def test_power_transfer_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer in election", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -856,6 +865,7 @@ async def test_power_transfer_2(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer with outdated target node", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -925,6 +935,7 @@ async def test_power_transfer_fails_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer failure due to timeout", logger=logger)
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)

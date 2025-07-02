@@ -44,9 +44,9 @@ async def test_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing basic election happy path with 3 nodes")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
 
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     # tell first one to start election, should send request vote messages to other two
     await ts_1.start_campaign()
     await cluster.deliver_all_pending(out_only=True)
@@ -110,6 +110,7 @@ async def test_election_2(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing basic election with 5 nodes")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
@@ -142,6 +143,7 @@ async def test_reelection_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing hard-triggered reelection with 3 nodes")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -181,6 +183,7 @@ async def test_reelection_2(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing hard-triggered reelection with 5 nodes")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -273,6 +276,7 @@ async def test_reelection_3(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing reelection with split votes and timeouts")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start(timers_disabled=False)
     # give ts_3 time to timeout and start campaign
     start_time = time.time()
@@ -353,6 +357,7 @@ async def test_pre_election_1(cluster_maker):
     cluster.set_configs()
 
     await cluster.test_trace.define_test("Testing election with pre-vote enabled")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -438,6 +443,7 @@ async def test_pre_vote_reject_1(cluster_maker):
     cluster.set_configs()
 
     await cluster.test_trace.define_test("Testing pre-vote rejection after normal election")
+    await cluster.test_trace.start_subtest("Command triggering node one to start election")
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]

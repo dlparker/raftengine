@@ -37,6 +37,7 @@ async def test_heartbeat_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -89,6 +90,7 @@ async def test_heartbeat_2(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections")
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -138,7 +140,7 @@ async def test_lost_leader_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing timers causing lost leader condition and new election")
-
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     await cluster.deliver_all_pending()
@@ -205,6 +207,8 @@ async def test_candidate_timeout_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing candidate timeout and new election start")
+    await cluster.test_trace.start_test_prep("Normal election")
+
     await cluster.start(timers_disabled=True)
     await ts_1.start_campaign()
     await cluster.run_election()

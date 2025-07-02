@@ -53,6 +53,7 @@ async def test_slow_voter(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.test_trace.define_test("Testing slow voter scenario in election", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -139,6 +140,7 @@ async def test_message_errors(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.test_trace.define_test("Testing message processing errors", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
