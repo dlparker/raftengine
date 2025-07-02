@@ -1,0 +1,13 @@
+digraph test_snapshot_3 {
+    rankdir=LR;
+    node [shape=box];
+    Leader [label="Leader (N-1)"];
+    Follower1 [label="Follower (N-2)"];
+    NewNode [label="New Node (N-3): FLWR"];
+    Leader -> Follower1 [label="m_c op=add n=N-3"];
+    Follower1 -> Leader [label="m_cr ok=True"];
+    Leader -> NewNode [label="sn i=100 t=2"];
+    NewNode -> Leader [label="snr s=True"];
+    Leader -> NewNode [label="ae i=101 t=2"];
+    NewNode -> Leader [label="ae_reply ok=True"];
+}
