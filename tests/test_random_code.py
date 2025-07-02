@@ -187,10 +187,10 @@ async def test_feature_defs_3(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing state machine command propagation with 3 nodes", logger=logger)
-    await cluster.start()
     f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
     spec = dict(used=[f_election,], tested=[])
     await cluster.test_trace.start_test_prep("Running normal election till fully replicated", features=spec)
+    await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
     

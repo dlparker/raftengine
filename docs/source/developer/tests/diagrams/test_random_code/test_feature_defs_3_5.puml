@@ -18,15 +18,9 @@ title Raft Consensus Sequence (test_feature_defs_3 Section 5)
 participant "Node 1" as n1 order 10 #Lightgreen
 participant "Node 2" as n2 order 20 #Lightgreen
 participant "Node 3" as n3 order 30 #Lightgreen
-n2 -> n1: AppendResponse(success=True, maxIndex=2)
-n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, heartbeat, commitIndex=2)
 n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, heartbeat, commitIndex=2)
 n2 -> n1: AppendResponse(success=True, maxIndex=2)
-n3 -> n1: AppendResponse(success=True, maxIndex=2)
 n1 -> n3: AppendEntries(term=1, prevIndex=2, prevTerm=1, heartbeat, commitIndex=2)
-n1 -> n3: AppendEntries(term=1, prevIndex=2, prevTerm=1, heartbeat, commitIndex=2)
-n3 -> n1: AppendResponse(success=True, maxIndex=2)
-n2 -> n1: AppendResponse(success=True, maxIndex=2)
 n3 -> n1: AppendResponse(success=True, maxIndex=2)
 
 legend right

@@ -142,7 +142,7 @@ class OrgFormatter:
             # Build table with same structure as original
             max_chars = 0
             trows = []
-            trows.append(f"** {section.description}")
+            trows.append(f"** {section.title}")
             
             # Create headers (identical to original)
             hrows = []
@@ -305,7 +305,7 @@ class RstFormatter:
             condensed_table = self.make_new_shorthand_table(section)
             
             # Section header
-            hline = f"Section {section.index+1}: {section.description}".rstrip('\n')
+            hline = f"Section {section.index+1}: {section.title}".rstrip('\n')
             all_rows.append(hline)
             all_rows.append("="*len(hline))
             all_rows.append("")
@@ -450,7 +450,7 @@ class RstFormatter:
         """
         # Get filtered indices using same logic as legacy
         filter_sections = self.trace_output.get_table_events()
-        if section.start_pos not in filter_sections:
+        if section.index not in filter_sections:
             return []
         
         filtered_indices = filter_sections[section.index]
@@ -571,7 +571,7 @@ class PUMLFormatter:
                     role_changes[ns.uri] = ns.role_name
 
                 # Message operation using readable formatters
-                if ns.save_event == SaveEvent.message_op and ns.message_action in ("sent", "handled_in"):
+                if ns.save_event == SaveEvent.message_op and ns.message_action in ("sent"):
                     if isinstance(ns.message, dict):
                         msg = decode_message(ns.message)
                     else:

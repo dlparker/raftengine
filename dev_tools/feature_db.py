@@ -48,12 +48,12 @@ class FeatureDB:
             cursor.execute(sql, [tid, section.index,])
             row = cursor.fetchone()
             if row is None:
-                sql = "insert into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
-                values = [tid, section.index, section.description, section.is_prep]
+                sql = "insert into test_sections (test_id, section_index, title, is_prep) values (?,?,?,?)"
+                values = [tid, section.index, section.title, section.is_prep]
                 cursor.execute(sql, values)
             else:
-                sql = "update test_sections set description = ?, is_prep = ? where section_id = ?"
-                values = [section.description, section.is_prep, row['section_id']]
+                sql = "update test_sections set title = ?, is_prep = ? where section_id = ?"
+                values = [section.title, section.is_prep, row['section_id']]
                 cursor.execute(sql, values)
         self.db.commit()
 
@@ -97,12 +97,12 @@ class FeatureDB:
         cursor.execute(sql, [tid, section.index,])
         row = cursor.fetchone()
         if row is None:
-            sql = "insert into test_sections (test_id, section_index, description, is_prep) values (?,?,?,?)"
-            values = [tid, section.index, section.description, section.is_prep]
+            sql = "insert into test_sections (test_id, section_index, title, is_prep) values (?,?,?,?)"
+            values = [tid, section.index, section.title, section.is_prep]
             cursor.execute(sql, values)
         else:
-            sql = "update test_sections set description = ?, is_prep = ? where section_id = ?"
-            values = [section.description, section.is_prep, row['section_id']]
+            sql = "update test_sections set title = ?, is_prep = ? where section_id = ?"
+            values = [section.title, section.is_prep, row['section_id']]
             cursor.execute(sql, values)
         self.db.commit()
         
@@ -115,8 +115,8 @@ class FeatureDB:
         if not row:
             raise Exception('save test and test section before trying to save feature')
         test_id = row[0]
-        sql =  "select section_id from test_sections where test_id = ? and description = ?"
-        cursor.execute(sql, [test_id, section.description])
+        sql =  "select section_id from test_sections where test_id = ? and title = ?"
+        cursor.execute(sql, [test_id, section.title])
         row = cursor.fetchone()
         if not row:
             raise Exception('save test and test section before trying to save feature')
@@ -294,6 +294,7 @@ class FeatureDB:
             CREATE TABLE IF NOT EXISTS test_sections (
                 section_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 section_index INT,
+                title TEXT NOT NULL,  
                 description TEXT,  
                 is_prep BOOLEAN,  
                 test_id INTEGER,

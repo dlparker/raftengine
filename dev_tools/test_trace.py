@@ -127,35 +127,53 @@ class TestTrace:
         start_pos = 0
         self.test_rec = TestRec(test_name=test_name, test_path=test_file, description=description,
                                    test_doc_string=doc_string, start_pos=start_pos)
-        section = TestSection(index=len(self.test_rec.sections),
-                              description=description, start_pos=start_pos, is_prep=True)
         fdb = self.feature_registry.feature_db
         fdb.record_test(test_name, test_file, description, doc_string, [])
-        self.test_rec.sections[len(self.test_rec.sections)] = section
         self.test_logger = logger
         if self.test_logger:
             self.test_logger.info("Starting test %s:%s::%s", test_file, test_name, description)
         await self.start()
+        return self.test_rec
 
-    async def start_test_prep(self, description, features=None):
-        await self.start_subtest(description, features=features, is_prep=True)
+    async def update_section(self, section, title, is_prep=None, description=None, features=None):
+        section = self.test_rec.sections[section.index] # will blow up if invalid
+        section = TestSection(index=len(self.test_rec.sections),
+                              start_pos=start_pos, title=title, is_prep=is_prep, description=description)
+        section.title = title
+        if is_prep is not None:
+            section.is_prep = is_prep
+        if description is not None:
+            section.description = description
+        if features is not None:
+            section.features = features
+        fdb.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
+        section.features = await self.mark_test_features(section, features)
+        if self.test_logger:
+            if is_prep:
+                self.test_logger.info("Preparing test conditions by %s", title)
+            else:
+                self.test_logger.info("Starting subtest %s", title)
         
-    async def start_subtest(self, description, features=None, is_prep=False):
+
+    async def start_test_prep(self, title, features=None, description=None):
+        await self.start_subtest(title, features=features, is_prep=True, description=description)
+        
+    async def start_subtest(self, title, features=None, is_prep=False, description=None):
         fdb = self.feature_registry.feature_db
         section = self.test_rec.get_last_section()
         if section and section.end_pos is None:
             await self.end_subtest()
         start_pos = len(self.trace_lines)
         section = TestSection(index=len(self.test_rec.sections),
-                              start_pos=start_pos, description=description, is_prep=is_prep)
+                              start_pos=start_pos, title=title, is_prep=is_prep, description=description)
         self.test_rec.sections[section.index] = section
         fdb.record_test_section(self.test_rec.test_name, self.test_rec.test_path, section)
         section.features = await self.mark_test_features(section, features)
         if self.test_logger:
             if is_prep:
-                self.test_logger.info("Preparing test conditions by %s", description)
+                self.test_logger.info("Preparing test conditions by %s", title)
             else:
-                self.test_logger.info("Starting subtest %s", description)
+                self.test_logger.info("Starting subtest %s", title)
 
     async def mark_test_features(self, section, features):
         used = []
@@ -185,9 +203,9 @@ class TestTrace:
         self.test_rec.end_pos = section.end_pos
         if self.test_logger:
             if section.is_prep:
-                self.test_logger.info("Done with test prep %s", section.description)
+                self.test_logger.info("Done with test prep %s", section.title)
             else:
-                self.test_logger.info("Done with subtest %s", section.description)
+                self.test_logger.info("Done with subtest %s", section.title)
 
     async def save_trace_line(self):
         # We write a new trace line for any change to any node, and each
@@ -195,6 +213,9 @@ class TestTrace:
         # This is not efficient, but it cannot result in confusion about
         # order
         tl = []
+        section = self.test_rec.get_last_section()
+        if section is None:
+            raise Exception('define a test section first')
         save_event = None
         for uri,node in self.cluster.nodes.items():
             # nodes can get added after startup

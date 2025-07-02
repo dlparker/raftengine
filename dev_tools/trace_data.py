@@ -55,7 +55,8 @@ class NodeState:
 class TestSection:
     index: int
     start_pos: int
-    description: str
+    title: str
+    description: Optional[str] = None
     is_prep: Optional[bool] = False
     #test_path: Optional[str] = None
     #test_doc_string: Optional[str] = None

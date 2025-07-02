@@ -21,33 +21,21 @@ participant "Node 3" as n3 order 30 #Lightgreen
 n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, 1 entry, commitIndex=2)
 note left of n1: Log: index=3, term=0
 n1 -> n3: AppendEntries(term=1, prevIndex=2, prevTerm=1, 1 entry, commitIndex=2)
-n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, 1 entry, commitIndex=2)
 note right of n2: Log: index=3, term=0
 n2 -> n1: AppendResponse(success=True, maxIndex=3)
-n2 -> n1: AppendResponse(success=True, maxIndex=3)
 note left of n1: Commit: index=3
-n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, heartbeat, commitIndex=3)
 note right of n2: Commit: index=3
 n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
 note left of n1: Log: index=4, term=0
 n2 -> n1: AppendResponse(success=True, maxIndex=3)
-n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
 note right of n2: Log: index=4, term=0
 n2 -> n1: AppendResponse(success=True, maxIndex=4)
-n2 -> n1: AppendResponse(success=True, maxIndex=3)
 n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
-n2 -> n1: AppendResponse(success=True, maxIndex=4)
 note left of n1: Commit: index=4
-n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
 n2 -> n1: AppendResponse(success=True, maxIndex=4)
-n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, heartbeat, commitIndex=4)
 note right of n2: Commit: index=4
 n2 -> n1: AppendResponse(success=True, maxIndex=4)
-n2 -> n1: AppendResponse(success=True, maxIndex=4)
-n2 -> n1: AppendResponse(success=True, maxIndex=4)
 n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, heartbeat, commitIndex=4)
-n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, heartbeat, commitIndex=4)
-n2 -> n1: AppendResponse(success=True, maxIndex=4)
 n2 -> n1: AppendResponse(success=True, maxIndex=4)
 n1 -> n3: AppendEntries(term=1, prevIndex=4, prevTerm=1, heartbeat, commitIndex=4)
 
