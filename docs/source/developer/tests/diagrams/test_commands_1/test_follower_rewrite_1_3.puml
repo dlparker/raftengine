@@ -1,0 +1,45 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_follower_rewrite_1 Section 3)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n2 -> n2: Becomes CANDIDATE
+n2 -> n1: PreVoteRequest(term=2, lastIndex=1, lastTerm=1)
+n2 -> n3: PreVoteRequest(term=2, lastIndex=1, lastTerm=1)
+n3 -> n2: PreVoteResponse(granted=True)
+note right of n2: Term: 2
+n2 -> n1: RequestVote(term=2, lastIndex=1, lastTerm=2)
+n2 -> n3: RequestVote(term=2, lastIndex=1, lastTerm=2)
+note right of n3: Term: 2
+n3 -> n2: VoteResponse(granted=True)
+note right of n2: Log: index=2, term=2
+n2 -> n2: Becomes LEADER
+n2 -> n1: AppendEntries(term=2, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
+n2 -> n3: AppendEntries(term=2, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
+note right of n3: Log: index=2, term=2
+n3 -> n2: AppendResponse(success=True, maxIndex=2)
+note right of n2: Commit: index=2
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

@@ -1,0 +1,50 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_command_sqlite_1 Section 1)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n3 -> n3: Becomes CANDIDATE
+n3 -> n1: PreVoteRequest(term=1, lastIndex=0, lastTerm=0)
+n3 -> n2: PreVoteRequest(term=1, lastIndex=0, lastTerm=0)
+n1 -> n3: PreVoteResponse(granted=True)
+n2 -> n3: PreVoteResponse(granted=True)
+note right of n3: Term: 1
+n3 -> n1: RequestVote(term=1, lastIndex=0, lastTerm=1)
+n3 -> n2: RequestVote(term=1, lastIndex=0, lastTerm=1)
+note left of n1: Term: 1
+n1 -> n3: VoteResponse(granted=True)
+note right of n2: Term: 1
+n2 -> n3: VoteResponse(granted=True)
+note right of n3: Log: index=1, term=1
+n3 -> n3: Becomes LEADER
+n3 -> n1: AppendEntries(term=1, prevIndex=0, prevTerm=0, 1 entry, commitIndex=0)
+n3 -> n2: AppendEntries(term=1, prevIndex=0, prevTerm=0, 1 entry, commitIndex=0)
+note left of n1: Log: index=1, term=1
+n1 -> n3: AppendResponse(success=True, maxIndex=1)
+note right of n2: Log: index=1, term=1
+n2 -> n3: AppendResponse(success=True, maxIndex=1)
+note right of n3: Commit: index=1
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

@@ -1,0 +1,1 @@
+Leader replicates log entries to followers using AppendEntries

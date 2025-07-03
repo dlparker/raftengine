@@ -1,0 +1,1 @@
+Follower recovers from crash and catches up with leader's log

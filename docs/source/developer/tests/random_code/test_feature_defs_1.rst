@@ -21,6 +21,7 @@ Test test_feature_defs_1 from file test_random_code
 Section 1: Transporting votes and append-entries unitl TERM_START is applied to all node
 ========================================================================================
 
+
 Raft features tested:
 
 .. include:: /developer/tests/features/leader_election/short.rst

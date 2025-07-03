@@ -1,0 +1,269 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_long_catchup Section 2)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, 1 entry, commitIndex=2)
+note left of n1: Log: index=3, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=2)
+note right of n2: Log: index=3, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=3)
+n1 -> n2: AppendEntries(term=1, prevIndex=2, prevTerm=1, 1 entry, commitIndex=2)
+note left of n1: Commit: index=3
+n2 -> n1: AppendResponse(success=True, maxIndex=3)
+note right of n2: Commit: index=3
+n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
+note left of n1: Log: index=4, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
+n2 -> n1: AppendResponse(success=True, maxIndex=3)
+note right of n2: Log: index=4, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=4)
+n2 -> n1: AppendResponse(success=True, maxIndex=4)
+n1 -> n2: AppendEntries(term=1, prevIndex=3, prevTerm=1, 1 entry, commitIndex=3)
+note left of n1: Commit: index=4
+n2 -> n1: AppendResponse(success=True, maxIndex=4)
+note right of n2: Commit: index=4
+n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, 1 entry, commitIndex=4)
+note left of n1: Log: index=5, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, 1 entry, commitIndex=4)
+n2 -> n1: AppendResponse(success=True, maxIndex=4)
+note right of n2: Log: index=5, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=5)
+n2 -> n1: AppendResponse(success=True, maxIndex=5)
+n1 -> n2: AppendEntries(term=1, prevIndex=4, prevTerm=1, 1 entry, commitIndex=4)
+note left of n1: Commit: index=5
+n2 -> n1: AppendResponse(success=True, maxIndex=5)
+note right of n2: Commit: index=5
+n1 -> n2: AppendEntries(term=1, prevIndex=5, prevTerm=1, 1 entry, commitIndex=5)
+note left of n1: Log: index=6, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=5, prevTerm=1, 1 entry, commitIndex=5)
+n2 -> n1: AppendResponse(success=True, maxIndex=5)
+note right of n2: Log: index=6, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=6)
+n2 -> n1: AppendResponse(success=True, maxIndex=6)
+n1 -> n2: AppendEntries(term=1, prevIndex=5, prevTerm=1, 1 entry, commitIndex=5)
+note left of n1: Commit: index=6
+n2 -> n1: AppendResponse(success=True, maxIndex=6)
+note right of n2: Commit: index=6
+n1 -> n2: AppendEntries(term=1, prevIndex=6, prevTerm=1, 1 entry, commitIndex=6)
+note left of n1: Log: index=7, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=6, prevTerm=1, 1 entry, commitIndex=6)
+n2 -> n1: AppendResponse(success=True, maxIndex=6)
+note right of n2: Log: index=7, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=7)
+n2 -> n1: AppendResponse(success=True, maxIndex=7)
+n1 -> n2: AppendEntries(term=1, prevIndex=6, prevTerm=1, 1 entry, commitIndex=6)
+note left of n1: Commit: index=7
+n2 -> n1: AppendResponse(success=True, maxIndex=7)
+note right of n2: Commit: index=7
+n1 -> n2: AppendEntries(term=1, prevIndex=7, prevTerm=1, 1 entry, commitIndex=7)
+note left of n1: Log: index=8, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=7, prevTerm=1, 1 entry, commitIndex=7)
+n2 -> n1: AppendResponse(success=True, maxIndex=7)
+note right of n2: Log: index=8, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=8)
+n2 -> n1: AppendResponse(success=True, maxIndex=8)
+n1 -> n2: AppendEntries(term=1, prevIndex=7, prevTerm=1, 1 entry, commitIndex=7)
+note left of n1: Commit: index=8
+n2 -> n1: AppendResponse(success=True, maxIndex=8)
+note right of n2: Commit: index=8
+n1 -> n2: AppendEntries(term=1, prevIndex=8, prevTerm=1, 1 entry, commitIndex=8)
+note left of n1: Log: index=9, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=8, prevTerm=1, 1 entry, commitIndex=8)
+n2 -> n1: AppendResponse(success=True, maxIndex=8)
+note right of n2: Log: index=9, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=9)
+n2 -> n1: AppendResponse(success=True, maxIndex=9)
+n1 -> n2: AppendEntries(term=1, prevIndex=8, prevTerm=1, 1 entry, commitIndex=8)
+note left of n1: Commit: index=9
+n2 -> n1: AppendResponse(success=True, maxIndex=9)
+note right of n2: Commit: index=9
+n1 -> n2: AppendEntries(term=1, prevIndex=9, prevTerm=1, 1 entry, commitIndex=9)
+note left of n1: Log: index=10, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=9, prevTerm=1, 1 entry, commitIndex=9)
+n2 -> n1: AppendResponse(success=True, maxIndex=9)
+note right of n2: Log: index=10, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=10)
+n2 -> n1: AppendResponse(success=True, maxIndex=10)
+n1 -> n2: AppendEntries(term=1, prevIndex=9, prevTerm=1, 1 entry, commitIndex=9)
+note left of n1: Commit: index=10
+n2 -> n1: AppendResponse(success=True, maxIndex=10)
+note right of n2: Commit: index=10
+n1 -> n2: AppendEntries(term=1, prevIndex=10, prevTerm=1, 1 entry, commitIndex=10)
+note left of n1: Log: index=11, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=10, prevTerm=1, 1 entry, commitIndex=10)
+n2 -> n1: AppendResponse(success=True, maxIndex=10)
+note right of n2: Log: index=11, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=11)
+n2 -> n1: AppendResponse(success=True, maxIndex=11)
+n1 -> n2: AppendEntries(term=1, prevIndex=10, prevTerm=1, 1 entry, commitIndex=10)
+note left of n1: Commit: index=11
+n2 -> n1: AppendResponse(success=True, maxIndex=11)
+note right of n2: Commit: index=11
+n1 -> n2: AppendEntries(term=1, prevIndex=11, prevTerm=1, 1 entry, commitIndex=11)
+note left of n1: Log: index=12, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=11, prevTerm=1, 1 entry, commitIndex=11)
+n2 -> n1: AppendResponse(success=True, maxIndex=11)
+note right of n2: Log: index=12, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=12)
+n2 -> n1: AppendResponse(success=True, maxIndex=12)
+n1 -> n2: AppendEntries(term=1, prevIndex=11, prevTerm=1, 1 entry, commitIndex=11)
+note left of n1: Commit: index=12
+n2 -> n1: AppendResponse(success=True, maxIndex=12)
+note right of n2: Commit: index=12
+n1 -> n2: AppendEntries(term=1, prevIndex=12, prevTerm=1, 1 entry, commitIndex=12)
+note left of n1: Log: index=13, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=12, prevTerm=1, 1 entry, commitIndex=12)
+n2 -> n1: AppendResponse(success=True, maxIndex=12)
+note right of n2: Log: index=13, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=13)
+n2 -> n1: AppendResponse(success=True, maxIndex=13)
+n1 -> n2: AppendEntries(term=1, prevIndex=12, prevTerm=1, 1 entry, commitIndex=12)
+note left of n1: Commit: index=13
+n2 -> n1: AppendResponse(success=True, maxIndex=13)
+note right of n2: Commit: index=13
+n1 -> n2: AppendEntries(term=1, prevIndex=13, prevTerm=1, 1 entry, commitIndex=13)
+note left of n1: Log: index=14, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=13, prevTerm=1, 1 entry, commitIndex=13)
+n2 -> n1: AppendResponse(success=True, maxIndex=13)
+note right of n2: Log: index=14, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=14)
+n2 -> n1: AppendResponse(success=True, maxIndex=14)
+n1 -> n2: AppendEntries(term=1, prevIndex=13, prevTerm=1, 1 entry, commitIndex=13)
+note left of n1: Commit: index=14
+n2 -> n1: AppendResponse(success=True, maxIndex=14)
+note right of n2: Commit: index=14
+n1 -> n2: AppendEntries(term=1, prevIndex=14, prevTerm=1, 1 entry, commitIndex=14)
+note left of n1: Log: index=15, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=14, prevTerm=1, 1 entry, commitIndex=14)
+n2 -> n1: AppendResponse(success=True, maxIndex=14)
+note right of n2: Log: index=15, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=15)
+n2 -> n1: AppendResponse(success=True, maxIndex=15)
+n1 -> n2: AppendEntries(term=1, prevIndex=14, prevTerm=1, 1 entry, commitIndex=14)
+note left of n1: Commit: index=15
+n2 -> n1: AppendResponse(success=True, maxIndex=15)
+note right of n2: Commit: index=15
+n1 -> n2: AppendEntries(term=1, prevIndex=15, prevTerm=1, 1 entry, commitIndex=15)
+note left of n1: Log: index=16, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=15, prevTerm=1, 1 entry, commitIndex=15)
+n2 -> n1: AppendResponse(success=True, maxIndex=15)
+note right of n2: Log: index=16, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=16)
+n2 -> n1: AppendResponse(success=True, maxIndex=16)
+n1 -> n2: AppendEntries(term=1, prevIndex=15, prevTerm=1, 1 entry, commitIndex=15)
+note left of n1: Commit: index=16
+n2 -> n1: AppendResponse(success=True, maxIndex=16)
+note right of n2: Commit: index=16
+n1 -> n2: AppendEntries(term=1, prevIndex=16, prevTerm=1, 1 entry, commitIndex=16)
+note left of n1: Log: index=17, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=16, prevTerm=1, 1 entry, commitIndex=16)
+n2 -> n1: AppendResponse(success=True, maxIndex=16)
+note right of n2: Log: index=17, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=17)
+n2 -> n1: AppendResponse(success=True, maxIndex=17)
+n1 -> n2: AppendEntries(term=1, prevIndex=16, prevTerm=1, 1 entry, commitIndex=16)
+note left of n1: Commit: index=17
+n2 -> n1: AppendResponse(success=True, maxIndex=17)
+note right of n2: Commit: index=17
+n1 -> n2: AppendEntries(term=1, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
+note left of n1: Log: index=18, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
+n2 -> n1: AppendResponse(success=True, maxIndex=17)
+note right of n2: Log: index=18, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=18)
+n2 -> n1: AppendResponse(success=True, maxIndex=18)
+n1 -> n2: AppendEntries(term=1, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
+note left of n1: Commit: index=18
+n2 -> n1: AppendResponse(success=True, maxIndex=18)
+note right of n2: Commit: index=18
+n1 -> n2: AppendEntries(term=1, prevIndex=18, prevTerm=1, 1 entry, commitIndex=18)
+note left of n1: Log: index=19, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=18, prevTerm=1, 1 entry, commitIndex=18)
+n2 -> n1: AppendResponse(success=True, maxIndex=18)
+note right of n2: Log: index=19, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=19)
+n2 -> n1: AppendResponse(success=True, maxIndex=19)
+n1 -> n2: AppendEntries(term=1, prevIndex=18, prevTerm=1, 1 entry, commitIndex=18)
+note left of n1: Commit: index=19
+n2 -> n1: AppendResponse(success=True, maxIndex=19)
+note right of n2: Commit: index=19
+n1 -> n2: AppendEntries(term=1, prevIndex=19, prevTerm=1, 1 entry, commitIndex=19)
+note left of n1: Log: index=20, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=19, prevTerm=1, 1 entry, commitIndex=19)
+n2 -> n1: AppendResponse(success=True, maxIndex=19)
+note right of n2: Log: index=20, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=20)
+n2 -> n1: AppendResponse(success=True, maxIndex=20)
+n1 -> n2: AppendEntries(term=1, prevIndex=19, prevTerm=1, 1 entry, commitIndex=19)
+note left of n1: Commit: index=20
+n2 -> n1: AppendResponse(success=True, maxIndex=20)
+note right of n2: Commit: index=20
+n1 -> n2: AppendEntries(term=1, prevIndex=20, prevTerm=1, 1 entry, commitIndex=20)
+note left of n1: Log: index=21, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=20, prevTerm=1, 1 entry, commitIndex=20)
+n2 -> n1: AppendResponse(success=True, maxIndex=20)
+note right of n2: Log: index=21, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=21)
+n2 -> n1: AppendResponse(success=True, maxIndex=21)
+n1 -> n2: AppendEntries(term=1, prevIndex=20, prevTerm=1, 1 entry, commitIndex=20)
+note left of n1: Commit: index=21
+n2 -> n1: AppendResponse(success=True, maxIndex=21)
+note right of n2: Commit: index=21
+n1 -> n2: AppendEntries(term=1, prevIndex=21, prevTerm=1, 1 entry, commitIndex=21)
+note left of n1: Log: index=22, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=21, prevTerm=1, 1 entry, commitIndex=21)
+n2 -> n1: AppendResponse(success=True, maxIndex=21)
+note right of n2: Log: index=22, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=22)
+n2 -> n1: AppendResponse(success=True, maxIndex=22)
+n1 -> n2: AppendEntries(term=1, prevIndex=21, prevTerm=1, 1 entry, commitIndex=21)
+note left of n1: Commit: index=22
+n2 -> n1: AppendResponse(success=True, maxIndex=22)
+note right of n2: Commit: index=22
+n1 -> n2: AppendEntries(term=1, prevIndex=22, prevTerm=1, 1 entry, commitIndex=22)
+note left of n1: Log: index=23, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=22, prevTerm=1, 1 entry, commitIndex=22)
+n2 -> n1: AppendResponse(success=True, maxIndex=22)
+note right of n2: Log: index=23, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=23)
+n2 -> n1: AppendResponse(success=True, maxIndex=23)
+n1 -> n2: AppendEntries(term=1, prevIndex=22, prevTerm=1, 1 entry, commitIndex=22)
+note left of n1: Commit: index=23
+n2 -> n1: AppendResponse(success=True, maxIndex=23)
+note right of n2: Commit: index=23
+n1 -> n2: AppendEntries(term=1, prevIndex=23, prevTerm=1, 1 entry, commitIndex=23)
+note left of n1: Log: index=24, term=0
+n1 -> n2: AppendEntries(term=1, prevIndex=23, prevTerm=1, 1 entry, commitIndex=23)
+n2 -> n1: AppendResponse(success=True, maxIndex=23)
+note right of n2: Log: index=24, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=24)
+n2 -> n1: AppendResponse(success=True, maxIndex=24)
+n1 -> n2: AppendEntries(term=1, prevIndex=23, prevTerm=1, 1 entry, commitIndex=23)
+note left of n1: Commit: index=24
+n2 -> n1: AppendResponse(success=True, maxIndex=24)
+note right of n2: Commit: index=24
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

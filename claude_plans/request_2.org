@@ -1,0 +1,37 @@
+Update the raft_feature_identification_methodology.md plan to add the following steps:
+
+1. Create the feature and feature branch definition files in the docs
+   tree instead of the captures tree.  The location in the docs tree
+   is docs/source/tests/features. There are already some files there
+   following the directory layout pattern used by the generated test
+   rst files. Add new files using the same pattern. Update the
+   existing files if they need improvement.
+2. Once the target test is updated with feature definition files and the tests pass,
+   and the doc build script has been run (dev_tools/build_docs.py), the new
+   test rst files need to be copied from the captures tree using the table below as a guide.
+
+
+copy captures/test_traces/rst/(COLUMN 2) to COLUMN 3
+
+
+| Test file name         | Capture RST               | Doc dir                                    |
+| test_elections_1.py    | test_elections_1/*.rst    | docs/source/developer/tests/elections      |
+| test_elections_2.py    | test_elections_2/*.rst    | docs/source/developer/tests/elections      |
+| test_commands_1.py     | test_commands_1/*.rst     | docs/source/developer/tests/commands       |
+| test_partions_1.py     | test_partions_1/*.rst     | docs/source/developer/tests/partitions     |
+| test_snapshots.py      | test_snapshots/*.rst      | docs/source/developer/tests/snapshots      |
+| test_member_changes.py | test_member_changes/*.rst | docs/source/developer/tests/member_changes |
+| test_log_fiddles.py    | test_log_fiddles/*.rst    | docs/source/developer/tests/log_recovery   |
+| test_class_edges.py    | test_class_edges/*.rst    | docs/source/developer/tests/edges          |
+| test_msg_edges.py      | test_msg_edges/*.rst      | docs/source/developer/tests/edges          |
+| test_events.py         | test_events/*.rst         | docs/source/developer/tests/events         |
+| test_events.py         | test_events/*.rst         | docs/source/developer/tests/events         |
+| test_timers_1.py       | test_timers_1/*.rst       | docs/source/developer/tests/timers         |
+| test_random_code.py    | test_random_code/*.rst    | docs/source/developer/tests/random_code    |
+
+copy captures/test_traces/plantuml/TEST_PATH*/test_name*.puml to docs/source/developer/tests/diagrams/TEST_PATH*
+where TEST_PATH* is something like test_elections_1 or test_elections_2.
+
+Add logic to build docs to perform these copy operations, but add argparse argument processing and make this step
+optional.
+

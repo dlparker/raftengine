@@ -9,3 +9,4 @@ This guide covers the internals, testing, and tools for Raftengine.
    test_suite
    simulation_tools
    tracing
+   tests/test_tracing_guide

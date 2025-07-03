@@ -1,0 +1,1 @@
+Leader sends empty AppendEntries as heartbeats to maintain authority

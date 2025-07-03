@@ -1,0 +1,34 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_reverse_add_follower_1 Section 4)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+participant "Node 4" as n4 order 40 #Lightgreen
+note left of n1: Term: 2
+n1 -> n2: AppendResponse(success=False, maxIndex=3)
+n2 -> n1: AppendEntries(term=2, prevIndex=2, prevTerm=1, 1 entry, commitIndex=3)
+note left of n1: Commit: index=3
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

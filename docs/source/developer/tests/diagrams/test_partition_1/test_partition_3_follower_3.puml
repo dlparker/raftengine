@@ -1,0 +1,60 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_partition_3_follower Section 3)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+note right of n2: Commit: index=1
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n2: AppendEntries(term=1, prevIndex=1, prevTerm=1, heartbeat, commitIndex=1)
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

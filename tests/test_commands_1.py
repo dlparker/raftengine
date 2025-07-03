@@ -59,6 +59,7 @@ async def test_command_1(cluster_maker):
     logger = logging.getLogger("test_code")
     await cluster.test_trace.define_test("Testing basic command processing with detailed control", logger=logger)
     await cluster.test_trace.start_test_prep("Normal election")
+    registry.get_raft_feature("leader_election.all_yes_votes.with_pre_vote", "uses")
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -71,6 +72,8 @@ async def test_command_1(cluster_maker):
     await cluster.start_auto_comms()
 
     await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit")
+    registry.get_raft_feature("state_machine_command.all_in_sync", "uses")
+    registry.get_raft_feature("log_replication.normal_replication", "uses")
     command_result = await ts_3.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
@@ -80,6 +83,7 @@ async def test_command_1(cluster_maker):
     # and apply and locally commit
     await cluster.stop_auto_comms()
     await cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat")
+    registry.get_raft_feature("log_replication.heartbeat_only", "uses")
     await ts_3.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.log.get_term()
@@ -104,11 +108,13 @@ async def test_command_1(cluster_maker):
 
     await cluster.stop_auto_comms()
     await cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect")
+    registry.get_raft_feature("state_machine_command.request_redirect", "tests")
     command_result = await ts_1.run_command("add 1")
     assert command_result.redirect == uri_3
     logger.debug('------------------------ Correct redirect (follower) done')
     
     await cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
+    registry.get_raft_feature("state_machine_command.retry_during_election", "tests")
     orig_term =  await ts_1.get_term() 
     await ts_1.do_leader_lost()
     assert ts_1.get_role_name() == "CANDIDATE"
@@ -134,6 +140,7 @@ async def test_command_1(cluster_maker):
     # so the tardy follower will catch up
 
     await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower")
+    registry.get_raft_feature("state_machine_command.minimal_node_count", "tests")
     await ts_1.simulate_crash()
     logger.debug('------------------------ Running command ---')
     sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
@@ -150,6 +157,7 @@ async def test_command_1(cluster_maker):
     await ts_3.send_heartbeats()
     await cluster.deliver_all_pending()
     await cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up")
+    registry.get_raft_feature("log_replication.follower_recovery_catchup", "tests")
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     await ts_1.recover_from_crash()
     await ts_3.send_heartbeats()

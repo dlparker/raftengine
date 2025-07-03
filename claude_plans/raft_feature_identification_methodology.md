@@ -238,16 +238,190 @@ Based on this analysis, these feature branches need to be created:
 
 ### For Analyzing New Tests
 
-1. **Start with JSON trace**: `captures/test_traces/json/{test_path}/{test_name}.json`
-2. **Extract test structure**: Use `test_doc_string` and section markers
-3. **Analyze message flows**: Map each message type to thesis concepts
-4. **Identify state transitions**: Track role changes and log evolution
-5. **Validate safety properties**: Ensure Raft invariants hold
-6. **Generate feature mappings**: Create appropriate registry entries
-7. **Update test with feature registry**: Modify test file to use registry.get_raft_feature()
-8. **Generate documentation**: Run trace generation and documentation build
-9. **VALIDATION CHECKLIST**: Perform critical format checks (see below)
-10. **Report created files**: List all new feature documentation files for manual integration
+1. **Load test metadata**: `captures/test_traces/metadata/{test_path}/{test_name}.json` (5KB vs 485KB for full JSON)
+2. **Load digest CSV trace**: `captures/test_traces/digest_csv/{test_path}/{test_name}.csv` (includes original_line_index column)
+3. **Extract test structure**: Use `test_doc_string` and section markers from metadata
+4. **Analyze message flows**: Parse CSV for message events, use original_line_index to correlate with sections
+5. **Identify state transitions**: Track role changes and log evolution from CSV data
+6. **Validate safety properties**: Ensure Raft invariants hold using filtered trace data
+7. **Generate feature mappings**: Create appropriate registry entries
+8. **Update test with feature registry**: Modify test file to use registry.get_raft_feature()
+9. **Create feature and feature branch definition files**: Create the feature definition files in `docs/source/tests/features/` instead of the `captures/` tree. Follow the directory layout pattern used by the generated test rst files. Update existing files if they need improvement.
+10. **Generate documentation**: Run trace generation and documentation build (`dev_tools/build_docs.py`)
+11. **Copy generated test rst files**: Once the target test is updated with feature definition files, tests pass, and doc build script has been run, copy the new test rst files from captures to docs according to the mapping table below
+12. **Update features_in_tests.rst**: Create or update `docs/source/developer/tests/features_in_tests.rst` with comprehensive feature-to-test mapping tables (see below)
+13. **Update test feature definitions checklist**: Mark the test as complete (✓) in `claude_plans/test_feature_definitions_checklist.md` and update the completion statistics
+14. **VALIDATION CHECKLIST**: Perform critical format checks (see below)
+15. **Report created files**: List all new feature documentation files for manual integration
+
+### Test RST File Copy Mapping
+
+Copy `captures/test_traces/rst/(COLUMN 2)` to `COLUMN 3`:
+
+| Test file name         | Capture RST               | Doc dir                                     |
+|------------------------|---------------------------|---------------------------------------------|
+| test_elections_1.py    | test_elections_1/*.rst    | docs/source/developer/tests/elections      |
+| test_elections_2.py    | test_elections_2/*.rst    | docs/source/developer/tests/elections      |
+| test_commands_1.py     | test_commands_1/*.rst     | docs/source/developer/tests/commands       |
+| test_partitions_1.py   | test_partitions_1/*.rst   | docs/source/developer/tests/partitions     |
+| test_snapshots.py      | test_snapshots/*.rst      | docs/source/developer/tests/snapshots      |
+| test_member_changes.py | test_member_changes/*.rst | docs/source/developer/tests/member_changes |
+| test_log_fiddles.py    | test_log_fiddles/*.rst    | docs/source/developer/tests/log_recovery   |
+| test_class_edges.py    | test_class_edges/*.rst    | docs/source/developer/tests/edges          |
+| test_msg_edges.py      | test_msg_edges/*.rst      | docs/source/developer/tests/edges          |
+| test_events.py         | test_events/*.rst         | docs/source/developer/tests/events         |
+| test_timers_1.py       | test_timers_1/*.rst       | docs/source/developer/tests/timers         |
+| test_random_code.py    | test_random_code/*.rst    | docs/source/developer/tests/random_code    |
+
+### PlantUML Diagram Copy Mapping
+
+Copy `captures/test_traces/plantuml/TEST_PATH*/test_name*.puml` to `docs/source/developer/tests/diagrams/TEST_PATH*` where TEST_PATH* is something like test_elections_1 or test_elections_2.
+
+### Build Documentation Script Enhancement
+
+Enhanced `dev_tools/build_docs.py` with optional copy operations:
+
+```bash
+# Generate documentation only (default behavior)
+python dev_tools/build_docs.py
+
+# Generate documentation AND copy files to docs tree
+python dev_tools/build_docs.py --copy-to-docs
+
+# With verbose output showing each copied file
+python dev_tools/build_docs.py --copy-to-docs --verbose
+```
+
+The `--copy-to-docs` flag copies generated RST and PlantUML files from `captures/test_traces/` to the appropriate directories in `docs/source/developer/tests/` according to the mapping table above. This allows users to choose whether to copy the generated test files during the build process.
+
+### Features in Tests Documentation
+
+Create or update `docs/source/developer/tests/features_in_tests.rst` with comprehensive feature-to-test mapping tables. This file should contain:
+
+#### Structure of features_in_tests.rst
+
+```rst
+Features in Tests
+=================
+
+This document provides a comprehensive mapping between Raft features and the tests that exercise them.
+
+Features That Are Tested
+-------------------------
+
+The following table shows features that are explicitly tested (validated) by test cases:
+
+.. list-table:: Features Under Test
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Feature
+     - Tests That Test This Feature
+   * - Leader Election: Normal Election
+     - test_elections_1::test_election_1, test_elections_1::test_election_2
+   * - Leader Election: Split Vote Recovery
+     - test_elections_2::test_failed_first_election_1, test_elections_2::test_failed_first_election_2
+   * - State Machine Command: Request Redirect
+     - test_commands_1::test_command_2_leaders_3
+   * - Network Partition: Leader Isolation
+     - test_partition_1::test_partition_2_leader, test_partition_1::test_partition_3_leader
+
+Features That Are Used (But Not Tested)
+----------------------------------------
+
+The following table shows features that are used by tests to set up conditions but are not the primary focus of testing:
+
+.. list-table:: Features Used by Tests
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Feature  
+     - Tests That Use This Feature
+   * - Leader Election: All Yes Votes with Pre-Vote
+     - test_commands_1::test_command_1, test_commands_1::test_command_2_leaders_1, test_snapshots::test_snapshot_1
+   * - State Machine Command: All In Sync
+     - test_commands_1::test_command_2_leaders_3, test_partition_1::test_partition_1
+   * - Log Replication: Normal Replication
+     - test_commands_1::test_command_1, test_commands_1::test_full_catchup
+```
+
+#### Content Generation Guidelines
+
+1. **Feature Descriptions**: Use the short description from the feature definition files (short.rst)
+2. **Test References**: Use the format `test_file::test_method` for precise identification
+3. **Categorization**: Clearly distinguish between features that are tested vs. used
+4. **Alphabetical Ordering**: Sort features alphabetically within each category
+5. **Cross-References**: Include links to feature definition files where appropriate
+
+#### Automation Integration
+
+The features_in_tests.rst file should be automatically generated or updated by parsing:
+- The feature registry database (`captures/features/features.db`)
+- Test feature usage annotations in test files
+- Feature definition files in `docs/source/tests/features/`
+
+This ensures the mapping tables stay synchronized with the actual test suite and feature definitions.
+
+## Optimized File Structure for Analysis
+
+### Problem Solved
+Large JSON trace files (485KB+) caused analysis tools to hit size limits. The solution splits trace data into optimized formats:
+
+### New File Structure
+
+**Metadata Files** (`captures/test_traces/metadata/`):
+- Contains test structure, sections, and feature mappings
+- **Size**: ~5KB (97% reduction from full JSON)
+- **Usage**: Load for test structure and section boundaries
+
+**Enhanced Digest CSV** (`captures/test_traces/digest_csv/`):
+- Contains filtered trace events (sent/handled_in messages only)
+- **New column**: `original_line_index` - maps to original trace line positions
+- **Size**: ~23KB (95% reduction from full JSON)
+- **Usage**: Primary data source for message flow analysis
+
+**Full JSON** (`captures/test_traces/json/`):
+- Complete trace data (preserved for debugging)
+- **Size**: ~485KB
+- **Usage**: Debugging only, not recommended for analysis
+
+### Analysis Workflow Using New Format
+
+```python
+# Load test metadata (fast, small file)
+with open('captures/test_traces/metadata/test_commands_1/test_command_1.json') as f:
+    metadata = json.load(f)
+
+# Get test structure
+test_sections = metadata['test_sections']
+test_name = metadata['test_name']
+
+# Load digest CSV for trace analysis
+import pandas as pd
+df = pd.read_csv('captures/test_traces/digest_csv/test_commands_1/test_command_1.csv')
+
+# Correlate CSV rows with test sections using original_line_index
+for section_id, section in test_sections.items():
+    start_pos = section['start_pos']
+    end_pos = section['end_pos']
+    
+    # Find CSV rows that fall within this section
+    section_events = df[
+        (df['original_line_index'] >= start_pos) & 
+        (df['original_line_index'] <= end_pos)
+    ]
+    
+    # Analyze message flows for this section
+    messages = section_events[section_events['event'] == 'MESSAGE_OP']
+    # ... perform analysis
+```
+
+### Benefits
+- **97% file size reduction** for analysis tools
+- **Faster loading and parsing** using CSV format
+- **Maintains all analysis capabilities** through original_line_index mapping
+- **Preserves full JSON for debugging** when needed
+- **Leverages existing filtering logic** from digest CSV generation
 
 ### For Adding New Feature Definitions
 

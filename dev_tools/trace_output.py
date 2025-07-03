@@ -46,12 +46,23 @@ class TraceOutput:
                 lines.append(self.test_data.trace_lines[pos])
         return lines
         
+    def filter_trace_with_positions(self):
+        """Return filtered trace lines with their original line positions"""
+        lines = []
+        positions = []
+        for sec_lines in self.get_table_events().values():
+            for pos in sec_lines:
+                lines.append(self.test_data.trace_lines[pos])
+                positions.append(pos)
+        return lines, positions
+        
     def write_csv_file(self, digest=False):
         if not digest:
             formatter = CSVFullFormatter(self.test_data.trace_lines)
             filetype = "csv"
         else:
-            formatter = CSVFullFormatter(self.filter_trace())
+            filtered_lines, original_positions = self.filter_trace_with_positions()
+            formatter = CSVFullFormatter(filtered_lines, original_positions)
             filetype = "digest_csv"
             
         filepath = self.get_trace_file_path(filetype)
@@ -97,6 +108,23 @@ class TraceOutput:
         with open(filepath, 'w') as f:
             f.write(rdata)
             
+    def write_test_metadata_file(self):
+        """Write test metadata without trace_lines data for analysis tools"""
+        filepath = self.get_trace_file_path('metadata')
+        
+        # Create metadata object without trace_lines
+        metadata = {
+            'test_name': self.test_data.test_name,
+            'test_path': self.test_data.test_path,
+            'test_doc_string': self.test_data.test_doc_string,
+            'test_sections': self.test_data.test_sections,
+            'original_trace_line_count': len(self.test_data.trace_lines)
+        }
+        
+        rdata = json.dumps(metadata, default=lambda o:o.__dict__, indent=4)
+        with open(filepath, 'w') as f:
+            f.write(rdata)
+            
     def write_verbose_trace_file(self, filepath):
         outlines = []
         state_history = {}
@@ -129,6 +157,7 @@ class TraceOutput:
                    'json': 'json',
                    'csv': 'csv',
                    'digest_csv': 'csv',
+                   'metadata': 'json',
                    'plantuml': 'puml'}
         if filetype not in options:
             raise Exception(f"{filetype} not in {options}")
@@ -136,7 +165,9 @@ class TraceOutput:
             raise Exception(f"plantuml file paths required an integer section number")
         test_file_path = test_path
         tdir = Path(Path(__file__).parent.parent.resolve(), "captures", "test_traces")
-        trace_dir = Path(tdir, filetype, Path(test_file_path).stem)
+        # Use digest_csv directory for digest_csv files, otherwise use filetype as directory
+        dir_name = "digest_csv" if filetype == "digest_csv" else filetype
+        trace_dir = Path(tdir, dir_name, Path(test_file_path).stem)
         if section_index is not None:
             return Path(trace_dir, test_name + f"_{section_index+1}." + options[filetype])
         else:

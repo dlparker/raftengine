@@ -18,32 +18,35 @@ title Raft Consensus Sequence (test_snapshot_4 Section 5)
 participant "Node 1" as n1 order 10 #Lightgreen
 participant "Node 2" as n2 order 20 #Lightgreen
 participant "Node 3" as n3 order 30 #Lightgreen
-n2 -> n2: Becomes CANDIDATE
-note right of n2: Term: 2
-n2 -> n1: AppendResponse(success=True, maxIndex=17)
-n2 -> n1: AppendResponse(success=True, maxIndex=17)
-n2 -> n1: RequestVote(term=2, lastIndex=17, lastTerm=2)
-n2 -> n3: RequestVote(term=2, lastIndex=17, lastTerm=2)
-n2 -> n1: AppendResponse(success=True, maxIndex=17)
-n2 -> n1: RequestVote(term=2, lastIndex=17, lastTerm=2)
-note left of n1: Term: 2
-n1 -> n2: VoteResponse(granted=True)
-n1 -> n2: VoteResponse(granted=True)
-note right of n2: Log: index=18, term=2
-n2 -> n2: Becomes LEADER
-n2 -> n1: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
-n2 -> n3: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
-n2 -> n1: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=17)
-note left of n1: Log: index=18, term=2
-n1 -> n2: AppendResponse(success=True, maxIndex=18)
-n1 -> n2: AppendResponse(success=True, maxIndex=18)
-note right of n2: Commit: index=18
 n2 -> n1: AppendEntries(term=2, prevIndex=18, prevTerm=2, heartbeat, commitIndex=18)
-n2 -> n1: AppendEntries(term=2, prevIndex=18, prevTerm=2, heartbeat, commitIndex=18)
-note left of n1: Commit: index=18
-n1 -> n2: AppendResponse(success=True, maxIndex=18)
 n1 -> n2: AppendResponse(success=True, maxIndex=18)
 n2 -> n3: AppendEntries(term=2, prevIndex=18, prevTerm=2, heartbeat, commitIndex=18)
+note right of n3: Term: 2
+n3 -> n2: AppendResponse(success=False, maxIndex=16)
+n2 -> n3: Snapshot(prevIndex=17)
+n3 -> n2: SnapshotResponse(prevIndex=17, success=True)
+n2 -> n3: Snapshot(prevIndex=17)
+note right of n3: Log: index=0, term=0
+note right of n3: Commit: index=17
+n3 -> n2: SnapshotResponse(prevIndex=17, success=True)
+n2 -> n3: AppendEntries(term=2, prevIndex=18, prevTerm=2, heartbeat, commitIndex=18)
+n3 -> n2: AppendResponse(success=False, maxIndex=17)
+n2 -> n3: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=18)
+note right of n3: Log: index=17, term=2
+n3 -> n2: AppendResponse(success=True, maxIndex=17)
+n2 -> n3: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=18)
+n3 -> n2: AppendResponse(success=False, maxIndex=17)
+n2 -> n3: Snapshot(prevIndex=17)
+n3 -> n2: SnapshotResponse(prevIndex=17, success=True)
+n2 -> n3: Snapshot(prevIndex=17)
+note right of n3: Log: index=0, term=0
+n3 -> n2: SnapshotResponse(prevIndex=17, success=True)
+n2 -> n3: AppendEntries(term=2, prevIndex=18, prevTerm=2, heartbeat, commitIndex=18)
+n3 -> n2: AppendResponse(success=False, maxIndex=17)
+n2 -> n3: AppendEntries(term=2, prevIndex=17, prevTerm=1, 1 entry, commitIndex=18)
+note right of n3: Log: index=18, term=2
+note right of n3: Commit: index=18
+n3 -> n2: AppendResponse(success=True, maxIndex=18)
 
 legend right
   <#GhostWhite,#GhostWhite>|      |= __Legend__ |

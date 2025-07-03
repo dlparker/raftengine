@@ -6,11 +6,15 @@ from dev_tools.readable_message_formatters import READABLE_MESSAGE_FORMATTERS, R
 
 class CSVFullFormatter:
 
-    def __init__(self, trace_lines):
+    def __init__(self, trace_lines, original_positions=None):
         self.trace_lines = trace_lines
+        self.original_positions = original_positions
 
     def to_csv(self):
         cols = []
+        # Add original_line_index column if we have position information
+        if self.original_positions is not None:
+            cols.append('original_line_index')
         cols.append('event')
         cols.append('event_node')
         cols.append('message_sender')
@@ -38,10 +42,13 @@ class CSVFullFormatter:
             cols.append(f'n{i}-voted_for')
             cols.append(f'n{i}-is_crashed')
         csv_lines = [cols,]
-        for line in self.trace_lines:
+        for line_index, line in enumerate(self.trace_lines):
             cols = []
             for ns in line:
                 if ns.save_event is not None:
+                    # Add original line index if we have position information
+                    if self.original_positions is not None:
+                        cols.append(str(self.original_positions[line_index]))
                     cols.append(f'{ns.save_event}')
                     cols.append(str(ns.uri))
                     if ns.message_action:

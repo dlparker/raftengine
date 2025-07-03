@@ -15,6 +15,36 @@ skinparam legend {
 }
 title Raft Consensus Sequence (test_snapshot_2 Section 3)
 
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n2 -> n2: Becomes CANDIDATE
+note right of n2: Term: 2
+n2 -> n1: RequestVote(term=2, lastIndex=91, lastTerm=2)
+n2 -> n3: RequestVote(term=2, lastIndex=91, lastTerm=2)
+note right of n3: Term: 2
+n3 -> n2: VoteResponse(granted=True)
+note left of n1: Term: 2
+n1 -> n2: VoteResponse(granted=True)
+note right of n2: Log: index=92, term=2
+n2 -> n2: Becomes LEADER
+n2 -> n1: AppendEntries(term=2, prevIndex=91, prevTerm=1, 1 entry, commitIndex=91)
+n2 -> n3: AppendEntries(term=2, prevIndex=91, prevTerm=1, 1 entry, commitIndex=91)
+note right of n3: Log: index=92, term=2
+n3 -> n2: AppendResponse(success=True, maxIndex=92)
+note left of n1: Log: index=92, term=2
+n1 -> n2: AppendResponse(success=True, maxIndex=92)
+note right of n2: Commit: index=92
+n2 -> n1: AppendEntries(term=2, prevIndex=92, prevTerm=2, 1 entry, commitIndex=92)
+note right of n2: Log: index=93, term=0
+n2 -> n3: AppendEntries(term=2, prevIndex=92, prevTerm=2, 1 entry, commitIndex=92)
+note right of n3: Log: index=93, term=0
+n3 -> n2: AppendResponse(success=True, maxIndex=93)
+note left of n1: Log: index=93, term=0
+n1 -> n2: AppendResponse(success=True, maxIndex=93)
+note right of n2: Commit: index=93
+note right of n3: Commit: index=93
+note left of n1: Commit: index=93
 
 legend right
   <#GhostWhite,#GhostWhite>|      |= __Legend__ |

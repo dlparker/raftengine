@@ -1,0 +1,61 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_failed_first_election_2 Section 2)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+n3 -> n1: RequestVote(term=1, lastIndex=0, lastTerm=1)
+n3 -> n2: RequestVote(term=1, lastIndex=0, lastTerm=1)
+note left of n1: Term: 1
+note right of n2: Term: 1
+note right of n3: Log: index=1, term=1
+n3 -> n3: Becomes LEADER
+n1 -> n1: Becomes CANDIDATE
+n1 -> n2: PreVoteRequest(term=2, lastIndex=0, lastTerm=1)
+n1 -> n3: PreVoteRequest(term=2, lastIndex=0, lastTerm=1)
+n2 -> n1: PreVoteResponse(granted=True)
+note left of n1: Term: 2
+n1 -> n2: RequestVote(term=2, lastIndex=0, lastTerm=2)
+n1 -> n3: RequestVote(term=2, lastIndex=0, lastTerm=2)
+note right of n2: Term: 2
+n2 -> n1: VoteResponse(granted=True)
+note left of n1: Log: index=1, term=2
+n1 -> n1: Becomes LEADER
+n1 -> n2: AppendEntries(term=2, prevIndex=0, prevTerm=0, 1 entry, commitIndex=0)
+n1 -> n3: AppendEntries(term=2, prevIndex=0, prevTerm=0, 1 entry, commitIndex=0)
+note right of n2: Log: index=1, term=2
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+note left of n1: Commit: index=1
+n1 -> n2: AppendEntries(term=2, prevIndex=1, prevTerm=2, heartbeat, commitIndex=1)
+note right of n2: Commit: index=1
+n2 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n3: AppendEntries(term=2, prevIndex=1, prevTerm=2, heartbeat, commitIndex=1)
+note right of n3: Term: 2
+n3 -> n1: AppendResponse(success=False, maxIndex=1)
+n1 -> n3: AppendEntries(term=2, prevIndex=0, prevTerm=0, 1 entry, commitIndex=1)
+note right of n3: Commit: index=1
+note right of n3: Term: 0
+n3 -> n1: AppendResponse(success=True, maxIndex=1)
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

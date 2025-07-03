@@ -1,0 +1,41 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_add_follower_round_2_timeout_1 Section 3)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+participant "Node 4" as n4 order 40 #Lightgreen
+n4 -> n1: MembershipChange(operation=ADD, node=mcpy://4)
+n1 -> n4: AppendEntries(term=1, prevIndex=7, prevTerm=1, heartbeat, commitIndex=7)
+note right of n4: Term: 1
+n1 -> n4: AppendEntries(term=1, prevIndex=0, prevTerm=0, 1 entry, commitIndex=7)
+note right of n4: Log: index=1, term=1
+note right of n4: Commit: index=1
+n4 -> n1: AppendResponse(success=True, maxIndex=1)
+n1 -> n4: AppendEntries(term=1, prevIndex=1, prevTerm=1, 6 entries, commitIndex=7)
+note right of n4: Log: index=7, term=0
+note right of n4: Commit: index=7
+n4 -> n1: AppendResponse(success=True, maxIndex=7)
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

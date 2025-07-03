@@ -1,0 +1,3 @@
+When a client sends a command request to a node that is currently in the CANDIDATE role (during an election), the node should respond with a retry indication rather than processing the command. This is because candidates are not authorized to process client commands - only leaders can do that. The retry response indicates that the cluster is temporarily unavailable for command processing due to an ongoing election, and the client should retry the request later once a leader has been elected.
+
+This behavior is essential for maintaining the Raft safety property that only leaders can accept and process client commands, as described in Diego Ongaro's thesis Section 6.

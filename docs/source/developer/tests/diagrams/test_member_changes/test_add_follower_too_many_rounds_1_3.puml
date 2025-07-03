@@ -1,0 +1,86 @@
+@startuml
+!pragma ratio 0.7
+skinparam dpi 150
+skinparam monochrome false
+skinparam sequence {
+  ArrowColor Black
+  ActorBorderColor Black
+  LifeLineBorderColor Black
+  ParticipantFontSize 12
+  Padding 10
+}
+skinparam legend {
+  BackgroundColor #F5F5F5
+  FontSize 11
+}
+title Raft Consensus Sequence (test_add_follower_too_many_rounds_1 Section 3)
+
+participant "Node 1" as n1 order 10 #Lightgreen
+participant "Node 2" as n2 order 20 #Lightgreen
+participant "Node 3" as n3 order 30 #Lightgreen
+participant "Node 4" as n4 order 40 #Lightgreen
+n4 -> n1: AppendResponse(success=True, maxIndex=7)
+n1 -> n4: AppendEntries(term=1, prevIndex=7, prevTerm=1, 1 entry, commitIndex=8)
+note right of n4: Log: index=8, term=0
+note right of n4: Commit: index=8
+note left of n1: Log: index=9, term=0
+note left of n1: Commit: index=9
+n4 -> n1: AppendResponse(success=True, maxIndex=8)
+n1 -> n4: AppendEntries(term=1, prevIndex=8, prevTerm=1, 1 entry, commitIndex=9)
+note right of n4: Log: index=9, term=0
+note right of n4: Commit: index=9
+note left of n1: Log: index=10, term=0
+note left of n1: Commit: index=10
+n4 -> n1: AppendResponse(success=True, maxIndex=9)
+n1 -> n4: AppendEntries(term=1, prevIndex=9, prevTerm=1, 1 entry, commitIndex=10)
+note right of n4: Log: index=10, term=0
+note right of n4: Commit: index=10
+note left of n1: Log: index=11, term=0
+note left of n1: Commit: index=11
+n4 -> n1: AppendResponse(success=True, maxIndex=10)
+n1 -> n4: AppendEntries(term=1, prevIndex=10, prevTerm=1, 1 entry, commitIndex=11)
+note right of n4: Log: index=11, term=0
+note right of n4: Commit: index=11
+note left of n1: Log: index=12, term=0
+note left of n1: Commit: index=12
+n4 -> n1: AppendResponse(success=True, maxIndex=11)
+n1 -> n4: AppendEntries(term=1, prevIndex=11, prevTerm=1, 1 entry, commitIndex=12)
+note right of n4: Log: index=12, term=0
+note right of n4: Commit: index=12
+note left of n1: Log: index=13, term=0
+note left of n1: Commit: index=13
+n4 -> n1: AppendResponse(success=True, maxIndex=12)
+n1 -> n4: AppendEntries(term=1, prevIndex=12, prevTerm=1, 1 entry, commitIndex=13)
+note right of n4: Log: index=13, term=0
+note right of n4: Commit: index=13
+note left of n1: Log: index=14, term=0
+note left of n1: Commit: index=14
+n4 -> n1: AppendResponse(success=True, maxIndex=13)
+n1 -> n4: AppendEntries(term=1, prevIndex=13, prevTerm=1, 1 entry, commitIndex=14)
+note right of n4: Log: index=14, term=0
+note right of n4: Commit: index=14
+note left of n1: Log: index=15, term=0
+note left of n1: Commit: index=15
+n4 -> n1: AppendResponse(success=True, maxIndex=14)
+n1 -> n4: AppendEntries(term=1, prevIndex=14, prevTerm=1, 1 entry, commitIndex=15)
+note right of n4: Log: index=15, term=0
+note right of n4: Commit: index=15
+note left of n1: Log: index=16, term=0
+note left of n1: Commit: index=16
+n4 -> n1: AppendResponse(success=True, maxIndex=15)
+n1 -> n4: AppendEntries(term=1, prevIndex=15, prevTerm=1, 1 entry, commitIndex=16)
+note right of n4: Log: index=16, term=0
+note right of n4: Commit: index=16
+note left of n1: Log: index=17, term=0
+note left of n1: Commit: index=17
+n4 -> n1: AppendResponse(success=True, maxIndex=16)
+n1 -> n4: MembershipChangeResponse(operation=ADD, node=mcpy://4, success=False)
+
+legend right
+  <#GhostWhite,#GhostWhite>|      |= __Legend__ |
+  |<#Lightgreen>| Raft Node |
+  |FOLLOWER| Follower Role |
+  |CANDIDATE| Candidate Role |
+  |LEADER| Leader Role |
+endlegend
+@enduml

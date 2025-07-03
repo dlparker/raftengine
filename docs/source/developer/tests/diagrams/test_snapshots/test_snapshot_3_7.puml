@@ -18,43 +18,42 @@ title Raft Consensus Sequence (test_snapshot_3 Section 7)
 participant "Node 1" as n1 order 10 #Lightgreen
 participant "Node 2" as n2 order 20 #Lightgreen
 participant "Node 3" as n3 order 30 #Lightgreen
-n1 -> n1: Becomes CANDIDATE
-note left of n1: Term: 3
-n1 -> n2: AppendResponse(success=True, maxIndex=103)
-n1 -> n2: RequestVote(term=3, lastIndex=103, lastTerm=3)
-n1 -> n3: RequestVote(term=3, lastIndex=103, lastTerm=3)
-n1 -> n2: AppendResponse(success=True, maxIndex=103)
-n1 -> n2: RequestVote(term=3, lastIndex=103, lastTerm=3)
-note right of n2: Term: 3
-n2 -> n1: VoteResponse(granted=True)
-n3 -> n2: AppendResponse(success=True, maxIndex=103)
-n1 -> n3: RequestVote(term=3, lastIndex=103, lastTerm=3)
-note right of n3: Term: 3
-n3 -> n1: VoteResponse(granted=True)
-n2 -> n1: VoteResponse(granted=True)
-note left of n1: Log: index=104, term=3
-n1 -> n1: Becomes LEADER
-n3 -> n1: VoteResponse(granted=True)
-n3 -> n2: AppendResponse(success=True, maxIndex=103)
-n1 -> n2: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=103)
-n1 -> n2: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=103)
-n2 -> n1: AppendResponse(success=False, maxIndex=103)
-n2 -> n1: AppendResponse(success=False, maxIndex=103)
-n1 -> n3: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=103)
-n1 -> n3: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=103)
-n3 -> n1: AppendResponse(success=False, maxIndex=103)
-n3 -> n1: AppendResponse(success=False, maxIndex=103)
-n1 -> n2: AppendEntries(term=3, prevIndex=103, prevTerm=2, 1 entry, commitIndex=103)
-n1 -> n2: AppendEntries(term=3, prevIndex=103, prevTerm=2, 1 entry, commitIndex=103)
-note right of n2: Log: index=104, term=3
-n2 -> n1: AppendResponse(success=True, maxIndex=104)
-n2 -> n1: AppendResponse(success=True, maxIndex=104)
-note left of n1: Commit: index=104
-n1 -> n3: AppendEntries(term=3, prevIndex=103, prevTerm=2, 1 entry, commitIndex=103)
-n1 -> n3: AppendEntries(term=3, prevIndex=103, prevTerm=2, 1 entry, commitIndex=103)
-note right of n3: Log: index=104, term=3
-n3 -> n1: AppendResponse(success=True, maxIndex=104)
-n3 -> n1: AppendResponse(success=True, maxIndex=104)
+participant "Node 4" as n4 order 40 #Lightgreen
+n4 -> n1: MembershipChange(operation=ADD, node=mcpy://4)
+n1 -> n4: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=104)
+note right of n4: Term: 3
+n4 -> n1: AppendResponse(success=False, maxIndex=0)
+n1 -> n4: Snapshot(prevIndex=101)
+n4 -> n1: SnapshotResponse(prevIndex=101, success=True)
+n1 -> n4: Snapshot(prevIndex=101)
+n4 -> n1: SnapshotResponse(prevIndex=101, success=True)
+n1 -> n4: Snapshot(prevIndex=101)
+n4 -> n1: SnapshotResponse(prevIndex=101, success=True)
+n1 -> n4: Snapshot(prevIndex=101)
+note right of n4: Commit: index=101
+n4 -> n1: SnapshotResponse(prevIndex=101, success=True)
+n1 -> n4: AppendEntries(term=3, prevIndex=104, prevTerm=3, heartbeat, commitIndex=104)
+n4 -> n1: AppendResponse(success=False, maxIndex=101)
+n1 -> n4: AppendEntries(term=3, prevIndex=101, prevTerm=1, 1 entry, commitIndex=104)
+note right of n4: Log: index=102, term=2
+note right of n4: Commit: index=102
+n4 -> n1: AppendResponse(success=True, maxIndex=102)
+n1 -> n4: AppendEntries(term=3, prevIndex=102, prevTerm=2, 2 entries, commitIndex=104)
+note right of n4: Log: index=104, term=3
+note right of n4: Commit: index=104
+n4 -> n1: AppendResponse(success=True, maxIndex=104)
+note left of n1: Log: index=105, term=0
+n1 -> n2: AppendEntries(term=3, prevIndex=104, prevTerm=3, 1 entry, commitIndex=104)
+note right of n2: Log: index=105, term=0
+n2 -> n1: AppendResponse(success=True, maxIndex=105)
+note left of n1: Commit: index=105
+n1 -> n3: AppendEntries(term=3, prevIndex=104, prevTerm=3, 1 entry, commitIndex=104)
+note right of n3: Log: index=105, term=0
+n3 -> n1: AppendResponse(success=True, maxIndex=105)
+n1 -> n4: MembershipChangeResponse(operation=ADD, node=mcpy://4, success=True)
+n1 -> n4: AppendEntries(term=3, prevIndex=104, prevTerm=3, 1 entry, commitIndex=104)
+note right of n4: Log: index=105, term=0
+n4 -> n1: AppendResponse(success=True, maxIndex=105)
 
 legend right
   <#GhostWhite,#GhostWhite>|      |= __Legend__ |

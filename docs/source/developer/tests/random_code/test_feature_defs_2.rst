@@ -19,8 +19,11 @@ Test test_feature_defs_2 from file test_random_code
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
-Section 1: Transporting pre-votes, votes and append-entries unitl TERM_START is applied to all node
-===================================================================================================
+Section 1: Doing message transport until new leader wins
+========================================================
+
+
+Transporting pre-votes and votes until leader is elected, then  transporting append-entries until TERM_START record is applied to all nodes.
 
 Raft features tested:
 

@@ -31,6 +31,7 @@ Test test_feature_defs_3 from file test_random_code
 Section 1: Running normal election till fully replicated
 ========================================================
 
+
 Raft features used:
 
 .. include:: /developer/tests/features/leader_election/short.rst
@@ -135,6 +136,7 @@ Raft features used:
 Section 2: Run one command, normal sequence till leader commit
 ==============================================================
 
+
 Raft features tested:
 
 .. include:: /developer/tests/features/state_machine_command/short.rst
@@ -206,6 +208,7 @@ Raft features tested:
 Section 3: Trying to run command at follower, looking for redirect
 ==================================================================
 
+
 Raft features tested:
 
 .. include:: /developer/tests/features/state_machine_command/short.rst
@@ -255,6 +258,7 @@ Section 4: Pushing one follower to candidate, then trying command to it, looking
 
 
 
+
 .. collapse:: section 4 trace table (click to toggle view)
 
    - See :ref:`Trace Table Legend` for help interpreting table contents
@@ -281,6 +285,7 @@ Section 4: Pushing one follower to candidate, then trying command to it, looking
 
 Section 5: Pushing Leader to send heartbeats, after forcing candidate's term back down
 ======================================================================================
+
 
 
 
@@ -326,6 +331,7 @@ Section 5: Pushing Leader to send heartbeats, after forcing candidate's term bac
 
 Section 6: Crashing one follower, then running command to ensure it works with only one follower
 ================================================================================================
+
 
 Raft features tested:
 
@@ -427,6 +433,7 @@ Raft features tested:
 
 Section 7: Recovering follower, then pushing hearbeat to get it to catch up
 ===========================================================================
+
 
 Raft features tested:
 
