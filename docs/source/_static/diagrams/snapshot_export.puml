@@ -17,7 +17,7 @@ skinparam legend {
 title Snapshot Export to Follower
 
 participant "Leader Role" as leader order 10 #Lightgreen
-participant Hull as hull order 20 #Coral
+participant Deck as deck order 20 #Coral
 participant Pilot as pilot order 30 #Lightblue
 participant "State Machine" as app_state order 40 #Lightyellow
 database "Raft Log" as raft_log order 50 #Coral
@@ -27,24 +27,24 @@ leader -> node: ae i=101 t=2
 note right: AppendEntries with prevLogIndex
 node --> leader: ae_reply ok=False mi=50
 note right: Follower’s matchIndex < Leader’s snapshot index
-leader -> hull: Need snapshot i=100
-hull -> pilot: begin_snapshot_export(i=100, t=2)
+leader -> deck: Need snapshot i=100
+deck -> pilot: begin_snapshot_export(i=100, t=2)
 pilot -> app_state: begin_snapshot_export(i=100, t=2)
 create participant "SnapShotTool" as tool order 35 #Lightblue
 app_state --> tool: Create
 app_state --> pilot: Return SnapShotTool
-pilot --> hull: Return SnapShotTool
+pilot --> deck: Return SnapShotTool
 loop Send chunks
-  hull -> tool: get_snapshot_chunk()
-  tool --> hull: Return chunk
-  hull -> node: sn i=100 t=2 chunk
+  deck -> tool: get_snapshot_chunk()
+  tool --> deck: Return chunk
+  deck -> node: sn i=100 t=2 chunk
 end
-hull -> tool: get_snapshot_chunk()
-tool --> hull: Done
-hull -> node: sn i=100 t=2 done
-node --> hull: snr s=True
+deck -> tool: get_snapshot_chunk()
+tool --> deck: Done
+deck -> node: sn i=100 t=2 done
+node --> deck: snr s=True
 note right: Snapshot transfer complete
-hull --> leader: Snapshot sent
+deck --> leader: Snapshot sent
 destroy tool
 
 legend right

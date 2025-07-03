@@ -8,14 +8,14 @@ from typing import Dict, List, Any
 from enum import Enum
 from raftengine.api.types import RoleName, OpDetail, ClusterConfig
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.hull_api import CommandResult
+from raftengine.api.deck_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.snapshot import SnapShotMessage
 from raftengine.messages.cluster_change import ChangeOp
 from raftengine.messages.base_message import BaseMessage
 from raftengine.roles.base_role import BaseRole
-from raftengine.hull.cluster_ops import SnapShotCursor
+from raftengine.deck.cluster_ops import SnapShotCursor
 
 class TimeoutTaskGroup(Exception):
     """Exception raised to terminate a task group due to timeout."""
@@ -23,8 +23,8 @@ class TimeoutTaskGroup(Exception):
 
 class Leader(BaseRole):
 
-    def __init__(self, hull, cluster_ops, term, use_check_quorum):
-        super().__init__(hull, RoleName.leader, cluster_ops)
+    def __init__(self, deck, cluster_ops, term, use_check_quorum):
+        super().__init__(deck, RoleName.leader, cluster_ops)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
         self.command_waiters = dict()
@@ -97,7 +97,7 @@ class Leader(BaseRole):
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex)
         self.logger.info("%s sending transfer power to %s", self.my_uri(), target_uri)
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
         if log_record:
             # the fact that we got a log record means that we are supposed
             # to exit, but let's check a couple of things to validate that
@@ -131,7 +131,7 @@ class Leader(BaseRole):
         log_record.applied = True
         await self.log.replace(log_record)
         self.logger.info("%s leader exiting cluster", self.my_uri())
-        await self.hull.note_exit_done(success=True)
+        await self.deck.note_exit_done(success=True)
         
     async def run_command(self, command, timeout=1.0, serial=None):
         if not self.accepting_commands:
@@ -163,7 +163,7 @@ class Leader(BaseRole):
                                              prevLogIndex=prevLogIndex,
                                              commitIndex=commit_index)
         if log_record.code == RecordCode.term_start:
-            await self.hull.record_op_detail(OpDetail.broadcasting_term_start)
+            await self.deck.record_op_detail(OpDetail.broadcasting_term_start)
         msgs = []
         for uri in self.cluster_ops.get_cluster_node_ids():
             if uri == self.my_uri():
@@ -178,7 +178,7 @@ class Leader(BaseRole):
             message = AppendEntriesMessage.from_dict(proto_message.__dict__)
             message.receiver = uri
             self.logger.info("broadcast command sending %s", message)
-            await self.hull.send_message(message)
+            await self.deck.send_message(message)
             msgs.append(message)
             await self.record_sent_message(message)
         self.bcast_pendings.append(dict(time=time.time(), messages=msgs, sent_count=len(msgs)))
@@ -214,7 +214,7 @@ class Leader(BaseRole):
                                            prevLogIndex=last_index,
                                            commitIndex=commit_index)
             self.logger.debug("%s sending heartbeat %s", my_uri, message)
-            await self.hull.send_message(message)
+            await self.deck.send_message(message)
             await self.record_sent_message(message)
             self.last_broadcast_time = time.time()
             msgs.append(message)
@@ -303,9 +303,9 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.logger.info("sending backdown %s", message)
-        await self.hull.record_op_detail(OpDetail.sending_backdown)
+        await self.deck.record_op_detail(OpDetail.sending_backdown)
         await self.record_sent_message(message)
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
     
     async def send_catchup(self, message):
         uri = message.sender
@@ -333,9 +333,9 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.logger.debug("sending catchup %s", message)
-        await self.hull.record_op_detail(OpDetail.sending_catchup)
+        await self.deck.record_op_detail(OpDetail.sending_catchup)
         await self.record_sent_message(message)
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
 
     async def record_commit_checker(self, log_record):
         # count the followers that have committed this far
@@ -371,7 +371,7 @@ class Leader(BaseRole):
         try:
             self.logger.info("%s applying command committed at index %d", self.my_uri(),
                              await self.log.get_last_index())
-            processor = self.hull.get_processor()
+            processor = self.deck.get_processor()
             result,error_data = await processor.process_command(log_record.command, log_record.serial)
         except Exception as e:
             error_data = traceback.format_exc()
@@ -388,7 +388,7 @@ class Leader(BaseRole):
 
     async def start_snapshot_send(self, target_uri):
         tracker = await self.cluster_ops.tracker_for_follower(target_uri)
-        snap = await self.hull.pilot.begin_snapshot_export(await self.log.get_snapshot())
+        snap = await self.deck.pilot.begin_snapshot_export(await self.log.get_snapshot())
         cursor = SnapShotCursor(target_uri, snap, 0, False)
         tracker.sending_snapshot = cursor
         await self.snapshot_send(target_uri)
@@ -412,7 +412,7 @@ class Leader(BaseRole):
             message.clusterConfig = await self.cluster_ops.get_cluster_config_json_string()
         ref.offset = new_offset
         ref.done = done
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
 
         
     async def on_snapshot_response_message(self, message):
@@ -428,8 +428,8 @@ class Leader(BaseRole):
         await self.snapshot_send(message.sender)
         
     async def term_expired(self, message):
-        await self.hull.set_term(message.term)
-        await self.hull.demote_and_handle(message)
+        await self.deck.set_term(message.term)
+        await self.deck.demote_and_handle(message)
         return None
 
     async def record_sent_message(self, message):
@@ -469,7 +469,7 @@ class Leader(BaseRole):
                 pop_bcasts.append(pending)
             elif time.time() - pending['time'] > et_max:
                 self.logger.warning("%s failed quorum check, resigning ", self.my_uri())
-                await self.hull.demote_and_handle()
+                await self.deck.demote_and_handle()
                 return False
         for p_b in pop_bcasts:
             self.bcast_pendings.remove(p_b)
@@ -524,12 +524,12 @@ class CommandWaiter:
                 self.leader.logger.debug("%s scheduled timeout for %f and check_done", self.leader.my_uri(), self.timeout)
         except* TimeoutTaskGroup:
             self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
-            if self.leader.hull.role != self.leader:
+            if self.leader.deck.role != self.leader:
                 self.leader.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
-                                         self.leader.my_uri(), self.leader.hull.leader_uri)
+                                         self.leader.my_uri(), self.leader.deck.leader_uri)
                 self.result = CommandResult(command=self.orig_log_record.command,
                                             committed=False,
-                                            redirect=self.leader.hull.leader_uri)
+                                            redirect=self.leader.deck.leader_uri)
             else:
                 self.leader.logger.debug("%s command timeout exception",
                                          self.leader.my_uri())
@@ -549,7 +549,7 @@ class CommandWaiter:
                                error=error_data,
                                redirect=None)
         if error_data:
-            await self.leader.hull.event_control.emit_error(error_data)
+            await self.leader.deck.event_control.emit_error(error_data)
         else:
             log_record = await self.log.read(self.orig_log_record.index)
             log_record.result = command_result

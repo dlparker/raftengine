@@ -17,7 +17,7 @@ title Snapshot Import by Follower
 
 participant "Leader Node" as leader order 10 #Lightgreen
 participant "Follower Role" as follower order 20 #Lightgreen
-participant Hull as hull order 30 #Coral
+participant Deck as deck order 30 #Coral
 participant Pilot as pilot order 40 #Lightblue
 participant "State Machine" as app_state order 50 #Lightyellow
 database "App Storage" as app_db order 60 #Lightyellow
@@ -25,29 +25,29 @@ database "Raft Log" as raft_log order 70 #Coral
 
 leader -> follower: sn i=100 t=2 chunk
 note right: InstallSnapshot RPC with chunk
-follower -> hull: Process snapshot
-hull -> pilot: begin_snapshot_import(i=100, t=2)
+follower -> deck: Process snapshot
+deck -> pilot: begin_snapshot_import(i=100, t=2)
 pilot -> app_state: begin_snapshot_import(i=100, t=2)
 create participant "SnapShotTool" as tool order 45 #Lightblue
 app_state->tool: Create
 app_state --> pilot: Return SnapShotTool
-pilot --> hull: Return SnapShotTool
-hull -> tool: load_snapshot_chunk()
+pilot --> deck: Return SnapShotTool
+deck -> tool: load_snapshot_chunk()
 tool -> app_db: Apply chunk
 loop Receive chunks
   leader -> follower: sn i=100 t=2 chunk
-  follower -> hull: Process chunk
-  hull -> tool: load_snapshot_chunk()
+  follower -> deck: Process chunk
+  deck -> tool: load_snapshot_chunk()
   tool -> app_db: Apply chunk
 end
 leader -> follower: sn i=100 t=2 done
-follower -> hull: Finalize snapshot
-hull -> tool: apply_snapshot()
+follower -> deck: Finalize snapshot
+deck -> tool: apply_snapshot()
 tool -> app_state: Apply snapshot state
 app_state --> tool: State applied
-hull -> raft_log: install_snapshot(i=100, t=2)
+deck -> raft_log: install_snapshot(i=100, t=2)
 note right: Persists snapshot, deletes logs up to i=100
-hull --> follower: Snapshot installed
+deck --> follower: Snapshot installed
 follower --> leader: snr s=True
 destroy tool
 

@@ -59,7 +59,7 @@ def set_levels(handler_names, additions=None, default_level='error'): # pragma: 
     log_loggers['Follower'] = default_log
     log_loggers['Candidate'] = default_log
     log_loggers['BaseRole'] = default_log
-    log_loggers['Hull'] = default_log
+    log_loggers['Deck'] = default_log
     log_loggers['Substates'] = default_log
     log_loggers['ClusterOps'] = default_log
     log_loggers['PausingServer'] = default_log

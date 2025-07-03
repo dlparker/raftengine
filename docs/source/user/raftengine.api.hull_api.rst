@@ -1,7 +1,7 @@
-raftengine.api.hull\_api module
+raftengine.api.deck\_api module
 ===============================
 
-.. automodule:: raftengine.api.hull_api
+.. automodule:: raftengine.api.deck_api
    :members:
    :show-inheritance:
    :undoc-members:

@@ -17,8 +17,8 @@ class PilotAPI(abc.ABC):
     5. Aquiring the :py:class:`raftengine.api.log_api.LogAPI` instance.  
 
     Many of these operations are "the other side" of operations performed by
-    calling methods on the :py:class:`raftengine.api.hull_api.HullAPI` instance. For example,
-    calling :py:meth:`raftengine.api.hull_api.HullAPI.run_command` will, after raft consensus
+    calling methods on the :py:class:`raftengine.api.deck_api.DeckAPI` instance. For example,
+    calling :py:meth:`raftengine.api.deck_api.DeckAPI.run_command` will, after raft consensus
     commit cause the raft engine to call process_command in this class.
 
     The :py:class:`raftengine.api.log_api.LogAPI` instance will be used by the Raft engine
@@ -49,7 +49,7 @@ class PilotAPI(abc.ABC):
     @abc.abstractmethod
     async def process_command(self, command: str, serial: int) -> str: 
         """
-        Called by raft :py:class:`raftengine.api.hull_api.HullAPI` to trigger
+        Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to trigger
         user defined commands once the raft algorithm has determined
         that the command is safe to apply. This is explained in the
         raft paper.
@@ -76,12 +76,12 @@ class PilotAPI(abc.ABC):
 
         Args:
             command (str): Passed through from the raft library log replication,
-                            from some call to :py:meth:`raftengine.api.hull_api.HullAPI.run_command`
+                            from some call to :py:meth:`raftengine.api.deck_api.DeckAPI.run_command`
             serial (int): Passed through from the raft library log replication from some c
-                           all to :py:meth:`raftengine.api.hull_api.HullAPI.run_command`
+                           all to :py:meth:`raftengine.api.deck_api.DeckAPI.run_command`
         
         Returns:
-            str: Meaning defined by Pilot developer, to be passed back as result from call to :py:meth:`raftengine.api.hull_api.HullAPI.run_command`
+            str: Meaning defined by Pilot developer, to be passed back as result from call to :py:meth:`raftengine.api.deck_api.DeckAPI.run_command`
 
         """
         raise NotImplementedError
@@ -89,7 +89,7 @@ class PilotAPI(abc.ABC):
     @abc.abstractmethod
     async def send_message(self, target_uri: str, message:str) -> None: 
         """
-        Called by raft :py:class:`raftengine.api.hull_api.HullAPI` to when the raft engine
+        Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to when the raft engine
         needs to send a message to another server in the cluster. Pilot implementation
         should send it as soon as possible and not wait for a response.
 
@@ -115,7 +115,7 @@ class PilotAPI(abc.ABC):
     @abc.abstractmethod
     async def send_response(self, target_uri: str, orig_message:str, reply:str) -> None: 
         """
-        Called by raft :py:class:`raftengine.api.hull_api.HullAPI` to when the raft engine
+        Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to when the raft engine
         needs to send a response message to a previously received message. The
         Pilot implementation should send it as soon as possible and not wait for a response.
 
@@ -141,7 +141,7 @@ class PilotAPI(abc.ABC):
 
     @abc.abstractmethod
     async def begin_snapshot_import(self, index:int, term:int) -> SnapShot:
-        """Called by raft :py:class:`raftengine.api.hull_api.HullAPI` when the raft leader
+        """Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` when the raft leader
         has sent a message indicating that the target node should load a snapshot with
         the given log position and term. The Pilot implementation needs to know how
         to work with the application state machine to prepare for this load process.
@@ -168,7 +168,7 @@ class PilotAPI(abc.ABC):
     async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShot:
         """
 
-        Called by raft :py:class:`raftengine.api.hull_api.HullAPI` as raft leader when
+        Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` as raft leader when
         a follower node needs to recieve and install a snapshot. The shapshot
         has been retrived from the log, but it does not contain a reference
         to the needed :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` implementation

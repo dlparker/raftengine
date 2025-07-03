@@ -23,14 +23,14 @@ node {
     	[PilotAPI] as pilot #Lightblue
     }
     package "Raft Engine" {
-        [HullAPI] as hull #Coral
+        [DeckAPI] as deck #Coral
     	[LogAPI] as log #Coral
 	[Leader Role] as role #Lightgreen
     }
 }
-app_core --> hull
-hull --> pilot
-hull --> snaptool
+app_core --> deck
+deck --> pilot
+deck --> snaptool
 role --> node2
 role --> node3
 skinparam legend {

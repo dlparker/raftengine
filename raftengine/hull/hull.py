@@ -5,9 +5,9 @@ import time
 import json
 
 from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig
-from raftengine.api.hull_api import CommandResult
+from raftengine.api.deck_api import CommandResult
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
-from raftengine.hull.event_control import EventControl
+from raftengine.deck.event_control import EventControl
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
@@ -18,22 +18,22 @@ from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
-from raftengine.api.hull_api import HullAPI
+from raftengine.api.deck_api import DeckAPI
 from raftengine.api.events import EventType
-from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
-from raftengine.hull.cluster_ops import ClusterOps
+from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
+from raftengine.deck.cluster_ops import ClusterOps
 
-class Hull(HullAPI):
+class Deck(DeckAPI):
 
     # Part of API
     def __init__(self, initial_cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
-            raise Exception('Must supply a raftengine.hull.api.PilotAPI implementation')
+            raise Exception('Must supply a raftengine.deck.api.PilotAPI implementation')
         self.pilot = pilot
         self.started = False
         self.log = pilot.get_log()
-        self.logger = logging.getLogger("Hull")
+        self.logger = logging.getLogger("Deck")
         self.role_async_handle = None
         self.role_run_after_target = None
         self.message_problem_history = []

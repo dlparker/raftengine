@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from raftengine.api.log_api import LogAPI, LogRec
 from raftengine.api.events import EventHandler
 from raftengine.api.pilot_api import PilotAPI
-from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
+from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.api.types import ClusterSettings, ClusterConfig
 
-class HullAPI(abc.ABC):
+class DeckAPI(abc.ABC):
     """
     Main entry and control point for RaftEngine library.
     
@@ -31,7 +31,7 @@ class HullAPI(abc.ABC):
     instance and whatever other state and services it needs to function, including commnications
     channels, the application "state machine", etc.
 
-    Once all that is complete, the server code calls api.get_hull_class() to get a reference
+    Once all that is complete, the server code calls api.get_deck_class() to get a reference
     to the implementation of this interface class, then creates an instance using the config data and
     the :py:class:`raftengine.api.pilot_api.PilotAPI` api instance.
 
@@ -41,7 +41,7 @@ class HullAPI(abc.ABC):
 
     At some point the server will either receive a message from the cluster Leader, or will participate
     in an election with messages both coming in and going out. Incomming message delivery is
-    the responsibility of the HullAPI implementation and outgoing message delivery is the responsibilty
+    the responsibility of the DeckAPI implementation and outgoing message delivery is the responsibilty
     of the PilotAPI implememtation.
 
     The implementer supplies the incoming message passing mechansim by calling the on_message method.
@@ -66,7 +66,7 @@ class HullAPI(abc.ABC):
         Initialize the RaftLibrary from the LocalConfig data and possibly the ClusterInitConfig.
         In the case that this is the first time this server instance has joined the cluster,
         the supplied cluster config will be used, otherwise the current config will be retrieved
-        from the log. The PilotAPI implementation will be installed in the Hull to be used for
+        from the log. The PilotAPI implementation will be installed in the Deck to be used for
         the services it provides. See :py:class:`raftengine.api.pilot_api.PilotAPI`.
 
         :param ClusterInitConfig cluster_config: Initial cluster definition to be used only if there is not one in the log.
@@ -165,7 +165,7 @@ class HullAPI(abc.ABC):
 
         :params str command: The command to execute at all cluster servers
         :params float timeout: Maximum time to wait for command to be executed
-        :rtype CommandResult: :py:class:`raftengine.api.hull_api.CommandResult`: 
+        :rtype CommandResult: :py:class:`raftengine.api.deck_api.CommandResult`: 
         
         """
         raise NotImplementedError
@@ -208,7 +208,7 @@ class HullAPI(abc.ABC):
     @abc.abstractmethod
     async def take_snapshot(self, snapshot:SnapShot, timeout=2.0) -> SnapShot:
         """
-        This method causes the hull to run the snapshot process by making 
+        This method causes the deck to run the snapshot process by making 
         
         consensus process. If you call this you should be aware of the impact
         that it has on the cluster, obviously.

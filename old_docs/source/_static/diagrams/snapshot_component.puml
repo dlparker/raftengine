@@ -23,7 +23,7 @@ node {
     	[PilotAPI] as pilot #Lightblue
     }
     package "Raft Engine" {
-        [HullAPI] as hull #Coral
+        [DeckAPI] as hull #Coral
     	[LogAPI] as log #Coral
 	[Leader Role] as role #Lightgreen
     }

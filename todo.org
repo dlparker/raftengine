@@ -1,18 +1,18 @@
 * immediate
 
-1. Work over log levels used in leader, candidate, follower, hull so that a clean but useful
+1. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting that level for those loggers.
 
    
 NOW!!!!
 1. Fix snapshot build sequence, log can move forward between start at operations and stop at role.
    Should be:
-   a. Hull gets take_snap call
-   b. Hull does role stop (transfer if leader)
-   c. Hull calls pilot take_snapshot
-   d. Pilot calls operations take_snapshot, returns snapshot to hull
-   e. Hull calls log to install snapshot
-   f. Hull returns snapshot to app code (not there yet, prolly callback)
+   a. Deck gets take_snap call
+   b. Deck does role stop (transfer if leader)
+   c. Deck calls pilot take_snapshot
+   d. Pilot calls operations take_snapshot, returns snapshot to deck
+   e. Deck calls log to install snapshot
+   f. Deck returns snapshot to app code (not there yet, prolly callback)
 
 
 1. [X] Add cluster config as term start message data, that ensures that new node joining a cluster
@@ -26,7 +26,7 @@ NOW!!!!
    serializing messages and serializing log record contents are different. Maybe the log_api can accept
    a seriailization object, and the message ops leave it to the Pilot? Fix the various run command
    annotations and docs if done.
-6. [] Need to think about changing the Pilot and Hull api message functions to use something like
+6. [] Need to think about changing the Pilot and Deck api message functions to use something like
    {msg_id: 10, payload: LONG_STRING} because it will be hard to implement reply_to functionality
    if the message is just and encoded string. How to make it not need perisistence? Could use UUID.
 
@@ -51,7 +51,7 @@ NOW!!!!
      
    
 Events and errors rework:
-1. [X] Fix Pilot and Hull interaction for events, hull and hull_api need to expose them, Pilot should probably
+1. [X] Fix Pilot and Deck interaction for events, deck and deck_api need to expose them, Pilot should probably
    have a required method for major events, remove and add events need to be added to major list.
 2. [X] Need to cleanup message_problem_history code and make a better effort at error reporting, see event item above
 3. [x] completely convert substate to events

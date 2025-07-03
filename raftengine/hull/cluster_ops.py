@@ -7,7 +7,7 @@ from typing import Optional
 from copy import deepcopy
 from dataclasses import dataclass
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.hull_api import HullAPI
+from raftengine.api.deck_api import DeckAPI
 from raftengine.api.log_api import LogAPI
 from raftengine.api.snapshot_api import SnapShot
 from raftengine.messages.cluster_change import ChangeOp, MembershipChangeMessage
@@ -43,8 +43,8 @@ class NewNodeLoad:
     
 class ClusterOps:
 
-    def __init__(self, hull:HullAPI, initial_config: ClusterConfig, log:LogAPI):
-        self.hull = hull
+    def __init__(self, deck:DeckAPI, initial_config: ClusterConfig, log:LogAPI):
+        self.deck = deck
         self.initial_config = initial_config
         self.logger = logging.getLogger("ClusterOps")
         self.follower_trackers = dict()
@@ -113,7 +113,7 @@ class ClusterOps:
         """
         Called by leader to start the process of adding or removing
         a node. This may be in response to a MembershipChangeMessage
-        or to a direct call via the HullAPI.
+        or to a direct call via the DeckAPI.
         """
         command = None
         if op == ChangeOp.remove:
@@ -208,7 +208,7 @@ class ClusterOps:
             msg = self.loading_data.change_message
             if msg:
                 await leader.send_membership_change_response_message(msg, ok=True)
-            await self.hull.note_join_done(True)
+            await self.deck.note_join_done(True)
             self.loading_data = None
             return True
         config = await self.get_cluster_config()
@@ -397,7 +397,7 @@ class ClusterOps:
         if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
             cc.nodes[operand] = cc.pending_node
             if operand == self.my_uri():
-                await self.hull.note_exit_done(success=False)
+                await self.deck.note_exit_done(success=False)
         cc.pending_node = None
         return await self.log.save_cluster_config(cc)
     
@@ -436,7 +436,7 @@ class ClusterOps:
             config = await self.finish_node_remove(operand)
             if operand == self.my_uri():
                 self.logger.warning("%s calling stop on self", self.my_uri())
-                await self.hull.note_exit_done(success=True)
+                await self.deck.note_exit_done(success=True)
         elif op == "update_settings":
             stored_config = await self.log.get_cluster_config()
             stored_config.settings = ClusterSettings(stored_config.settings.__dict__)
@@ -459,16 +459,16 @@ class ClusterOps:
                 log_record.applied = True
                 await self.log.replace(log_record)
                 # notify the target node directly
-                await self.hull.role.send_heartbeats(target_only=operand)
+                await self.deck.role.send_heartbeats(target_only=operand)
                 # notify everone else
-                await self.hull.role.send_heartbeats()
+                await self.deck.role.send_heartbeats()
                 if self.remove_message:
                     await leader.send_membership_change_response_message(self.remove_message, ok=True)
                     self.remove_message = None
             else:
                 config = ClusterConfig(**cdict['config'])
                 t_uri = list(config.nodes.keys())[0]
-                await self.hull.role.transfer_power(t_uri, log_record)
+                await self.deck.role.transfer_power(t_uri, log_record)
                 return
         elif op == "add_node":
             # we need to start the catchup for this node
@@ -496,4 +496,4 @@ class ClusterOps:
         return list(self.follower_trackers.values())
 
     def my_uri(self):
-        return self.hull.get_my_uri()
+        return self.deck.get_my_uri()

@@ -149,7 +149,7 @@ async def test_message_errors(cluster_maker):
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     
-    ts_1.hull.explode_on_message_code = AppendEntriesMessage.get_code()
+    ts_1.deck.explode_on_message_code = AppendEntriesMessage.get_code()
     
     hist = ts_1.get_message_problem_history(clear=True)
     await ts_3.send_heartbeats()
@@ -160,9 +160,9 @@ async def test_message_errors(cluster_maker):
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
     
-    ts_1.hull.explode_on_message_code = None
+    ts_1.deck.explode_on_message_code = None
 
-    ts_1.hull.corrupt_message_with_code = AppendEntriesMessage.get_code()
+    ts_1.deck.corrupt_message_with_code = AppendEntriesMessage.get_code()
     await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()

@@ -8,7 +8,7 @@ participant "Application\nServer Core" as app_core order 30 #Lightyellow
 participant "State Machine" as app_state order 20 #Lightyellow 
 database "Application\nStorage" as app_db order 10 #Lightyellow
 participant Pilot as pilot order 40 #Lightblue
-participant Hull as hull order 50 #Coral
+participant Deck as hull order 50 #Coral
 database "Raft Log" as log order 60 #Coral
 participant "Follower Role" as role order 70 #Lightgreen
 app_core->hull: Start snapshot creation

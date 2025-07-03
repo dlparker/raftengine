@@ -76,7 +76,7 @@ class SNormalCommand(StdSequence):
         self.network = self.cluster.net_mgr.get_majority_network()
         for uri,node in self.network.nodes.items():
             node.clear_triggers()
-            if node.hull.role.role_name == "LEADER":
+            if node.deck.role.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
@@ -95,7 +95,7 @@ class SNormalCommand(StdSequence):
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
-            await node.hull.role.send_heartbeats()
+            await node.deck.role.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
             # leader needs to send commit index to all other nodes, even
@@ -205,7 +205,7 @@ class SPartialCommand(StdSequence):
                 raise Exception(f'bad setup, {voter} not in majority network')
             node = self.network.nodes[uri]
             node.clear_triggers()
-            if node.hull.role.role_name == "LEADER":
+            if node.deck.role.role_name == "LEADER":
                 self.leader = node
                 orig_index = await node.log.get_commit_index()
                 self.target_index = orig_index + 1
@@ -227,7 +227,7 @@ class SPartialCommand(StdSequence):
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
             node.clear_triggers()
-            await node.hull.role.send_heartbeats()
+            await node.deck.role.send_heartbeats()
             self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
             node.set_trigger(WhenCommitIndexSent(self.target_index))
             # leader needs to send commit index to all other nodes, even

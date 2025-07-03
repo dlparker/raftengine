@@ -17,7 +17,7 @@ skinparam legend {
 title Snapshot Export to Follower
 
 participant "Leader Role" as leader order 10 #Lightgreen
-participant Hull as hull order 20 #Coral
+participant Deck as hull order 20 #Coral
 participant Pilot as pilot order 30 #Lightblue
 participant "State Machine" as app_state order 40 #Lightyellow
 database "Raft Log" as raft_log order 50 #Coral

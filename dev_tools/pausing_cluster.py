@@ -11,7 +11,7 @@ from dev_tools.sequences import SPartialElection, SPartialCommand
 from dev_tools.network_sim import NetManager
 from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace
-from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
+from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 
 class PausingCluster:
 
@@ -116,7 +116,7 @@ class PausingCluster:
 
     def get_leader(self):
         for uri, node in self.nodes.items():
-            if node.hull.role.role_name == "LEADER":
+            if node.deck.role.role_name == "LEADER":
                 return node
         return None
 

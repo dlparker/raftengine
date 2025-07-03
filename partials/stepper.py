@@ -342,7 +342,7 @@ class Sequencer:
         await rec.server.start_campaign()
 
     async def send_heartbeats(self, rec):
-        await rec.server.hull.state.send_heartbeats()
+        await rec.server.deck.state.send_heartbeats()
     
     async def assert_log_state(self, server, node_op):
         log = server.get_log()

@@ -8,8 +8,8 @@ from raftengine.messages.pre_vote import PreVoteMessage
 
 class Candidate(BaseRole):
 
-    def __init__(self, hull, cluster_ops, use_pre_vote=False, authorized=False):
-        super().__init__(hull, RoleName.candidate, cluster_ops)
+    def __init__(self, deck, cluster_ops, use_pre_vote=False, authorized=False):
+        super().__init__(deck, RoleName.candidate, cluster_ops)
         self.term = None
         self.votes = dict()
         self.pre_votes = dict()
@@ -30,50 +30,50 @@ class Candidate(BaseRole):
             return await self.start_campaign_base()
         
     async def start_campaign_base(self):
-        await self.hull.record_op_detail(OpDetail.start_election)
+        await self.deck.record_op_detail(OpDetail.start_election)
         self.term += 1
-        await self.hull.set_term(self.term)
+        await self.deck.set_term(self.term)
         self.reply_count = 0
-        for node_id in self.hull.get_cluster_node_ids():
-            if node_id == self.hull.get_my_uri():
+        for node_id in self.deck.get_cluster_node_ids():
+            if node_id == self.deck.get_my_uri():
                 self.votes[node_id] = True
             else:
                 self.votes[node_id] = None
-                message = RequestVoteMessage(sender=self.hull.get_my_uri(),
+                message = RequestVoteMessage(sender=self.deck.get_my_uri(),
                                              receiver=node_id,
                                              term=self.term,
                                              prevLogTerm=await self.log.get_term(),
                                              prevLogIndex=await self.log.get_last_index())
-                await self.hull.send_message(message)
+                await self.deck.send_message(message)
         timeout = await self.cluster_ops.get_election_timeout()
-        self.logger.debug("%s setting election timeout to %f", self.hull.get_my_uri(), timeout)
+        self.logger.debug("%s setting election timeout to %f", self.deck.get_my_uri(), timeout)
         await self.run_after(timeout, self.election_timed_out)
         
     async def start_campaign_pre(self):
-        await self.hull.record_op_detail(OpDetail.start_pre_election)
+        await self.deck.record_op_detail(OpDetail.start_pre_election)
         self.reply_count = 0
-        for node_id in self.hull.get_cluster_node_ids():
-            if node_id == self.hull.get_my_uri():
+        for node_id in self.deck.get_cluster_node_ids():
+            if node_id == self.deck.get_my_uri():
                 self.pre_votes[node_id] = True
             else:
                 self.pre_votes[node_id] = None
-                message = PreVoteMessage(sender=self.hull.get_my_uri(),
+                message = PreVoteMessage(sender=self.deck.get_my_uri(),
                                              receiver=node_id,
                                              term=self.term + 1,
                                              prevLogTerm=await self.log.get_term(),
                                              prevLogIndex=await self.log.get_last_index(),
                                              authorized=self.authorized)
-                await self.hull.send_message(message)
+                await self.deck.send_message(message)
         timeout = await self.cluster_ops.get_election_timeout()
-        self.logger.debug("%s setting pre vote election timeout to %f", self.hull.get_my_uri(), timeout)
+        self.logger.debug("%s setting pre vote election timeout to %f", self.deck.get_my_uri(), timeout)
         await self.run_after(timeout, self.election_timed_out)
         
     async def on_vote_response(self, message):
         if message.term < self.term:
-            self.logger.info("candidate %s ignoring out of date vote", self.hull.get_my_uri())
+            self.logger.info("candidate %s ignoring out of date vote", self.deck.get_my_uri())
             return
         self.votes[message.sender] = message.vote
-        self.logger.info("candidate %s voting result %s from %s", self.hull.get_my_uri(),
+        self.logger.info("candidate %s voting result %s from %s", self.deck.get_my_uri(),
                          message.vote, message.sender)
         self.reply_count += 1
         tally = 0
@@ -81,26 +81,26 @@ class Candidate(BaseRole):
             if self.votes[nid] == True:
                 tally += 1
         self.logger.info("candidate %s voting results with %d votes in, wins = %d (includes self)",
-                         self.hull.get_my_uri(), self.reply_count + 1, tally)
+                         self.deck.get_my_uri(), self.reply_count + 1, tally)
         if tally > len(self.votes) / 2:
             await self.cancel_run_after()
-            await self.hull.win_vote(self.term)
-            await self.hull.record_op_detail(OpDetail.won)
+            await self.deck.win_vote(self.term)
+            await self.deck.record_op_detail(OpDetail.won)
             return
         if self.reply_count + 1 > len(self.votes) / 2:
-            self.logger.info("candidate %s campaign lost, trying again", self.hull.get_my_uri())
+            self.logger.info("candidate %s campaign lost, trying again", self.deck.get_my_uri())
             await self.cancel_run_after()
             await self.run_after(await self.cluster_ops.get_election_timeout(), self.start_campaign)            
-            await self.hull.record_op_detail(OpDetail.lost)
-            await self.hull.record_op_detail(OpDetail.start_new_election)
+            await self.deck.record_op_detail(OpDetail.lost)
+            await self.deck.record_op_detail(OpDetail.start_new_election)
             return
 
     async def on_pre_vote_response(self, message):
         if message.term <= self.term:
-            self.logger.info("candidate %s ignoring out of date pre vote", self.hull.get_my_uri())
+            self.logger.info("candidate %s ignoring out of date pre vote", self.deck.get_my_uri())
             return
         self.pre_votes[message.sender] = message.vote
-        self.logger.info("candidate %s voting result %s from %s", self.hull.get_my_uri(),
+        self.logger.info("candidate %s voting result %s from %s", self.deck.get_my_uri(),
                          message.vote, message.sender)
         self.reply_count += 1
         tally = 0
@@ -108,46 +108,46 @@ class Candidate(BaseRole):
             if self.pre_votes[nid] == True:
                 tally += 1
         self.logger.info("candidate %s voting results with %d votes in, wins = %d (includes self)",
-                         self.hull.get_my_uri(), self.reply_count + 1, tally)
+                         self.deck.get_my_uri(), self.reply_count + 1, tally)
         if tally > len(self.pre_votes) / 2:
             await self.cancel_run_after()
-            await self.hull.record_op_detail(OpDetail.pre_won)
+            await self.deck.record_op_detail(OpDetail.pre_won)
             await self.start_campaign_base()
             return
         if self.reply_count + 1 > len(self.pre_votes) / 2:
-            self.logger.info("candidate %s pre vote campaign lost, trying again", self.hull.get_my_uri())
+            self.logger.info("candidate %s pre vote campaign lost, trying again", self.deck.get_my_uri())
             await self.cancel_run_after()
             await self.run_after(await self.cluster_ops.get_election_timeout(), self.start_campaign)            
-            await self.hull.record_op_detail(OpDetail.pre_lost)
-            await self.hull.record_op_detail(OpDetail.start_new_election)
+            await self.deck.record_op_detail(OpDetail.pre_lost)
+            await self.deck.record_op_detail(OpDetail.start_new_election)
             return
 
     async def term_expired(self, message):
-        await self.hull.record_op_detail(OpDetail.newer_term)
-        await self.hull.set_term(message.term)
-        await self.hull.demote_and_handle(message)
+        await self.deck.record_op_detail(OpDetail.newer_term)
+        await self.deck.set_term(message.term)
+        await self.deck.demote_and_handle(message)
         return None
 
     async def on_append_entries(self, message):
-        self.logger.info("candidate %s got append entries from %s", self.hull.get_my_uri(),
+        self.logger.info("candidate %s got append entries from %s", self.deck.get_my_uri(),
                          message.sender)
         # never get here if term is higher, we get called self.term_expired first
         if message.term == await self.log.get_term():
-            await self.hull.record_op_detail(OpDetail.older_term)
-            self.logger.info("candidate %s at term %d yielding to %s term %d", self.hull.get_my_uri(),
+            await self.deck.record_op_detail(OpDetail.older_term)
+            self.logger.info("candidate %s at term %d yielding to %s term %d", self.deck.get_my_uri(),
                              await self.log.get_term(), message.sender, message.term)
-            await self.hull.demote_and_handle(message)
+            await self.deck.demote_and_handle(message)
             return
         # if term was newer, we'd get term_expired call. if it was same about test
         # would catch it. So, term is older
         self.logger.warning("candidate %s at term %d got append_entries from  %s term %d",
-                            self.hull.get_my_uri(),  await self.log.get_term(),
+                            self.deck.get_my_uri(),  await self.log.get_term(),
                             message.sender, message.term)
         await self.send_reject_append_response(message)
         
     async def election_timed_out(self):
-        await self.hull.record_op_detail(OpDetail.election_timeout)
-        self.logger.info("--!!!!!--candidate %s campaign timedout, trying again", self.hull.get_my_uri())
+        await self.deck.record_op_detail(OpDetail.election_timeout)
+        self.logger.info("--!!!!!--candidate %s campaign timedout, trying again", self.deck.get_my_uri())
         await self.start_campaign()
         
         

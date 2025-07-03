@@ -37,9 +37,9 @@ logger = logging.getLogger("test_code")
 # more need for it.
 
     
-async def test_get_hull():
-    from raftengine.api import get_hull_class
-    from raftengine.api.hull_config import ClusterInitConfig, LocalConfig
+async def test_get_deck():
+    from raftengine.api import get_deck_class
+    from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
     from dev_tools.memory_log import MemoryLog
     from raftengine.api.pilot_api import PilotAPI
 
@@ -69,7 +69,7 @@ async def test_get_hull():
         async def begin_snapshot_export(self, snapshot):
             raise NotImplementedError
 
-    cls = get_hull_class()
+    cls = get_deck_class()
     cc = ClusterInitConfig(node_uris=['foo1', 'foo2', 'foo3'],
                            heartbeat_period=1,
                            election_timeout_min=1,
@@ -78,7 +78,7 @@ async def test_get_hull():
     local_config = LocalConfig(uri="foo1",
                                working_dir='/tmp/',
                                )
-    hull = cls(cc, local_config, PilotSim())
+    deck = cls(cc, local_config, PilotSim())
 
 
 async def test_feature_defs_1(cluster_maker):

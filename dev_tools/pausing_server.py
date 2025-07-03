@@ -9,12 +9,12 @@ from dev_tools.memory_log import MemoryLog
 from dev_tools.triggers import TriggerSet
 from dev_tools.sqlite_log import SqliteLog
 from dev_tools.operations import SimpleOps
-from raftengine.api.hull_config import ClusterInitConfig
+from raftengine.api.deck_config import ClusterInitConfig
 from raftengine.api.log_api import LogRec
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.types import ClusterSettings
 from raftengine.api.snapshot_api import SnapShot
-from raftengine.hull.hull import Hull
+from raftengine.deck.deck import Deck
 
 
 class PausingServer(PilotAPI):
@@ -24,7 +24,7 @@ class PausingServer(PilotAPI):
         self.cluster = cluster
         self.cluster_init_config = None
         self.local_config = None
-        self.hull = None
+        self.deck = None
         self.in_messages = []
         self.out_messages = []
         self.lost_out_messages = []
@@ -53,21 +53,21 @@ class PausingServer(PilotAPI):
     def set_configs(self, local_config, cluster_config, use_ops=SimpleOps):
         self.cluster_init_config = cluster_config
         self.local_config = local_config
-        self.hull = TestHull(self.cluster_init_config, self.local_config, self)
+        self.deck = Testdeck(self.cluster_init_config, self.local_config, self)
         self.ops_class = use_ops
         self.operations = use_ops(self)
 
     async def change_cluster_config(self, cluster_config):
         # in case test reuses one improperly, which is convenient
         self.cluster_init_config = deepcopy(cluster_config)
-        return await self.hull.change_cluster_config(self.cluster_init_config)
+        return await self.deck.change_cluster_config(self.cluster_init_config)
 
     async def get_cluster_config(self):
         # in case test reuses one improperly, which is convenient
-        return await self.hull.get_cluster_config()
+        return await self.deck.get_cluster_config()
 
     async def simulate_crash(self):
-        await self.hull.stop()
+        await self.deck.stop()
         
         if self.use_log == SqliteLog:
             self.log.close()
@@ -77,7 +77,7 @@ class PausingServer(PilotAPI):
         self.out_messages = []
         test_trace = self.network.test_trace
         await test_trace.note_crash(self)
-        self.hull = None
+        self.deck = None
 
     async def recover_from_crash(self, deliver=False, save_log=True, save_ops=True):
         if not save_log:
@@ -89,66 +89,66 @@ class PausingServer(PilotAPI):
         if not save_ops:
             self.operations = self.ops_class(self)
         self.am_crashed = False
-        self.hull = TestHull(self.cluster_init_config, self.local_config, self)
-        await self.hull.start()
+        self.deck = Testdeck(self.cluster_init_config, self.local_config, self)
+        await self.deck.start()
         self.network.reconnect_server(self, deliver=deliver)
         test_trace = self.network.test_trace
         await test_trace.note_recover(self)
 
     def get_role_name(self):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        return self.hull.get_role_name()
+        return self.deck.get_role_name()
 
     def get_message_problem_history(self, clear=False):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        return self.hull.get_message_problem_history(clear)
+        return self.deck.get_message_problem_history(clear)
 
     def get_role(self):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        return self.hull.get_role()
+        return self.deck.get_role()
 
     async def get_term(self):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        return await self.hull.get_term()
+        return await self.deck.get_term()
 
     def get_leader_uri(self):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        if self.hull.get_role_name() == "LEADER":
+        if self.deck.get_role_name() == "LEADER":
             return self.uri
-        return self.hull.leader_uri
+        return self.deck.leader_uri
 
     async def start_campaign(self, authorized=False):
-        res = await self.hull.start_campaign(authorized=authorized)
+        res = await self.deck.start_campaign(authorized=authorized)
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
         return res
 
     async def transfer_power(self, other_uri):
-        res =  await self.hull.transfer_power(other_uri)
+        res =  await self.deck.transfer_power(other_uri)
         return res
 
     async def send_heartbeats(self, target_only=None):
-        return await self.hull.role.send_heartbeats(target_only)
+        return await self.deck.role.send_heartbeats(target_only)
 
     async def do_leader_lost(self):
-        await self.hull.role.leader_lost()
+        await self.deck.role.leader_lost()
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
 
     async def do_demote_and_handle(self, message=None):
-        await self.hull.demote_and_handle(message)
+        await self.deck.demote_and_handle(message)
         test_trace = self.network.test_trace
         await test_trace.note_role_changed(self)
 
     async def run_command(self, command, timeout=1.0):
         test_trace = self.network.test_trace
         await test_trace.note_command_started(self)
-        res = await self.hull.run_command(command, timeout)
+        res = await self.deck.run_command(command, timeout)
         await test_trace.note_command_finished(self)
         return res
 
@@ -163,13 +163,13 @@ class PausingServer(PilotAPI):
     # Part of PilotAPI
     async def on_message(self, in_msg):
         if self.save_message_history:
-            msg = self.hull.decode_message(in_msg)
+            msg = self.deck.decode_message(in_msg)
             self.in_message_history.append(msg)
-        await self.hull.on_message(in_msg)
+        await self.deck.on_message(in_msg)
 
     # Part of PilotAPI
     async def send_message(self, target, out_msg):
-        msg = self.hull.decode_message(out_msg)
+        msg = self.deck.decode_message(out_msg)
         self.logger.debug("queueing out msg %s", msg)
         self.out_messages.append(msg)
         if self.save_message_history:
@@ -177,7 +177,7 @@ class PausingServer(PilotAPI):
 
     # Part of PilotAPI
     async def send_response(self, target, out_msg, in_reply):
-        reply = self.hull.decode_message(in_reply)
+        reply = self.deck.decode_message(in_reply)
         self.logger.debug("queueing out reply %s", reply)
         self.out_messages.append(reply)
         if self.save_message_history:
@@ -193,33 +193,33 @@ class PausingServer(PilotAPI):
 
     # Part of PilotAPI
     async def stop_commanded(self) -> None:
-        self.logger.debug('%s stop_commanded from hull', self.uri)
+        self.logger.debug('%s stop_commanded from deck', self.uri)
         #await self.cluster.remove_node(self.uri)
 
     async def exit_cluster(self, callback=None, timeout=10.0):
-        await self.hull.exit_cluster(callback, timeout)
+        await self.deck.exit_cluster(callback, timeout)
 
     async def start(self):
-        await self.hull.start()
+        await self.deck.start()
 
     async def stop(self):
-        await self.hull.stop()
+        await self.deck.stop()
 
     async def start_and_join(self, leader_uri, callback=None, timeout=10.0):
-        await self.hull.start_and_join(leader_uri, callback, timeout)
+        await self.deck.start_and_join(leader_uri, callback, timeout)
 
     async def start_election(self):
-        await self.hull.campaign()
+        await self.deck.campaign()
 
     async def disable_timers(self):
-        return await self.hull.disable_timers()
+        return await self.deck.disable_timers()
 
     async def enable_timers(self, reset=True):
-        return await self.hull.enable_timers(reset=reset)
+        return await self.deck.enable_timers(reset=reset)
 
     async def take_snapshot(self, timeout=2.0):
         snapshot = await self.operations.begin_snapshot_build()
-        return await self.hull.take_snapshot(snapshot, timeout=timeout)
+        return await self.deck.take_snapshot(snapshot, timeout=timeout)
     
     async def fake_command(self, op, value):
         last_index = await self.log.get_last_index()
@@ -249,8 +249,8 @@ class PausingServer(PilotAPI):
                 self.log = setup_sqlite_log(self.uri)
         else:
             self.log = new_log
-        self.hull.log = self.log
-        self.hull.role.log = self.log
+        self.deck.log = self.log
+        self.deck.role.log = self.log
         return self.log
 
     def change_networks(self, network):
@@ -293,12 +293,12 @@ class PausingServer(PilotAPI):
         self.blocked_out_messages = None
 
     def get_leader_id(self):
-        if self.hull is None:
+        if self.deck is None:
             return None
-        if self.hull.role.role_name == "LEADER":
+        if self.deck.role.role_name == "LEADER":
             return self.uri
-        elif self.hull.role.role_name == "FOLLOWER":
-            return self.hull.role.leader_uri
+        elif self.deck.role.role_name == "FOLLOWER":
+            return self.deck.role.leader_uri
         else:
             return None
 
@@ -328,21 +328,21 @@ class PausingServer(PilotAPI):
         self.clear_in_msgs()
 
     async def cleanup(self):
-        hull = self.hull
-        if hull and hull.role:
-            self.logger.debug('cleanup stopping %s %s', hull.role, self.uri)
-            handle =  hull.role_async_handle
-            await hull.role.stop()
+        deck = self.deck
+        if deck and deck.role:
+            self.logger.debug('cleanup stopping %s %s', deck.role, self.uri)
+            handle =  deck.role_async_handle
+            await deck.role.stop()
             if handle:
                 self.logger.debug('after %s %s stop, handle.cancelled() says %s',
-                                 hull.role, self.uri, handle.cancelled())
-            ohandle =  hull.join_waiter_handle
+                                 deck.role, self.uri, handle.cancelled())
+            ohandle =  deck.join_waiter_handle
             if ohandle:
                 self.logger.debug('after %s %s stop, join_waiter handle.cancelled() says %s',
-                                 hull.role, self.uri, ohandle.cancelled())
-        if hull:
-            self.hull = None
-            del hull
+                                 deck.role, self.uri, ohandle.cancelled())
+        if deck:
+            self.deck = None
+            del deck
         self.log.close()
         self.logger.debug('cleanup done on %s', self.uri)
 
@@ -416,12 +416,12 @@ class PausingServer(PilotAPI):
             print(jdata)
 
     async def dump_stats(self):
-        if self.hull.role.role_name == "FOLLOWER":
-            leaderId=self.hull.role.leader_uri
+        if self.deck.role.role_name == "FOLLOWER":
+            leaderId=self.deck.role.leader_uri
         else:
             leaderId=None
         stats = dict(uri=self.uri,
-                     role_name=self.hull.role.role_name,
+                     role_name=self.deck.role.role_name,
                      term=await self.log.get_term(),
                      prevLogIndex=await self.log.get_last_index(),
                      prevLogTerm=await self.log.get_last_term(),
@@ -439,7 +439,7 @@ def setup_sqlite_log(uri):
     return log
 
 
-class TestHull(Hull):
+class Testdeck(Deck):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

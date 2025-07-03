@@ -23,14 +23,14 @@ additionl complexity to be useful for testing log snapshot operations.
 
 The important thing is that many of the details of client interaction described in section 6 of the thesis
 do not apply to this library, because it does not provide an RPC or messaging mechanism itself, it needs
-to have that service provided through the PilotAPI and HullAPI classes. There are some features of the
+to have that service provided through the PilotAPI and DeckAPI classes. There are some features of the
 library that can help with implementing the section 6 features.
 
 Command Execution
 -----------------
 
 When a client wants a state machine command to be executed by the cluster, the server application it is talking
-to should submit that request to the HullAPI run_command method. If the server is the cluster leader, then
+to should submit that request to the DeckAPI run_command method. If the server is the cluster leader, then
 the normal command sequence begins. It is:
 
 1. Persist the command as a log record at the leader

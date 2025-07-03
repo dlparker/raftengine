@@ -284,26 +284,26 @@ async def test_election_timeout_1(cluster_maker):
 
     # Do the same sequence, only this time set the stopped flag on the
     # candidate to make sure the election timeout does not start another
-    # election. This tests a bit of code in the hull role_after_runnner
+    # election. This tests a bit of code in the deck role_after_runnner
     # method that is designed to prevent a timer from triggering code
     # in a role instance that is no longer active.
-    # So, for example, a Candidate has resigned, and the hull.stop_role method 
+    # So, for example, a Candidate has resigned, and the deck.stop_role method 
     # has been called, and it has gotten far enough to set the stopped
     # flag, but the election timeout handler task has not yet been
     # cancelled. If the handler task fires right then it might
     # break logic that thinks the Candidate is still running.
     # So we have this mechanism to ensure that it doesn't run because
-    # it is shimmed by the hull.role_after_runner method.
+    # it is shimmed by the deck.role_after_runner method.
     
     await leader.do_demote_and_handle()
     await f1.do_leader_lost()
     assert f1.get_role_name() == "CANDIDATE"
     # Set the stopped flag to prevent timeout from restarting election
     # don't call stop(), it cancels the timeout
-    f1.hull.role.stopped = True
+    f1.deck.role.stopped = True
     # now delay for more than the timeout, should start new election with new term
     old_term = await f1.get_term()
-    assert f1.hull.role_async_handle is not None
+    assert f1.deck.role_async_handle is not None
     await asyncio.sleep(0.015)
     assert f1.get_role_name() == "CANDIDATE"
     new_term = await f1.get_term()
@@ -584,7 +584,7 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
     ts3_out_1 = await ts_3.do_next_out_msg()
     ts3_out_2 = await ts_3.do_next_out_msg()
     logger.info("-------- Target code should run on next message to ts_1,  should vote no")
-    ts_1.hull.cluster_ops.leader_uri = None
+    ts_1.deck.cluster_ops.leader_uri = None
     ts_1_in_1 = await ts_1.do_next_in_msg()
     if not use_pre_vote:
         assert ts_1_in_1.get_code() == RequestVoteMessage.get_code()
@@ -878,10 +878,10 @@ async def test_power_transfer_2(cluster_maker):
 
     # make sure calling transfer on something that is not  a leader doesn't work
     with pytest.raises(Exception):
-        await ts_3.hull.transfer_power(ts_1.uri)
+        await ts_3.deck.transfer_power(ts_1.uri)
     # make sure calling transfer on invalid node doesn' work
     with pytest.raises(Exception):
-        await ts_1.hull.transfer_power('foo')
+        await ts_1.deck.transfer_power('foo')
     await ts_2.simulate_crash()
     await cluster.start_auto_comms()
     for i in range(0, 3):
@@ -961,12 +961,12 @@ async def test_power_transfer_fails_1(cluster_maker):
     expire_time = await ts_1.transfer_power(ts_2.uri)
     assert expire_time is not None
     start_time = time.time()
-    command_result = await ts_1.hull.run_command("add 1")
+    command_result = await ts_1.deck.run_command("add 1")
     assert command_result.retry 
-    while time.time()  < expire_time + 0.1 and not ts_1.hull.role.accepting_commands:
+    while time.time()  < expire_time + 0.1 and not ts_1.deck.role.accepting_commands:
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.0001)
-    assert ts_1.hull.role.accepting_commands
+    assert ts_1.deck.role.accepting_commands
     await cluster.test_trace.start_subtest("Allowing full election run to complete")
 
     ts_2.unblock_network()

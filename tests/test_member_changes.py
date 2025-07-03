@@ -10,7 +10,7 @@ from raftengine.api.events import EventType, EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import NodeRec, ClusterConfig, ClusterSettings
-from raftengine.hull.hull import Hull
+from raftengine.deck.deck import Deck
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.sequences import SPartialElection
@@ -97,9 +97,9 @@ async def test_cluster_config_ops(cluster_maker):
     log = MemoryLog()
     log.start()
     
-    hull = Hull(initial_cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
-    c_ops = hull.cluster_ops
-    cc = await hull.get_cluster_config()
+    deck = Deck(initial_cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
+    c_ops = deck.cluster_ops
+    cc = await deck.get_cluster_config()
     
     uri = 'mcpy://4'
     await c_ops.start_node_add(uri)
@@ -181,7 +181,7 @@ async def test_remove_follower_1(cluster_maker):
             else:
                 logger.debug('in handler with success = False\n')
                 done_by_event = False
-    await ts_3.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_3.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_3.exit_cluster(callback=cb)
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
@@ -191,7 +191,7 @@ async def test_remove_follower_1(cluster_maker):
     assert removed is not None
     await asyncio.sleep(0.0)
     assert done_by_event is not None
-    assert ts_3.hull.role.stopped
+    assert ts_3.deck.role.stopped
 
     # now make sure heartbeat send only goes to the one remaining follower
     await ts_1.send_heartbeats()
@@ -226,14 +226,14 @@ async def test_remove_leader_1(cluster_maker):
     while time.time() - start_time < 1.0:
         if ts_2.get_role_name() == "LEADER" or ts_3.get_role_name() == "LEADER":
             break
-        if ts_1.hull is None:
+        if ts_1.deck is None:
             break
         await asyncio.sleep(0.01)
         await cluster.deliver_all_pending()
         
     assert ts_2.get_role_name() == "LEADER" or ts_3.get_role_name() == "LEADER"
     await asyncio.sleep(0.01)
-    assert ts_1.hull.role.stopped
+    assert ts_1.deck.role.stopped
 
 async def test_add_follower_1(cluster_maker):
     """
@@ -259,7 +259,7 @@ async def test_add_follower_1(cluster_maker):
     assert ts_1.operations.total == 1
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
-    assert await ts_1.hull.get_leader_uri() == leader.uri
+    assert await ts_1.deck.get_leader_uri() == leader.uri
     async def join_done(ok, new_uri):
         logger.debug(f"Join callback said {ok} joining as {new_uri}")
         assert ok
@@ -296,7 +296,7 @@ async def test_add_follower_2(cluster_maker):
     await cluster.run_election()
     await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
@@ -345,7 +345,7 @@ async def test_add_follower_2(cluster_maker):
 
     logger.debug("\n\nStarting join from node 4\n\n")
     await cluster.test_trace.start_subtest("Records inserted, starting add of node 4")
-    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
     while time.time() - start_time < 0.1:
@@ -382,7 +382,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     await cluster.run_election()
     await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via direct insert")
 
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
@@ -418,7 +418,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
 
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
-    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
 
     ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -494,7 +494,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     await cluster.run_election()
     await cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4")
 
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
@@ -530,7 +530,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
 
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
-    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
 
     ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -578,7 +578,7 @@ async def test_add_follower_3_rounds_1(cluster_maker):
 
     # poised to finish round 2, add more commands to force round 3, and make it enough to take > 1 message
     await cluster.test_trace.start_subtest("Node 4 caught up on roudn 2, adding new records before letting leader know that")
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per*2)
     for i in range(limit):
         for ts in [ts_1, ts_2, ts_3]:
@@ -625,7 +625,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     await cluster.run_election()
     await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
 
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
@@ -662,7 +662,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
 
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
-    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
 
     ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -745,7 +745,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     Not really necessisary, but nice.
 
     Next, a new test server is created but not started yet. It has an event handler registered
-    for membership change events. The new server gets a call to the start_and_join method of the hull,
+    for membership change events. The new server gets a call to the start_and_join method of the deck,
     which starts the process of adding the server to the cluster. It sends a message to the leader
     asking to be added, then the leader starts loading it with log records prior to starting the actual
     add.
@@ -810,7 +810,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     await ts_1.start_campaign()
     await cluster.run_election()
 
-    msg_per = await ts_1.hull.get_max_entries_per_message()
+    msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
     await cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records")
     for i in range(2, limit+1):
@@ -852,7 +852,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
-    await ts_4.hull.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await cluster.test_trace.start_subtest("Node 4 created, telling it to start_and_join, waiting for append entries sequences")
     await ts_4.start_and_join(leader.uri, join_done, timeout=100.0)
 
@@ -914,7 +914,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     assert done_by_event is False
 
     # cluster config should be back to original state, nothing pending
-    cc = await ts_1.hull.cluster_ops.get_cluster_config()
+    cc = await ts_1.deck.cluster_ops.get_cluster_config()
     assert ts_4.uri not in cc.nodes
     assert cc.pending_node is None
     await cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal")
@@ -936,7 +936,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     assert done_by_callback is True
     assert done_by_event is True
 
-    cc = await ts_1.hull.cluster_ops.get_cluster_config()
+    cc = await ts_1.deck.cluster_ops.get_cluster_config()
     assert ts_4.uri in cc.nodes
     assert cc.pending_node is None
 
@@ -944,7 +944,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     await cluster.deliver_all_pending()
 
     for ts in [ts_2, ts_3, ts_4]:
-        cc = await ts.hull.cluster_ops.get_cluster_config()
+        cc = await ts.deck.cluster_ops.get_cluster_config()
         assert ts_4.uri in cc.nodes
         assert cc.pending_node is None
 
@@ -983,7 +983,7 @@ async def test_reverse_add_follower_1(cluster_maker):
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
     await ts_4.start_and_join(leader.uri)
-    assert ts_4.hull.join_waiter_handle is not None
+    assert ts_4.deck.join_waiter_handle is not None
     
 
     # want add load to complete and leader to send add log message, but we don't want followers
@@ -1096,7 +1096,7 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
 
-    await ts_3.hull.add_event_handler(event_handler)
+    await ts_3.deck.add_event_handler(event_handler)
     await ts_3.exit_cluster(callback, timeout)
     ts_1.set_trigger(WhenMessageIn(MembershipChangeMessage.get_code()))
     ts_3.set_trigger(WhenMessageOut(MembershipChangeMessage.get_code()))
@@ -1212,7 +1212,7 @@ async def test_reverse_remove_follower_2(cluster_maker):
     """
     This tests is identical to test_reverse_remove_follower_1 except that the cluster exiting node told
     to stop before it can receive the timeout. This tests code that cleans up the handler in
-    hull.py that monitors the cluster exit process. It is a very unlikely event in real life, but possible
+    deck.py that monitors the cluster exit process. It is a very unlikely event in real life, but possible
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
 
@@ -1389,9 +1389,9 @@ async def test_add_follower_timeout_1(cluster_maker):
         logger.debug(f"Join callback said {ok} joining as {new_uri}")
         callback_result = ok
 
-    assert await ts_1.hull.get_election_timeout() > 0.01
-    assert await ts_1.hull.get_heartbeat_period() > 0.01
-    assert (await ts_1.hull.get_election_timeout_range())[1] > 0.01
+    assert await ts_1.deck.get_election_timeout() > 0.01
+    assert await ts_1.deck.get_heartbeat_period() > 0.01
+    assert (await ts_1.deck.get_election_timeout_range())[1] > 0.01
     
     await ts_4.start_and_join(leader.uri, join_done, timeout=0.01)
     ts_1.block_network()
@@ -1482,7 +1482,7 @@ async def test_remove_candidate_1(cluster_maker):
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    assert ts_3.hull.role.stopped
+    assert ts_3.deck.role.stopped
 
     # now make sure heartbeat send only goes to the one remaining follower
     await ts_1.send_heartbeats()
@@ -1512,26 +1512,26 @@ async def test_update_settings(cluster_maker):
     await cluster.deliver_all_pending()
     await cluster.test_trace.start_subtest("Node 1 is leader, sending settings update")
 
-    orig_cc = await ts_1.hull.get_cluster_config()
+    orig_cc = await ts_1.deck.get_cluster_config()
     cur_settings = orig_cc.settings
     orig_value = cur_settings.max_entries_per_message
     new_settings = ClusterSettings(**cur_settings.__dict__)
     new_settings.max_entries_per_message += 1
 
     with pytest.raises(Exception):
-        await ts_2.hull.update_settings(new_settings)
+        await ts_2.deck.update_settings(new_settings)
         
-    await ts_1.hull.update_settings(new_settings)
+    await ts_1.deck.update_settings(new_settings)
     start_time = time.time()
     while time.time() - start_time < 0.1 and cur_settings.max_entries_per_message == orig_value:
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
-        new_cc = await ts_1.hull.get_cluster_config()
+        new_cc = await ts_1.deck.get_cluster_config()
         cur_settings = new_cc.settings
-    assert (await ts_1.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
+    assert (await ts_1.deck.get_cluster_config()).settings.max_entries_per_message != orig_value
 
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
 
-    assert (await ts_2.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
-    assert (await ts_3.hull.get_cluster_config()).settings.max_entries_per_message != orig_value
+    assert (await ts_2.deck.get_cluster_config()).settings.max_entries_per_message != orig_value
+    assert (await ts_3.deck.get_cluster_config()).settings.max_entries_per_message != orig_value

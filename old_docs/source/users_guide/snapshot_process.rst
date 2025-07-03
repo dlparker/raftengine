@@ -16,9 +16,9 @@ for generating, storing, exporting, and importing snapshots.
 Raftengine encodes the interaction between these responsibilities and
 the related raft operations via APIs in
 
-   #. :py:class:`raftengine.api.hull_api.HullAPI`
+   #. :py:class:`raftengine.api.hull_api.DeckAPI`
       
-      #. :py:meth:`raftengine.api.hull_api.HullAPI.take_snapshot`
+      #. :py:meth:`raftengine.api.hull_api.DeckAPI.take_snapshot`
 	 
    #. :py:class:`raftengine.api.pilot_api.PilotAPI`
       
@@ -57,7 +57,7 @@ Create/Store Sequence
 .. plantuml:: ../_static/diagrams/take_snapshot.puml
    :caption: Sequence for generating and storing a snapshot locally
 
-This sequence shows how the ``App Server Core`` triggers snapshot creation, with the ``SnapShotTool`` coordinating with the ``State Machine`` and ``App Storage`` to save the application state, which is then installed in the ``Raft Log`` by the ``Hull``.
+This sequence shows how the ``App Server Core`` triggers snapshot creation, with the ``SnapShotTool`` coordinating with the ``State Machine`` and ``App Storage`` to save the application state, which is then installed in the ``Raft Log`` by the ``Deck``.
 
 Export Sequence
 ---------------

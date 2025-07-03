@@ -10,9 +10,9 @@ This is a Python implementation of a Raft consensus algorithm library designed t
 
 ### Core Components
 
-- **Hull** (`raftengine/hull/hull.py`): Main entry point and control center for the Raft engine
+- **Deck** (`raftengine/deck/deck.py`): Main entry point and control center for the Raft engine
 - **PilotAPI** (`raftengine/api/pilot_api.py`): User-supplied interface for message transport and log storage
-- **HullAPI** (`raftengine/api/hull_api.py`): Main API interface for the Raft engine
+- **DeckAPI** (`raftengine/api/deck_api.py`): Main API interface for the Raft engine
 - **Roles** (`raftengine/roles/`): Implementation of Raft roles (Leader, Follower, Candidate)
 - **Messages** (`raftengine/messages/`): Raft protocol message types (RequestVote, AppendEntries, etc.)
 
@@ -103,7 +103,7 @@ The system uses an event-driven architecture with configurable event handlers fo
 ## Working with the Codebase
 
 ### Adding New Features
-1. Implement core logic in appropriate module (`roles/`, `messages/`, `hull/`)
+1. Implement core logic in appropriate module (`roles/`, `messages/`, `deck/`)
 2. Add corresponding API interfaces if needed
 3. Create comprehensive tests with trace generation
 4. Update documentation using the trace system

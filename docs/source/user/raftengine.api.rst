@@ -8,8 +8,8 @@ API modules
    :maxdepth: 1
 
    raftengine.api.events
-   raftengine.api.hull_api
-   raftengine.api.hull_config
+   raftengine.api.deck_api
+   raftengine.api.deck_config
    raftengine.api.log_api
    raftengine.api.pilot_api
    raftengine.api.snapshot_api

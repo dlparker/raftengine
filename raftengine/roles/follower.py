@@ -12,8 +12,8 @@ from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp
 
 class Follower(BaseRole):
 
-    def __init__(self, hull, cluster_ops):
-        super().__init__(hull, RoleName.follower, cluster_ops)
+    def __init__(self, deck, cluster_ops):
+        super().__init__(deck, RoleName.follower, cluster_ops)
         # log is set in BaseState as is leader_uri
         # only used during voting for leadership
         # Needs to be as recent as configured maximum silence period, or we raise hell.
@@ -37,10 +37,10 @@ class Follower(BaseRole):
                           len(message.entries))
 
         if message.term == await self.log.get_term() and self.leader_uri != message.sender:
-            await self.hull.set_leader_uri(message.sender)
+            await self.deck.set_leader_uri(message.sender)
             self.logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
-            await self.hull.record_op_detail(OpDetail.joined_leader)
+            await self.deck.record_op_detail(OpDetail.joined_leader)
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
         if message.prevLogIndex == 0 and await self.log.get_last_index() > 0:
             self.logger.warning("%s Leader says our log is junk, starting over", self.my_uri())
@@ -111,7 +111,7 @@ class Follower(BaseRole):
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
                                       leaderId=self.leader_uri)
-        await self.hull.send_response(message, reply)
+        await self.deck.send_response(message, reply)
         self.logger.info("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
@@ -153,14 +153,14 @@ class Follower(BaseRole):
         error_data = None
         try:
             command = log_record.command
-            processor = self.hull.get_processor()
+            processor = self.deck.get_processor()
             result, error_data = await processor.process_command(command, log_record.serial)
         except Exception as e:
             trace = traceback.format_exc()
             msg = f"supplied process_command caused exception {trace}"
             error_data = trace
             self.logger.error(trace)
-            await self.hull.event_control.emit_error(error_data)
+            await self.deck.event_control.emit_error(error_data)
         if error_data:
             result = error_data
             error_flag = True
@@ -174,7 +174,7 @@ class Follower(BaseRole):
         else:
             await self.log.replace(log_record)
             self.logger.warning("processor ran but had an error %s", error_data)
-            await self.hull.event_control.emit_error(error_data)
+            await self.deck.event_control.emit_error(error_data)
     
     async def on_vote_request(self, message):
         last_vote = await self.log.get_voted_for()
@@ -221,22 +221,22 @@ class Follower(BaseRole):
                                           receiver=leader_uri,
                                           op=ChangeOp.add,
                                           target_uri=self.my_uri())
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
         
     async def term_expired(self, message):
         # Raft protocol says all participants should record the highest term
         # value that they receive in a message. Always means an election has
         # happened and we are in the new term.
         # Followers never decide that a higher term is not valid
-        await self.hull.record_op_detail(OpDetail.newer_term)
-        await self.hull.set_term(message.term)
+        await self.deck.record_op_detail(OpDetail.newer_term)
+        await self.deck.set_term(message.term)
         await self.log.set_voted_for(None) # in case we voted during the now expired term
         # Tell the base class method to route the message back to us as normal
         return message
         
     async def leader_lost(self):
-        await self.hull.record_op_detail(OpDetail.leader_lost)
-        await self.hull.start_campaign()
+        await self.deck.record_op_detail(OpDetail.leader_lost)
+        await self.deck.start_campaign()
         
     async def send_vote_response_message(self, message, vote_yes=True):
         vote_response = RequestVoteResponseMessage(sender=self.my_uri(),
@@ -245,7 +245,7 @@ class Follower(BaseRole):
                                                    prevLogIndex=await self.log.get_last_index(),
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    vote=vote_yes)
-        await self.hull.send_response(message, vote_response)
+        await self.deck.send_response(message, vote_response)
         
     async def send_append_entries_response(self, message):
         append_response = AppendResponseMessage(sender=self.my_uri(),
@@ -257,7 +257,7 @@ class Follower(BaseRole):
                                                 prevLogTerm=message.prevLogTerm,
                                                 leaderId=self.leader_uri)
         self.logger.debug("%s sending response %s", self.my_uri(), append_response)
-        await self.hull.send_response(message, append_response)
+        await self.deck.send_response(message, append_response)
 
     async def contact_checker(self):
         max_time = await self.cluster_ops.get_election_timeout()
@@ -273,7 +273,7 @@ class Follower(BaseRole):
         if message.term == await self.log.get_term():
             if self.snapshot is None:
                 self.logger.debug("%s starting snapshot import %s", self.my_uri(), message)
-                self.snapshot = await self.hull.pilot.begin_snapshot_import(message.prevLogIndex, message.prevLogTerm)
+                self.snapshot = await self.deck.pilot.begin_snapshot_import(message.prevLogIndex, message.prevLogTerm)
                 config = message.clusterConfig
                 await self.cluster_ops.update_cluster_config_from_json_string(config)
             self.logger.debug("%s importing snapshot chunk %s", self.my_uri(), message)

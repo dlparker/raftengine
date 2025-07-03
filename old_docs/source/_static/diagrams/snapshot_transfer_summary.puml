@@ -16,10 +16,10 @@ skinparam legend {
 title Snapshot Transfer Summary
 
 participant "Leader Role" as leader order 10 #Lightgreen
-participant "Leader Hull" as l_hull order 20 #Coral
+participant "Leader Deck" as l_hull order 20 #Coral
 database "Leader Raft Log" as l_log order 30 #Coral
 participant "Follower Role" as follower order 40 #Lightgreen
-participant "Follower Hull" as f_hull order 50 #Coral
+participant "Follower Deck" as f_hull order 50 #Coral
 database "Follower Raft Log" as f_log order 60 #Coral
 
 note left of l_log: Snapshot i=100 installed

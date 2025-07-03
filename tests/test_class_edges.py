@@ -4,7 +4,7 @@ import logging
 import pytest
 import time
 import json
-from raftengine.hull.hull import Hull
+from raftengine.deck.deck import Deck
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
@@ -19,11 +19,11 @@ logger = logging.getLogger("test_code")
 
 async def test_bogus_pilot(cluster_maker):
     """
-    Ensures that Hull constructor rejects Pilot class that does
+    Ensures that Deck constructor rejects Pilot class that does
     not implement PilotAPI
     """
     cluster = cluster_maker(3)
-    await cluster.test_trace.define_test("Testing Hull constructor with invalid Pilot", logger=logger)
+    await cluster.test_trace.define_test("Testing Deck constructor with invalid Pilot", logger=logger)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
     uri_1 = cluster.node_uris[0]
@@ -31,7 +31,7 @@ async def test_bogus_pilot(cluster_maker):
     class BadPilot:
         pass
     with pytest.raises(Exception):
-        Hull(ts_1.cluster_init_config, ts_1.local_config, BadPilot())
+        Deck(ts_1.cluster_init_config, ts_1.local_config, BadPilot())
 
 async def test_str_methods():
     """

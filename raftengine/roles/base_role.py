@@ -11,11 +11,11 @@ from raftengine.api.types import RoleName
 class BaseRole:
 
     
-    def __init__(self, hull, role_name, cluster_ops):
-        self.hull = hull
+    def __init__(self, deck, role_name, cluster_ops):
+        self.deck = deck
         self.role_name = role_name
         self.logger = logging.getLogger("BaseRole")
-        self.log = hull.get_log()
+        self.log = deck.get_log()
         self.stopped = False
         self.routes = None
         self.build_routes()
@@ -23,7 +23,7 @@ class BaseRole:
 
     @property
     def leader_uri(self):
-        return self.hull.leader_uri
+        return self.deck.leader_uri
         
     def build_routes(self):
         self.routes = dict()
@@ -67,7 +67,7 @@ class BaseRole:
     async def start(self):
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().start())
-        self.cluster_op = self.hull.get_cluster_ops()
+        self.cluster_op = self.deck.get_cluster_ops()
         self.stopped = False
 
     async def stop(self):
@@ -76,10 +76,10 @@ class BaseRole:
         self.stopped = True
 
     async def run_after(self, delay, target):
-        await self.hull.role_run_after(delay, target)
+        await self.deck.role_run_after(delay, target)
 
     async def cancel_run_after(self):
-        await self.hull.cancel_role_run_after()
+        await self.deck.cancel_role_run_after()
         
     async def on_message(self, message):
         if not self.stopped:
@@ -172,7 +172,7 @@ class BaseRole:
             if message.term == term and message.prevLogIndex == index and message.prevLogTerm == last_term:
                 self.logger.warning("%s recieved valid transfer of power messages, starting election", self.my_uri())
                 await self.send_transfer_power_response_message(message, success=True)
-                await self.hull.start_campaign(authorized=True)
+                await self.deck.start_campaign(authorized=True)
         
     async def send_reject_append_response(self, message):
         leaderId = self.leader_uri
@@ -184,7 +184,7 @@ class BaseRole:
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
                                       leaderId=leaderId)
-        await self.hull.send_response(message, reply)
+        await self.deck.send_response(message, reply)
 
     async def send_reject_vote_response(self, message):
         data = dict(response=False)
@@ -194,7 +194,7 @@ class BaseRole:
                                            prevLogIndex=await self.log.get_last_index(),
                                            prevLogTerm=await self.log.get_last_term(),
                                            vote=False)
-        await self.hull.send_response(message, reply)
+        await self.deck.send_response(message, reply)
 
     async def send_pre_vote_response_message(self, message, vote_yes=True):
         pre_vote_response = PreVoteResponseMessage(sender=self.my_uri(),
@@ -203,7 +203,7 @@ class BaseRole:
                                                    prevLogIndex=await self.log.get_last_index(),
                                                    prevLogTerm=await self.log.get_last_term(),
                                                    vote=vote_yes)
-        await self.hull.send_response(message, pre_vote_response)
+        await self.deck.send_response(message, pre_vote_response)
         
     async def send_transfer_power_response_message(self, message, success=True):
         xfer_power_response = TransferPowerResponseMessage(sender=self.my_uri(),
@@ -212,14 +212,14 @@ class BaseRole:
                                                          prevLogIndex=await self.log.get_last_index(),
                                                          prevLogTerm=await self.log.get_last_term(),
                                                          success=success)
-        await self.hull.send_response(message, xfer_power_response)
+        await self.deck.send_response(message, xfer_power_response)
 
     async def send_self_exit(self):
         message = MembershipChangeMessage(sender=self.my_uri(),
                                       receiver=self.leader_uri,
                                       op=ChangeOp.remove,
                                       target_uri=self.my_uri())
-        await self.hull.send_message(message)
+        await self.deck.send_message(message)
     
     async def on_membership_change_message(self, message):
         problem = 'pre_membership_change_message not implemented in the class '
@@ -233,10 +233,10 @@ class BaseRole:
                 self.logger.info("%s leader accepted add request, must be caught up or close to it", self.my_uri())
             else:
                 self.logger.info("%s leader rejected add request", self.my_uri())
-            await self.hull.note_join_done(message.ok)
+            await self.deck.note_join_done(message.ok)
         else:
-            if self.hull.exiting_cluster:
-                await self.hull.note_exit_done(message.ok)
+            if self.deck.exiting_cluster:
+                await self.deck.note_exit_done(message.ok)
             
     async def send_membership_change_response_message(self, message, ok=True):
         response = MembershipChangeResponseMessage(sender=self.my_uri(),
@@ -244,7 +244,7 @@ class BaseRole:
                                                    op=message.op,
                                                    target_uri=message.target_uri,
                                                    ok=ok)
-        await self.hull.send_response(message, response)
+        await self.deck.send_response(message, response)
         
     async def on_snapshot_message(self, message):
         self.logger.info('%s snapshot message  %s', self.my_uri(), str(message))
@@ -267,10 +267,10 @@ class BaseRole:
                                            term=await self.log.get_term(),
                                            offset=message.offset,
                                            success=success)
-        await self.hull.send_response(message, response)
+        await self.deck.send_response(message, response)
         
     def my_uri(self):
-        return self.hull.get_my_uri()
+        return self.deck.get_my_uri()
 
     def __repr__(self):
         return self.role_name

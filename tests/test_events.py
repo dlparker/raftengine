@@ -96,14 +96,14 @@ async def test_event_handlers(cluster_maker):
     for ts in [ts_1, ts_2, ts_3]:
         rch = RoleChangeHandler()
         rch_by_node[ts.uri] = rch
-        await ts.hull.add_event_handler(rch)
-        await ts.hull.add_event_handler(TermChangeHandler())
+        await ts.deck.add_event_handler(rch)
+        await ts.deck.add_event_handler(TermChangeHandler())
         leader_handler = LeaderChangeHandler()
-        await ts.hull.add_event_handler(leader_handler)
+        await ts.deck.add_event_handler(leader_handler)
         election_handler = ElectionHandler(ts)
-        await ts.hull.add_event_handler(election_handler)
+        await ts.deck.add_event_handler(election_handler)
         resync_handler = ResyncHandler(ts)
-        await ts.hull.add_event_handler(resync_handler)
+        await ts.deck.add_event_handler(resync_handler)
 
     await cluster.start()
     await ts_1.start_campaign()
@@ -142,10 +142,10 @@ async def test_event_handlers(cluster_maker):
     
     for ts in [ts_2, ts_3]:
         rch = rch_by_node[ts.uri]
-        await ts.hull.remove_event_handler(rch)
+        await ts.deck.remove_event_handler(rch)
         
     # now demote the leader and make sure we get only one event
-    await ts_1.hull.demote_and_handle()
+    await ts_1.deck.demote_and_handle()
     await asyncio.sleep(0)
     assert role_change_counter == 6
     await cluster.stop_auto_comms()
@@ -187,7 +187,7 @@ async def test_message_errors(cluster_maker):
             error_counter += 1
             
     for ts in [ts_1, ts_2, ts_3]:
-        await ts.hull.add_event_handler(ErrorHandler())
+        await ts.deck.add_event_handler(ErrorHandler())
     
     await cluster.start()
     await ts_3.start_campaign()
@@ -197,7 +197,7 @@ async def test_message_errors(cluster_maker):
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     
-    ts_1.hull.explode_on_message_code = AppendEntriesMessage.get_code()
+    ts_1.deck.explode_on_message_code = AppendEntriesMessage.get_code()
     
     hist = ts_1.get_message_problem_history(clear=True)
     await ts_3.send_heartbeats()
@@ -209,9 +209,9 @@ async def test_message_errors(cluster_maker):
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
     
-    ts_1.hull.explode_on_message_code = None
+    ts_1.deck.explode_on_message_code = None
 
-    ts_1.hull.corrupt_message_with_code = AppendEntriesMessage.get_code()
+    ts_1.deck.corrupt_message_with_code = AppendEntriesMessage.get_code()
     await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()

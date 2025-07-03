@@ -176,7 +176,7 @@ class WhenIsLeader(PauseTrigger):
         return msg
     
     async def is_tripped(self, server):
-        if server.hull.get_role_name() == "LEADER":
+        if server.deck.get_role_name() == "LEADER":
             return True
         return False
     
@@ -190,9 +190,9 @@ class WhenHasLeader(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if server.hull.get_role_name() != "FOLLOWER":
+        if server.deck.get_role_name() != "FOLLOWER":
             return False
-        if server.hull.role.leader_uri == self.leader_uri:
+        if server.deck.role.leader_uri == self.leader_uri:
             return True
         return False
     
@@ -206,7 +206,7 @@ class WhenHasLogIndex(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if await server.hull.log.get_last_index() >= self.index:
+        if await server.deck.log.get_last_index() >= self.index:
             return True
         return False
     
@@ -220,7 +220,7 @@ class WhenHasCommitIndex(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if await server.hull.log.get_commit_index() >= self.index:
+        if await server.deck.log.get_commit_index() >= self.index:
             return True
         return False
     
@@ -235,7 +235,7 @@ class WhenHasAppliedIndex(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        if await server.hull.log.get_applied_index() >= self.index:
+        if await server.deck.log.get_applied_index() >= self.index:
             return True
         return False
     
@@ -259,7 +259,7 @@ class WhenElectionDone(PauseTrigger):
             self.voters = list(server.cluster.nodes.keys())
         for uri in self.voters:
             node = server.cluster.nodes[uri]
-            if node.hull.get_role_name() == "LEADER":
+            if node.deck.get_role_name() == "LEADER":
                 have_leader = True
                 rec = self.announced[uri]
                 if "is_leader" not in rec:

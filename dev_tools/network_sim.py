@@ -210,7 +210,7 @@ class Network:
                     try:
                         msg = await node.do_next_in_msg()
                     except:
-                        if node.hull is None:
+                        if node.deck is None:
                             # node can get stop_commanded during this loop
                             continue
                         else:
@@ -223,7 +223,7 @@ class Network:
                     try:
                         msg = await node.do_next_out_msg()
                     except:
-                        if node.hull is None:
+                        if node.deck is None:
                             # node can get stop_commanded during this loop
                             continue
                         else:
@@ -246,12 +246,12 @@ class Network:
             return None
         self.logger.debug("%s handling message %s", node.uri, msg)
         stime = time.perf_counter()
-        start_state = node.hull.role.role_name
+        start_state = node.deck.role.role_name
         stime = time.perf_counter()
         await node.on_message(json.dumps(msg, default=lambda o:o.__dict__))
         etime = time.perf_counter() - stime
         await self.test_trace.note_message_handled(node, msg, etime)
-        if start_state != node.hull.role.role_name:
+        if start_state != node.deck.role.role_name:
             await self.test_trace.note_role_changed(node)
         return msg
 

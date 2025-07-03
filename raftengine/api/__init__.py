@@ -1,4 +1,4 @@
-def get_hull_class():
-    from raftengine.hull.hull import Hull
-    return Hull
+def get_deck_class():
+    from raftengine.deck.deck import Deck
+    return Deck
     

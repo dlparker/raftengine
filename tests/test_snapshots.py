@@ -10,7 +10,7 @@ import pytest
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
-from raftengine.api.hull_config import ClusterInitConfig
+from raftengine.api.deck_config import ClusterInitConfig
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
@@ -191,8 +191,8 @@ async def test_snapshot_2(cluster_maker):
     await ts_1.do_demote_and_handle()
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
-    assert ts_2.hull.is_leader()
-    assert ts_1.hull.is_leader() is False
+    assert ts_2.deck.is_leader()
+    assert ts_1.deck.is_leader() is False
     assert await ts_2.log.get_last_term() == 2
     assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
     assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 1
@@ -273,7 +273,7 @@ async def test_snapshot_3(cluster_maker):
     await cluster.start_auto_comms()
     ts_1_ss = await ts_1.take_snapshot()
     await cluster.stop_auto_comms()
-    assert ts_1.hull.is_leader() is False
+    assert ts_1.deck.is_leader() is False
     new_leader = cluster.get_leader()
     assert new_leader is not None
     assert new_leader.uri != ts_1.uri
@@ -387,8 +387,8 @@ async def test_snapshot_4(cluster_maker):
     await ts_1.do_demote_and_handle()
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
-    assert ts_2.hull.is_leader()
-    assert ts_1.hull.is_leader() is False
+    assert ts_2.deck.is_leader()
+    assert ts_1.deck.is_leader() is False
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
     logger.debug(f"\nnode 2 leader\n")
