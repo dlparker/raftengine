@@ -321,13 +321,16 @@ class RstFormatter:
             if section.features:
                 for mode in ('tested', 'used'):
                     done = []
+                    if section.features[mode]:  # Only add header if there are features
+                        all_rows.append(f"Raft features {mode}:\n")
                     for fnum, feature_string in enumerate(section.features[mode]):
                         plist = str(feature_string).split('.')
-                        if fnum == 0:
-                            all_rows.append(f"Raft features {mode}:\n")
-                            froot = plist[0]
-                            regy = FeatureRegistry.get_registry()
-                            feature = regy.features[froot]
+                        froot = plist[0]
+                        regy = FeatureRegistry.get_registry()
+                        feature = regy.features[froot]
+                        
+                        # Add feature documentation for each unique feature
+                        if froot not in done:
                             all_rows.append(f".. include:: /developer/tests/features/{feature.get_name_snake()}/short.rst")
                             all_rows.append("")
                             all_rows.append(f".. collapse:: {feature.get_name_snake()} details (click to toggle view)")
@@ -337,11 +340,14 @@ class RstFormatter:
                             all_rows.append(f"   .. include:: /developer/tests/features/{feature.get_name_snake()}/narative.rst")
                             all_rows.append("")
                             all_rows.append("")
+                            done.append(froot)
                         cur_path = []
                         for b_name in plist[1:]:
                             cur_path.append(b_name)
-                            if b_name not in done:
-                                branch = feature.branches['.'.join(cur_path)]
+                            branch_path = '.'.join(cur_path)
+                            if branch_path not in done:
+                                branch_key = '.'.join(cur_path)
+                                branch = feature.branches[branch_key]
                                 partial = f"{feature.get_name_snake()}/branches/{'.'.join(cur_path)}"
                                 all_rows.append(f".. include..  :: /developer/tests/features/{partial}/short.rst")
                                 all_rows.append("")
@@ -352,6 +358,7 @@ class RstFormatter:
                                 all_rows.append(f"   .. include:: /developer/tests/features/{partial}/narative.rst")
                                 all_rows.append("")
                                 all_rows.append("")
+                                done.append(branch_path)
                                 done.append(b_name)
                         
                 all_rows.append("")

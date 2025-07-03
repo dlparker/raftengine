@@ -1,6 +1,3 @@
-
-When a leader sends an append entries message to a follower it includes the index of the last log record and the term
-of that record, and the follower compares those values to its own last log record. There are a variety of scenarios
 depending on the relationship between these values, but this one concerns the cases where the follower's index
 is less than the leader's index, and the actual last record at the follower is present at the same index in the
 leader's log.

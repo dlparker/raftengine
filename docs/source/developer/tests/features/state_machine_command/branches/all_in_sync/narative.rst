@@ -1,6 +1,3 @@
-
-The simplest case of log replication should hopefully be the scenario for the vast majority of
-real operations for any actual application using this library. The leadership is settled, all the
 followers are replicating the leader's log records as soon as they come in, no network problems are
 causing delays, no overloading is causing any node to get behind. This should result in
 the minimum number of messages to complete the replication, and append entries from the leader

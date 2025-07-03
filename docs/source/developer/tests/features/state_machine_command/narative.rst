@@ -1,6 +1,3 @@
-
-
-The term "state machine" in the Raft thesis probably requires a somewhat liberal interpretation. In terms
 of how the Raft algorithm views the "application" that is the focus of all this activity, that is correct.
 However, it may be that much application logic lies beyond the "state machine" part of the program. So,
 probably, the authors of the application need to think about inputs and outputs to whatever they are doing

@@ -1,6 +1,3 @@
-
-This feature branch is the logic that applies when an election is held and all the non-candidate nodes accept the
-candidate's bid on the first round of voting. That means that the candidate's term is greater than the follower's
 terms, and the candidates committed log record index is at least as high as any other node's value.
 
 Thesis section 9.6 describes the PreVote extension to the basic election protocol, and why it is desirable. The goal

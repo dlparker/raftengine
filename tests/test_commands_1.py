@@ -16,6 +16,7 @@ from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandle
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.logging_ops import setup_logging, log_config
+from dev_tools.features import FeatureRegistry
 
 #extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name="test_code", level="debug"), ]
@@ -24,6 +25,7 @@ default_level="error"
 #default_level="debug"
 log_config = setup_logging(default_level=default_level)
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 async def test_command_1(cluster_maker):
     """
@@ -374,7 +376,11 @@ async def test_command_2_leaders_3(cluster_maker):
     logger = logging.getLogger("test_code")
     
     await cluster.test_trace.define_test("Testing command redirect after leader partition", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Normal election to establish initial leader
+    f_normal_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    spec = dict(used=[f_normal_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -383,8 +389,12 @@ async def test_command_2_leaders_3(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
+    
+    # Section 2: Normal command processing
+    f_normal_command = registry.get_raft_feature("state_machine_command", "all_in_sync") 
+    spec = dict(used=[f_normal_command], tested=[])
     logger.info('---------!!!!!!! starting comms')
-    await cluster.test_trace.start_subtest("Running command normally")
+    await cluster.test_trace.start_subtest("Running command normally", features=spec)
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -396,9 +406,13 @@ async def test_command_2_leaders_3(cluster_maker):
     # command. The leader should figure out it doesn't lead
     # anymore and give back a redirect
 
+    # Section 3: Network partition and new election
+    f_leader_isolation = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_post_partition_election = registry.get_raft_feature("leader_election", "partition_recovery")
+    spec = dict(used=[f_leader_isolation, f_post_partition_election], tested=[])
     logger.info('---------!!!!!!! stopping comms')
     await cluster.stop_auto_comms()
-    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
+    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2", features=spec)
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election')
     await ts_2.start_campaign(authorized=True)
@@ -408,7 +422,10 @@ async def test_command_2_leaders_3(cluster_maker):
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
 
-    await cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected")
+    # Section 4: Command redirect after partition recovery  
+    f_leader_discovery_redirect = registry.get_raft_feature("state_machine_command", "discovery_redirect")
+    spec = dict(used=[], tested=[f_leader_discovery_redirect])
+    await cluster.test_trace.start_subtest("Trying to run command at leader that is no longer connected", features=spec)
     
     # can't use cluster command runner here, it will connect to the actual leader
     command_result = None

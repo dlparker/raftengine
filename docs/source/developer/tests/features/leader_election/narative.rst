@@ -1,6 +1,3 @@
-
-
-The main elements of leader election are defined in section 3.4 of the thesis. There
 are many legal sequences of interaction between nodes in the cluster that can
 lead to a leader being elected. These are covered in the various feature branch
 descriptions.
