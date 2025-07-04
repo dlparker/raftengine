@@ -6,17 +6,54 @@ Test test_command_sqlite_1 from file test_commands_1
 
 
     Test election and state machine command operations while using
-    a SQLite implementation of the Logo's. Most other tests use
-    an in memory log implementation, so this test is mostly focused
-    on whether the basic logging operations work correctly against
-    a real db. If another test is using SQLite and has problems,
-    this test might help call out something basic.
+    a SQLite implementation of the log storage. Most other tests use
+    an in-memory log implementation, so this test validates that the
+    basic Raft operations work correctly with persistent database storage.
+
+    This test covers:
+    - Leader election with pre-vote (using SQLite for vote persistence)
+    - State machine command processing with database log storage
+    - Log replication and commit notification with persistent storage
+    - Validation that all Raft safety properties hold with SQLite backend
+
+    The test ensures SQLite compatibility for core Raft operations including
+    log entry persistence, term tracking, and vote recording. If other tests
+    using SQLite encounter issues, this test helps isolate basic storage problems.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
 
 Section 1: Normal election
 ==========================
+
+
+Raft features used:
+
+.. include:: /developer/tests/features/leader_election/short.rst
+
+.. collapse:: leader_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/features.rst
+
+   .. include:: /developer/tests/features/leader_election/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
 
 
 
@@ -93,6 +130,73 @@ Section 1: Normal election
 
 Section 2: Run command and check results at all nodes
 =====================================================
+
+
+Raft features tested:
+
+.. include:: /developer/tests/features/log_storage/short.rst
+
+.. collapse:: log_storage details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_storage/features.rst
+
+   .. include:: /developer/tests/features/log_storage/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_storage/branches/sqlite_compatibility/short.rst
+
+.. collapse:: log_storage/branches/sqlite_compatibility details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_storage/branches/sqlite_compatibility/features.rst
+
+   .. include:: /developer/tests/features/log_storage/branches/sqlite_compatibility/narative.rst
+
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/all_in_sync/short.rst
+
+.. collapse:: state_machine_command/branches/all_in_sync details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/narative.rst
+
+
+Raft features used:
+
+.. include:: /developer/tests/features/log_replication/short.rst
+
+.. collapse:: log_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/normal_replication/short.rst
+
+.. collapse:: log_replication/branches/normal_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/normal_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/normal_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/heartbeat_only/short.rst
+
+.. collapse:: log_replication/branches/heartbeat_only details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/narative.rst
 
 
 

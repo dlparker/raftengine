@@ -8,6 +8,7 @@ from pathlib import Path
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.api.log_api import LogRec
 from dev_tools.memory_log import MemoryLog
+from dev_tools.features import registry
 
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.triggers import WhenHasLogIndex
@@ -58,8 +59,9 @@ async def test_command_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.test_trace.define_test("Testing basic command processing with detailed control", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
-    registry.get_raft_feature("leader_election.all_yes_votes.with_pre_vote", "uses")
+    f_normal_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    spec = dict(used=[f_normal_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -71,9 +73,10 @@ async def test_command_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit")
-    registry.get_raft_feature("state_machine_command.all_in_sync", "uses")
-    registry.get_raft_feature("log_replication.normal_replication", "uses")
+    f_state_machine_cmd = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_log_replication = registry.get_raft_feature("log_replication", "normal_replication")
+    spec = dict(used=[f_state_machine_cmd, f_log_replication], tested=[])
+    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit", features=spec)
     command_result = await ts_3.run_command("add 1")
     assert command_result.result is not None
     assert command_result.error is None
@@ -82,8 +85,9 @@ async def test_command_1(cluster_maker):
     # followers will see the commitIndex is higher
     # and apply and locally commit
     await cluster.stop_auto_comms()
-    await cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat")
-    registry.get_raft_feature("log_replication.heartbeat_only", "uses")
+    f_heartbeat = registry.get_raft_feature("log_replication", "heartbeat_only")
+    spec = dict(used=[f_heartbeat], tested=[])
+    await cluster.test_trace.start_subtest("Finish command by notifying followers of commit with heartbeat", features=spec)
     await ts_3.send_heartbeats()
     logger.info('------------------------ Leader has command completion, heartbeats going out')
     term = await ts_3.log.get_term()
@@ -107,14 +111,16 @@ async def test_command_1(cluster_maker):
     logger.debug('------------------------ Correct command done')
 
     await cluster.stop_auto_comms()
-    await cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect")
-    registry.get_raft_feature("state_machine_command.request_redirect", "tests")
+    f_request_redirect = registry.get_raft_feature("state_machine_command", "request_redirect")
+    spec = dict(used=[], tested=[f_request_redirect])
+    await cluster.test_trace.start_subtest("Trying to run command at follower, looking for redirect", features=spec)
     command_result = await ts_1.run_command("add 1")
     assert command_result.redirect == uri_3
     logger.debug('------------------------ Correct redirect (follower) done')
     
-    await cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry")
-    registry.get_raft_feature("state_machine_command.retry_during_election", "tests")
+    f_retry_during_election = registry.get_raft_feature("state_machine_command", "retry_during_election")
+    spec = dict(used=[], tested=[f_retry_during_election])
+    await cluster.test_trace.start_subtest("Pushing one follower to candidate, then trying command to it, looking for retry", features=spec)
     orig_term =  await ts_1.get_term() 
     await ts_1.do_leader_lost()
     assert ts_1.get_role_name() == "CANDIDATE"
@@ -139,8 +145,9 @@ async def test_command_1(cluster_maker):
     # commands are committed, let heartbeats go out
     # so the tardy follower will catch up
 
-    await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower")
-    registry.get_raft_feature("state_machine_command.minimal_node_count", "tests")
+    f_minimal_node_count = registry.get_raft_feature("state_machine_command", "minimal_node_count")
+    spec = dict(used=[], tested=[f_minimal_node_count])
+    await cluster.test_trace.start_subtest("Crashing one follower, then running command to ensure it works with only one follower", features=spec)
     await ts_1.simulate_crash()
     logger.debug('------------------------ Running command ---')
     sequence = SPartialCommand(cluster, "add 1", voters=[uri_2, uri_3])
@@ -156,8 +163,9 @@ async def test_command_1(cluster_maker):
     await cluster.deliver_all_pending()
     await ts_3.send_heartbeats()
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up")
-    registry.get_raft_feature("log_replication.follower_recovery_catchup", "tests")
+    f_follower_recovery = registry.get_raft_feature("log_replication", "follower_recovery_catchup")
+    spec = dict(used=[], tested=[f_follower_recovery])
+    await cluster.test_trace.start_subtest("Recovering follower, then pushing hearbeat to get it to catch up", features=spec)
     logger.debug('------------------------ Unblocking, doing hearbeats, should catch up ---')
     await ts_1.recover_from_crash()
     await ts_3.send_heartbeats()
@@ -175,11 +183,19 @@ async def test_command_1(cluster_maker):
 async def test_command_sqlite_1(cluster_maker):
     """
     Test election and state machine command operations while using
-    a SQLite implementation of the Logo's. Most other tests use
-    an in memory log implementation, so this test is mostly focused
-    on whether the basic logging operations work correctly against
-    a real db. If another test is using SQLite and has problems,
-    this test might help call out something basic.
+    a SQLite implementation of the log storage. Most other tests use
+    an in-memory log implementation, so this test validates that the
+    basic Raft operations work correctly with persistent database storage.
+
+    This test covers:
+    - Leader election with pre-vote (using SQLite for vote persistence)
+    - State machine command processing with database log storage
+    - Log replication and commit notification with persistent storage
+    - Validation that all Raft safety properties hold with SQLite backend
+
+    The test ensures SQLite compatibility for core Raft operations including
+    log entry persistence, term tracking, and vote recording. If other tests
+    using SQLite encounter issues, this test helps isolate basic storage problems.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
@@ -190,7 +206,9 @@ async def test_command_sqlite_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
     await cluster.test_trace.define_test("Testing command operations with SQLite log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    f_normal_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    spec = dict(used=[f_normal_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -201,7 +219,12 @@ async def test_command_sqlite_1(cluster_maker):
     logger.info('------------------------ Election done')
     await cluster.start_auto_comms()
 
-    await cluster.test_trace.start_subtest("Run command and check results at all nodes")
+    f_sqlite_compat = registry.get_raft_feature("log_storage", "sqlite_compatibility")
+    f_state_machine_cmd = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_log_replication = registry.get_raft_feature("log_replication", "normal_replication")
+    f_heartbeat = registry.get_raft_feature("log_replication", "heartbeat_only")
+    spec = dict(used=[f_log_replication, f_heartbeat], tested=[f_sqlite_compat, f_state_machine_cmd])
+    await cluster.test_trace.start_subtest("Run command and check results at all nodes", features=spec)
     command_result = await cluster.run_command("add 1", 1)
     
     assert ts_1.operations.total == 1

@@ -32,6 +32,35 @@ Section 1: Normal election
 ==========================
 
 
+Raft features used:
+
+.. include:: /developer/tests/features/leader_election/short.rst
+
+.. collapse:: leader_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/features.rst
+
+   .. include:: /developer/tests/features/leader_election/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
+
+
 
 
 .. collapse:: section 1 trace table (click to toggle view)
@@ -108,6 +137,44 @@ Section 2: Run one command, normal sequence till leader commit
 ==============================================================
 
 
+Raft features used:
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/all_in_sync/short.rst
+
+.. collapse:: state_machine_command/branches/all_in_sync details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/narative.rst
+
+
+.. include:: /developer/tests/features/log_replication/short.rst
+
+.. collapse:: log_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/normal_replication/short.rst
+
+.. collapse:: log_replication/branches/normal_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/normal_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/normal_replication/narative.rst
+
+
 
 
 .. collapse:: section 2 trace table (click to toggle view)
@@ -152,6 +219,26 @@ Section 3: Finish command by notifying followers of commit with heartbeat
 =========================================================================
 
 
+Raft features used:
+
+.. include:: /developer/tests/features/log_replication/short.rst
+
+.. collapse:: log_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/heartbeat_only/short.rst
+
+.. collapse:: log_replication/branches/heartbeat_only details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/narative.rst
+
+
 
 
 .. collapse:: section 3 trace table (click to toggle view)
@@ -184,6 +271,26 @@ Section 4: Trying to run command at follower, looking for redirect
 ==================================================================
 
 
+Raft features tested:
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/request_redirect/short.rst
+
+.. collapse:: state_machine_command/branches/request_redirect details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/request_redirect/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/request_redirect/narative.rst
+
+
 
 
 .. collapse:: section 4 trace table (click to toggle view)
@@ -210,6 +317,26 @@ Section 4: Trying to run command at follower, looking for redirect
 
 Section 5: Pushing one follower to candidate, then trying command to it, looking for retry
 ==========================================================================================
+
+
+Raft features tested:
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/retry_during_election/short.rst
+
+.. collapse:: state_machine_command/branches/retry_during_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/retry_during_election/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/retry_during_election/narative.rst
 
 
 
@@ -286,6 +413,26 @@ Section 6: Pushing Leader to send heartbeats, after forcing candidate's term bac
 
 Section 7: Crashing one follower, then running command to ensure it works with only one follower
 ================================================================================================
+
+
+Raft features tested:
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/minimal_node_count/short.rst
+
+.. collapse:: state_machine_command/branches/minimal_node_count details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/minimal_node_count/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/minimal_node_count/narative.rst
 
 
 
@@ -368,6 +515,26 @@ Section 7: Crashing one follower, then running command to ensure it works with o
 
 Section 8: Recovering follower, then pushing hearbeat to get it to catch up
 ===========================================================================
+
+
+Raft features tested:
+
+.. include:: /developer/tests/features/log_replication/short.rst
+
+.. collapse:: log_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/follower_recovery_catchup/short.rst
+
+.. collapse:: log_replication/branches/follower_recovery_catchup details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/follower_recovery_catchup/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/follower_recovery_catchup/narative.rst
 
 
 

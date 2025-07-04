@@ -245,14 +245,90 @@ Based on this analysis, these feature branches need to be created:
 5. **Identify state transitions**: Track role changes and log evolution from CSV data
 6. **Validate safety properties**: Ensure Raft invariants hold using filtered trace data
 7. **Generate feature mappings**: Create appropriate registry entries
-8. **Update test with feature registry**: Modify test file to use registry.get_raft_feature()
-9. **Create feature and feature branch definition files**: Create the feature definition files in `docs/source/tests/features/` instead of the `captures/` tree. Follow the directory layout pattern used by the generated test rst files. Update existing files if they need improvement.
-10. **Generate documentation**: Run trace generation and documentation build (`dev_tools/build_docs.py`)
-11. **Copy generated test rst files**: Once the target test is updated with feature definition files, tests pass, and doc build script has been run, copy the new test rst files from captures to docs according to the mapping table below
-12. **Update features_in_tests.rst**: Create or update `docs/source/developer/tests/features_in_tests.rst` with comprehensive feature-to-test mapping tables (see below)
-13. **Update test feature definitions checklist**: Mark the test as complete (✓) in `claude_plans/test_feature_definitions_checklist.md` and update the completion statistics
-14. **VALIDATION CHECKLIST**: Perform critical format checks (see below)
-15. **Report created files**: List all new feature documentation files for manual integration
+8. **Update test docstring**: After analyzing the test traces, consider updating the test's docstring to better document its purpose, the Raft behaviors it tests, and the expected outcomes. Some tests have comprehensive docstrings while others are minimal - use the trace analysis to improve documentation consistency.
+9. **Update test with feature registry**: Modify test file to use registry.get_raft_feature() calls with proper integration into test sections. **IMPORTANT**: The feature registry calls must be made BEFORE calling start_test_prep() or start_subtest(), and the returned feature branches must be provided via the "features" argument to these methods.
+
+   **CRITICAL API USAGE**: The get_raft_feature() method takes two parameters:
+   - **First parameter**: Root feature category (e.g., "leader_election", "state_machine_command")  
+   - **Second parameter**: Branch path within that category (e.g., "all_yes_votes.with_pre_vote", "request_redirect")
+
+   ```python
+   # ✓ CORRECT USAGE:
+   f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+   f_redirect = registry.get_raft_feature("state_machine_command", "request_redirect")
+   f_replication = registry.get_raft_feature("log_replication", "normal_replication")
+   
+   # ✗ WRONG - DO NOT DO THIS:
+   f_election = registry.get_raft_feature("leader_election.all_yes_votes.with_pre_vote", "uses")
+   
+   # Complete pattern:
+   f_used_feature = registry.get_raft_feature("feature_category", "branch.path")
+   f_tested_feature = registry.get_raft_feature("feature_category", "branch.path")
+   spec = dict(used=[f_used_feature], tested=[f_tested_feature])
+   await cluster.test_trace.start_test_prep("Section Name", features=spec)
+   # or
+   await cluster.test_trace.start_subtest("Section Name", features=spec)
+   ```
+10. **Create feature and feature branch definition files**: Create the feature definition files in `docs/source/developer/tests/features/` instead of the `captures/` tree. Follow the directory layout pattern used by the generated test rst files. Update existing files if they need improvement.
+
+   **CRITICAL: Feature Branch File Structure**: Each feature branch directory must contain exactly three files with specific formats:
+
+   ### `short.rst` - One-line description (NO title)
+   ```rst
+   SQLite Log Storage Compatibility
+   ```
+   
+   ### `narative.rst` - Detailed explanation (NO title, content only)
+   ```rst
+   This feature branch validates that the Raft consensus algorithm operates correctly when using SQLite as the persistent log storage backend...
+   
+   **Key Validation Points**:
+   - Transaction Atomicity: SQLite's transaction support ensures...
+   - Persistence Across Restarts: Unlike in-memory logs...
+   ```
+   
+   ### `features.rst` - Thesis section references (NO title, NO includes)
+   ```rst
+   * **Log replication**: section 3.5
+   * **Persistence requirements**: section 2.1
+   * **Safety properties**: section 3.2
+   ```
+
+   **❌ WRONG `features.rst` format (DON'T DO THIS)**:
+   ```rst
+   Feature Name
+   ============
+
+   .. include:: short.rst
+
+   Description
+   -----------
+
+   .. include:: narative.rst
+   ```
+
+   **✅ CORRECT `features.rst` format**:
+   ```rst
+   * **Topic Name**: section X.X
+   * **Another Topic**: section Y.Y
+   ```
+
+   **Important Notes**:
+   - Both root-level AND branch-level `features.rst` files use the same simple bullet-point format
+   - NO toctree directives, NO include directives, NO titles
+   - Reference sections from Diego Ongaro's Raft thesis (In Search of an Understandable Consensus Algorithm)
+   - Keep descriptions concise but specific to the technical area
+
+   **Quick Format Summary**:
+   - `short.rst`: One line, no title → `SQLite Log Storage Compatibility`
+   - `narative.rst`: Multiple paragraphs, no title → `This feature branch validates...`
+   - `features.rst`: Bullet points, no title → `* **Log replication**: section 3.5`
+11. **Generate documentation**: Run trace generation and documentation build (`dev_tools/build_docs.py`)
+12. **Copy generated test rst files**: Once the target test is updated with feature definition files, tests pass, and doc build script has been run, copy the new test rst files from captures to docs according to the mapping table below
+13. **Update features_in_tests.rst**: Create or update `docs/source/developer/tests/features_in_tests.rst` with comprehensive feature-to-test mapping tables (see below)
+14. **Update test feature definitions checklist**: Mark the test as complete (✓) in `claude_plans/test_feature_definitions_checklist.md` and update the completion statistics
+15. **VALIDATION CHECKLIST**: Perform critical format checks (see below)
+16. **Report created files**: List all new feature documentation files for manual integration
 
 ### Test RST File Copy Mapping
 

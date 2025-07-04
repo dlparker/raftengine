@@ -4,22 +4,23 @@ This checklist tracks which tests have been upgraded to include feature definiti
 
 ## Status Summary
 - **Total Tests**: 74
-- **Tests with Feature Definitions**: 5
-- **Tests Remaining**: 69
-- **Completion Rate**: 6.8%
+- **Tests with Feature Definitions**: 6 (all properly implemented)
+- **Tests Remaining**: 68
+- **Completion Rate**: 8.1%
+- **API Status**: ✓ All existing feature registry calls now use correct API pattern
 
 ## Test Files and Methods
 
-### test_class_edges.py (0/4 complete)
-- [ ] `test_class_edges.py::test_bogus_pilot`
-- [ ] `test_class_edges.py::test_str_methods`
-- [ ] `test_class_edges.py::test_enum_edges`
-- [ ] `test_class_edges.py::test_message_ops`
+### test_class_edges.py (0/4 complete) USES NO RAFT FEATURES
+- [NA] `test_class_edges.py::test_bogus_pilot`
+- [NA] `test_class_edges.py::test_str_methods`
+- [NA] `test_class_edges.py::test_enum_edges`
+- [NA] `test_class_edges.py::test_message_ops`
 
-### test_commands_1.py (2/13 complete)
+### test_commands_1.py (3/13 complete)
 - [x] `test_commands_1.py::test_command_1` ✓
 - [x] `test_commands_1.py::test_command_2_leaders_1` ✓
-- [ ] `test_commands_1.py::test_command_sqlite_1`
+- [x] `test_commands_1.py::test_command_sqlite_1` ✓
 - [ ] `test_commands_1.py::test_command_2_leaders_2`
 - [ ] `test_commands_1.py::test_command_2_leaders_3`
 - [ ] `test_commands_1.py::test_command_after_heal_1`
@@ -31,8 +32,8 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [ ] `test_commands_1.py::test_follower_run_error`
 - [ ] `test_commands_1.py::test_follower_rewrite_1`
 
-### test_dev_tools.py (0/1 complete)
-- [ ] `test_dev_tools.py::test_log_stuff`
+### test_dev_tools.py (0/1 complete) USES NO RAFT FEATURES
+- [NA] `test_dev_tools.py::test_log_stuff`
 
 ### test_elections_1.py (0/7 complete)
 - [ ] `test_elections_1.py::test_election_1`
@@ -96,12 +97,12 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [ ] `test_partition_1.py::test_partition_3_leader`
 - [ ] `test_partition_1.py::test_partition_3_follower`
 
-### test_random_code.py (3/5 complete)
-- [ ] `test_random_code.py::test_get_deck`
+### test_random_code.py (3/3 complete)
+- [NA] `test_random_code.py::test_get_deck` USES NO RAFT FEATURES
 - [x] `test_random_code.py::test_feature_defs_1` ✓
 - [x] `test_random_code.py::test_feature_defs_2` ✓
 - [x] `test_random_code.py::test_feature_defs_3` ✓
-- [ ] `test_random_code.py::test_feature_defs_4` (Note: This test may not exist)
+- [NA] `test_random_code.py::test_feature_defs_4` (Note: This test does not exist)
 
 ### test_snapshots.py (0/5 complete)
 - [ ] `test_snapshots.py::test_dict_ops`

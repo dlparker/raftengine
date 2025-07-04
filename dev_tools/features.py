@@ -131,11 +131,80 @@ class FeatureRegistry:
             registry = cls()
         return registry
     
-    def get_raft_feature(self, name, branch_path):
-        # API
-        feat = self.features.get(name, None)
+    def get_raft_feature(self, feature_category, branch_path):
+        """
+        Get a Raft feature branch definition for test tracking.
+        
+        This method retrieves a specific branch of a Raft feature for use in test
+        tracing. Features are organized hierarchically with a root category and
+        specific branch paths.
+        
+        Args:
+            feature_category (str): Root feature category name. Examples:
+                       - "leader_election"
+                       - "state_machine_command" 
+                       - "log_replication"
+                       - "network_partition"
+                       - "log_storage"
+            branch_path (str): Specific branch path within the feature category.
+                             Can use dot notation for nested branches. Examples:
+                             - "all_yes_votes.with_pre_vote"
+                             - "request_redirect"
+                             - "normal_replication"
+                             - "sqlite_compatibility"
+        
+        Returns:
+            FeatureDefinition: A feature definition object with the target branch set
+        
+        Examples:
+            # Leader election with pre-vote extension
+            f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+            
+            # State machine command redirect behavior
+            f_redirect = registry.get_raft_feature("state_machine_command", "request_redirect")
+            
+            # Normal log replication
+            f_replication = registry.get_raft_feature("log_replication", "normal_replication")
+            
+            # SQLite storage compatibility
+            f_sqlite = registry.get_raft_feature("log_storage", "sqlite_compatibility")
+            
+            # Network partition scenarios
+            f_partition = registry.get_raft_feature("network_partition", "leader_isolation")
+        
+        Common Usage Pattern:
+            # Get feature definitions
+            f_used = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+            f_tested = registry.get_raft_feature("state_machine_command", "request_redirect")
+            
+            # Create feature specification
+            spec = dict(used=[f_used], tested=[f_tested])
+            
+            # Pass to test section
+            await cluster.test_trace.start_subtest("Test section name", features=spec)
+        
+        Note:
+            Do NOT pass the full dotted feature name as the first parameter.
+            ✗ Wrong:   registry.get_raft_feature("leader_election.all_yes_votes.with_pre_vote", "uses")
+            ✓ Correct: registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+        """
+        # API - Parameter validation to catch common mistakes
+        if "." in feature_category and branch_path in ["uses", "tests"]:
+            raise ValueError(
+                f"Likely API misuse detected!\n"
+                f"  You called: registry.get_raft_feature('{feature_category}', '{branch_path}')\n"
+                f"  This suggests you're using the old API pattern.\n"
+                f"  \n"
+                f"  ✗ Wrong:   registry.get_raft_feature('feature.branch.path', 'uses|tests')\n"
+                f"  ✓ Correct: registry.get_raft_feature('feature', 'branch.path')\n"
+                f"  \n"
+                f"  Example fix:\n"
+                f"    registry.get_raft_feature('{feature_category.split('.')[0]}', '{'.'.join(feature_category.split('.')[1:])}')"
+            )
+        
+        feat = self.features.get(feature_category, None)
         if not feat:
-            feat = self.add_feature(name)
+            feat = self.add_feature(feature_category)
         # We want to return a tuned feature definition, one that only has the requested branch elements.
         branch = feat.branches.get(branch_path)
         if branch is None:
