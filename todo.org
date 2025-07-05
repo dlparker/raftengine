@@ -5,30 +5,79 @@
 
    
 NOW!!!!
-1. Fix snapshot build sequence, log can move forward between start at operations and stop at role.
+
+1. Change Commit index to Applied index in all snapshot stuff
+   
+1. [ ] Document updates to reflect updated snapshot create logic:
+   1. Deck gets take_snap call await deck.take_snapshot(timeout) 
+   2. Deck does role stop (transfer if leader)
+   3. Deck collects log commit_index and term of that record
+   4. Deck calls pilot await pilot.create_snapshot(snap_index, snap_term)
+   5. Pilot creates the snapshot
+      1. In our test code it calls the operations class to do that
+      2. Operation class saves snapshot (in memory)
+   6. Pilot calls operations returns snapshot to deck 
+   7. Deck calls log to install snapshot
+      1. Saves snap_index, snap_term in db
+      2. Deletes all records up to an including snap_index
+   8. Deck returns snapshot to app code
+2. [ ] Clarify documentation about snapshot export
+   1. Follower recieves snapshot start message from leader (offset = 0)
+   2. Follower generates a SnapShot instance and calls PilotAPI.begin_stanshot_import,
+      which returns a SnapShotToolAPI
+   3. Follower uses tool to install first chunk
+   4. Follower replies to leader
+   5. Repeats installing chunks until message says "done"
+   6. Follower calls log_api install_snapshot
+   7. Log saves snapshot properties, then deletes all records up to and
+      including the snapshot index.
+   8. Follower reply implies that snapshot is installed and log trimmed.
+3. [ ] Clarify documentation about snapshot export
+   1. Leader code detects need to send snapshot to follower (why?)
+   2. Leader code retrieves snapshot from log, which is just index and term
+   3. Leader calls PilotAPI.begin_snapshot_export(snapshot)
+   4. Pilot implementation figures out how to find snapshot data, creates a SnapShotToolAPI
+	 to return to Leader.
+   5. Pilot uses tool to collect chunks of snapshot data and send to follower, repeating till
+      all sent.
+      
+      
+      
+      
+      
+	 
+
+3. [X]  Fix snapshot build sequence, log can move forward between start at operations and stop at role.
    Should be:
-   a. Deck gets take_snap call
-   b. Deck does role stop (transfer if leader)
-   c. Deck calls pilot take_snapshot
-   d. Pilot calls operations take_snapshot, returns snapshot to deck
-   e. Deck calls log to install snapshot
-   f. Deck returns snapshot to app code (not there yet, prolly callback)
+   1. Deck gets take_snap call await deck.take_snapshot(timeout) REMOVE the snapshot argument
+   2. Deck does role stop (transfer if leader)
+   3. Deck collects log index, term
+   4. Deck calls pilot await pilot.create_snapshot(last_index, last_term)
+   5. Pilot creates the snapshot, and in our example it calls the operations class to do that.
+   6. Pilot calls operations take_snapshot, returns updated snapshot to deck 
+   7. Deck calls log to install snapshot 
+   8. Deck returns snapshot to app code (not there yet, prolly callback)
+4. [ ] Change the logic for snapshot tool, make it requried, but supply a tool child
+   class that saves chunks to log, json encoding them if so configured, show
+   an example of how to use it.
+5. [ ] pUpdate documentation, including pumls. Simplest  way is to add a "snapshot_store"
+   and have tool call that instead of app db, then somehow document that the
+   snapshot_store can be the log db.
 
-
-1. [X] Add cluster config as term start message data, that ensures that new node joining a cluster
+6. [X] Add cluster config as term start message data, that ensures that new node joining a cluster
    with no config changes applied can look up the correct config in the last term start.
-2. [X] Add logic to follower to apply cluster config as present in first term start log record
-3. [X] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
+7. [X] Add logic to follower to apply cluster config as present in first term start log record
+8. [X] Plan a way to share changes to cluster config settings. Shouldn't need undo, so kind of an
    admin command, might want to generalize it that way so other commands are easy (e.g. logging control)
-4. [] build an example mangement interface for doing cluster ops such as config, snapshots.
-5. [] Think about serialization. Currently command and command replies have to be strings, which is yucky.
-   This could be fixed by providing an interface for serialize/deserialize but need to think about how
-   serializing messages and serializing log record contents are different. Maybe the log_api can accept
-   a seriailization object, and the message ops leave it to the Pilot? Fix the various run command
-   annotations and docs if done.
-6. [] Need to think about changing the Pilot and Deck api message functions to use something like
-   {msg_id: 10, payload: LONG_STRING} because it will be hard to implement reply_to functionality
-   if the message is just and encoded string. How to make it not need perisistence? Could use UUID.
+9. [] build an example mangement interface for doing cluster ops such as config, snapshots.
+10. [] Think about serialization. Currently command and command replies have to be strings, which is yucky.
+    This could be fixed by providing an interface for serialize/deserialize but need to think about how
+    serializing messages and serializing log record contents are different. Maybe the log_api can accept
+    a seriailization object, and the message ops leave it to the Pilot? Fix the various run command
+    annotations and docs if done.
+11. [] Need to think about changing the Pilot and Deck api message functions to use something like
+    {msg_id: 10, payload: LONG_STRING} because it will be hard to implement reply_to functionality
+    if the message is just and encoded string. How to make it not need perisistence? Could use UUID.
 
    
    

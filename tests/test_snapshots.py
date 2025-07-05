@@ -11,13 +11,14 @@ from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.deck_config import ClusterInitConfig
+from raftengine.api.snapshot_api import SnapShot
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.logging_ops import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.pausing_server import setup_sqlite_log
-from dev_tools.operations import DictTotalsOps, SnapShot
+from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
 #extra_logging = [dict(name=__name__, level="debug"),]
@@ -58,28 +59,32 @@ async def test_dict_ops():
             command = f'add {i} {random.randint(1,100)}'
             await fs1.process_command(command, i)
         assert len(ops1.totals) == 10
-        ss1 = await fs1.ops.take_snapshot()
+        last_applied = await fs1.log.get_applied_index()
+        last_rec  = await fs1.log.read(last_applied)
+        ss1 = await fs1.ops.create_snapshot(last_applied, last_rec.term)
         await fs1.log.install_snapshot(ss1)
         assert len(ops1.snap_data) == 10
-        assert await fs1.log.read(ss1.last_index) is None
+        assert await fs1.log.read(ss1.index) is None
         assert await fs1.log.get_first_index() is None
-        assert await fs1.log.read(ss1.last_index + 1) is None
-        assert await fs1.log.get_last_index() == ss1.last_index
+        assert await fs1.log.read(ss1.index + 1) is None
+        assert await fs1.log.get_last_index() == ss1.index
         assert await fs1.log.get_last_term() == 1
         assert len(ops1.snap_data) == 10
         assert len(ops1.snap_data) == 10
+
+        tool1 = SnapShotTool(fs1.ops, fs1.log, ss1)
         
         fs2 = FakeServer(2, logc)
         ops2 = fs2.ops
-        # this is what a pilot should do on a call to begin_snapshot_import
-        ss2 = await ops2.begin_snapshot_import(ss1.last_index, ss1.last_term)
+        ss2 = SnapShot(ss1.index, ss1.term)
+        tool2 = await ops2.begin_snapshot_import(ss2)
         
         offset = 0
         done = False
 
         while not done:
-            chunk, new_offset, done = await ss1.tool.get_snapshot_chunk(offset)
-            await ss2.tool.load_snapshot_chunk(chunk)
+            chunk, new_offset, done = await tool1.get_snapshot_chunk(offset)
+            await tool2.load_snapshot_chunk(chunk)
             offset = new_offset
         await fs2.log.install_snapshot(ss2)
         for key in ops1.totals:
@@ -117,19 +122,20 @@ async def test_snapshot_1(cluster_maker):
     assert await ts_1.log.read(last_index) is None
     assert await ts_1.log.get_first_index() is None
     assert await ts_1.log.read(last_index + 1) is None
-    assert await ts_1.log.get_last_index() == ts_1_ss.last_index
+    assert await ts_1.log.get_last_index() == ts_1_ss.index
     assert await ts_1.log.get_last_term() == 1
+    assert await ts_1.log.get_last_term() == ts_1_ss.term
 
+    tool1 = await ts_1.begin_snapshot_export(ts_1_ss)
     ts_4 = await cluster.add_node()
-    ts_4_ss = await ts_4.begin_snapshot_import(ts_1_ss.last_index, ts_1_ss.last_term)
-    tool_4 = ts_4_ss.tool
+    tool4 = await ts_4.begin_snapshot_import(ts_1_ss)
     offset = 0
     done = False
     while not done:
-        chunk, new_offset, done = await ts_1_ss.tool.get_snapshot_chunk(offset)
-        await tool_4.load_snapshot_chunk(chunk)
+        chunk, new_offset, done = await tool1.get_snapshot_chunk(offset)
+        await tool4.load_snapshot_chunk(chunk)
         offset = new_offset
-    await tool_4.apply_snapshot()
+    await tool4.apply_snapshot()
     assert ts_4.operations.totals == ts_1.operations.totals
     assert await ts_4.log.get_first_index() == None
     assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()
@@ -177,7 +183,7 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.read(last_index) is None
     assert await ts_2.log.get_first_index() is None
     assert await ts_2.log.read(last_index + 1) is None
-    assert await ts_2.log.get_last_index() == ts_2_ss.last_index
+    assert await ts_2.log.get_last_index() == ts_2_ss.index
     assert await ts_2.log.get_last_term() == 1
 
     await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
@@ -188,8 +194,8 @@ async def test_snapshot_2(cluster_maker):
     assert ts_2.deck.is_leader()
     assert ts_1.deck.is_leader() is False
     assert await ts_2.log.get_last_term() == 2
-    assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
-    assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 1
+    assert await ts_2.log.get_first_index() == ts_2_ss.index + 1
+    assert await ts_2.log.get_last_index() == ts_2_ss.index + 1
     term_start_rec = await ts_2.log.read()
     assert term_start_rec is not None
     assert term_start_rec.index == last_index + 1
@@ -197,8 +203,8 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.get_last_index() == last_index + 1
 
     command_result = await cluster.run_command("add 1 1", 1)
-    assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
-    assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 2
+    assert await ts_2.log.get_first_index() == ts_2_ss.index + 1
+    assert await ts_2.log.get_last_index() == ts_2_ss.index + 2
         
     # Now make sure that the message interceptors work for out of sync messages
 
@@ -275,21 +281,21 @@ async def test_snapshot_3(cluster_maker):
     # log should now have only the term start record
     assert await ts_1.log.read(last_index) is None
     assert await ts_1.log.get_first_index() == last_index + 1
-    assert await ts_1.log.get_last_index() == ts_1_ss.last_index + 1
+    assert await ts_1.log.get_last_index() == ts_1_ss.index + 1
     assert await ts_1.log.read(last_index + 1) is not None
     assert await ts_1.log.get_last_term() == 2
 
     assert await new_leader.log.read(last_index) is not None
     assert await new_leader.log.get_first_index() is not None
     assert await new_leader.log.read(last_index + 1) is not None
-    assert await new_leader.log.get_last_index() == ts_1_ss.last_index + 1
+    assert await new_leader.log.get_last_index() == ts_1_ss.index + 1
     assert await new_leader.log.get_last_term() == 2
 
     await cluster.test_trace.start_subtest("Node 1 has snapshot and empty log, {new_leader.uri} is leader, running command")
         
     command_result = await cluster.run_command("add 1 1", 1)
-    assert await ts_1.log.get_first_index() == ts_1_ss.last_index + 1
-    assert await ts_1.log.get_last_index() == ts_1_ss.last_index + 2
+    assert await ts_1.log.get_first_index() == ts_1_ss.index + 1
+    assert await ts_1.log.get_last_index() == ts_1_ss.index + 2
         
     await cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
     await new_leader.do_demote_and_handle()
@@ -372,7 +378,7 @@ async def test_snapshot_4(cluster_maker):
     assert await ts_2.log.read(last_index) is None
     assert await ts_2.log.get_first_index() is None
     assert await ts_2.log.read(last_index + 1) is None
-    assert await ts_2.log.get_last_index() == ts_2_ss.last_index
+    assert await ts_2.log.get_last_index() == ts_2_ss.index
     assert await ts_2.log.get_last_term() == 1
 
     await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
@@ -387,8 +393,8 @@ async def test_snapshot_4(cluster_maker):
     await cluster.deliver_all_pending()
     logger.debug(f"\nnode 2 leader\n")
     assert await ts_2.log.get_last_term() == 2
-    assert await ts_2.log.get_last_index() == ts_2_ss.last_index + 1
-    assert await ts_2.log.get_first_index() == ts_2_ss.last_index + 1
+    assert await ts_2.log.get_last_index() == ts_2_ss.index + 1
+    assert await ts_2.log.get_first_index() == ts_2_ss.index + 1
     term_start_rec = await ts_2.log.read()
     assert term_start_rec is not None
     assert term_start_rec.index == last_index + 1

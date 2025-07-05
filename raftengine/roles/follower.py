@@ -9,6 +9,8 @@ from raftengine.messages.request_vote import RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteResponseMessage
 from raftengine.roles.base_role import BaseRole
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp
+from raftengine.api.snapshot_api import SnapShot
+
 
 class Follower(BaseRole):
 
@@ -273,14 +275,16 @@ class Follower(BaseRole):
         if message.term == await self.log.get_term():
             if self.snapshot is None:
                 self.logger.debug("%s starting snapshot import %s", self.my_uri(), message)
-                self.snapshot = await self.deck.pilot.begin_snapshot_import(message.prevLogIndex, message.prevLogTerm)
+                self.snapshot =  SnapShot(message.prevLogIndex, message.prevLogTerm)
+                self.snapshot_tool = await self.deck.pilot.begin_snapshot_import(self.snapshot)
                 config = message.clusterConfig
                 await self.cluster_ops.update_cluster_config_from_json_string(config)
             self.logger.debug("%s importing snapshot chunk %s", self.my_uri(), message)
-            await self.snapshot.tool.load_snapshot_chunk(message.data)
+            await self.snapshot_tool.load_snapshot_chunk(message.data)
             if message.done:
                 self.logger.debug("%s applying imported snapshot %s", self.my_uri(), message)
-                await self.snapshot.tool.apply_snapshot()
+                await self.snapshot_tool.apply_snapshot()
                 self.snapshot = None
+                self.snapshot_tool = None
             await self.send_snapshot_response_message(message, True)
 

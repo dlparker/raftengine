@@ -109,11 +109,11 @@ class Leader(BaseRole):
 
     async def get_prev_record_id(self, this_index):
         snap = await self.log.get_snapshot()
-        if snap and this_index - 1 < snap.last_index + 1:
-            if snap.last_index == this_index - 1:
-                prevLogIndex = snap.last_index
-                prevLogTerm = snap.last_term
-            elif snap.last_index > this_index - 1:
+        if snap and this_index - 1 < snap.index + 1:
+            if snap.index == this_index - 1:
+                prevLogIndex = snap.index
+                prevLogTerm = snap.term
+            elif snap.index > this_index - 1:
                 return None, None
         else:
             if this_index > 1:
@@ -255,7 +255,7 @@ class Leader(BaseRole):
                 # that defines commit at the cluster level, and apply it
                 # if so.
                 snap = await self.log.get_snapshot()
-                if not snap or snap.last_index < tracker.matchIndex:
+                if not snap or snap.index < tracker.matchIndex:
                     log_rec = await self.log.read(tracker.matchIndex)
                     await self.record_commit_checker(log_rec)
             if tracker.matchIndex == await self.log.get_last_index():
@@ -287,7 +287,7 @@ class Leader(BaseRole):
         if prevLogIndex is None:
             # we must have a snapshot, so check
             snap = await self.log.get_snapshot()
-            if snap and snap.last_index >= send_index:
+            if snap and snap.index >= send_index:
                 # start the snapshot send process for this node
                 await self.start_snapshot_send(uri)
                 return
@@ -388,22 +388,24 @@ class Leader(BaseRole):
 
     async def start_snapshot_send(self, target_uri):
         tracker = await self.cluster_ops.tracker_for_follower(target_uri)
-        snap = await self.deck.pilot.begin_snapshot_export(await self.log.get_snapshot())
-        cursor = SnapShotCursor(target_uri, snap, 0, False)
+        snapshot = await self.log.get_snapshot()
+        snapshot_tool = await self.deck.pilot.begin_snapshot_export(snapshot)
+        cursor = SnapShotCursor(target_uri, snapshot, 0, False)
         tracker.sending_snapshot = cursor
+        tracker.snapshot_tool = snapshot_tool
         await self.snapshot_send(target_uri)
         
     async def snapshot_send(self, target_uri):
         tracker = await self.cluster_ops.tracker_for_follower(target_uri)
         ref = tracker.sending_snapshot
+        tool = tracker.snapshot_tool
         snap = ref.snapshot
-        tool = snap.tool
         chunk, new_offset, done = await tool.get_snapshot_chunk(ref.offset)
         message = SnapShotMessage(sender=self.my_uri(),
                                    receiver=target_uri,
                                    term=await self.log.get_term(),
-                                   prevLogIndex=snap.last_index,
-                                   prevLogTerm=snap.last_term,
+                                   prevLogIndex=snap.index,
+                                   prevLogTerm=snap.term,
                                    leaderId=self.my_uri(),
                                    offset=ref.offset,
                                    done=done,
@@ -421,8 +423,9 @@ class Leader(BaseRole):
             snap = tracker.sending_snapshot.snapshot
             if tracker.sending_snapshot.done and message.success:
                 tracker.sending_snapshot = None
-                tracker.nextIndex = snap.last_index + 1
-                tracker.matchIndex = snap.last_index 
+                tracker.snapshot_tool = None
+                tracker.nextIndex = snap.index + 1
+                tracker.matchIndex = snap.index 
                 await self.send_heartbeats(target_only=message.sender)
                 return
         await self.snapshot_send(message.sender)

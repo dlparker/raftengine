@@ -72,8 +72,8 @@ class MemoryLog(LogAPI):
         if len(self.entries) == 0:
             self.first_index = None
             if self.snapshot:
-                self.last_index = self.snapshot.last_index
-                self.last_term = self.snapshot.last_term
+                self.last_index = self.snapshot.index
+                self.last_term = self.snapshot.term
             else:
                 self.last_index = 0
                 self.last_term = 0
@@ -117,7 +117,7 @@ class MemoryLog(LogAPI):
             if entry.committed:
                 return entry.index
         if self.snapshot:
-            return self.snapshot.last_index
+            return self.snapshot.index
         return 0
 
     async def get_applied_index(self):
@@ -128,7 +128,7 @@ class MemoryLog(LogAPI):
             if entry.applied:
                 return entry.index
         if self.snapshot:
-            return self.snapshot.last_index
+            return self.snapshot.index
         return 0
     
     async def append_multi(self, entries: List[LogRec]) -> None:
@@ -187,8 +187,8 @@ class MemoryLog(LogAPI):
             self.entries = {}
             self.first_entry = 0
             if self.snapshot:
-                self.last_index = self.snapshot.last_index
-                self.last_term = self.snapshot.last_term
+                self.last_index = self.snapshot.index
+                self.last_term = self.snapshot.term
             else:
                 self.last_index = 0
                 self.last_term = 0
@@ -225,18 +225,15 @@ class MemoryLog(LogAPI):
     
     async def install_snapshot(self, snapshot:SnapShot):
         self.snapshot = snapshot
-        end_index = self.snapshot.last_index
+        end_index = self.snapshot.index
         await self.delete_ending_with(end_index)
-        self.last_term = max(self.snapshot.last_term, self.last_term)
-        self.last_index = max(self.snapshot.last_index, self.last_index)
-        if self.last_index > self.snapshot.last_index:
-            self.first_index = self.snapshot.last_index + 1
+        self.last_term = max(self.snapshot.term, self.last_term)
+        self.last_index = max(self.snapshot.index, self.last_index)
+        if self.last_index > self.snapshot.index:
+            self.first_index = self.snapshot.index + 1
         else:
             self.first_index = None
-    
+            
     async def get_snapshot(self):
         return self.snapshot
-    
-
-        
     

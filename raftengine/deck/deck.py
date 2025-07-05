@@ -276,7 +276,7 @@ class Deck(DeckAPI):
             await self.stop()
 
     # Part of API
-    async def take_snapshot(self, snapshot:SnapShot, timeout=2.0) -> SnapShot:
+    async def take_snapshot(self, timeout=2.0) -> SnapShot:
         if self.role.role_name == "LEADER":
             nodes = self.cluster_ops.get_cluster_node_ids()
             target = None
@@ -291,11 +291,14 @@ class Deck(DeckAPI):
             if self.role.role_name == "LEADER":
                 raise Exception("could not start snapshot, node is leader and transfer power failed")
         await self.role.stop()
-        shot = await snapshot.tool.take_snapshot()
-        await self.log.install_snapshot(shot)
+        index = await self.log.get_commit_index()
+        rec = await self.log.read(index)
+        term = rec.term
+        snapshot = await self.pilot.create_snapshot(index, term)
+        await self.log.install_snapshot(snapshot)
         self.role = Follower(self, self.cluster_ops)
         await self.role.start()
-        return shot
+        return snapshot
     
     # Part of API 
     async def exit_cluster(self, callback=None, timeout=10.0):

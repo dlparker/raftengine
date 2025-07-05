@@ -4,10 +4,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class SnapShot:
-    last_index:int
-    last_term:int
-    tool:Optional["SnapShotToolAPI"] = field(default=None)
-
+    index:int # This will be the index of the last committed record at snapshot time
+    term:int  # This will be the term of the last committed record
     
 class SnapShotToolAPI(abc.ABC):
 

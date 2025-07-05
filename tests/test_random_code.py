@@ -9,6 +9,7 @@ from typing import Optional
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from raftengine.messages.append_entries import AppendResponseMessage
 from dev_tools.sequences import SPartialCommand
+from raftengine.api.snapshot_api import SnapShot
 import time
 import json 
 
@@ -69,6 +70,10 @@ async def test_get_deck():
         async def begin_snapshot_export(self, snapshot):
             raise NotImplementedError
 
+        async def create_snapshot(self, index:int , term: int) -> SnapShot:
+            raise NotImplementedError
+
+        
     cls = get_deck_class()
     cc = ClusterInitConfig(node_uris=['foo1', 'foo2', 'foo3'],
                            heartbeat_period=1,

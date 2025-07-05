@@ -13,7 +13,7 @@ from raftengine.api.deck_config import ClusterInitConfig
 from raftengine.api.log_api import LogRec
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.types import ClusterSettings
-from raftengine.api.snapshot_api import SnapShot
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 
 
@@ -184,11 +184,15 @@ class PausingServer(PilotAPI):
             self.out_message_history.append(reply)
 
     # Part of PilotAPI
-    async def begin_snapshot_import(self, index, term) -> SnapShot:
-        return await self.operations.begin_snapshot_import(index, term)
+    async def create_snapshot(self, index:int , term: int) -> SnapShot:
+        return await self.operations.create_snapshot(index, term)
+    
+    # Part of PilotAPI
+    async def begin_snapshot_import(self, snapshot:SnapShot) -> SnapShotToolAPI:
+        return await self.operations.begin_snapshot_import(snapshot)
 
     # Part of PilotAPI
-    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShot:
+    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShotToolAPI:
         return await self.operations.begin_snapshot_export(snapshot)
 
     # Part of PilotAPI
@@ -218,8 +222,7 @@ class PausingServer(PilotAPI):
         return await self.deck.enable_timers(reset=reset)
 
     async def take_snapshot(self, timeout=2.0):
-        snapshot = await self.operations.begin_snapshot_build()
-        return await self.deck.take_snapshot(snapshot, timeout=timeout)
+        return await self.deck.take_snapshot(timeout=timeout)
     
     async def fake_command(self, op, value):
         last_index = await self.log.get_last_index()

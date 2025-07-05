@@ -9,7 +9,6 @@ class DictTotalsOps:
         self.server = server
         self.log = server.log
         self.totals = defaultdict(int)
-        self.snapshot_tool = SnapShotTool(self, server.log,)
         self.snapshot = None
         self.snap_data = []
         
@@ -28,29 +27,21 @@ class DictTotalsOps:
         logger.debug("command %s returning %s for slot %s no error", command, result, operand)
         return result, None
 
-    async def take_snapshot(self):
-        # a "real" state machine will need to do something to store
-        # the snap shot for export to other nodes, we just hold on to it since
-        # it has the data in it.
-        self.snapshot = await self.snapshot_tool.take_snapshot()
-        return self.snapshot
-
-    async def begin_snapshot_build(self) -> SnapShot:
-        last_applied = await self.log.get_applied_index()
-        rec = await self.log.read(last_applied)
-        self.snapshot = SnapShot(last_applied, rec.term)
-        self.snapshot.tool = SnapShotTool(self, self.log, self.snapshot)
-        return self.snapshot
-
-    async def begin_snapshot_import(self, index, term) -> SnapShot:
+    async def create_snapshot(self, index, term):
         self.snapshot = SnapShot(index, term)
         self.snapshot.tool = SnapShotTool(self, self.log, self.snapshot)
+        self.snap_data = []
+        for slot_name, slot_value in self.totals.items():
+            self.snap_data.append({slot_name: slot_value})
         return self.snapshot
+
+    async def begin_snapshot_import(self, snapshot) -> SnapShotToolAPI:
+        self.snapshot = snapshot
+        return SnapShotTool(self, self.log, self.snapshot)
     
     async def begin_snapshot_export(self, snapshot) -> SnapShot:
         self.snapshot = snapshot
-        self.snapshot.tool = SnapShotTool(self, self.log, self.snapshot)
-        return self.snapshot
+        return SnapShotTool(self, self.log, self.snapshot)
 
 class SnapShotTool(SnapShotToolAPI):
 
@@ -62,31 +53,20 @@ class SnapShotTool(SnapShotToolAPI):
         self.snapshot = snapshot
 
     async def load_snapshot_chunk(self, chunk):
-        for item in chunk:
-            self.ops.totals.update(json.loads(item))
+        for item in json.loads(chunk):
+            self.ops.totals.update(item)
     
     async def get_snapshot_chunk(self,  offset=0):
         done = False
         limit = offset + self.items_per_chunk
         if limit >= len(self.ops.snap_data):
             done = True
-        data = self.ops.snap_data[offset:limit + 1]
+        data = json.dumps(self.ops.snap_data[offset:limit + 1])
         return data, limit + 1, done
 
     async def apply_snapshot(self):
         await self.log.install_snapshot(self.snapshot)
 
-    # not part of the api, prolly not right place for it in realistic code, but works
-    # here to simplify path for testing
-    async def take_snapshot(self):
-        if not self.snapshot:
-            last_applied = await self.log.get_applied_index()
-            rec = await self.log.read(last_applied)
-            self.snapshot = SnapShot(last_applied, rec.term, self)
-        self.ops.snap_data = []
-        for slot_name, slot_value in self.ops.totals.items():
-            self.ops.snap_data.append(json.dumps({slot_name: slot_value}))
-        return self.snapshot
 
 class SimpleOps: # pragma: no cover
 

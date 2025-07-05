@@ -206,12 +206,9 @@ class DeckAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def take_snapshot(self, snapshot:SnapShot, timeout=2.0) -> SnapShot:
+    async def take_snapshot(self, timeout=2.0) -> SnapShot:
         """
-        This method causes the deck to run the snapshot process by making 
-        
-        consensus process. If you call this you should be aware of the impact
-        that it has on the cluster, obviously.
+        This method causes the deck to run the snapshot process.
 
         :rtype None:
         """

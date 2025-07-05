@@ -1,7 +1,7 @@
 import abc
 from typing import List, Any
 from raftengine.api.log_api import LogAPI
-from raftengine.api.snapshot_api import SnapShot
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 
 class PilotAPI(abc.ABC):
     """
@@ -140,23 +140,26 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def begin_snapshot_import(self, index:int, term:int) -> SnapShot:
+    async def begin_snapshot_import(self, snapshot:SnapShot) -> SnapShotToolAPI:
         """Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` when the raft leader
         has sent a message indicating that the target node should load a snapshot with
         the given log position and term. The Pilot implementation needs to know how
         to work with the application state machine to prepare for this load process.
 
-        This preparation is encapsulated in an instance of
-        :py:class:`raftengine.api.snapshot_api.SnapShot` containing a
-        reference to a instance of a user supplied implementation
-        of :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI`.
-        This is the return value.
+        The provided SnapShot instance indicates that last Raft log index record prior
+        that was applied to the state machine before the snapshot was created. There
+        is no expecation that this information will be relevant to how the snapshot is
+        stored by the application state machine and is provided just for clarity.
+
+        The application state machine needs to instantiate an implememtation
+        of :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` that can save the
+        snapshot data according to whatever scheme the application uses. 
 
         See :ref:`snapshot_process` for details
 
         Args:
-            index (int): The index of the last log entry that is to be replaces by the snapshot
-            term (int): The term of the last log entry that is to be replaces by the snapshot
+            index (int): The index of the last log entry that is to be replaced by the snapshot
+            term (int): The term of the last log entry that is to be replaced by the snapshot
 
         
         :rtype: SnapShot
@@ -165,31 +168,69 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShot:
+    async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShotToolAPI:
         """
 
         Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` as raft leader when
         a follower node needs to recieve and install a snapshot. The shapshot
-        has been retrived from the log, but it does not contain a reference
-        to the needed :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` implementation
-        instance.
-
-        This method should locate the actual snapshot data associated with the
-        provided :py:class:`raftengine.api.snapshot_api.SnapShot` instance and instantiate
-        a :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` instance that is prepared
-        to deliver chunks of snapshot data to the raft leader for transmission
-        to the follower.
+        properties have been retrived from the log and is supplied in case the PilotAPI
+        implemetation cares about them, although that is not likely. The
+        application state machine snapshot storage mechanism needs to be exposed to the
+        leader as and instance of an implememtation of
+        :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI`, which will allow the
+        leader to collection chunks of the stored snapshot data and send them to the
+        follower, where the follower will store them using its own instance of the
+        same tool implementation.
 
         See :ref:`snapshot_process` for the big picture
         
-        :param SnapShot snapshot: The partially filled in :py:class:`raftengine.api.snapshot_api.SnapShot` that was
-                                  retrieved from the log.
-        :rtype: SnapShot: A new or updated :py:class:`raftengine.api.snapshot_api.SnapShot` instance that
-                          has a fully prepared :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI`
-                          implementation instance.
+        :param SnapShot snapshot: denotes that index of the last record applied prior to snapshot
+                                  creation and the term of that record.
+        :rtype: SnapShot: In instance of a :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI`
+                          implementation that can deliver the snapshot data in chunks.
         """
         raise NotImplementedError
     
+    @abc.abstractmethod
+    async def create_snapshot(self, index:int , term: int) -> SnapShot:
+        """
+
+        Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` when
+        it is commanded to take a snapshot. The application state machine
+        that implements the PilotAPI must generate the data for the snapshot
+        and return a new :py:class:`raftengine.api.snapshot_api.SnapShot`
+        instance. The index will be the last committed log record index
+        and the term will be the term saved in that record. This marks
+        the last record to be included in the snapshot and makes
+        log equivalence checks available in a log that contains only
+        the snapshot and is otherwise empty.
+
+        Two options are available for storing the snapshot data. These
+        options are selected by either providing a
+        :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` instance
+        or not in the returned SnapShot. Either way the next step is
+        to call the log api "install_snapshot" method. The log will
+        behave differently depending on the "tool" property of the
+        SnapShot. 
+
+        If a tool is not supplied in the SnapShot, then the application
+        must provide persistence for the data directly,
+        ensuring that it can be retrieved in future when provided
+        with a matching SnapShot instance at a later time.
+
+        If the application wants the data to be stored by the
+        :py:class:`raftengine.api.log_api.LogAPI` implementaion,
+        then it should create a an implementation of
+        the :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI` API
+        that has access to whatever temporary storge contains the
+        snapshot data (more on that below) and place a reference
+        to an instance of that class in the "tool" property
+        of the SnapShot. The log instance will then collected the
+        data via the calls to the "get_snapshot_chunk" method of the tool
+        and it will persist the chunks for later retreval.
+
+        """
+        
     @abc.abstractmethod
     async def stop_commanded(self) -> None:
         """ This server has been commanded to stop raft operations, probably

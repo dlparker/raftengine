@@ -1,26 +1,25 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
+import random
 from pathlib import Path
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from dev_tools.sequences import SNormalElection, SNormalCommand
+import json
+
+import pytest
+
+from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
+from raftengine.messages.append_entries import AppendEntriesMessage
+from raftengine.api.log_api import LogRec
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
+from dev_tools.memory_log import MemoryLog
+from dev_tools.sqlite_log import SqliteLog
 from dev_tools.logging_ops import setup_logging
-from dev_tools.triggers import WhenElectionDone
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 
 setup_logging()
 logger = logging.getLogger("test_code")
 
 async def test_log_stuff():
-    from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
-    import json
-    from raftengine.messages.append_entries import AppendEntriesMessage
-    from dev_tools.memory_log import MemoryLog
-    from dev_tools.sqlite_log import SqliteLog
-    from raftengine.api.log_api import LogRec
     m_log = MemoryLog()
     m_log.start()
 
@@ -111,3 +110,27 @@ async def test_log_stuff():
     rec = await new_s_log.read(2)
     assert rec.index == 2
     assert rec.command == "add 2"
+
+
+class SnapShotTool(SnapShotToolAPI):
+
+    def __init__(self, snapshot, log, data):
+        self.snapshot = snapshot
+        self.log = log
+        self.data = data
+
+    async def load_snapshot_chunk(self, chunk):
+        self.data.append(json.loads(chunk))
+    
+    async def get_snapshot_chunk(self,  offset=0):
+        chunk = json.dumps(self.data[offset])
+        new_offset = offset + 1
+        done = False
+        if new_offset >= len(self.data):
+            done = True
+        return chunk, new_offset, done
+
+    async def apply_snapshot(self):
+        await self.log.install_snapshot(self.snapshot)
+
+

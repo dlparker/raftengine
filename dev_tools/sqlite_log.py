@@ -57,7 +57,7 @@ class Records:
         cursor.execute(sql)
         row = cursor.fetchone()
         if row:
-           self.snapshot = SnapShot(last_index=row['last_index'], last_term=row['last_term'])
+           self.snapshot = SnapShot(index=row['index'], term=row['term'])
         
     def close(self) -> None:
         if self.db is None:  # pragma: no cover
@@ -79,19 +79,18 @@ class Records:
         schema += "committed BOOLEAN," 
         schema += "applied BOOLEAN)" 
         cursor.execute(schema)
+
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER,"\
             " term INTEGER, voted_for TEXT)"
         cursor.execute(schema)
-        schema = f"CREATE TABLE if not exists snapshot " \
-            "(snap_id INTERGER primary key,"\
-            " last_index INTERGER NULL, last_term INTEGER NULL)" 
-        cursor.execute(schema)
+
         schema =  "CREATE TABLE if not exists nodes " 
         schema += "(uri TEXT PRIMARY KEY UNIQUE, " 
         schema += "is_adding BOOLEAN, " 
         schema += "is_removing BOOLEAN)" 
         cursor.execute(schema)
+
         schema =  "CREATE TABLE if not exists settings " 
         schema += "(the_index INTEGER PRIMARY KEY UNIQUE, " 
         schema += "heartbeat_period FLOAT, " 
@@ -102,6 +101,12 @@ class Records:
         schema += "use_check_quorum BOOLEAN, "
         schema += "use_dynamic_config BOOLEAN) "
         cursor.execute(schema)
+
+        schema = f"CREATE TABLE if not exists snapshot " \
+            "(snap_id INTERGER primary key,"\
+            " s_index INTERGER NULL, term INTEGER NULL)" 
+        cursor.execute(schema)
+
         self.db.commit()
         cursor.close()
                      
@@ -217,7 +222,7 @@ class Records:
         if rec_data is None:
             cursor.close()
             if self.snapshot:
-                return self.snapshot.last_index
+                return self.snapshot.index
             return 0
         cursor.close()
         return rec_data['rec_index']
@@ -232,7 +237,7 @@ class Records:
         if rec_data is None:
             cursor.close()
             if self.snapshot:
-                return self.snapshot.last_index
+                return self.snapshot.index
             return 0
         cursor.close()
         return rec_data['rec_index']
@@ -294,14 +299,34 @@ class Records:
         res = ClusterConfig(nodes=nodes, settings=settings)
         return res
 
-    def install_snapshot(self, snapshot):
+    def get_first_index(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if not self.snapshot:
+            if self.max_index > 0:
+                return 1
+            return None
+        if self.max_index > self.snapshot.index:
+            return self.snapshot.index + 1
+        return None
+
+    def get_last_index(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if not self.snapshot:
+            return self.max_index
+        return max(self.max_index, self.snapshot.index)
+    
+    async def install_snapshot(self, snapshot):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
         cursor = self.db.cursor()
-        sql = "replace into snapshot (snap_id, last_index, last_term) values (?,?,?)"
-        cursor.execute(sql, [1, snapshot.last_index, snapshot.last_term])
+        sql = "delete from snapshot"
+        cursor.execute(sql)
+        sql = "insert into snapshot (snap_id, s_index, term) values (?,?,?)"
+        cursor.execute(sql, [1, snapshot.index, snapshot.term])
         sql = "delete from records where rec_index <= ?"
-        cursor.execute(sql, [snapshot.last_index,])
+        cursor.execute(sql, [snapshot.index,])
         cursor.close()
         self.db.commit()
         self.snapshot = snapshot
@@ -311,24 +336,6 @@ class Records:
             self.open() # pragma: no cover
         return self.snapshot
 
-    def get_first_index(self):
-        if self.db is None: # pragma: no cover
-            self.open() # pragma: no cover
-        if not self.snapshot:
-            if self.max_index > 0:
-                return 1
-            return None
-        if self.max_index > self.snapshot.last_index:
-            return self.snapshot.last_index + 1
-        return None
-
-    def get_last_index(self):
-        if self.db is None: # pragma: no cover
-            self.open() # pragma: no cover
-        if not self.snapshot:
-            return self.max_index
-        return max(self.max_index, self.snapshot.last_index)
-    
 class SqliteLog(LogAPI):
 
     def __init__(self, filepath: os.PathLike):
@@ -428,7 +435,7 @@ class SqliteLog(LogAPI):
         if rec is None:
             snap = self.records.get_snapshot()
             if snap:
-                return snap.last_term
+                return snap.term
             return 0
         return rec.term
 
@@ -467,19 +474,18 @@ class SqliteLog(LogAPI):
             self.records.open() # pragma: no cover
         return self.records.get_cluster_config()
     
-    async def install_snapshot(self, snapshot:SnapShot):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
-        return self.records.install_snapshot(snapshot)
-
     async def get_first_index(self) -> int:
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         return self.records.get_first_index()
+
+    async def install_snapshot(self, snapshot:SnapShot):
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
+        return await self.records.install_snapshot(snapshot)
 
     async def get_snapshot(self) -> Optional[SnapShot]: 
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
         return self.records.get_snapshot()
 
-            

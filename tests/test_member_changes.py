@@ -11,6 +11,7 @@ from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogRec, RecordCode
 from raftengine.api.types import NodeRec, ClusterConfig, ClusterSettings
 from raftengine.deck.deck import Deck
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.sequences import SPartialElection
@@ -50,6 +51,10 @@ class PilotSim(PilotAPI):
 
     async def begin_snapshot_export(self, snapshot):
         raise NotImplementedError
+    
+    async def create_snapshot(self, index:int , term: int) -> SnapShot:
+        raise NotImplementedError
+
     
 async def test_member_change_messages(cluster_maker):
     """
