@@ -291,7 +291,7 @@ class Deck(DeckAPI):
             if self.role.role_name == "LEADER":
                 raise Exception("could not start snapshot, node is leader and transfer power failed")
         await self.role.stop()
-        index = await self.log.get_commit_index()
+        index = await self.log.get_applied_index()
         rec = await self.log.read(index)
         term = rec.term
         snapshot = await self.pilot.create_snapshot(index, term)
