@@ -14,17 +14,9 @@ participant "Follower Role" as role order 70 #Lightgreen
 app_core->deck: Start snapshot creation
 deck->role: Stop accepting raft messages, freezes log
 deck->log: Get last APPLIED index and term
-deck->pilot: Start take_snapshot (with index and term)
-create participant "SnapShotTool" as tool order 35 #Lightblue
-pilot->tool: Create 
-pilot->deck: Return snapshot tool
-deck->tool: Start take_snapshot
-tool->app_state: take_snapshot
-app_state->app_db: Save snapshot chunk
-app_state->app_db: Save snapshot chunk
-app_state->app_db: Save snapshot chunk
-app_state->app_db: Save snapshot chunk
-app_state->pilot: Return snapshot_record
+deck->pilot: Start create_snapshot (with index and term)
+pilot->app_state: Create Snapshot
+app_state->app_db: Save snapshot 
 pilot->deck: Return snapshot_record
 deck->log: Install snapshot, delete covered log records
 deck->role: Resume Raft ops

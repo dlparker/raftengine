@@ -3,6 +3,29 @@
 Snapshot Process
 ================
 
+Design Philosophy and Scope
+----------------------------
+
+Diego Ongaro's Raft thesis contains extensive discussions about various strategies for managing snapshots in distributed systems. However, the majority of this discussion concerns application design choices rather than the core elements of the Raft protocol itself that are required to support those choices.
+
+This library's snapshot implementation focuses on a specific variant of the possibilities outlined in the thesis, where:
+
+- The state machine is persistent (application data is stored durably)
+- The persisted snapshot data is small enough that snapshot propagation is not unduly slow
+- The emphasis is on maintaining proper Raft log state rather than providing comprehensive snapshot management features
+
+**Important Limitation**: The snapshot support provided by this library represents the minimum functionality needed to maintain proper Raft log state and protocol compliance. It does not provide the more sophisticated or specialized snapshot management approaches detailed in the thesis, such as:
+
+- Incremental snapshots
+- Background snapshot streaming
+- Complex snapshot compression strategies
+- Advanced snapshot scheduling mechanisms
+- Snapshot metadata management beyond basic index/term tracking
+
+Applications requiring these advanced snapshot features will need to implement them within their PilotAPI and SnapShotToolAPI implementations, building upon the basic framework provided by this library.
+
+For comprehensive coverage of snapshot design alternatives and their trade-offs, readers should consult Section 7 of Ongaro's thesis directly.
+
 Overview
 --------
 
@@ -22,8 +45,9 @@ the related raft operations via APIs in
 	 
    #. :py:class:`raftengine.api.pilot_api.PilotAPI`
       
-      #. :py:meth:`raftengine.api.pilot_api.PilotAPI.begin_snapshot_import` 
+      #. :py:meth:`raftengine.api.pilot_api.PilotAPI.create_snapshot` 
       #. :py:meth:`raftengine.api.pilot_api.PilotAPI.begin_snapshot_export`
+      #. :py:meth:`raftengine.api.pilot_api.PilotAPI.begin_snapshot_import` 
 	 
    #. :py:class:`raftengine.api.snapshot_api.SnapShotToolAPI`
 
@@ -50,12 +74,15 @@ to perform these operations.
 
 .. plantuml:: /_static/diagrams/snapshot_component.puml
    :caption: Suggested components for implementing APIs used in snapshot process.
-
+   :scale: 100%
+	   
+	     
 Create/Store Sequence
 ---------------------
 
 .. plantuml:: /_static/diagrams/take_snapshot.puml
    :caption: Sequence for generating and storing a snapshot locally
+   :scale: 100%
 
 This sequence shows how the ``App Server Core`` triggers snapshot creation, with the ``SnapShotTool`` coordinating with the ``State Machine`` and ``App Storage`` to save the application state, which is then installed in the ``Raft Log`` by the ``Deck``.
 
@@ -64,6 +91,7 @@ Export Sequence
 
 .. plantuml:: /_static/diagrams/snapshot_export.puml
    :caption: Sequence for exporting a snapshot to a lagging follower
+   :scale: 100%
 
 When a ``Follower Node``’s log is behind (detected via an ``AppendEntries`` mismatch), the ``Leader Role`` initiates snapshot export. The ``Pilot`` and ``SnapShotTool`` retrieve the snapshot from the ``Raft Log`` and send chunks to the follower using ``InstallSnapshot`` RPCs.
 
@@ -72,6 +100,7 @@ Import Sequence
 
 .. plantuml:: /_static/diagrams/snapshot_import.puml
    :caption: Sequence for importing a snapshot by a follower
+   :scale: 100%
 
 A ``Follower Role`` receiving an ``InstallSnapshot`` RPC uses the ``Pilot`` and ``SnapShotTool`` to apply snapshot chunks to ``App Storage`` and install the snapshot in the ``Raft Log``, updating the application state via the ``State Machine``.
 
@@ -80,6 +109,7 @@ Transfer Sequence Summary
 
 .. plantuml:: /_static/diagrams/snapshot_transfer_summary.puml
    :caption: Summary of snapshot transfer from leader to follower
+   :scale: 100%
 
 This high-level view shows the ``Leader`` with a snapshot and the ``Follower`` with a full log, highlighting the key message traffic (``AppendEntries``, ``InstallSnapshot``) that results in the follower installing the snapshot.
 
