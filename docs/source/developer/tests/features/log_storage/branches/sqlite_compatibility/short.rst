@@ -1,0 +1,1 @@
+SQLite Log Storage Compatibility
