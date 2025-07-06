@@ -3,7 +3,7 @@ import json
 from decimal import Decimal
 from datetime import datetime, date, timedelta
 from src.transports.json_helpers import BankJSONEncoder, bank_json_decoder, bank_json_dumps, bank_json_loads
-from src.base.datatypes import AccountType
+from src.base.datatypes import AccountType, Customer, Account, Transaction, Statement
 
 
 class TestJSONSerialization:
@@ -201,3 +201,57 @@ class TestJSONSerialization:
         assert isinstance(deserialized["args"]["account_type"], AccountType)
         assert deserialized["args"]["from_account_id"] == 1
         assert deserialized["args"]["to_account_id"] == 2
+    
+    def test_customer_dataclass_serialization(self):
+        """Test Customer dataclass serialization and deserialization"""
+        customer = Customer(
+            cust_id=123,
+            first_name="Alice",
+            last_name="Smith",
+            address="456 Oak Ave",
+            accounts=[1, 2],
+            create_time=datetime(2024, 1, 1, 12, 0, 0),
+            update_time=datetime(2024, 1, 2, 14, 30, 0)
+        )
+        
+        # Serialize
+        json_str = bank_json_dumps(customer)
+        
+        # Deserialize
+        result = bank_json_loads(json_str)
+        
+        # Verify
+        assert isinstance(result, Customer)
+        assert result.cust_id == 123
+        assert result.first_name == "Alice"
+        assert result.last_name == "Smith"
+        assert result.address == "456 Oak Ave"
+        assert result.accounts == [1, 2]
+        assert result.create_time == datetime(2024, 1, 1, 12, 0, 0)
+        assert result.update_time == datetime(2024, 1, 2, 14, 30, 0)
+    
+    def test_account_dataclass_serialization(self):
+        """Test Account dataclass serialization and deserialization"""
+        account = Account(
+            account_id=456,
+            account_type=AccountType.SAVINGS,
+            customer_id="Smith,Alice",
+            balance=Decimal('1250.75'),
+            create_time=datetime(2024, 1, 1, 12, 0, 0),
+            update_time=datetime(2024, 1, 2, 14, 30, 0)
+        )
+        
+        # Serialize
+        json_str = bank_json_dumps(account)
+        
+        # Deserialize
+        result = bank_json_loads(json_str)
+        
+        # Verify
+        assert isinstance(result, Account)
+        assert result.account_id == 456
+        assert result.account_type == AccountType.SAVINGS
+        assert result.customer_id == "Smith,Alice"
+        assert result.balance == Decimal('1250.75')
+        assert result.create_time == datetime(2024, 1, 1, 12, 0, 0)
+        assert result.update_time == datetime(2024, 1, 2, 14, 30, 0)

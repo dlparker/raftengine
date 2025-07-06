@@ -2,13 +2,16 @@ import json
 from typing import Any
 from datetime import timedelta, date, datetime
 from decimal import Decimal
-from ..base.datatypes import AccountType, CommandType
+from dataclasses import asdict, is_dataclass
+from ..base.datatypes import AccountType, CommandType, Customer, Account, Transaction, Statement
 
 
 def _preprocess_for_json(obj):
-    """Recursively preprocess objects to handle StrEnum before JSON serialization"""
+    """Recursively preprocess objects to handle StrEnum and dataclasses before JSON serialization"""
     if isinstance(obj, (AccountType, CommandType)):
         return {"__type__": type(obj).__name__, "value": obj.value}
+    elif is_dataclass(obj):
+        return {"__type__": type(obj).__name__, "value": asdict(obj)}
     elif isinstance(obj, dict):
         return {k: _preprocess_for_json(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -24,6 +27,8 @@ class BankJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (AccountType, CommandType)):
             return {"__type__": type(obj).__name__, "value": obj.value}
+        elif is_dataclass(obj):
+            return {"__type__": type(obj).__name__, "value": asdict(obj)}
         elif isinstance(obj, datetime):
             return {"__type__": "datetime", "value": obj.isoformat()}
         elif isinstance(obj, date):
@@ -36,7 +41,7 @@ class BankJSONEncoder(json.JSONEncoder):
 
 
 def bank_json_decoder(dct):
-    """Custom JSON decoder that reconstructs datetime, date, timedelta, and Decimal objects"""
+    """Custom JSON decoder that reconstructs datetime, date, timedelta, Decimal, and dataclass objects"""
     if "__type__" in dct:
         type_name = dct["__type__"]
         value = dct["value"]
@@ -53,6 +58,14 @@ def bank_json_decoder(dct):
             return AccountType(value)
         elif type_name == "CommandType":
             return CommandType(value)
+        elif type_name == "Customer":
+            return Customer(**value)
+        elif type_name == "Account":
+            return Account(**value)
+        elif type_name == "Transaction":
+            return Transaction(**value)
+        elif type_name == "Statement":
+            return Statement(**value)
     
     return dct
 

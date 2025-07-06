@@ -33,9 +33,8 @@ class ASClient:
         data = await self.reader.read(msg_len)
         if not data:
             raise Exception('server gone!')
-        # Process the line
-        data = await self.reader.read(1000)
-        response = bank_json_loads(data)
+        # Process the response
+        response = bank_json_loads(data.decode())
         return response
 
     async def close(self):
@@ -78,10 +77,10 @@ class ASClientFollower:
             request = bank_json_loads(data.decode())
             result = await self.do_command(request['command_name'], request['args'])
             response = bank_json_dumps(result).encode()
-            count = len(response)
+            count = str(len(response))
             self.writer.write(f"{count:20s}".encode())
             self.writer.write(response)
-            await writer.drain()
+            await self.writer.drain()
     
         self.writer.close()
         await self.writer.wait_closed()
