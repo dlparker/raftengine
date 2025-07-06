@@ -296,7 +296,11 @@ async def double_leader_inner(cluster, discard):
     #ts_2.operations.dump_state = True
     #ts_3.operations.dump_state = True
     await cluster.test_trace.define_test("Testing command processing with dual leaders", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Normal election to establish initial leader
+    f_normal_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    spec = dict(used=[f_normal_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -305,8 +309,12 @@ async def double_leader_inner(cluster, discard):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
+    
+    # Section 2: Normal command processing
+    f_normal_command = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    spec = dict(used=[f_normal_command], tested=[])
     logger.info('---------!!!!!!! starting comms')
-    await cluster.test_trace.start_subtest("Running command normally")
+    await cluster.test_trace.start_subtest("Running command normally", features=spec)
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
@@ -314,7 +322,12 @@ async def double_leader_inner(cluster, discard):
 
     logger.info('---------!!!!!!! stopping auto comms')
     await cluster.stop_auto_comms()
-    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ")
+    
+    # Section 3: Network partition and new election
+    f_leader_isolation = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_partition_election = registry.get_raft_feature("leader_election", "partition_recovery")
+    spec = dict(used=[f_leader_isolation, f_partition_election], tested=[])
+    await cluster.test_trace.start_subtest("Simlating network/speed problems for leader and starting election at node 2 ", features=spec)
     ts_1.block_network()
     logger.info('------------------ isolated leader, starting new election at node 2')
     await ts_2.start_campaign(authorized=True)
@@ -333,7 +346,9 @@ async def double_leader_inner(cluster, discard):
         # Will discard the messages that were blocked 
         # so it looks like the network was broken
         # during that time.
-        await cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period")
+        f_message_loss = registry.get_raft_feature("network_partition", "message_loss_recovery")
+        spec = dict(used=[], tested=[f_message_loss])
+        await cluster.test_trace.start_subtest("Letting old leader rejoin network, but losing any messages sent during problem period", features=spec)
         logger.info('------------------ Telling old leader to rejoin network with messages lost')
         ts_1.unblock_network()
         logger.info('---------!!!!!!! starting comms')
@@ -353,7 +368,9 @@ async def double_leader_inner(cluster, discard):
         # that Raft is meant to handle. They might be unlikely,
         # but they are possible.
         logger.info('------------------ Telling old leader to rejoin network with messages still in queues')
-        await cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages")
+        f_delayed_delivery = registry.get_raft_feature("network_partition", "delayed_message_delivery")
+        spec = dict(used=[], tested=[f_delayed_delivery])
+        await cluster.test_trace.start_subtest("Letting old leader rejoin network and delivering all lost messages", features=spec)
 
         ts_1.unblock_network(deliver=True)
         await cluster.deliver_all_pending()
@@ -361,7 +378,10 @@ async def double_leader_inner(cluster, discard):
     logger.debug('------------------ Command AppendEntries should get rejected -')
 
     
-    await cluster.test_trace.start_subtest("New leader sending heartbeats")
+    # Section 5: Leader recovery via heartbeats  
+    f_heartbeat_recovery = registry.get_raft_feature("log_replication", "heartbeat_only")
+    spec = dict(used=[f_heartbeat_recovery], tested=[])
+    await cluster.test_trace.start_subtest("New leader sending heartbeats", features=spec)
     logger.info('\n\n sending heartbeat, so old leader can catch up date\n\n')
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()

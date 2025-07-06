@@ -29,7 +29,7 @@ TEST_COPY_MAPPING = {
     'test_random_code': 'docs/source/developer/tests/random_code'
 }
 
-def copy_test_files_to_docs(args):
+def copy_test_files_to_docs(verbose):
     """Copy generated test RST and PlantUML files to docs tree"""
     base_dir = Path(__file__).parent.parent.resolve()
     
@@ -46,7 +46,7 @@ def copy_test_files_to_docs(args):
                 dest_file = rst_dest_dir / rst_file.name
                 shutil.copy2(rst_file, dest_file)
                 copied_files.append(str(dest_file.relative_to(base_dir)))
-                if args.verbose:
+                if verbose:
                     print(f"Copied RST: {rst_file.name} -> {dest_file.relative_to(base_dir)}")
         
         # Copy PlantUML files
@@ -59,7 +59,7 @@ def copy_test_files_to_docs(args):
                 dest_file = puml_dest_dir / puml_file.name
                 shutil.copy2(puml_file, dest_file)
                 copied_files.append(str(dest_file.relative_to(base_dir)))
-                if args.verbose:
+                if verbose:
                     print(f"Copied PlantUML: {puml_file.name} -> {dest_file.relative_to(base_dir)}")
     
     if copied_files:
@@ -69,18 +69,11 @@ def copy_test_files_to_docs(args):
     
     return copied_files
 
-def main():
-    parser = argparse.ArgumentParser(description='Build documentation from test traces')
-    parser.add_argument('--copy-to-docs', action='store_true', 
-                       help='Copy generated RST and PlantUML files to docs tree')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Verbose output showing copied files')
-    
-    args = parser.parse_args()
-    
+def do_ops(copy_to_docs, verbose):
     tests = registry.feature_db.get_test_records()
     for test in tests:
-        print(f"{test['path']}, {test['name']}")
+        if verbose:
+            print(f"{test['path']}, {test['name']}")
         jfilepath = TraceOutput.trace_file_path("json", test['path'], test['name'])
         if not jfilepath.exists():
             print("!"*120)
@@ -102,7 +95,8 @@ def main():
                 print(f"can't write puml file for section {section['section_index']} prolly no data")
                 print("!"*120)
                 continue
-            print(f"wrote puml for section {section['section_index']}")
+            if verbose:
+                print(f"wrote puml for section {section['section_index']}")
 
         for tfm in registry.get_test_to_feature_maps():
             if tfm.test_id_path == Path(test['path']).stem  + '.' + test['name']:
@@ -112,18 +106,28 @@ def main():
                     registry.build_feature_branch_file(branch)
     
     # Optionally copy files to docs tree
-    if args.copy_to_docs:
+    if copy_to_docs:
         print("\n" + "="*60)
         print("COPYING GENERATED FILES TO DOCS TREE")
         print("="*60)
-        copied_files = copy_test_files_to_docs(args)
+        copied_files = copy_test_files_to_docs(verbose)
         
         if copied_files:
             print(f"\nSUCCESS: Copied {len(copied_files)} files to docs tree")
-            if not args.verbose:
+            if not verbose:
                 print("Use --verbose to see individual file operations")
         else:
             print("\nNo files were copied")
-            
+
+def main():
+    parser = argparse.ArgumentParser(description='Build documentation from test traces')
+    parser.add_argument('--copy-to-docs', action='store_true', 
+                       help='Copy generated RST and PlantUML files to docs tree')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Verbose output showing copied files')
+    
+    args = parser.parse_args()
+    do_ops(args.copy_to_docs, args.verbose)
+    
 if __name__=="__main__":
     main()

@@ -44,15 +44,10 @@ This is a Python implementation of a Raft consensus algorithm library designed t
 ./run_tests.sh tests/test_elections_1.py::TestElections1::test_election_1
 ```
 
-### Running Development Tool Tests
 
 ```bash
-# Run dev_tools tests with coverage
+# Run tests with coverage only of dev_tools sources, to identify dead code in dev_tools
 ./test_tools.sh
-
-# Run specific dev_tools test
-./test_tools.sh dev_tools_tests/test_message_formatters.py
-```
 
 ### Building Documentation
 
