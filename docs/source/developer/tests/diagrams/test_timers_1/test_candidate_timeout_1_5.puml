@@ -18,20 +18,26 @@ title Raft Consensus Sequence (test_candidate_timeout_1 Section 5)
 participant "Node 1" as n1 order 10 #Lightgreen
 participant "Node 2" as n2 order 20 #Lightgreen
 participant "Node 3" as n3 order 30 #Lightgreen
-n2 -> n1: RequestVote(term=4, lastIndex=1, lastTerm=4)
-note left of n1: Term: 4
+n2 -> n1: RequestVote(term=3, lastIndex=1, lastTerm=3)
+note left of n1: Term: 3
 n1 -> n2: VoteResponse(granted=True)
-note right of n2: Log: index=2, term=4
+note right of n2: Log: index=2, term=3
 n2 -> n2: Becomes LEADER
-n2 -> n3: RequestVote(term=4, lastIndex=1, lastTerm=4)
-note right of n3: Term: 4
+n2 -> n3: RequestVote(term=3, lastIndex=1, lastTerm=3)
+note right of n3: Term: 3
 n3 -> n2: VoteResponse(granted=True)
-n2 -> n1: AppendEntries(term=4, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
-note left of n1: Log: index=2, term=4
+n2 -> n1: AppendEntries(term=3, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
+note left of n1: Log: index=2, term=3
 n1 -> n2: AppendResponse(success=True, maxIndex=2)
 note right of n2: Commit: index=2
-n2 -> n3: AppendEntries(term=4, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
-note right of n3: Log: index=2, term=4
+n2 -> n3: AppendEntries(term=3, prevIndex=1, prevTerm=1, 1 entry, commitIndex=0)
+note right of n3: Log: index=2, term=3
+n3 -> n2: AppendResponse(success=True, maxIndex=2)
+n2 -> n1: AppendEntries(term=3, prevIndex=2, prevTerm=3, heartbeat, commitIndex=2)
+note left of n1: Commit: index=2
+n1 -> n2: AppendResponse(success=True, maxIndex=2)
+n2 -> n3: AppendEntries(term=3, prevIndex=2, prevTerm=3, heartbeat, commitIndex=2)
+note right of n3: Commit: index=2
 n3 -> n2: AppendResponse(success=True, maxIndex=2)
 
 legend right

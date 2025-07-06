@@ -15,11 +15,6 @@ skinparam legend {
 }
 title Raft Consensus Sequence (test_candidate_timeout_1 Section 4)
 
-participant "Node 1" as n1 order 10 #Lightgreen
-participant "Node 2" as n2 order 20 #Lightgreen
-participant "Node 3" as n3 order 30 #Lightgreen
-n2 -> n1: RequestVote(term=3, lastIndex=1, lastTerm=3)
-n2 -> n3: RequestVote(term=3, lastIndex=1, lastTerm=3)
 
 legend right
   <#GhostWhite,#GhostWhite>|      |= __Legend__ |

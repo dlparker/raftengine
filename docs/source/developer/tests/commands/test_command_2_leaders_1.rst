@@ -47,6 +47,35 @@ Section 1: Normal election
 ==========================
 
 
+Raft features used:
+
+.. include:: /developer/tests/features/leader_election/short.rst
+
+.. collapse:: leader_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/features.rst
+
+   .. include:: /developer/tests/features/leader_election/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/short.rst
+
+.. collapse:: leader_election/branches/all_yes_votes.with_pre_vote details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/all_yes_votes.with_pre_vote/narative.rst
+
+
 
 
 .. collapse:: section 1 trace table (click to toggle view)
@@ -123,6 +152,26 @@ Section 2: Running command normally
 ===================================
 
 
+Raft features used:
+
+.. include:: /developer/tests/features/state_machine_command/short.rst
+
+.. collapse:: state_machine_command details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/narative.rst
+
+
+.. include..  :: /developer/tests/features/state_machine_command/branches/all_in_sync/short.rst
+
+.. collapse:: state_machine_command/branches/all_in_sync details (click to toggle view)
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/features.rst
+
+   .. include:: /developer/tests/features/state_machine_command/branches/all_in_sync/narative.rst
+
+
 
 
 .. collapse:: section 2 trace table (click to toggle view)
@@ -169,6 +218,44 @@ Section 2: Running command normally
 
 Section 3: Simlating network/speed problems for leader and starting election at node 2 
 =======================================================================================
+
+
+Raft features used:
+
+.. include:: /developer/tests/features/network_partition/short.rst
+
+.. collapse:: network_partition details (click to toggle view)
+
+   .. include:: /developer/tests/features/network_partition/features.rst
+
+   .. include:: /developer/tests/features/network_partition/narative.rst
+
+
+.. include..  :: /developer/tests/features/network_partition/branches/leader_isolation/short.rst
+
+.. collapse:: network_partition/branches/leader_isolation details (click to toggle view)
+
+   .. include:: /developer/tests/features/network_partition/branches/leader_isolation/features.rst
+
+   .. include:: /developer/tests/features/network_partition/branches/leader_isolation/narative.rst
+
+
+.. include:: /developer/tests/features/leader_election/short.rst
+
+.. collapse:: leader_election details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/features.rst
+
+   .. include:: /developer/tests/features/leader_election/narative.rst
+
+
+.. include..  :: /developer/tests/features/leader_election/branches/partition_recovery/short.rst
+
+.. collapse:: leader_election/branches/partition_recovery details (click to toggle view)
+
+   .. include:: /developer/tests/features/leader_election/branches/partition_recovery/features.rst
+
+   .. include:: /developer/tests/features/leader_election/branches/partition_recovery/narative.rst
 
 
 
@@ -247,6 +334,26 @@ Section 4: Letting old leader rejoin network, but losing any messages sent durin
 ================================================================================================
 
 
+Raft features tested:
+
+.. include:: /developer/tests/features/network_partition/short.rst
+
+.. collapse:: network_partition details (click to toggle view)
+
+   .. include:: /developer/tests/features/network_partition/features.rst
+
+   .. include:: /developer/tests/features/network_partition/narative.rst
+
+
+.. include..  :: /developer/tests/features/network_partition/branches/message_loss_recovery/short.rst
+
+.. collapse:: network_partition/branches/message_loss_recovery details (click to toggle view)
+
+   .. include:: /developer/tests/features/network_partition/branches/message_loss_recovery/features.rst
+
+   .. include:: /developer/tests/features/network_partition/branches/message_loss_recovery/narative.rst
+
+
 
 
 .. collapse:: section 4 trace table (click to toggle view)
@@ -273,6 +380,26 @@ Section 4: Letting old leader rejoin network, but losing any messages sent durin
 
 Section 5: New leader sending heartbeats
 ========================================
+
+
+Raft features used:
+
+.. include:: /developer/tests/features/log_replication/short.rst
+
+.. collapse:: log_replication details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/features.rst
+
+   .. include:: /developer/tests/features/log_replication/narative.rst
+
+
+.. include..  :: /developer/tests/features/log_replication/branches/heartbeat_only/short.rst
+
+.. collapse:: log_replication/branches/heartbeat_only details (click to toggle view)
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/features.rst
+
+   .. include:: /developer/tests/features/log_replication/branches/heartbeat_only/narative.rst
 
 
 

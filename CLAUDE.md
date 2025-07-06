@@ -55,9 +55,6 @@ This is a Python implementation of a Raft consensus algorithm library designed t
 # Build all documentation from test traces
 python dev_tools/build_docs.py
 
-# Build feature reports
-python dev_tools/build_feature_reports.py
-```
 
 ### Working with Test Traces
 
