@@ -3,10 +3,10 @@ import tempfile
 import os
 from decimal import Decimal
 from datetime import timedelta, date
-from src.client import Client
-from src.proxy import ServerProxy, ServerWrapper
-from src.server import Server
-from src.datatypes import AccountType, Customer, Account
+from src.base.client import Client
+from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.base.server import Server
+from src.base.datatypes import AccountType, Customer, Account
 
 
 class TestIntegrationFlow:

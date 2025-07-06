@@ -10,6 +10,24 @@ class AccountType(StrEnum):
     CHECKING = auto()
 
 
+class CommandType(StrEnum):
+    """Command types for remote procedure calls. 
+    
+    These values must exactly match the method names on the Server class
+    that are to be executed as remote commands through the proxy layer.
+    """
+    CREATE_CUSTOMER = auto()
+    CREATE_ACCOUNT = auto()
+    DEPOSIT = auto()
+    WITHDRAW = auto()
+    TRANSFER = auto()
+    CASH_CHECK = auto()
+    LIST_ACCOUNTS = auto()
+    GET_ACCOUNTS = auto()
+    LIST_STATEMENTS = auto()
+    ADVANCE_TIME = auto()
+
+
 @dataclass
 class Customer:
     cust_id: int

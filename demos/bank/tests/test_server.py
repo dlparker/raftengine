@@ -3,8 +3,8 @@ import tempfile
 import os
 from datetime import datetime, timedelta, date
 from decimal import Decimal
-from src.server import Server
-from src.datatypes import AccountType
+from src.base.server import Server
+from src.base.datatypes import AccountType
 
 
 @pytest.fixture

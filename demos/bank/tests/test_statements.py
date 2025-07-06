@@ -3,10 +3,10 @@ import tempfile
 import os
 from datetime import datetime, timedelta, date
 from decimal import Decimal
-from src.server import Server
-from src.proxy import ServerProxy, ServerWrapper
-from src.client import Client
-from src.datatypes import AccountType
+from src.base.server import Server
+from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.base.client import Client
+from src.base.datatypes import AccountType
 
 
 @pytest.fixture

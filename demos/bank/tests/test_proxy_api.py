@@ -3,11 +3,11 @@ from abc import ABC
 from decimal import Decimal
 from datetime import timedelta, date
 from unittest.mock import AsyncMock
-from src.proxy_api import ProxyAPI
-from src.proxy import ServerProxy, ServerWrapper
-from src.server import Server
-from src.client import Client
-from src.datatypes import AccountType, Customer, Account
+from src.base.proxy_api import ProxyAPI
+from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.base.server import Server
+from src.base.client import Client
+from src.base.datatypes import AccountType, Customer, Account
 
 
 class TestProxyAPI:
