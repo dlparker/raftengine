@@ -1,6 +1,0 @@
-* Action: ACTION-001
-- Description: Add tracing for leader election events in the Raft library.
-- Prompt: "Modify the Raft library to log detailed tracing information for leader election events. Ensure logs include timestamps and node IDs. Output should be written to the existing trace file."
-- Success Criteria: Trace logs include leader election events in tests; no test failures introduced.
-- Dependencies: None.
-- Estimated Complexity: Medium.
