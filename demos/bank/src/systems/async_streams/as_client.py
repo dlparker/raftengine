@@ -5,9 +5,8 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.base.client import Client
-from src.transports.astream.proxy import ASClient, ServerProxy
-from src.systems.direct.one_process import test_banking
+from src.systems.get_client import get_astream_client
+from src.systems.test_banking import test_banking
 
 async def main():
     parser = argparse.ArgumentParser(description='Async Streams Banking Client')
@@ -23,14 +22,16 @@ async def main():
     print(f"=== Async Streams Banking Client ===")
     print(f"Connecting to: {args.host}:{args.port}")
     
-    as_client = ASClient(args.host, args.port)
-    proxy = ServerProxy(as_client)
-    client = Client(proxy)
+    client, cleanup = get_astream_client(args.host, args.port)
     
     try:
         await test_banking(client)
     finally:
-        await as_client.close()
+        if cleanup:
+            if asyncio.iscoroutinefunction(cleanup):
+                await cleanup()
+            else:
+                cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
