@@ -1,0 +1,4 @@
+prompt_toolkit==3.0.51
+rich==14.0.0
+click==8.2.1grpcio>=1.60.0
+grpcio-tools>=1.60.0

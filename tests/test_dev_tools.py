@@ -11,12 +11,12 @@ import pytest
 from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
 from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.api.log_api import LogRec
-from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import LogController
 
-setup_logging()
+log_control = LogController()
+log_control.set_default_level('debug')
 logger = logging.getLogger("test_code")
 
 async def test_log_stuff():
@@ -42,7 +42,9 @@ async def test_log_stuff():
         assert await log.get_commit_index() == 0
         assert await log.get_term() == 0
         assert  await log.read() is None
-        
+
+        logger.debug("setting term")
+        logger.error("setting term")
         await log.set_term(1)
         [rec_1, rec_2] = await log.append_multi([rec1, rec2])
         assert await log.get_last_index() == 2
@@ -112,25 +114,5 @@ async def test_log_stuff():
     assert rec.command == "add 2"
 
 
-class SnapShotTool(SnapShotToolAPI):
-
-    def __init__(self, snapshot, log, data):
-        self.snapshot = snapshot
-        self.log = log
-        self.data = data
-
-    async def load_snapshot_chunk(self, chunk):
-        self.data.append(json.loads(chunk))
-    
-    async def get_snapshot_chunk(self,  offset=0):
-        chunk = json.dumps(self.data[offset])
-        new_offset = offset + 1
-        done = False
-        if new_offset >= len(self.data):
-            done = True
-        return chunk, new_offset, done
-
-    async def apply_snapshot(self):
-        await self.log.install_snapshot(self.snapshot)
 
 

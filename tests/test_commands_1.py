@@ -16,16 +16,14 @@ from dev_tools.triggers import WhenInMessageCount, WhenElectionDone
 from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.logging_ops import setup_logging, log_config
+#from dev_tools.logging_ops import setup_logging, log_config
 from dev_tools.features import FeatureRegistry
+from dev_tools.log_control import LogController, TemporaryLogControl
 
-#extra_logging = [dict(name="test_code", level="debug"), dict(name="Triggers", level="debug")]
-#extra_logging = [dict(name="test_code", level="debug"), ]
-#log_config = setup_logging(extra_logging, default_level="debug")
-default_level="error"
-#default_level="debug"
-log_config = setup_logging(default_level=default_level)
+log_control = LogController()
+log_control.set_default_level('info')
 logger = logging.getLogger("test_code")
+
 registry = FeatureRegistry.get_registry()
 
 async def test_command_1(cluster_maker):
@@ -778,29 +776,16 @@ async def test_long_catchup(cluster_maker):
     # Watching debug level logging for a bunch of commands is painful,
     # so lets temporarily reduce the log messages to only those from the state classes
     # and put it back when we are done
-    global log_config
-    old_levels = dict()
-
-    trim_loggers = True
-    if trim_loggers:
-        for logger_name, spec in log_config['loggers'].items():
-            logger = logging.getLogger(logger_name)
-            if  logger_name == "test_commands_1" or logger_name == "Leader" or logger_name == "Follower":
-                continue
-            old_levels[logger_name] = logger.level
-            logger.setLevel('ERROR')
-
-    for i in range(loop_limit):
-        command_result = await cluster.run_command("add 1", 1)
-    total = ts_1.operations.total
-    assert ts_2.operations.total == total
-    assert ts_3.operations.total != total
+    logger.warning('------------------------ Surpressing logging')
+    keep_active = ["test_commands_1", "Leader", "Follower"]
+    with TemporaryLogControl(log_control, keep_active, 'ERROR') as tmplog:
+        for i in range(loop_limit):
+            command_result = await cluster.run_command("add 1", 1)
+        total = ts_1.operations.total
+        assert ts_2.operations.total == total
+        assert ts_3.operations.total != total
+    logger.warning('------------------------ Unsurpressing logging')
     # restore the loggers
-    if trim_loggers:
-        for logger_name in old_levels:
-            logger = logging.getLogger(logger_name)
-            old_value = old_levels[logger_name]
-            logger.setLevel(old_value)
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
     await cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up")

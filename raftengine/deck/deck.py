@@ -47,6 +47,7 @@ class Deck(DeckAPI):
         self.exiting_cluster = False
         self.exit_result = None
         self.exit_waiter_handle = None
+        self.stopped = False
         
     # Part of API
     async def start(self):
@@ -341,7 +342,8 @@ class Deck(DeckAPI):
             self.exiting_cluster = False
             await asyncio.sleep(0.001)
             self.exit_waiter_handle = None
-            
+        self.stopped = True
+        
     async def stop_role(self):
         await self.role.stop()
         if self.role_async_handle:
