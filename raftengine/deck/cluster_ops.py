@@ -113,7 +113,7 @@ class ClusterOps:
         """
         Called by leader to start the process of adding or removing
         a node. This may be in response to a MembershipChangeMessage
-        or to a direct call via the DeckAPI.
+        or to a indirect call via the DeckAPI.
         """
         command = None
         if op == ChangeOp.remove:

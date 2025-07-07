@@ -2,7 +2,7 @@
 import asyncio
 from decimal import Decimal
 from src.base.server import Server
-from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.transports.indirect.proxy import ServerProxy, ServerWrapper
 from src.base.client import Client
 from src.base.datatypes import AccountType
 

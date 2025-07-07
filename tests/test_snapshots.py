@@ -162,7 +162,7 @@ async def test_snapshot_2(cluster_maker):
     
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by indirect fake path")
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.
@@ -251,7 +251,7 @@ async def test_snapshot_3(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by direct fake path")
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by indirect fake path")
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.

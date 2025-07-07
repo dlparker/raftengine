@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import timedelta, date
 from unittest.mock import AsyncMock
 from src.base.proxy_api import ProxyAPI
-from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.transports.indirect.proxy import ServerProxy, ServerWrapper
 from src.base.server import Server
 from src.base.client import Client
 from src.base.datatypes import AccountType, Customer, Account

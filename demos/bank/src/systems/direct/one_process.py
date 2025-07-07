@@ -14,7 +14,7 @@ from src.base.client import Client
 
 
 async def test_banking(client):
-    """Test all banking operations through direct access"""
+    """Test all banking operations through indirect access"""
     
     
     try:

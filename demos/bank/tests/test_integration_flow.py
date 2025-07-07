@@ -4,7 +4,7 @@ import os
 from decimal import Decimal
 from datetime import timedelta, date
 from src.base.client import Client
-from src.transports.direct.proxy import ServerProxy, ServerWrapper
+from src.transports.indirect.proxy import ServerProxy, ServerWrapper
 from src.base.server import Server
 from src.base.datatypes import AccountType, Customer, Account
 

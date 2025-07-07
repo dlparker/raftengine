@@ -299,7 +299,7 @@ async def test_add_follower_2(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs")
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
@@ -385,7 +385,7 @@ async def test_add_follower_2_rounds_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via direct insert")
+    await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via indirect insert")
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -628,7 +628,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via direct acceess to logs")
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs")
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
