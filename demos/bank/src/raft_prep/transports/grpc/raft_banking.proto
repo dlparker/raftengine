@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package raft_banking;
+
+import "google/protobuf/timestamp.proto";
+
+// Account type enumeration
+enum AccountType {
+    ACCOUNT_TYPE_UNSPECIFIED = 0;
+    ACCOUNT_TYPE_SAVINGS = 1;
+    ACCOUNT_TYPE_CHECKING = 2;
+}
+
+// Customer message
+message Customer {
+    int32 cust_id = 1;
+    string first_name = 2;
+    string last_name = 3;
+    string address = 4;
+    repeated int32 accounts = 5;
+    google.protobuf.Timestamp create_time = 6;
+    google.protobuf.Timestamp update_time = 7;
+}
+
+// Account message
+message Account {
+    int32 account_id = 1;
+    AccountType account_type = 2;
+    string customer_id = 3;
+    string balance = 4;  // Using string to preserve Decimal precision
+    google.protobuf.Timestamp create_time = 5;
+    google.protobuf.Timestamp update_time = 6;
+}
+
+// Transaction message
+message Transaction {
+    int32 account_id = 1;
+    string starting_balance = 2;
+    string ending_balance = 3;
+    string change = 4;
+    google.protobuf.Timestamp transaction_time = 5;
+}
+
+// Statement message
+message Statement {
+    int32 account_id = 1;
+    string statement_date = 2;  // ISO date string
+    string starting_balance = 3;
+    string ending_balance = 4;
+    string total_credits = 5;
+    string total_debits = 6;
+}
+
+// Raft message for consensus protocol communication
+message RaftMessage {
+    string message_type = 1;    // e.g., "AppendEntries", "RequestVote", etc.
+    string message_data = 2;    // JSON serialized message content
+}
+
+// Request/Response messages for each banking operation
+
+// CreateCustomer
+message CreateCustomerRequest {
+    string first_name = 1;
+    string last_name = 2;
+    string address = 3;
+}
+
+message CreateCustomerResponse {
+    Customer customer = 1;
+}
+
+// CreateAccount
+message CreateAccountRequest {
+    string customer_id = 1;
+    AccountType account_type = 2;
+}
+
+message CreateAccountResponse {
+    Account account = 1;
+}
+
+// Deposit
+message DepositRequest {
+    int32 account_id = 1;
+    string amount = 2;
+}
+
+message DepositResponse {
+    string balance = 1;
+}
+
+// Withdraw
+message WithdrawRequest {
+    int32 account_id = 1;
+    string amount = 2;
+}
+
+message WithdrawResponse {
+    string balance = 1;
+}
+
+// Transfer
+message TransferRequest {
+    int32 from_account_id = 1;
+    int32 to_account_id = 2;
+    string amount = 3;
+}
+
+message TransferResponse {
+    string from_balance = 1;
+    string to_balance = 2;
+}
+
+// CashCheck
+message CashCheckRequest {
+    int32 account_id = 1;
+    string amount = 2;
+}
+
+message CashCheckResponse {
+    string balance = 1;
+}
+
+// ListAccounts
+message ListAccountsRequest {
+    // Empty - lists all accounts
+}
+
+message ListAccountsResponse {
+    repeated Account accounts = 1;
+}
+
+// GetAccounts
+message GetAccountsRequest {
+    string customer_id = 1;
+}
+
+message GetAccountsResponse {
+    repeated int32 account_ids = 1;
+}
+
+// ListStatements
+message ListStatementsRequest {
+    int32 account_id = 1;
+}
+
+message ListStatementsResponse {
+    repeated string statement_dates = 1;  // ISO date strings
+}
+
+// AdvanceTime
+message AdvanceTimeRequest {
+    int64 delta_seconds = 1;  // timedelta as seconds
+}
+
+message AdvanceTimeResponse {
+    // Empty response
+}
+
+// RaftMessage RPC
+message RaftMessageRequest {
+    RaftMessage in_message = 1;
+}
+
+message RaftMessageResponse {
+    RaftMessage out_message = 1;
+}
+
+// Banking Service Definition
+service BankingService {
+    rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse);
+    rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+    rpc Deposit(DepositRequest) returns (DepositResponse);
+    rpc Withdraw(WithdrawRequest) returns (WithdrawResponse);
+    rpc Transfer(TransferRequest) returns (TransferResponse);
+    rpc CashCheck(CashCheckRequest) returns (CashCheckResponse);
+    rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+    rpc GetAccounts(GetAccountsRequest) returns (GetAccountsResponse);
+    rpc ListStatements(ListStatementsRequest) returns (ListStatementsResponse);
+    rpc AdvanceTime(AdvanceTimeRequest) returns (AdvanceTimeResponse);
+    rpc RaftMessage(RaftMessageRequest) returns (RaftMessageResponse);
+}
