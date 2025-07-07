@@ -6,8 +6,8 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.systems.get_client import get_grpc_client
-from src.systems.test_banking import test_banking
+from src.no_raft.transports.grpc.client import get_grpc_client
+from src.base.test_banking import test_banking
 
 
 async def main():

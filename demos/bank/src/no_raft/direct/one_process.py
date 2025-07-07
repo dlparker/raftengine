@@ -5,9 +5,22 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.systems.get_client import get_direct_client
-from src.systems.test_banking import test_banking
-    
+from src.base.server import Server
+
+from src.base.client import Client
+from src.base.server import Server
+
+top_dir = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(top_dir))
+from src.base.test_banking import test_banking
+
+def get_direct_client(database_file: str):
+    """Create a direct client that bypasses any proxy/transport layer"""
+    server = Server(db_file=database_file)
+    client = Client(server)
+    def fake():
+        pass
+    return client, fake  # No cleanup needed
 async def main():
     parser = argparse.ArgumentParser(description='Direct Banking Demo')
     parser.add_argument('--database', '-d', 
@@ -32,5 +45,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-      
+
 

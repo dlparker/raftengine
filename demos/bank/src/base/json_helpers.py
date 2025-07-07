@@ -3,7 +3,7 @@ from typing import Any
 from datetime import timedelta, date, datetime
 from decimal import Decimal
 from dataclasses import asdict, is_dataclass
-from ..base.datatypes import AccountType, CommandType, Customer, Account, Transaction, Statement
+from src.base.datatypes import AccountType, CommandType, Customer, Account, Transaction, Statement
 
 
 def _preprocess_for_json(obj):

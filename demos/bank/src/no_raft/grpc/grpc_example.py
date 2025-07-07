@@ -17,7 +17,7 @@ import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
 from src.base.client import Client
-from src.transports.grpc.client import GrpcServerProxy
+from src.no_raft.transports import GrpcServerProxy
 from src.base.datatypes import AccountType
 
 

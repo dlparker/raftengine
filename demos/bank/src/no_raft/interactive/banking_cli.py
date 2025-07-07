@@ -21,7 +21,9 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 
-from src.systems.get_client import get_direct_client, get_astream_client, get_grpc_client
+from src.no_raft.transports.grpc.client import get_grpc_client
+from src.no_raft.direct.one_process import get_direct_client
+from src.no_raft.transports.async_streams.proxy import get_astream_client
 from src.base.datatypes import AccountType
 
 
@@ -208,7 +210,7 @@ class BankingCLI:
         help_table.add_column("Usage", style="dim")
         
         commands = [
-            ("connect", "Connect to transport", "connect direct <db_file> | astream <host> <port> | grpc <host> <port>"),
+            ("connect", "Connect to transport", "connect direct <db_file> | async_streams <host> <port> | grpc <host> <port>"),
             ("disconnect", "Disconnect from current transport", "disconnect"),
             ("status", "Show connection status", "status"),
             ("create-customer", "Create a new customer", "create-customer <first_name> <last_name> <address>"),
@@ -232,7 +234,7 @@ class BankingCLI:
     async def cmd_connect(self, args):
         """Handle connect command"""
         if not args:
-            self.console.print("[red]Usage:[/red] connect direct <db_file> | astream <host> <port> | grpc <host> <port>")
+            self.console.print("[red]Usage:[/red] connect direct <db_file> | async_streams <host> <port> | grpc <host> <port>")
             return
         
         transport = args[0].lower()
@@ -244,9 +246,9 @@ class BankingCLI:
                 db_file = args[1]
             await self.connect_direct(db_file)
         
-        elif transport == "astream":
+        elif transport == "async_streams":
             if len(args) < 3:
-                self.console.print("[red]Usage:[/red] connect astream <host> <port>")
+                self.console.print("[red]Usage:[/red] connect async_streams <host> <port>")
                 return
             host = args[1]
             try:

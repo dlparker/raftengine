@@ -3,10 +3,11 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal
 from typing import List, Optional, Dict
 
+from src.base.client import Client
 from . import banking_pb2
 from . import banking_pb2_grpc
-from ...base.datatypes import Customer, Account, AccountType
-from ...base.proxy_api import ProxyAPI
+from src.base.datatypes import Customer, Account, AccountType
+from src.base.proxy_api import ProxyAPI
 
 
 class GrpcServerProxy(ProxyAPI):
@@ -215,3 +216,15 @@ class GrpcServerProxy(ProxyAPI):
             self.channel.close()
             self.channel = None
             self.stub = None
+
+
+def get_grpc_client(host: str, port: int):
+    """Create a gRPC client"""
+    server_address = f"{host}:{port}"
+    proxy = GrpcServerProxy(server_address)
+    client = Client(proxy)
+
+    def cleanup():
+        proxy.close()
+
+    return client, cleanup

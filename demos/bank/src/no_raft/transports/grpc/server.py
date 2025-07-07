@@ -3,11 +3,10 @@ import grpc
 from concurrent import futures
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
 
 from . import banking_pb2
 from . import banking_pb2_grpc
-from ...base.datatypes import Customer, Account, AccountType
+from src.base.datatypes import Customer, Account, AccountType
 
 
 class BankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):

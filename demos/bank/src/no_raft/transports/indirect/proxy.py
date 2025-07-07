@@ -2,9 +2,9 @@ from operator import methodcaller
 from typing import List, Optional, Dict, Any
 from datetime import timedelta, date
 from decimal import Decimal
-from ...base.datatypes import Customer, Account, AccountType, CommandType
-from ...base.proxy_api import ProxyAPI
-from ..json_helpers import bank_json_dumps, bank_json_loads
+from src.base.datatypes import Customer, Account, AccountType, CommandType
+from src.base.proxy_api import ProxyAPI
+from src.base.json_helpers import bank_json_dumps, bank_json_loads
 
 class ServerProxy(ProxyAPI):
 
@@ -69,13 +69,13 @@ class ServerWrapper:
         
     async def do_command(self, command_name: CommandType, argsdict: Dict[str, Any]) -> Any:
         send_data = dict(command_name=command_name, args=argsdict)
-        # pretend this is a call to raft library "run_command" method
+        # pretend this is a call to raft_bits library "run_command" method
         # so that command gets logged, replicated, committed and then applied by calling us back
         result = await self.fake_raft_replicate(bank_json_dumps(send_data))
         return result
 
     async def fake_raft_replicate(self, data):
-        # this is sort of a simulation of receiving a raft log replication "apply" operation
+        # this is sort of a simulation of receiving a raft_bits log replication "apply" operation
         # once a command has been "committed". 
         request = bank_json_loads(data)
         result = await self.really_do_command(request['command_name'], request['args'])

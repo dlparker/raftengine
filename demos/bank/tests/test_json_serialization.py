@@ -1,9 +1,8 @@
-import pytest
 import json
 from decimal import Decimal
 from datetime import datetime, date, timedelta
-from src.transports.json_helpers import BankJSONEncoder, bank_json_decoder, bank_json_dumps, bank_json_loads
-from src.base.datatypes import AccountType, Customer, Account, Transaction, Statement
+from src.base.json_helpers import BankJSONEncoder, bank_json_decoder, bank_json_dumps, bank_json_loads
+from src.base.datatypes import AccountType, Customer, Account
 
 
 class TestJSONSerialization:

@@ -27,7 +27,6 @@ class CommandType(StrEnum):
     LIST_STATEMENTS = auto()
     ADVANCE_TIME = auto()
 
-
 @dataclass
 class Customer:
     cust_id: int

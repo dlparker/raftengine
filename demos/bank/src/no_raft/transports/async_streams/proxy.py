@@ -1,12 +1,13 @@
 import asyncio
-from enum import StrEnum, auto
 from operator import methodcaller
 from typing import List, Optional, Dict, Any
 from datetime import timedelta, date
 from decimal import Decimal
-from ...base.datatypes import Customer, Account, AccountType, CommandType
-from ...base.proxy_api import ProxyAPI
-from ..json_helpers import bank_json_dumps, bank_json_loads
+
+from src.base.client import Client
+from src.base.datatypes import Customer, Account, AccountType, CommandType
+from src.base.proxy_api import ProxyAPI
+from src.base.json_helpers import bank_json_dumps, bank_json_loads
 
 
 class ASClient:
@@ -147,4 +148,13 @@ class ServerProxy(ProxyAPI):
         return await self.as_client.do_command(CommandType.ADVANCE_TIME, args)
 
 
+def get_astream_client(host: str, port: int):
+    """Create an async streams client"""
+    as_client = ASClient(host, port)
+    proxy = ServerProxy(as_client)
+    client = Client(proxy)
 
+    async def cleanup():
+        await as_client.close()
+
+    return client, cleanup

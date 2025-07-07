@@ -22,7 +22,7 @@ pip install click prompt-toolkit rich
 Start the interactive CLI:
 
 ```bash
-python src/systems/interactive/banking_cli.py
+python src/no_raft/interactive/banking_cli.py
 ```
 
 **Note**: This CLI uses async prompt handling to work properly with the async banking operations. The CLI will connect to a direct database by default.
@@ -30,7 +30,7 @@ python src/systems/interactive/banking_cli.py
 Or with a custom database:
 
 ```bash
-python src/systems/interactive/banking_cli.py --database my_bank.db
+python src/no_raft/interactive/banking_cli.py --database my_bank.db
 ```
 
 ## Available Commands

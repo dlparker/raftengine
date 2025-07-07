@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import asyncio
 from src.base.server import Server
-from src.transports.astream.proxy import ASServer
+from src.no_raft.transports import ASServer
 
 async def main():
     server = Server()

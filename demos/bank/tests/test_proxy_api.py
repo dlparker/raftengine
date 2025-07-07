@@ -1,10 +1,10 @@
 import pytest
 from abc import ABC
 from decimal import Decimal
-from datetime import timedelta, date
+from datetime import timedelta
 from unittest.mock import AsyncMock
 from src.base.proxy_api import ProxyAPI
-from src.transports.indirect.proxy import ServerProxy, ServerWrapper
+from src.no_raft.transports.indirect.proxy import ServerProxy, ServerWrapper
 from src.base.server import Server
 from src.base.client import Client
 from src.base.datatypes import AccountType, Customer, Account

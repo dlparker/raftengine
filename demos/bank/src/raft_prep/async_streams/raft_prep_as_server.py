@@ -5,11 +5,10 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.base.server import Server
-from src.transports.astream.proxy import ASServer
+from src.raft_prep.transports.async_streams.proxy import RaftServer, RaftASServer
 
 async def main():
-    parser = argparse.ArgumentParser(description='Async Streams Banking Server')
+    parser = argparse.ArgumentParser(description='Async Streams Raft Banking Server')
     parser.add_argument('--host', '-H', 
                        default='127.0.0.1',
                        help='Server host address (default: 127.0.0.1)')
@@ -22,13 +21,13 @@ async def main():
     
     args = parser.parse_args()
     
-    print(f"=== Async Streams Banking Server ===")
+    print(f"=== Async Streams Raft Banking Server ===")
     print(f"Host: {args.host}")
     print(f"Port: {args.port}")
     print(f"Database: {args.database}")
     
-    server = Server(db_file=args.database)
-    as_server = ASServer(server, args.host, args.port)
+    server = RaftServer(db_file=args.database)
+    as_server = RaftASServer(server, args.host, args.port)
     
     sock_server = await asyncio.start_server(
         as_server.handle_client, args.host, args.port)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Client factory functions for different transport systems"""
+"""Client factory functions for different transport no_raft"""
 from pathlib import Path
 import sys
 
@@ -9,8 +9,10 @@ sys.path.insert(0, str(top_dir))
 
 from src.base.client import Client
 from src.base.server import Server
-from src.transports.astream.proxy import ASClient, ServerProxy as ASServerProxy
-from src.transports.grpc.client import GrpcServerProxy
+from src.no_raft.transports import ASClient, ServerProxy as ASServerProxy
+from src.no_raft.transports import RaftServerProxy as RaftASServerProxy
+from src.no_raft.transports import RaftClient as RaftASClient
+from src.no_raft.transports import GrpcServerProxy
 
 
 def get_direct_client(database_file: str):
@@ -25,6 +27,18 @@ def get_astream_client(host: str, port: int):
     as_client = ASClient(host, port)
     proxy = ASServerProxy(as_client)
     client = Client(proxy)
+    
+    async def cleanup():
+        await as_client.close()
+    
+    return client, cleanup
+
+
+def get_raft_astream_client(host: str, port: int):
+    """Create an async streams client"""
+    as_client = ASClient(host, port)
+    proxy = RaftASServerProxy(as_client)
+    client = RaftASClient(proxy)
     
     async def cleanup():
         await as_client.close()

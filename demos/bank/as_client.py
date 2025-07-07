@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import asyncio
 from src.base.client import Client
-from src.transports.astream.proxy import ASClient, ServerProxy
+from src.no_raft.transports import ASClient, ServerProxy
 
 async def main():
     as_client = ASClient('localhost', 9999)

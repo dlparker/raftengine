@@ -2,9 +2,9 @@ import pytest
 import tempfile
 import os
 from decimal import Decimal
-from datetime import timedelta, date
+from datetime import timedelta
 from src.base.client import Client
-from src.transports.indirect.proxy import ServerProxy, ServerWrapper
+from src.no_raft.transports.indirect.proxy import ServerProxy, ServerWrapper
 from src.base.server import Server
 from src.base.datatypes import AccountType, Customer, Account
 

@@ -7,7 +7,7 @@ import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
 from src.base.server import Server
-from src.transports.grpc.server import serve_banking_server
+from src.no_raft.transports.grpc.server import serve_banking_server
 
 
 def main():
