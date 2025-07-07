@@ -35,11 +35,29 @@ class ASClient:
         if not data:
             raise Exception('server gone!')
         # Process the response
-        response = bank_json_loads(data.decode())
-        return response
+        response_data = bank_json_loads(data.decode())
+        
+        if response_data.get("success", True):
+            return response_data.get("result")
+        else:
+            # Recreate the exception on the client side
+            error_type = response_data.get("error_type", "Exception")
+            error_message = response_data.get("error", "Unknown error")
+            
+            # Map known exception types
+            if error_type == "ValueError":
+                raise ValueError(error_message)
+            elif error_type == "KeyError":
+                raise KeyError(error_message)
+            elif error_type == "TypeError":
+                raise TypeError(error_message)
+            else:
+                raise Exception(f"{error_type}: {error_message}")
 
     async def close(self):
-        self.writer.close()
+        if self.writer:
+            self.writer.close()
+            await self.writer.wait_closed()
 
 class ASServer:
 
@@ -76,8 +94,13 @@ class ASClientFollower:
                 break
             # Process the line
             request = bank_json_loads(data.decode())
-            result = await self.do_command(request['command_name'], request['args'])
-            response = bank_json_dumps(result).encode()
+            try:
+                result = await self.do_command(request['command_name'], request['args'])
+                response_data = {"success": True, "result": result}
+            except Exception as e:
+                response_data = {"success": False, "error": str(e), "error_type": type(e).__name__}
+            
+            response = bank_json_dumps(response_data).encode()
             count = str(len(response))
             self.writer.write(f"{count:20s}".encode())
             self.writer.write(response)

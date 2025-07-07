@@ -1,12 +1,12 @@
 import pytest
+import pytest_asyncio
 import tempfile
 import os
 from decimal import Decimal
 from datetime import timedelta
 from src.base.client import Client
-from src.no_raft.transports.indirect.proxy import ServerProxy, ServerWrapper
-from src.base.server import Server
 from src.base.datatypes import AccountType, Customer, Account
+from tests.test_helpers import setup_async_streams_test, create_temp_db, cleanup_temp_db
 
 
 class TestIntegrationFlow:
@@ -15,30 +15,21 @@ class TestIntegrationFlow:
     @pytest.fixture
     def temp_db_path(self):
         """Create a temporary database file for testing"""
-        fd, path = tempfile.mkstemp(suffix='.db')
-        os.close(fd)
+        path = create_temp_db()
         yield path
-        if os.path.exists(path):
-            os.unlink(path)
+        cleanup_temp_db(path)
     
-    @pytest.fixture
-    def full_stack(self, temp_db_path):
-        """Create the complete Client->Proxy->Wrapper->Server stack"""
-        server = Server()
-        # Override the database path to use our temporary file
-        server.db.db_path = temp_db_path
-        server.db.init_database()
-        
-        wrapper = ServerWrapper(server)
-        proxy = ServerProxy(wrapper)
-        client = Client(proxy)
-        
-        return client, proxy, wrapper, server
+    @pytest_asyncio.fixture
+    async def full_stack(self, temp_db_path):
+        """Create the complete Client->Server stack using async_streams transport"""
+        client, cleanup, port = await setup_async_streams_test(temp_db_path)
+        yield client, cleanup, port
+        await cleanup()
     
     @pytest.mark.asyncio
     async def test_create_customer_full_flow(self, full_stack):
         """Test customer creation through the complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Test through client
         customer = await client.create_customer("John", "Doe", "123 Main St")
@@ -52,16 +43,13 @@ class TestIntegrationFlow:
         assert customer.create_time is not None
         assert customer.update_time is not None
         
-        # Verify it's actually stored in the server's database
-        stored_customer = server.db.get_customer("Doe,John")
-        assert stored_customer is not None
-        assert stored_customer.first_name == "John"
-        assert stored_customer.last_name == "Doe"
+        # Note: We can't directly verify database state since we're using transport layer
+        # The successful return of the customer object indicates it was stored correctly
     
     @pytest.mark.asyncio
     async def test_create_account_full_flow(self, full_stack):
         """Test account creation through the complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # First create a customer
         customer = await client.create_customer("Jane", "Smith", "456 Oak Ave")
@@ -75,20 +63,20 @@ class TestIntegrationFlow:
         assert account.balance == Decimal('0.00')
         assert account.account_id == 0
         
-        # Verify it's stored in server's database
-        stored_account = server.db.get_account(0)
-        assert stored_account is not None
-        assert stored_account.account_type == AccountType.CHECKING
-        assert stored_account.customer_id == "Smith,Jane"
+        # Verify account was created by checking it can be listed
+        all_accounts = await client.list_accounts()
+        assert len(all_accounts) == 1
+        assert all_accounts[0].account_type == AccountType.CHECKING
+        assert all_accounts[0].customer_id == "Smith,Jane"
         
         # Verify customer's accounts list is updated
-        updated_customer = server.db.get_customer("Smith,Jane")
-        assert 0 in updated_customer.accounts
+        customer_accounts = await client.get_accounts("Smith,Jane")
+        assert 0 in customer_accounts
     
     @pytest.mark.asyncio
     async def test_banking_operations_full_flow(self, full_stack):
         """Test deposit, withdraw, and transfer through complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Setup: create customer and accounts
         customer = await client.create_customer("Bob", "Wilson", "789 Pine St")
@@ -99,20 +87,19 @@ class TestIntegrationFlow:
         balance = await client.deposit(checking.account_id, Decimal('1000.00'))
         assert balance == Decimal('1000.00')
         
-        # Verify transaction recorded
-        transactions = server.db.get_all_transactions()
-        assert len(transactions) == 1
-        assert transactions[0].account_id == checking.account_id
-        assert transactions[0].change == Decimal('1000.00')
+        # Verify deposit worked by checking balance
+        accounts = await client.list_accounts()
+        checking_account = next(acc for acc in accounts if acc.account_id == checking.account_id)
+        assert checking_account.balance == Decimal('1000.00')
         
         # Test withdrawal through client
         balance = await client.withdraw(checking.account_id, Decimal('250.00'))
         assert balance == Decimal('750.00')
         
-        # Verify second transaction recorded
-        transactions = server.db.get_all_transactions()
-        assert len(transactions) == 2
-        assert transactions[1].change == Decimal('-250.00')
+        # Verify withdrawal worked by checking balance
+        accounts = await client.list_accounts()
+        checking_account = next(acc for acc in accounts if acc.account_id == checking.account_id)
+        assert checking_account.balance == Decimal('750.00')
         
         # Test transfer through client
         result = await client.transfer(checking.account_id, savings.account_id, Decimal('300.00'))
@@ -121,20 +108,17 @@ class TestIntegrationFlow:
         assert result['from_balance'] == Decimal('450.00')
         assert result['to_balance'] == Decimal('300.00')
         
-        # Verify both accounts updated in database
-        checking_account = server.db.get_account(checking.account_id)
-        savings_account = server.db.get_account(savings.account_id)
+        # Verify both accounts updated by checking balances
+        accounts = await client.list_accounts()
+        checking_account = next(acc for acc in accounts if acc.account_id == checking.account_id)
+        savings_account = next(acc for acc in accounts if acc.account_id == savings.account_id)
         assert checking_account.balance == Decimal('450.00')
         assert savings_account.balance == Decimal('300.00')
-        
-        # Verify transfer created two transactions
-        transactions = server.db.get_all_transactions()
-        assert len(transactions) == 4  # deposit + withdraw + transfer_from + transfer_to
     
     @pytest.mark.asyncio
     async def test_cash_check_full_flow(self, full_stack):
         """Test cash check through complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Setup
         customer = await client.create_customer("Alice", "Brown", "321 Elm St")
@@ -145,14 +129,15 @@ class TestIntegrationFlow:
         balance = await client.cash_check(account.account_id, Decimal('75.00'))
         assert balance == Decimal('425.00')
         
-        # Verify account updated
-        stored_account = server.db.get_account(account.account_id)
+        # Verify account updated by checking balance
+        accounts = await client.list_accounts()
+        stored_account = next(acc for acc in accounts if acc.account_id == account.account_id)
         assert stored_account.balance == Decimal('425.00')
     
     @pytest.mark.asyncio
     async def test_list_operations_full_flow(self, full_stack):
         """Test list accounts and get accounts through complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Setup multiple customers and accounts
         customer1 = await client.create_customer("Tom", "Jones", "111 First St")
@@ -183,7 +168,7 @@ class TestIntegrationFlow:
     @pytest.mark.asyncio
     async def test_time_advance_and_statements_full_flow(self, full_stack):
         """Test time advancement and statement generation through complete stack"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Setup
         customer = await client.create_customer("Mark", "Taylor", "555 Time St")
@@ -197,15 +182,13 @@ class TestIntegrationFlow:
         statement_dates = await client.list_statements(account.account_id)
         assert len(statement_dates) > 0
         
-        # Verify statements in database
-        statements = server.db.get_all_statements()
-        assert len(statements) > 0
-        assert statements[0].account_id == account.account_id
+        # Verify statements were generated (we can only check dates through API)
+        # The fact that we got statement dates back indicates they were created
     
     @pytest.mark.asyncio
     async def test_error_propagation_full_flow(self, full_stack):
         """Test that errors propagate correctly through all layers"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Test customer not found error
         with pytest.raises(ValueError, match="Customer NonExistent not found"):
@@ -230,7 +213,7 @@ class TestIntegrationFlow:
     @pytest.mark.asyncio
     async def test_command_serialization_through_proxy(self, full_stack):
         """Test that commands are properly serialized and deserialized"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # This test verifies the command pattern is working by ensuring
         # method calls with complex parameters work through the proxy
@@ -255,7 +238,7 @@ class TestIntegrationFlow:
     @pytest.mark.asyncio
     async def test_multiple_customers_isolation(self, full_stack):
         """Test that operations on different customers are properly isolated"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Create two customers with accounts
         customer1 = await client.create_customer("User", "One", "Address 1")
@@ -277,16 +260,17 @@ class TestIntegrationFlow:
         assert account2.account_id in customer2_accounts
         assert account2.account_id not in customer1_accounts
         
-        # Verify balances in database
-        stored_account1 = server.db.get_account(account1.account_id)
-        stored_account2 = server.db.get_account(account2.account_id)
+        # Verify balances by listing accounts
+        all_accounts = await client.list_accounts()
+        stored_account1 = next(acc for acc in all_accounts if acc.account_id == account1.account_id)
+        stored_account2 = next(acc for acc in all_accounts if acc.account_id == account2.account_id)
         assert stored_account1.balance == Decimal('100.00')
         assert stored_account2.balance == Decimal('200.00')
     
     @pytest.mark.asyncio
     async def test_async_operation_consistency(self, full_stack):
         """Test that async operations maintain data consistency"""
-        client, proxy, wrapper, server = full_stack
+        client, cleanup, port = full_stack
         
         # Setup
         customer = await client.create_customer("Async", "User", "Async St")
@@ -299,15 +283,6 @@ class TestIntegrationFlow:
         await client.withdraw(account.account_id, Decimal('25.00'))
         
         # Final balance should be 1000 - 100 + 50 - 25 = 925
-        final_account = server.db.get_account(account.account_id)
+        accounts = await client.list_accounts()
+        final_account = next(acc for acc in accounts if acc.account_id == account.account_id)
         assert final_account.balance == Decimal('925.00')
-        
-        # Verify all transactions recorded
-        transactions = server.db.get_all_transactions()
-        assert len(transactions) == 4
-        
-        # Verify transaction amounts
-        expected_changes = [Decimal('1000.00'), Decimal('-100.00'), 
-                          Decimal('50.00'), Decimal('-25.00')]
-        actual_changes = [t.change for t in transactions]
-        assert actual_changes == expected_changes

@@ -4,10 +4,11 @@ from decimal import Decimal
 from datetime import timedelta
 from unittest.mock import AsyncMock
 from src.base.proxy_api import ProxyAPI
-from src.no_raft.transports.indirect.proxy import ServerProxy, ServerWrapper
+from src.no_raft.transports.async_streams.proxy import ServerProxy
 from src.base.server import Server
 from src.base.client import Client
 from src.base.datatypes import AccountType, Customer, Account
+from tests.test_helpers import setup_async_streams_test, create_temp_db, cleanup_temp_db
 
 
 class TestProxyAPI:
@@ -18,15 +19,22 @@ class TestProxyAPI:
         with pytest.raises(TypeError):
             ProxyAPI()
     
-    def test_server_proxy_implements_proxy_api(self):
+    @pytest.mark.asyncio
+    async def test_server_proxy_implements_proxy_api(self):
         """Test that ServerProxy properly implements ProxyAPI"""
         # This should work without errors
-        server = Server()
-        wrapper = ServerWrapper(server)
-        proxy = ServerProxy(wrapper)
-        
-        # Verify it's an instance of ProxyAPI
-        assert isinstance(proxy, ProxyAPI)
+        temp_db = create_temp_db()
+        try:
+            client, cleanup, port = await setup_async_streams_test(temp_db)
+            # Get the proxy from the client setup
+            proxy = client.server_proxy
+            
+            # Verify it's an instance of ProxyAPI
+            assert isinstance(proxy, ProxyAPI)
+        finally:
+            if 'cleanup' in locals():
+                await cleanup()
+            cleanup_temp_db(temp_db)
     
     def test_client_accepts_proxy_api(self):
         """Test that Client accepts any ProxyAPI implementation"""
@@ -72,46 +80,61 @@ class TestProxyAPI:
         
         assert abstract_methods == expected_methods
     
-    def test_server_proxy_implements_all_methods(self):
+    @pytest.mark.asyncio
+    async def test_server_proxy_implements_all_methods(self):
         """Test that ServerProxy implements all abstract methods"""
-        server = Server()
-        wrapper = ServerWrapper(server)
-        proxy = ServerProxy(wrapper)
-        
-        # Check that all abstract methods are implemented
-        for method_name in ProxyAPI.__abstractmethods__:
-            assert hasattr(proxy, method_name)
-            method = getattr(proxy, method_name)
-            assert callable(method)
+        temp_db = create_temp_db()
+        try:
+            client, cleanup, port = await setup_async_streams_test(temp_db)
+            proxy = client.server_proxy
+            
+            # Check that all abstract methods are implemented
+            for method_name in ProxyAPI.__abstractmethods__:
+                assert hasattr(proxy, method_name)
+                method = getattr(proxy, method_name)
+                assert callable(method)
+        finally:
+            if 'cleanup' in locals():
+                await cleanup()
+            cleanup_temp_db(temp_db)
     
     @pytest.mark.asyncio
     async def test_full_stack_with_proxy_api(self):
         """Test the full stack works with ProxyAPI typing"""
-        # Create full stack
-        server = Server()
-        wrapper = ServerWrapper(server)
-        proxy: ProxyAPI = ServerProxy(wrapper)  # Type annotation to verify
-        client = Client(proxy)
-        
-        # Test basic operation
-        customer = await client.create_customer("API", "Test", "456 Interface Ave")
-        assert isinstance(customer, Customer)
-        assert customer.first_name == "API"
-        assert customer.last_name == "Test"
+        temp_db = create_temp_db()
+        try:
+            client, cleanup, port = await setup_async_streams_test(temp_db)
+            proxy: ProxyAPI = client.server_proxy  # Type annotation to verify
+            
+            # Test basic operation
+            customer = await client.create_customer("API", "Test", "456 Interface Ave")
+            assert isinstance(customer, Customer)
+            assert customer.first_name == "API"
+            assert customer.last_name == "Test"
+        finally:
+            if 'cleanup' in locals():
+                await cleanup()
+            cleanup_temp_db(temp_db)
     
-    def test_proxy_api_inheritance_chain(self):
+    @pytest.mark.asyncio
+    async def test_proxy_api_inheritance_chain(self):
         """Test the inheritance chain is correctly set up"""
-        server = Server()
-        wrapper = ServerWrapper(server)
-        proxy = ServerProxy(wrapper)
-        
-        # Check inheritance
-        assert isinstance(proxy, ProxyAPI)
-        assert isinstance(proxy, ServerProxy)
-        assert issubclass(ServerProxy, ProxyAPI)
-        
-        # Check that ProxyAPI is abstract
-        assert ABC in ProxyAPI.__mro__
+        temp_db = create_temp_db()
+        try:
+            client, cleanup, port = await setup_async_streams_test(temp_db)
+            proxy = client.server_proxy
+            
+            # Check inheritance
+            assert isinstance(proxy, ProxyAPI)
+            assert isinstance(proxy, ServerProxy)
+            assert issubclass(ServerProxy, ProxyAPI)
+            
+            # Check that ProxyAPI is abstract
+            assert ABC in ProxyAPI.__mro__
+        finally:
+            if 'cleanup' in locals():
+                await cleanup()
+            cleanup_temp_db(temp_db)
 
 
 class MockProxyImplementation(ProxyAPI):
