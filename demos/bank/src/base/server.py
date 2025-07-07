@@ -7,8 +7,8 @@ from .database import BankDatabase
 
 class Server:
 
-    def __init__(self) -> None:
-        self.db = BankDatabase()
+    def __init__(self, db_file="/tmp/bank.db") -> None:
+        self.db = BankDatabase(db_path=db_file)
         self.sim_datetime = datetime.now()
 
         

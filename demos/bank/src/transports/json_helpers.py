@@ -61,6 +61,9 @@ def bank_json_decoder(dct):
         elif type_name == "Customer":
             return Customer(**value)
         elif type_name == "Account":
+            # Handle AccountType enum conversion
+            if 'account_type' in value and isinstance(value['account_type'], str):
+                value['account_type'] = AccountType(value['account_type'])
             return Account(**value)
         elif type_name == "Transaction":
             return Transaction(**value)
