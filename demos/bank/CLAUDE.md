@@ -336,3 +336,46 @@ class RaftBankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
 - The shared code is minimal
 
 This demo now uses direct implementation throughout raft_prep/ to provide clear, self-contained examples that are easy to understand and debug.
+
+## Interactive CLI Tool
+
+The banking demo includes an enhanced interactive CLI tool located in `src/interactive/` that supports both no_raft and raft_prep versions:
+
+### Key Features
+
+- **Dual Version Support**: Connect to both no_raft and raft_prep transports
+- **Rich Interactive Interface**: Beautiful tables, colored output, command history, and auto-completion
+- **Raft Messaging**: Send Raft consensus messages when connected to raft_prep
+- **Dynamic UI**: Prompt changes from `bank>` to `raft>` when connected to raft-enabled transports
+- **Multiple Transports**: Direct, Async Streams, and gRPC connections
+
+### Quick Start
+
+```bash
+# Install dependencies
+pip install -r src/interactive/requirements.txt
+
+# Run the interactive CLI
+python src/interactive/banking_cli.py
+
+# Connect to different versions
+bank> connect grpc localhost 50051          # no_raft version
+bank> connect raft grpc localhost 50052     # raft_prep version
+raft> raft-message RequestVote {"term": 1}  # Send Raft message
+```
+
+### Usage Examples
+
+```bash
+# Banking operations (work on both versions)
+bank> create-customer Alice Smith 123 Main St
+bank> create-account Smith,Alice checking
+bank> deposit 0 1000.00
+bank> list-accounts
+
+# Raft operations (raft_prep only)
+raft> raft-message AppendEntries {"term": 1, "leader_id": "node1"}
+raft> status  # Shows raft capabilities
+```
+
+The CLI provides an excellent way to explore and test both versions interactively. See `src/interactive/README.md` for complete documentation.
