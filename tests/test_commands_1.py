@@ -1,27 +1,21 @@
 #!/usr/bin/env python
 import asyncio
 import logging
-import pytest
 import time
 import traceback
-from pathlib import Path
+import os
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.api.log_api import LogRec
-from dev_tools.memory_log import MemoryLog
 from dev_tools.features import registry
 
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
-from dev_tools.triggers import WhenHasLogIndex
-from dev_tools.triggers import WhenInMessageCount, WhenElectionDone
-from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
-from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-#from dev_tools.logging_ops import setup_logging, log_config
+from dev_tools.pausing_cluster import cluster_maker
+from dev_tools.sequences import SNormalElection, SPartialCommand
 from dev_tools.features import FeatureRegistry
-from dev_tools.log_control import LogController, TemporaryLogControl
+from raftengine.deck.log_control TemporaryLogControl
+from dev_tools.log_control import setup_logging
 
-log_control = LogController()
-log_control.set_default_level('info')
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 registry = FeatureRegistry.get_registry()

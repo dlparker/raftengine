@@ -1,22 +1,16 @@
 #!/usr/bin/env python
-import asyncio
 import logging
-import time
-import random
 from pathlib import Path
-import json
 
 import pytest
 
-from raftengine.api.log_api import LogRec,RecordCode, CommandLogRec, ConfigLogRec
 from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.api.log_api import LogRec
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
-from dev_tools.log_control import LogController
+from dev_tools.log_control import setup_logging
 
-log_control = LogController()
-log_control.set_default_level('debug')
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 async def test_log_stuff():
