@@ -10,13 +10,13 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from dev_tools.triggers import WhenElectionDone
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialCommand
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 
 extra_logging = [dict(name="test_code", level="debug"), ]
 #setup_logging(extra_logging, default_level="debug")
 default_level="error"
 #default_level="debug"
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 async def test_partition_1(cluster_maker):

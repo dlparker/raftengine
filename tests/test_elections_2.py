@@ -15,13 +15,13 @@ from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandle
 from dev_tools.triggers import WhenInMessageCount
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 
 extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
 #setup_logging(extra_logging, default_level="debug")
 default_level="error"
 #default_level="debug"
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 

@@ -37,7 +37,7 @@ class LogController:
     approach to managing logger levels during testing and development.
     """
     
-    def __init__(self, additional_loggers: Optional[List[tuple]] = None):
+    def __init__(self, additional_loggers: Optional[List[tuple]] = None, default_level: str = "ERROR"):
         """
         Initialize the LogController with the known logger names from the system.
         Builds a dictionary of logger names as a class property during init.
@@ -46,7 +46,7 @@ class LogController:
             additional_loggers: Optional list of tuples (name, description) to add to known loggers
         """
         # Default level for all loggers
-        self.default_level: str = "ERROR"
+        self.default_level = default_level.upper()
         
         # Default handlers for new loggers
         self.default_handlers: List[str] = ["stdout"]

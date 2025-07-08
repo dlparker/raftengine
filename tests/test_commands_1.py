@@ -12,7 +12,7 @@ from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.sequences import SNormalElection, SPartialCommand
 from dev_tools.features import FeatureRegistry
-from raftengine.deck.log_control TemporaryLogControl
+from raftengine.deck.log_control import TemporaryLogControl
 from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()

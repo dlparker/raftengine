@@ -8,7 +8,7 @@ from raftengine.api.events import EventType, EventHandler
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 from dev_tools.triggers import WhenElectionDone
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 
@@ -16,7 +16,7 @@ from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 #setup_logging(extra_logging)
 default_level='error'
 #default_level='debug'
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
         

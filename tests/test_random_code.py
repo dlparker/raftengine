@@ -14,7 +14,7 @@ import time
 import json 
 
 from dev_tools.pausing_cluster import cluster_maker
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 from dev_tools.features import FeatureRegistry
 registry = FeatureRegistry.get_registry()
 
@@ -22,11 +22,12 @@ registry = FeatureRegistry.get_registry()
 #setup_logging(extra_logging)
 default_level='error'
 #default_level='debug'
-extra_logging = [dict(name="test_code", level="debug"), dict(name="Leader", level="debug"),
-                 dict(name="Candidate", level="debug"),
-                 dict(name="Follower", level="debug")]
-                 
-setup_logging(additions=extra_logging, default_level=default_level)
+log_control = setup_logging()
+# Set custom levels for specific loggers
+log_control.set_logger_level("test_code", "debug")
+log_control.set_logger_level("Leader", "debug")
+log_control.set_logger_level("Candidate", "debug")
+log_control.set_logger_level("Follower", "debug")
 logger = logging.getLogger("test_code")
 
 

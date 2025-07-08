@@ -335,7 +335,7 @@ class ClusterManager(App):
         
         try:
             # Command to start the server
-            script_path = Path(__file__).parent / "start_server.py"
+            script_path = Path(__file__).parent / "control_server.py"
             cmd = [sys.executable, str(script_path), "--index", str(node_index)]
             
             self._add_log_line(node_index, f"Running command: {' '.join(cmd)}")

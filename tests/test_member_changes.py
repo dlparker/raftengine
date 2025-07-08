@@ -17,13 +17,13 @@ from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.sequences import SPartialElection
 from dev_tools.memory_log import MemoryLog
 from dev_tools.pausing_cluster import cluster_maker
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
 default_level="error"
 #default_level="debug"
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 class PilotSim(PilotAPI):

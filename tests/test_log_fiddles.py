@@ -16,14 +16,14 @@ from dev_tools.triggers import WhenInMessageCount, WhenElectionDone
 from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 
 #extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name=__name__, level="debug"),]
 #log_config = setup_logging(extra_logging)
 default_level='error'
 #default_level='debug'
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 async def test_empty_log_1(cluster_maker):

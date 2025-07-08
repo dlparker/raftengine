@@ -75,12 +75,3 @@ __all__ = [
     "__license__",
 ]
 
-# Convenience function for getting the main implementation
-def get_deck_class():
-    """
-    Get the main Deck implementation class.
-    
-    Returns:
-        Type[DeckAPI]: The Deck class that implements the DeckAPI interface
-    """
-    return Deck

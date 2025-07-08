@@ -15,7 +15,7 @@ from raftengine.api.snapshot_api import SnapShot
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
-from dev_tools.logging_ops import setup_logging
+from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.pausing_server import setup_sqlite_log
 from dev_tools.operations import DictTotalsOps, SnapShotTool
@@ -25,7 +25,7 @@ from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessag
 #setup_logging(extra_logging)
 default_level='error'
 #default_level='debug'
-setup_logging(default_level=default_level)
+log_control = setup_logging()
 logger = logging.getLogger("test_code")
 
 
