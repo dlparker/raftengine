@@ -32,6 +32,9 @@ from rich.text import Text
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
 
+# Import control_server functions
+from src.raft.raft_components.control_server import is_server_running, get_server_status, start_server, stop_server
+
 
 class NodeState(Enum):
     """Enumeration of possible node states"""
@@ -184,13 +187,40 @@ class ClusterManager(App):
         # Focus the command input
         self.query_one("#command_input", Input).focus()
     
-    def update_status_display(self) -> None:
+    async def update_status_display(self) -> None:
         """Update the status table with current node information"""
         table = self.query_one("#status_table", DataTable)
         
         # Clear and repopulate table
         table.clear()
         for node in self.nodes.values():
+            # Use control_server to get real status
+            try:
+                status = await get_server_status(node.index)
+                
+                # Update node state based on actual status
+                if status['running']:
+                    if node.state != NodeState.RUNNING:
+                        node.state = NodeState.RUNNING
+                        node.start_time = datetime.now()  # Approximate start time
+                        # Start log monitoring for nodes that are already running
+                        if not hasattr(node, 'log_task') or node.log_task is None:
+                            node.log_task = asyncio.create_task(self._monitor_node_logs(node))
+                    node.pid = status['pid']
+                else:
+                    if node.state == NodeState.RUNNING:
+                        node.state = NodeState.STOPPED
+                        node.start_time = None
+                        # Cancel log monitoring for stopped nodes
+                        if hasattr(node, 'log_task') and node.log_task:
+                            node.log_task.cancel()
+                            node.log_task = None
+                    node.pid = None
+                    
+            except Exception:
+                # If we can't get status, don't update the state
+                pass
+            
             # Calculate uptime
             uptime = ""
             if node.start_time and node.state == NodeState.RUNNING:
@@ -217,7 +247,7 @@ class ClusterManager(App):
         }
         return color_map.get(state, "white")
     
-    def update_logs_display(self) -> None:
+    async def update_logs_display(self) -> None:
         """Update the logs display with recent log entries"""
         logs_widget = self.query_one("#logs_display", RichLog)
         
@@ -325,7 +355,7 @@ class ClusterManager(App):
             node.log_lines = node.log_lines[-self.log_buffer_size:]
     
     async def _start_node(self, node_index: int) -> bool:
-        """Start a specific node"""
+        """Start a specific node using control_server"""
         node = self.nodes[node_index]
         if node.state != NodeState.STOPPED:
             return False
@@ -334,38 +364,34 @@ class ClusterManager(App):
         self._add_log_line(node_index, f"Starting Node {node_index}...")
         
         try:
-            # Command to start the server
-            script_path = Path(__file__).parent / "control_server.py"
-            cmd = [sys.executable, str(script_path), "--index", str(node_index)]
-            
-            self._add_log_line(node_index, f"Running command: {' '.join(cmd)}")
-            
-            # Start the process
-            node.process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                cwd=script_path.parent
-            )
-            
-            node.pid = node.process.pid
-            node.start_time = datetime.now()
-            node.state = NodeState.RUNNING
-            
-            self._add_log_line(node_index, f"Process started with PID {node.pid}")
-            
-            # Start log capture task and store the task reference
-            node.log_task = asyncio.create_task(self._capture_node_logs(node))
-            
-            return True
-            
+            # Use control_server.start_server() instead of subprocess
+            success = await start_server(node_index)
+            if success:
+                node.state = NodeState.RUNNING
+                node.start_time = datetime.now()
+                
+                # Get PID from server status
+                status = await get_server_status(node_index)
+                node.pid = status.get('pid')
+                
+                self._add_log_line(node_index, f"Node {node_index} started successfully with PID {node.pid}")
+                
+                # Start log capture task for file-based monitoring
+                node.log_task = asyncio.create_task(self._monitor_node_logs(node))
+                
+                return True
+            else:
+                node.state = NodeState.ERROR
+                self._add_log_line(node_index, f"Failed to start Node {node_index}")
+                return False
+                
         except Exception as e:
             node.state = NodeState.ERROR
             self._add_log_line(node_index, f"Failed to start: {e}")
             return False
     
     async def _stop_node(self, node_index: int) -> bool:
-        """Stop a specific node"""
+        """Stop a specific node using control_server"""
         node = self.nodes[node_index]
         if node.state not in [NodeState.RUNNING, NodeState.STARTING]:
             return False
@@ -382,67 +408,102 @@ class ClusterManager(App):
                 except asyncio.CancelledError:
                     pass
             
-            if node.process:
-                node.process.terminate()
-                await asyncio.wait_for(node.process.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
-            self._add_log_line(node_index, f"Process didn't terminate gracefully, killing...")
-            if node.process:
-                node.process.kill()
-                await node.process.wait()
+            # Use control_server.stop_server() instead of direct process control
+            success = await stop_server(node_index)
+            if success:
+                node.state = NodeState.STOPPED
+                node.process = None
+                node.pid = None
+                node.start_time = None
+                if hasattr(node, 'log_task'):
+                    node.log_task = None
+                self._add_log_line(node_index, f"Node {node_index} stopped")
+                return True
+            else:
+                self._add_log_line(node_index, f"Failed to stop Node {node_index}")
+                node.state = NodeState.ERROR
+                return False
+                
         except Exception as e:
             self._add_log_line(node_index, f"Error stopping: {e}")
-        
-        self._add_log_line(node_index, f"Node {node_index} stopped")
-        
-        node.state = NodeState.STOPPED
-        node.process = None
-        node.pid = None
-        node.start_time = None
-        if hasattr(node, 'log_task'):
-            node.log_task = None
-        
-        return True
+            node.state = NodeState.ERROR
+            return False
     
-    async def _capture_node_logs(self, node: NodeInfo):
-        """Capture stdout/stderr from a node process"""
-        if not node.process or not node.process.stdout:
-            self._add_log_line(node.index, "No process or stdout for log capture")
-            return
+    async def _monitor_node_logs(self, node: NodeInfo):
+        """Monitor log files for a node"""
+        work_dir = Path('/tmp', f"rserver_{node.index}")
+        stdout_file = work_dir / 'server.stdout'
+        stderr_file = work_dir / 'server.stderr'
         
-        self._add_log_line(node.index, f"Starting log capture for Node {node.index}")
+        last_stdout_size = 0
+        last_stderr_size = 0
+        
+        self._add_log_line(node.index, f"Starting log monitoring for Node {node.index}")
         
         try:
-            while True:
-                # Check if process has ended
-                if node.process.returncode is not None:
-                    self._add_log_line(node.index, f"Process ended with return code {node.process.returncode}")
-                    break
-                
+            # First, read existing log content if files exist
+            if stdout_file.exists():
                 try:
-                    # Use a timeout to avoid hanging forever
-                    line = await asyncio.wait_for(node.process.stdout.readline(), timeout=0.1)
-                    if not line:
-                        # EOF reached, process may have ended
-                        break
-                    
-                    line_str = line.decode().strip()
-                    if line_str:
-                        self._add_log_line(node.index, line_str)
-                except asyncio.TimeoutError:
-                    # No output yet, continue loop
-                    continue
+                    with open(stdout_file, 'r') as f:
+                        existing_content = f.read()
+                        for line in existing_content.splitlines():
+                            if line.strip():
+                                self._add_log_line(node.index, line)
+                        last_stdout_size = len(existing_content.encode())
                 except Exception as e:
-                    self._add_log_line(node.index, f"Read error: {e}")
-                    break
+                    self._add_log_line(node.index, f"Error reading existing stdout: {e}")
+            
+            if stderr_file.exists():
+                try:
+                    with open(stderr_file, 'r') as f:
+                        existing_content = f.read()
+                        for line in existing_content.splitlines():
+                            if line.strip():
+                                self._add_log_line(node.index, f"ERROR: {line}")
+                        last_stderr_size = len(existing_content.encode())
+                except Exception as e:
+                    self._add_log_line(node.index, f"Error reading existing stderr: {e}")
+            
+            # Now monitor for new content
+            while node.state == NodeState.RUNNING:
+                try:
+                    # Check stdout file
+                    if stdout_file.exists():
+                        current_size = stdout_file.stat().st_size
+                        if current_size > last_stdout_size:
+                            with open(stdout_file, 'r') as f:
+                                f.seek(last_stdout_size)
+                                new_content = f.read()
+                                for line in new_content.splitlines():
+                                    if line.strip():
+                                        self._add_log_line(node.index, line)
+                            last_stdout_size = current_size
+                    
+                    # Check stderr file
+                    if stderr_file.exists():
+                        current_size = stderr_file.stat().st_size
+                        if current_size > last_stderr_size:
+                            with open(stderr_file, 'r') as f:
+                                f.seek(last_stderr_size)
+                                new_content = f.read()
+                                for line in new_content.splitlines():
+                                    if line.strip():
+                                        self._add_log_line(node.index, f"ERROR: {line}")
+                            last_stderr_size = current_size
+                    
+                    await asyncio.sleep(0.1)  # Check every 100ms
+                    
+                except Exception as e:
+                    self._add_log_line(node.index, f"Log monitoring error: {e}")
+                    await asyncio.sleep(1)
                     
         except asyncio.CancelledError:
-            self._add_log_line(node.index, f"Log capture cancelled for Node {node.index}")
+            self._add_log_line(node.index, f"Log monitoring cancelled for Node {node.index}")
             raise
         except Exception as e:
-            self._add_log_line(node.index, f"Log capture error: {e}")
+            self._add_log_line(node.index, f"Log monitoring error: {e}")
         
-        self._add_log_line(node.index, f"Log capture ended for Node {node.index}")
+        self._add_log_line(node.index, f"Log monitoring ended for Node {node.index}")
     
     async def cmd_start(self, args: List[str]) -> str:
         """Start cluster or specific nodes"""
@@ -599,11 +660,7 @@ Examples:
         asyncio.create_task(_async_clear())
     
     async def on_exit(self):
-        """Called when the app is exiting"""
-        # Stop all nodes
-        for i in range(3):
-            await self._stop_node(i)
-
+        pass
 
 def main():
     """Main entry point"""

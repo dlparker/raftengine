@@ -23,6 +23,9 @@ class DeckHand:
     async def start(self):
         await self.deck.start()
 
+    async def stop(self):
+        await self.deck.stop()
+
     async def raft_message(self, in_message: Dict[str, Any]) -> Dict[str, Any]:
         return await self.deck.on_message(in_message)
 
