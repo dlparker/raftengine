@@ -474,7 +474,7 @@ class Testdeck(Deck):
         if self.break_on_message_code == dmsg.get_code():
             print('here to catch break')
         if self.explode_on_message_code == dmsg.get_code():
-            result = await super().on_message('{"code":"foo"}')
+            result = await super().on_message(b'{"code":"foo"}')
         if self.corrupt_message_with_code == dmsg.get_code():
             dmsg.entries = [dict(a=1),]
             self.wrapper_logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)

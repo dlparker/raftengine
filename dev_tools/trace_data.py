@@ -3,12 +3,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 import json
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
-from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
-from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
+from raftengine.messages.message_codec import MessageCodec
 from raftengine.api.log_api import LogRec
 
 class SaveEvent(str, Enum):
@@ -101,19 +96,14 @@ class TestTraceData:
 def decode_message(mdict):
     # we don't always need these reconstitued from save json,
     # so we make it easy for code that needs them to do it.
-    mtypes = [AppendEntriesMessage,AppendResponseMessage,
-              RequestVoteMessage,RequestVoteResponseMessage,
-              PreVoteMessage,PreVoteResponseMessage,
-              TransferPowerMessage,TransferPowerResponseMessage,
-              MembershipChangeMessage,MembershipChangeResponseMessage,
-              SnapShotMessage,SnapShotResponseMessage,]
-    message = None
-    for mtype in mtypes:
-        if mdict['code'] == mtype.get_code():
-            message = mtype.from_dict(mdict)
-    if message is None:
-        raise Exception('Message is not decodeable as a raft type')
-    return message
+    # Convert dict to bytes and use MessageCodec
+    if isinstance(mdict, dict):
+        json_str = json.dumps(mdict)
+        message_bytes = json_str.encode('utf-8')
+        return MessageCodec.decode_message(message_bytes)
+    else:
+        # If it's already bytes, use directly
+        return MessageCodec.decode_message(mdict)
 
 
             

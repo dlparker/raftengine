@@ -2,7 +2,6 @@ import asyncio
 import traceback
 import logging
 import time
-import json
 
 from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig
 from raftengine.api.deck_api import CommandResult
@@ -14,6 +13,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.cluster_change import MembershipChangeMessage, MembershipChangeResponseMessage, ChangeOp
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
+from raftengine.messages.message_codec import MessageCodec
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
 from raftengine.roles.leader import Leader
@@ -122,20 +122,7 @@ class Deck(DeckAPI):
         
     # Part of API
     def decode_message(self, in_message):
-        mdict = json.loads(in_message)
-        mtypes = [AppendEntriesMessage,AppendResponseMessage,
-                  RequestVoteMessage,RequestVoteResponseMessage,
-                  PreVoteMessage,PreVoteResponseMessage,
-                  TransferPowerMessage,TransferPowerResponseMessage,
-                  MembershipChangeMessage,MembershipChangeResponseMessage,
-                  SnapShotMessage,SnapShotResponseMessage,]
-        message = None
-        for mtype in mtypes:
-            if mdict['code'] == mtype.get_code():
-                message = mtype.from_dict(mdict)
-        if message is None:
-            raise Exception('Message is not decodeable as a raft type')
-        return message
+        return MessageCodec.decode_message(in_message)
     
     # Part of API
     async def on_message(self, in_message):
@@ -407,14 +394,14 @@ class Deck(DeckAPI):
     # Called by Role
     async def send_message(self, message):
         self.logger.debug("Sending message type %s to %s", message.get_code(), message.receiver)
-        encoded = json.dumps(message, default=lambda o:o.__dict__)
+        encoded = MessageCodec.encode_message(message)
         await self.pilot.send_message(message.receiver, encoded)
 
     # Called by Role
     async def send_response(self, message, response):
         self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
-        encoded = json.dumps(message, default=lambda o:o.__dict__)
-        encoded_reply = json.dumps(response, default=lambda o:o.__dict__)
+        encoded = MessageCodec.encode_message(message)
+        encoded_reply = MessageCodec.encode_message(response)
         await self.pilot.send_response(response.receiver, encoded, encoded_reply)
 
     # Called by Role. This may seem odd, but it is done this

@@ -143,12 +143,12 @@ class DeckAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def on_message(self, in_message:str) -> None:
+    async def on_message(self, in_message:bytes) -> None:
         """
         When the server receives a message for the RaftLibrary, it should pass it to this
         method. 
 
-        :params str in_message: The incomming message string
+        :params bytes in_message: The incoming message bytes
         :rtype None:
         
         """

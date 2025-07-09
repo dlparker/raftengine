@@ -9,6 +9,7 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.pre_vote import PreVoteMessage,PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
+from raftengine.messages.message_codec import MessageCodec
 from raftengine.api.types import RoleName
 from raftengine.api.log_api import LogRec
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
@@ -70,10 +71,10 @@ async def test_message_ops():
                                entries = [rec_1], commitIndex=0)
     re_1 = AppendResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, maxIndex=1, success=True, leaderId='mcpy://1')
 
-    jd1 = json.dumps(ae_1, default=lambda o:o.__dict__)
-    jd2 = json.dumps(re_1, default=lambda o:o.__dict__)
-    c_ae_1 = AppendEntriesMessage.from_dict(json.loads(jd1))
-    c_re_1 = AppendResponseMessage.from_dict(json.loads(jd2))
+    jd1 = MessageCodec.encode_message(ae_1)
+    jd2 = MessageCodec.encode_message(re_1)
+    c_ae_1 = MessageCodec.decode_message(jd1)
+    c_re_1 = MessageCodec.decode_message(jd2)
     assert c_re_1.is_reply_to(ae_1)
     assert re_1.is_reply_to(c_ae_1)
     assert str(ae_1) == str(c_ae_1)
@@ -82,10 +83,10 @@ async def test_message_ops():
     mc_1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', op=ChangeOp.add, target_uri="mcpy://4")
     rmc_1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', op=ChangeOp.add, target_uri="mcpy://4", ok=True)
 
-    mc_jd1 = json.dumps(mc_1, default=lambda o:o.__dict__)
-    rm_jd1 = json.dumps(rmc_1, default=lambda o:o.__dict__)
-    c_mc_1 = MembershipChangeMessage.from_dict(json.loads(mc_jd1))
-    c_rmc_1 = MembershipChangeResponseMessage.from_dict(json.loads(rm_jd1))
+    mc_jd1 = MessageCodec.encode_message(mc_1)
+    rm_jd1 = MessageCodec.encode_message(rmc_1)
+    c_mc_1 = MessageCodec.decode_message(mc_jd1)
+    c_rmc_1 = MessageCodec.decode_message(rm_jd1)
     assert str(mc_1) == str(c_mc_1)
     assert str(rmc_1) == str(c_rmc_1)
     assert c_rmc_1.is_reply_to(mc_1)
@@ -94,10 +95,10 @@ async def test_message_ops():
     tpm_1 = TransferPowerMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0)
     tpr_1 = TransferPowerResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, success=True)
     
-    j_tpm_1 = json.dumps(tpm_1, default=lambda o:o.__dict__)
-    j_tpr_1 = json.dumps(tpr_1, default=lambda o:o.__dict__)
-    c_tpm_1 = TransferPowerMessage.from_dict(json.loads(j_tpm_1))
-    c_tpr_1 = TransferPowerResponseMessage.from_dict(json.loads(j_tpr_1))
+    j_tpm_1 = MessageCodec.encode_message(tpm_1)
+    j_tpr_1 = MessageCodec.encode_message(tpr_1)
+    c_tpm_1 = MessageCodec.decode_message(j_tpm_1)
+    c_tpr_1 = MessageCodec.decode_message(j_tpr_1)
     assert c_tpr_1.is_reply_to(tpm_1)
     assert tpr_1.is_reply_to(c_tpm_1)
     assert str(tpm_1) == str(c_tpm_1)
@@ -107,10 +108,10 @@ async def test_message_ops():
     pvm_1 = PreVoteMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0)
     pvr_1 = PreVoteResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, vote=True)
     
-    j_pvm_1 = json.dumps(pvm_1, default=lambda o:o.__dict__)
-    j_pvr_1 = json.dumps(pvr_1, default=lambda o:o.__dict__)
-    c_pvm_1 = PreVoteMessage.from_dict(json.loads(j_pvm_1))
-    c_pvr_1 = PreVoteResponseMessage.from_dict(json.loads(j_pvr_1))
+    j_pvm_1 = MessageCodec.encode_message(pvm_1)
+    j_pvr_1 = MessageCodec.encode_message(pvr_1)
+    c_pvm_1 = MessageCodec.decode_message(j_pvm_1)
+    c_pvr_1 = MessageCodec.decode_message(j_pvr_1)
     assert c_pvr_1.is_reply_to(pvm_1)
     assert pvr_1.is_reply_to(c_pvm_1)
     assert str(pvm_1) == str(c_pvm_1)
@@ -119,10 +120,10 @@ async def test_message_ops():
     rvm_1 = RequestVoteMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0)
     rvr_1 = RequestVoteResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, vote=True)
     
-    j_rvm_1 = json.dumps(rvm_1, default=lambda o:o.__dict__)
-    j_rvr_1 = json.dumps(rvr_1, default=lambda o:o.__dict__)
-    c_rvm_1 = RequestVoteMessage.from_dict(json.loads(j_rvm_1))
-    c_rvr_1 = RequestVoteResponseMessage.from_dict(json.loads(j_rvr_1))
+    j_rvm_1 = MessageCodec.encode_message(rvm_1)
+    j_rvr_1 = MessageCodec.encode_message(rvr_1)
+    c_rvm_1 = MessageCodec.decode_message(j_rvm_1)
+    c_rvr_1 = MessageCodec.decode_message(j_rvr_1)
     assert c_rvr_1.is_reply_to(rvm_1)
     assert rvr_1.is_reply_to(c_rvm_1)
     assert str(rvm_1) == str(c_rvm_1)
