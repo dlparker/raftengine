@@ -2,8 +2,8 @@ from decimal import Decimal
 import datetime
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Any
-from .datatypes import Customer, Account, AccountType, Transaction, Statement
-from .database import BankDatabase
+from base.datatypes import Customer, Account, AccountType, Transaction, Statement
+from base.database import BankDatabase
 
 class Server:
 

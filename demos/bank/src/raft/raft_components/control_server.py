@@ -17,62 +17,6 @@ nodes = ["grpc://localhost:50055",
          "grpc://localhost:50056",
          "grpc://localhost:50057",]
 
-def old_start_server(index: int) -> bool:
-    """Start a server as a subprocess"""
-    work_dir = Path('/tmp', f"rserver_{index}")
-    if not work_dir.exists():
-        work_dir.mkdir()
-    
-    pid_file = work_dir / 'server.pid'
-    
-    # Check if server is already running
-    if is_server_running(index):
-        print(f"Server {index} is already running")
-        return False
-    
-    # Start the server process by calling this script with 'run' command
-    script_path = Path(__file__)
-    cmd = [sys.executable, str(script_path), 'run', '--index', str(index)]
-    
-    # Create log files for stdout and stderr
-    stdout_file = work_dir / 'server.stdout'
-    stderr_file = work_dir / 'server.stderr'
-    
-    try:
-        # Set environment for unbuffered output
-        env = os.environ.copy()
-        env['PYTHONUNBUFFERED'] = '1'
-        
-        # Start process in background with log file redirection
-        with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
-            process = subprocess.Popen(cmd, 
-                                     stdout=stdout_f, 
-                                     stderr=stderr_f,
-                                     env=env,
-                                     start_new_session=True)
-        
-        # Wait a moment to see if process starts successfully
-        time.sleep(0.5)
-        
-        if process.poll() is None:  # Process is still running
-            print(f"Server {index} started successfully")
-            print(f"  stdout: {stdout_file}")
-            print(f"  stderr: {stderr_file}")
-            return True
-        else:
-            print(f"Server {index} failed to start")
-            # Read the error logs
-            if stderr_file.exists():
-                with open(stderr_file, 'r') as f:
-                    stderr_content = f.read()
-                if stderr_content:
-                    print(f"stderr: {stderr_content}")
-            return False
-            
-    except Exception as e:
-        print(f"Error starting server {index}: {e}")
-        return False
-
 def is_server_running(index: int) -> bool:
     """Check if server is running using PID file"""
     work_dir = Path('/tmp', f"rserver_{index}")
@@ -104,35 +48,6 @@ def is_server_running(index: int) -> bool:
             pid_file.unlink()
         return False
 
-def old_stop_server(index: int) -> bool:
-    """Stop server using stop file"""
-    work_dir = Path('/tmp', f"rserver_{index}")
-    
-    if not is_server_running(index):
-        print(f"Server {index} is not running")
-        return False
-    
-    stop_file = work_dir / 'server.stop'
-    
-    try:
-        # Create stop file to trigger shutdown
-        with open(stop_file, 'w') as f:
-            f.write("stop")
-        
-        # Wait for server to stop
-        max_wait = 10  # seconds
-        for i in range(max_wait):
-            if not is_server_running(index):
-                print(f"Server {index} stopped successfully")
-                return True
-            time.sleep(1)
-        
-        print(f"Server {index} did not stop within {max_wait} seconds")
-        return False
-        
-    except Exception as e:
-        print(f"Error stopping server {index}: {e}")
-        return False
 
 async def get_server_status(index: int) -> dict:
     """Get detailed status of server"""
@@ -157,7 +72,7 @@ async def get_server_status(index: int) -> dict:
     
     return status
 
-async def start_server(index: int) -> bool:
+async def start_server(index: int, pause) -> bool:
     """Start a server as a subprocess (async version)"""
     work_dir = Path('/tmp', f"rserver_{index}")
     if not work_dir.exists():
@@ -173,6 +88,8 @@ async def start_server(index: int) -> bool:
     # Start the server process by calling this script with 'run' command
     script_path = Path(__file__)
     cmd = [sys.executable, str(script_path), 'run', '--index', str(index)]
+    if pause:
+        cmd.append('-p')
     
     # Create log files for stdout and stderr
     stdout_file = work_dir / 'server.stdout'
@@ -296,7 +213,7 @@ async def tail_server_errors(index: int, lines: int = 10) -> bool:
 
 async def main():
     parser = argparse.ArgumentParser(description='Raft Banking Server Control')
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'run', 'tail', 'tail_errors'],
+    parser.add_argument('command', choices=['start', 'stop', 'status', 'run', 'tail', 'tail_errors', 'go'],
                         help='Command to execute')
     parser.add_argument('--index', '-i', 
                         type=int, default=None,
@@ -305,6 +222,8 @@ async def main():
                         help='Apply command to all servers')
     parser.add_argument('--lines', '-n', type=int, default=10,
                         help='Number of lines to show (for tail commands)')
+    parser.add_argument('--pause', '-p', action='store_true',
+                        help='Pause at start awaiting go file')
     args = parser.parse_args()
     
     if args.all or args.index is None:
@@ -312,9 +231,17 @@ async def main():
     else:
         indices = [args.index]
     
+    if args.command == 'go':
+        for index in indices:
+            work_dir = Path('/tmp', f"rserver_{index}")
+            if work_dir.exists():
+                with open(Path(work_dir, 'server.go'), 'w') as f:
+                    f.write('')
+        return
+    
     if args.command == 'start':
         for index in indices:
-            await start_server(index)
+            await start_server(index, args.pause)
     
     elif args.command == 'stop':
         for index in indices:
@@ -344,6 +271,9 @@ async def main():
             return
         
         index = indices[0]
+#                                     heartbeat_period=0.01,
+#                                     election_timeout_min=0.250,
+#                                     election_timeout_max=0.350,
         c_config = ClusterInitConfig(node_uris=nodes,
                                      heartbeat_period=10000,
                                      election_timeout_min=20000,
@@ -357,7 +287,7 @@ async def main():
         if not work_dir.exists():
             work_dir.mkdir()
         local_config = LocalConfig(uri=uri, working_dir=work_dir)
-        await server_main(uri, c_config, local_config)
+        await server_main(uri, c_config, local_config, args.pause)
     
 if __name__ == "__main__":
     asyncio.run(main())

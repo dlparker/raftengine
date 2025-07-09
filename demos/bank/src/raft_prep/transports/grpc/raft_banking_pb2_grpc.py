@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import banking_pb2 as raft__banking__pb2
+from . import raft_banking_pb2 as raft__banking__pb2
 
 GRPC_GENERATED_VERSION = '1.73.1'
 GRPC_VERSION = grpc.__version__

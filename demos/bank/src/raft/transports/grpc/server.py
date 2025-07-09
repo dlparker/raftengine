@@ -1,12 +1,17 @@
 import asyncio
-import grpc
+import sys
 from concurrent import futures
 from datetime import datetime, timedelta
 from decimal import Decimal
+import grpc
 
-from .raft_server import RaftServer
-from . import banking_pb2
-from . import banking_pb2_grpc
+from pathlib import Path
+top_dir = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(top_dir))
+
+from src.raft.raft_components.raft_server import RaftServer
+from src.raft.transports.grpc import raft_banking_pb2 as banking_pb2
+from src.raft.transports.grpc import raft_banking_pb2_grpc as banking_pb2_grpc
 from src.base.datatypes import Customer, Account, AccountType
 
 
@@ -206,27 +211,16 @@ class RaftBankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
     def RaftMessage(self, request, context):
         """Handle Raft consensus messages"""
         try:
-            # Extract the message from the request
+            # Extract the simple string message from the request
             in_message = request.in_message
             
-            # Convert protobuf RaftMessage to a simple dict for the server
-            message_dict = {
-                "message_type": in_message.message_type,
-                "message_data": in_message.message_data
-            }
-            
-            # Call the server's raft_message method
-            result_dict = self._run_async(
-                self.server.raft_message(message_dict)
+            # Call the server's raft_message method with the simple string
+            result_message = self._run_async(
+                self.server.raft_message(in_message)
             )
             
-            # Convert result back to protobuf RaftMessage
-            out_message = banking_pb2.RaftMessage(
-                message_type=result_dict.get("message_type", ""),
-                message_data=result_dict.get("message_data", "")
-            )
-            
-            return banking_pb2.RaftMessageResponse(out_message=out_message)
+            # Return the simple string result
+            return banking_pb2.RaftMessageResponse(out_message=result_message)
             
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)

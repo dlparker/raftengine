@@ -4,12 +4,7 @@ from decimal import Decimal
 from datetime import timedelta
 from pathlib import Path
 import sys
-
-# Add the top-level directory to the path
-top_dir = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(top_dir))
-
-from src.base.datatypes import AccountType
+from base.datatypes import AccountType
 
 
 async def test_banking(client):

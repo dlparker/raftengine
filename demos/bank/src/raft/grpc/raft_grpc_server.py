@@ -6,8 +6,9 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.raft_prep.transports.grpc.raft_server import RaftServer
-from src.raft_prep.transports.grpc.server import serve_raft_banking_server
+from src.raft.raft_components.pilot import DeckHand
+from src.raft.raft_components.raft_server import RaftServer
+from src.raft.transports.grpc.server import serve_raft_banking_server
 
 
 def main():
@@ -27,6 +28,7 @@ def main():
     print(f"Database: {args.database}")
     
     server = RaftServer(db_file=args.database)
+    deckhand = DeckHand(server, None, client_maker, cluster_config, local_config)
     grpc_server = serve_raft_banking_server(server, port=args.port)
     
     try:

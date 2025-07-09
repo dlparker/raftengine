@@ -6,7 +6,7 @@ from pathlib  import Path
 import sys
 top_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(top_dir))
-from src.raft_prep.transports.grpc.client import get_grpc_client
+from src.raft.transports.grpc.client import get_grpc_client
 from src.base.test_banking import test_banking
 
 

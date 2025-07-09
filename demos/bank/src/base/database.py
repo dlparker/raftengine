@@ -2,7 +2,7 @@ import sqlite3
 import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from .datatypes import Customer, Account, AccountType, Transaction, Statement
+from base.datatypes import Customer, Account, AccountType, Transaction, Statement
 
 
 class BankDatabase:

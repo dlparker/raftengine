@@ -1,8 +1,8 @@
 from typing import List, Optional, Dict
 from datetime import timedelta, date
 from decimal import Decimal
-from .datatypes import AccountType, Customer, Account
-from .proxy_api import ProxyAPI
+from base.datatypes import AccountType, Customer, Account
+from base.proxy_api import ProxyAPI
 
 
 

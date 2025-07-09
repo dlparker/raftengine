@@ -1,4 +1,5 @@
 from pathlib import Path
+import traceback
 from operator import methodcaller
 from typing import Dict, Any
 from raftengine.api.pilot_api import PilotAPI
@@ -27,6 +28,7 @@ class DeckHand:
         await self.deck.stop()
 
     async def raft_message(self, in_message: Dict[str, Any]) -> Dict[str, Any]:
+        print('in deckhand.raft_message')
         return await self.deck.on_message(in_message)
 
 
@@ -64,9 +66,15 @@ class Pilot(PilotAPI):
         return response
 
     # PilotAPI
-    async def send_message(self, target_uri: str, message:str) -> None: 
-        cli = self.ensure_node_connection(target_uri)
-        cli.raft_message(message)
+    async def send_message(self, target_uri: str, message:str) -> None:
+        print(f"message for target {target_uri}", flush=True)
+        cli = await self.ensure_node_connection(target_uri)
+        try:
+            await cli.raft_message(message)
+            print(f"sent message for target {target_uri}", flush=True)
+        except Exception as e:
+            traceback.print_exc()
+            raise SystemExit()
 
     # PilotAPI
     async def send_response(self, target_uri: str, orig_message:str, reply:str) -> None: 

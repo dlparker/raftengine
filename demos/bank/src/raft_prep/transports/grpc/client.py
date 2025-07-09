@@ -4,8 +4,8 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any
 
 from src.base.client import Client
-from . import banking_pb2
-from . import banking_pb2_grpc
+from . import raft_banking_pb2 as banking_pb2
+from . import raft_banking_pb2_grpc as banking_pb2_grpc
 from src.base.datatypes import Customer, Account, AccountType
 from src.base.proxy_api import ProxyAPI
 
@@ -217,26 +217,18 @@ class RaftGrpcServerProxy(ProxyAPI):
             self.channel = None
             self.stub = None
     
-    async def raft_message(self, in_message: Dict[str, Any]) -> Dict[str, Any]:
+    async def raft_message(self, in_message: str) -> str:
         """Send Raft message via gRPC"""
         self._ensure_connected()
         
-        # Convert dict to protobuf RaftMessage
-        proto_message = banking_pb2.RaftMessage(
-            message_type=in_message.get("message_type", ""),
-            message_data=in_message.get("message_data", "")
-        )
-        
-        request = banking_pb2.RaftMessageRequest(in_message=proto_message)
+        # Send simple string message
+        request = banking_pb2.RaftMessageRequest(in_message=in_message)
         
         try:
             response = self.stub.RaftMessage(request)
             
-            # Convert protobuf response back to dict
-            return {
-                "message_type": response.out_message.message_type,
-                "message_data": response.out_message.message_data
-            }
+            # Return simple string response
+            return response.out_message
         except grpc.RpcError as e:
             raise Exception(f"gRPC error: {e.details()}")
 
@@ -244,7 +236,7 @@ class RaftGrpcServerProxy(ProxyAPI):
 class RaftClient(Client):
     """Banking client extended with Raft messaging capability"""
     
-    async def raft_message(self, in_message: Dict[str, Any]) -> Dict[str, Any]:
+    async def raft_message(self, in_message: str) -> str:
         """Send Raft message through the proxy"""
         return await self.server_proxy.raft_message(in_message)
 

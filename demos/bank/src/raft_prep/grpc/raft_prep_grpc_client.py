@@ -32,10 +32,7 @@ async def main():
         
         # Test Raft message functionality
         print("\n=== Testing Raft Message ===")
-        test_message = {
-            "message_type": "TestMessage",
-            "message_data": "Hello from Raft client!"
-        }
+        test_message = "{'foo': 'bar'}"
         response = await client.raft_message(test_message)
         print(f"Sent: {test_message}")
         print(f"Received: {response}")

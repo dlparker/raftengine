@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import asyncio
-import argparse
 import sys
 import os
 from pathlib import Path
@@ -13,10 +12,10 @@ sys.path.insert(0, str(top_dir))
 from src.raft.raft_components.pilot import DeckHand
 from src.raft.raft_components.sqlite_log import SqliteLog
 from src.raft.raft_components.raft_server import RaftServer
-from src.raft_prep.transports.grpc.client import get_grpc_client
+from src.raft.transports.grpc.client import get_grpc_client
 
 my_loggers = [('bank_demo', 'Demo raft integration banking app'),]
-log_control = LogController(my_loggers, default_level="info")
+log_control = LogController(my_loggers, default_level="debug")
 logger = logging.getLogger('bank_demo')
 
 class FileEventType(StrEnum):
@@ -131,7 +130,7 @@ class FileWatcher:
         self._running = False
 
 
-async def server_main(uri, cluster_config, local_config):
+async def server_main(uri, cluster_config, local_config, start_pause=False):
     path_root = Path(local_config.working_dir)
     if not path_root.exists():
         path_root.mkdir()
@@ -147,15 +146,14 @@ async def server_main(uri, cluster_config, local_config):
             if tmp[0].strip(':') != "grpc":
                 raise Exception(f'Misconfigure, should be grpc, not {tmp[0]}')
             host, port = tmp[-1].split(":")
-            return get_grpc_client(host, int(port))
+            return get_grpc_client(host, int(port))[0]
     else:
         raise Exception(f'no code for transport {transport}')
     
-    server = RaftServer()
+    bank_db_path = Path(path_root, 'banking.db')
+    server = RaftServer(db_file=bank_db_path)
     deckhand = DeckHand(server, log, client_maker, cluster_config, local_config)
     server.set_deckhand(deckhand)
-    await deckhand.start()
-    logger.info(f"{uri} deck started")
     
     # Write process ID to server.pid file
     pid_file = Path(local_config.working_dir, 'server.pid')
@@ -172,16 +170,34 @@ async def server_main(uri, cluster_config, local_config):
         logger.info(f"Stop file detected: {path} ({event_type})")
         await deckhand.stop()
     
-    file_watcher = FileWatcher(stop_file, stop_detected, autodelete=True)
-    watcher_task = asyncio.create_task(file_watcher.watch())
+    stop_watcher = FileWatcher(stop_file, stop_detected, autodelete=True)
+    watcher_task = asyncio.create_task(stop_watcher.watch())
     logger.info(f"Started file watcher for {stop_file}")
+
+    if start_pause:
+        go_file = Path(local_config.working_dir, 'server.go')
+        if go_file.exists():
+            go_file.unlink()
+        go_flag = False
+        async def go_noted(path, event_type):
+            nonlocal go_flag
+            go_flag = True
+        go_watcher = FileWatcher(go_file, go_noted, autodelete=True)
+        go_watcher_task = asyncio.create_task(go_watcher.watch())
+        print(f'Waiting for go file {go_file}', flush=True)
+        while not go_file.exists():
+            await asyncio.sleep(0.0001)
+        
+    
+    await deckhand.start()
+    logger.info(f"{uri} deck started")
     
     while not deckhand.deck.stopped:
         await asyncio.sleep(0.0001)
     
     logger.info("Deck (and deckhand) stopped")
     # Clean up file watcher
-    file_watcher.stop()
+    stop_watcher.stop()
     watcher_task.cancel()
     try:
         await watcher_task

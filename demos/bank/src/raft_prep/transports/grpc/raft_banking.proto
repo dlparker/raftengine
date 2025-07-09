@@ -51,11 +51,7 @@ message Statement {
     string total_debits = 6;
 }
 
-// Raft message for consensus protocol communication
-message RaftMessage {
-    string message_type = 1;    // e.g., "AppendEntries", "RequestVote", etc.
-    string message_data = 2;    // JSON serialized message content
-}
+// Raft message for consensus protocol communication - simplified to match async_streams
 
 // Request/Response messages for each banking operation
 
@@ -158,13 +154,13 @@ message AdvanceTimeResponse {
     // Empty response
 }
 
-// RaftMessage RPC
+// RaftMessage RPC - simplified to match async_streams
 message RaftMessageRequest {
-    RaftMessage in_message = 1;
+    string in_message = 1;
 }
 
 message RaftMessageResponse {
-    RaftMessage out_message = 1;
+    string out_message = 1;
 }
 
 // Banking Service Definition
