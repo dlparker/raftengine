@@ -1,0 +1,214 @@
+
+
+* Raft Enablement Process
+
+This demo is built to retain all the stages of development so that they can serve as
+examples of how this stepwise layering of functionality could work. As such it has
+some abstractions and complexity that you might not want to retain in your production
+code base. There may be some value in keeping some of it, since having a single process
+implementation that connects your client and server code can be useful for debugging
+when the problem is not related to the functions of the remoting method (RPCs or whatnot),
+or indeed to find out if it is related.
+
+Anywho, the structure is important to preserving clarity in this demo where there
+are multiple transport options and multiple versions of the app with varying degrees
+of completeness of the stepwise process.
+
+If you are starting from scratch in building your client server app that will use the
+Raftengine library to add Raft consensus support, this directory lays out a process
+for building it by layering functionality build sequentially. If you already have
+a client server application that you are going to enhance, most of this process
+is still relevant, you would just start in the middle somewhere based on the
+degree of completeness.
+
+The demo application here is a simple banking simulation that operates on customer
+and account records that are stored in a Sqlite database.
+
+The code here preserves the state of the code at the end of each of the major
+steps detailed below, so that you can review how the steps may be applied to
+your project.
+
+This part of the document summarizes the major steps of the recommended
+process. More detailed descriptions may be found in the next section.
+
+* Major steps
+
+** Major step one
+
+1. Build your server functionality and define the API the client will use.
+2. Build your client functionality for using the server API.
+3. Build an in-process version of your app that allows the client to call
+   the server with direct access, though through a proxy.
+4. Build a validator that ensures that the client gets the expected results
+   from the server.
+
+** Major step two
+
+1. Build a transport and a proxy to manage it for the client.
+2. Run the validator to ensure that the transport provides full access to the server
+
+** Major step three
+
+Raft enabled operations require that your server operations be accessible via log replication. This
+means that your request to the server needs to be stored in a Raft Log record, then replicated
+across the cluster, and only after a majority of servers have saved the record, then applied to
+underlying operational logic.
+
+Your server methods therefore need to be accessible by converting a serialized repsentation of the
+method identity and the method arguments that can be deserialized later and use to call the server.
+
+A peculiarity of this design is that the results of the serialized command do not need to be
+serialized. The client will only ever receive a result from the cluster leader, and the cluster
+leader server is the same one that receives the full RPC from the client, so it can return the
+result in original python object form. The non-leader servers will apply the serialized command
+and simply discard the results.
+
+This might make the process a little hard to understand, so it is a good idea to build the
+infrastructure for performing this conversion and testing it directly before integrating it with
+the raft library.
+
+1. Update the client, proxy, server and transport to support the Raft Message operations
+   which require a single additional RPC that transports an encoded raft message and
+   receives an encoded raft reply. You can call it what you like,
+   a natural name is "raft_message". This will be used by the servers for the message
+   traffic that is needed to manage the cluster, hold elections, replicate log records,
+   everything that the Raft protocol does that requires interaction between the nodes. 
+2. Build a set of tools that convert your API calls and their arguments into byte or string encoded
+   data.
+   1. For each API function, define a method call data structure that contains identifies the API function and
+      its arguments.
+   2. Build an encoder to convert the method call data structure to string or bytes
+   3. Build a decoders for the method call data structures
+3. Build a ProxyWrapper class that implements your application's ServerProxyAPI that converts
+      the methods to encode using your new encoders.
+4. Build a Dispatcher class that decodes your messages into specific server calls and returns the result to
+      the caller.
+5. Build a special TestFacade that implements ServerProxyAPI that will only be used for
+   this stage of development and will  be discarded when the Raftengine library is
+   integrated in a later step. This will be used in the server, not the client.
+   1. Provide it with the server instance and an instance of the ProxyWrapper class and an instance
+      of the Dispatcher class.
+   2. Write the methods so that they:
+      1. Use the ProxyWrapper to convert the method call to a serialized request
+      2. Pass the serialized request to the Dispatcher 
+      3. Collect the result of the Dispatcher call and return it.
+   3. Build a server that uses this TestFacade in place of the actual server
+6. Run the client validator against this TestFacade server
+
+
+* Major step one details
+
+** Build the Server and the Proxy API
+
+In the demo in src/base/server.py and src/base/proxy_api.py
+
+This server has no functions except those that the client will
+trigger with RPCs. Your server may differ, but this
+discussion only considers RPC support and Raft support.
+
+The ServerProxyAPI is just a convenience to ensure you
+provide all the methods in your ServerProxy class. This
+can be helpful when moving from one step in this process
+to the next. You can discard the ServerProxyAPI class
+when development is done and replace it with your
+concreate ServerProxy class.
+
+** Build your client.
+
+In the demo in src/base/client.py
+
+Our client does nothing except call the Server methods via the ServerProxyAPI,
+but it is common for real world clients to do other things such as caching
+handles, emitting events, etc.
+
+   
+** Build a validator client function or class
+
+In demo in src/base/test_banking.py
+
+This serves as a basic sanity check for ensuring that the
+client can access the server functionaly. This should
+be built to accept a client instance and not contain any
+variant specific behavior so that it can be used by all
+variants.
+
+** Build a direct in-process version of the app
+
+In demo in src/direct/proxy.py.
+
+Build a concrete implementation of the proxy api that has direct access to a server object.
+The ServerProxyAPI is intended for use in the client side, so normally it would
+not be in the same process as the server, but here that is the goal, to skip using
+any actual RPCs and use the proxy instance as a substitute. 
+
+
+** Configure a test the direct version
+
+*** Build a SetupHelperAPI implementation.
+
+In demo in src/direct/setup_helper.py
+
+You need a SetupToolAPI implementation to inform the command line tools
+how to setup the application. See [Architecture of multi-stage development support tools]
+
+In this case only one method will be used and only by the client
+command line tools, and it will configure the server and the proxy.
+
+** Configure a test of the direct version
+
+In the demo we have support for multiple transports and multiple
+completion stages, so we add some configuration to
+src/cli/transports.py to identify the SetupHelper for the direct
+case.
+
+The tools in src/cli/run_server.py and src/cli/run_client.py offer
+the choice of variant via command line arguments. For the direct
+variant run_server.py -t direct will tell you to just run the client.
+run_client -t direct will create a server, a proxy and a client
+and wires them together, then runs the validator tool against the client.
+
+You can build something simpler than this, but keep in mind that you
+might want to retain the ability to run the direct mode in order to
+simplify error analysis and debugging even after your raft enabled
+servers are in production. I can be challenging to debug servers that
+can change cluster leadership based on timeouts.
+
+
+*** Architecture of multi-stage development support tools
+
+This demo is built to retain all the stages of development so that they can serve as
+examples of how this stepwise layering of functionality could work. As such it has
+some abstractions and complexity that you might not want to retain in your production
+code base. There may be some value in keeping some of it, since having a single process
+implementation that connects your client and server code can be useful for debugging
+when the problem is not related to the functions of the remoting method (RPCs or whatnot),
+or indeed to find out if it is related.
+
+Anywho, the structure is important to preserving clarity in this demo where there
+are multiple transport options and multiple versions of the app with varying degrees
+of completeness of the stepwise process.
+
+To ensure the each stage does not need duplicate implementations of the various
+command line tools needed for testing and development, we use a layer of abstraction
+to connect the command line tools with the particular you wan to use. The
+key element if this is the src/base/setup_helper.py SetupHelperAPI class. It
+defines tools for creating servers, proxies, clients, etc. via method
+calls.
+
+Each variant builds an implementation of the SetupHelper that
+addresses the specific needs of that variant. The command line tools
+have a hardcoded registry of the available variants and the
+needed setup tool and chooses the right one based on user input.
+
+
+
+
+
+   
+
+   
+   
+   the client and server portions of your application logic as separate
+classes, create a proxy class for the server class and have the client class call the server class to perform the operations.
+In this demo these classes are in src/base/client.py and src/base/server.py
+ 
