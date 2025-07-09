@@ -233,10 +233,6 @@ async def test_command_sqlite_1(cluster_maker):
     rec_1 = await ts_1.log.read(index)
     rec_2 = await ts_2.log.read(index)
     rec_3 = await ts_3.log.read(index)
-    assert rec_1.result == rec_2.result 
-    assert rec_1.result == rec_3.result
-    new_rec = LogRec.from_dict(rec_1.__dict__)
-    assert new_rec.result == rec_1.result
     await cluster.stop_auto_comms()
     
 async def double_leader_inner(cluster, discard):

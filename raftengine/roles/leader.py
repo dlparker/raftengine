@@ -378,10 +378,11 @@ class Leader(BaseRole):
         if error_data:
             self.logger.debug("%s running command produced error %s", self.my_uri(), error_data)
         else:
-            log_rec.result = result
+            #log_rec.result = result
             log_rec.applied = True
             await self.log.replace(log_rec)
-            self.logger.debug("%s running command produced no error, apply_index is now %s", self.my_uri(), await self.log.get_applied_index())
+            self.logger.debug("%s running command produced no error, apply_index is now %s",
+                              self.my_uri(), await self.log.get_applied_index())
         waiter = self.command_waiters[log_rec.index]
         if waiter:
             await waiter.handle_run_result(result, error_data)
@@ -553,10 +554,6 @@ class CommandWaiter:
                                redirect=None)
         if error_data:
             await self.leader.deck.event_control.emit_error(error_data)
-        else:
-            log_record = await self.log.read(self.orig_log_record.index)
-            log_record.result = command_result
-            new_rec = await self.log.replace(log_record)
         self.result = result
         async with self.done_condition:
             self.done_condition.notify()
