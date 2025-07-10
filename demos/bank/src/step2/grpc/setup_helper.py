@@ -3,7 +3,7 @@ import asyncio
 import logging
 from base.setup_helper import SetupHelperAPI
 from base.client import Client
-from base.server import Server
+from base.operations import Ops
 from step2.grpc.server import BankingServiceImpl, create_server
 from step2.grpc.proxy import ServerProxy
 
@@ -28,7 +28,7 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(host, port)
 
     async def get_server(self, db_file: os.PathLike, port='50051'):
-        server = Server(db_file)
+        server = Ops(db_file)
         self.port = port
         return BankingServiceImpl(server)
     

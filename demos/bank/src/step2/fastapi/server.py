@@ -8,13 +8,13 @@ from datetime import timedelta, date
 from decimal import Decimal
 
 from base.datatypes import Customer, Account, AccountType
-from base.server import Server
+from base.operations import Ops
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 # Global server instance - will be set by setup_helper
-banking_server: Optional[Server] = None
+banking_server: Optional[Ops] = None
 
-def set_banking_server(server: Server):
+def set_banking_server(server: Ops):
     """Set the global banking server instance"""
     global banking_server
     banking_server = server
@@ -197,7 +197,7 @@ async def health_check():
     return {"status": "healthy", "service": "banking-jsonrpc"}
 
 
-async def create_server(host: str, port: int, server: Server):
+async def create_server(host: str, port: int, server: Ops):
     """Create and configure the FastAPI server"""
     set_banking_server(server)
     return app

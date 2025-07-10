@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from base.client import Client
-from base.server import Server
+from base.operations import Ops
 from base.proxy_api import ProxyAPI
 
 class SetupHelperAPI(ABC):

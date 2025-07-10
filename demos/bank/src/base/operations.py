@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from base.datatypes import Customer, Account, AccountType, Transaction, Statement
 from base.database import BankDatabase
 
-class Server:
+class Ops:
 
     def __init__(self, db_file="/tmp/bank.db") -> None:
         self.db = BankDatabase(db_path=db_file)
@@ -220,6 +220,4 @@ class Server:
         self.db.create_statement(statement)
 
     
-
-
 

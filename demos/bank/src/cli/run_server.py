@@ -20,42 +20,81 @@ else:
 if src_dir not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-from cli.transports import transport_table
+from cli.setup_configs import (
+    setup_configs, get_available_steps, get_available_transports,
+    get_module_path, validate_step_transport
+)
 
-async def main():
-    parser = argparse.ArgumentParser(description='Banking Server Runner')
-    # Define the list of valid choices
+async def main_async(args=None):
+    """Main async function that can be called directly or from command line"""
+    parser = argparse.ArgumentParser(
+        description='Banking Server Runner',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --step step2 --transport grpc --port 8080
+  %(prog)s -s step2 -t fastapi -p 8000
 
-    valid_transports = list(transport_table.keys())
-    parser.add_argument(
-        '-t', '--transport',  # Short and long option names
-        required=True,   # Make the argument mandatory
-        choices=valid_transports,  # Restrict to this list
-        help=f'Type of transport (must be one of: {", ".join(valid_transports)})'
+Available step/transport combinations:
+  step1: direct (not applicable - server created by client automatically)
+  step2: aiozmq, grpc, fastapi (network servers that need explicit startup)
+        """
     )
+
+    # Step and transport arguments
+    parser.add_argument(
+        '-s', '--step',
+        required=True,
+        choices=get_available_steps(),
+        help='Demo evolution step (only step2 applicable for servers)'
+    )
+    parser.add_argument(
+        '-t', '--transport',
+        required=True,
+        help='Transport mechanism within the step'
+    )
+    
     parser.add_argument('--database', '-d', 
                         default='banking_direct.db',
                         help='Database file path (default: banking_direct.db)')
     
     parser.add_argument('-u', '--uri', type=int, help='Uri from cluster node list')
-    parser.add_argument('-p', '--port', type=int, help='Server Port Number (required if not -u, not used for direct)')
+    parser.add_argument('-p', '--port', type=int, help='Server port number (required if not -u)')
 
     # Parse arguments
-    args = parser.parse_args()
-    if args.transport == "direct":
-        print("For testing direct transport, just execute run_client.py, it creates server")
+    if args is None:
+        parsed_args = parser.parse_args()
+    else:
+        parsed_args = parser.parse_args(args)
+
+    # Get step and transport
+    step = parsed_args.step
+    transport = parsed_args.transport
+    
+    # Validate combination
+    valid, message = validate_step_transport(step, transport)
+    if not valid:
+        parser.error(message)
+        
+    if step == "step1":
+        print("For step1/direct, just execute run_client.py - it creates the server automatically")
+        print("Step1 uses in-process direct calls, no separate server needed.")
         raise SystemExit(0)
 
-    if args.port is None and args.uri is None:
-        parser.error('must have either --port or --uri')
+    if parsed_args.port is None and parsed_args.uri is None:
+        parser.error('step2 transports require either --port or --uri')
 
-    module_path = transport_table[args.transport]
+    module_path = get_module_path(step, transport)
     module = importlib.import_module(module_path)
     SetupHelper = getattr(module, "SetupHelper")
     helper = SetupHelper()
-    server = await helper.get_server(db_file=Path(args.database), port=args.port)
+    server = await helper.get_server(db_file=Path(parsed_args.database), port=parsed_args.port)
     await helper.serve(server=server)
+
+def main():
+    """Entry point for command line usage"""
+    asyncio.run(main_async())
     
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
 

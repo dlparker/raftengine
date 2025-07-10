@@ -4,9 +4,9 @@ import logging
 import uvicorn
 from base.setup_helper import SetupHelperAPI
 from base.client import Client
-from base.server import Server
-from step2.fastapi_jsonrpc.server import create_server
-from step2.fastapi_jsonrpc.proxy import ServerProxy
+from base.operations import Ops
+from step2.fastapi.server import create_server
+from step2.fastapi.proxy import ServerProxy
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +30,7 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(host, port)
 
     async def get_server(self, db_file: os.PathLike, port='8000'):
-        server = Server(db_file)
+        server = Ops(db_file)
         self.port = port
         self.server = server
         return server
@@ -46,7 +46,7 @@ class SetupHelper(SetupHelperAPI):
             logger.info("FastAPI JSON-RPC server stopped")
 
 
-async def start_server(banking_server: Server, port: str):
+async def start_server(banking_server: Ops, port: str):
     """Start the FastAPI server with uvicorn"""
     # Enable asyncio debugging
     asyncio.get_event_loop().set_debug(True)

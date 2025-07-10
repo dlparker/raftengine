@@ -5,7 +5,7 @@ import zmq
 import aiozmq.rpc
 from base.setup_helper import SetupHelperAPI
 from base.client import Client
-from base.server import Server
+from base.operations import Ops
 from step2.aiozmq.server import Server as RPCServer
 from step2.aiozmq.proxy import ServerProxy
 
@@ -32,7 +32,7 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(host, port)
 
     async def get_server(self, db_file:os.PathLike, port='55555'):
-        server = Server(db_file)
+        server = Ops(db_file)
         self.port = port
         return RPCServer(server)
     

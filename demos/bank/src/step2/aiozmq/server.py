@@ -8,7 +8,7 @@ import aiozmq.rpc
 
 from base.datatypes import Customer, Account, AccountType
 from base.proxy_api import ProxyAPI
-from base.server import Server
+from base.operations import Ops
 from base.msgpack_helpers import BankPacker, get_bank_translation_table
 
 

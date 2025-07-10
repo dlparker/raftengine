@@ -6,7 +6,7 @@ from datetime import timedelta, date
 from decimal import Decimal
 
 from base.datatypes import Customer, Account, AccountType
-from base.server import Server
+from base.operations import Ops
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 # These will be generated from the proto file
@@ -19,7 +19,7 @@ class BankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
     gRPC service implementation for banking operations with msgpack serialization
     """
 
-    def __init__(self, server: Server):
+    def __init__(self, server: Ops):
         self.server = server
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -164,7 +164,7 @@ class BankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
             return banking_pb2.AdvanceTimeResponse()
 
 
-async def create_server(host: str, port: int, banking_server: Server):
+async def create_server(host: str, port: int, banking_server: Ops):
     """Create and start a gRPC server"""
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
     banking_service = BankingServiceImpl(banking_server)

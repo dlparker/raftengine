@@ -1,8 +1,8 @@
 import os
 from base.setup_helper import SetupHelperAPI
 from base.client import Client
-from base.server import Server
-from direct.proxy import ServerProxy
+from base.operations import Ops
+from step1.proxy import ServerProxy
 
 
 class SetupHelper(SetupHelperAPI):
@@ -13,9 +13,9 @@ class SetupHelper(SetupHelperAPI):
         return Client(server_proxy=proxy)
 
     async def get_server(self, db_file:os.PathLike):
-        return Server(db_file)
+        return Ops(db_file)
     
-    async def get_proxy(self, server:Server):
+    async def get_proxy(self, server:Ops):
         return ServerProxy(server=server)
         
     

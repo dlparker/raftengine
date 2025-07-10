@@ -6,18 +6,18 @@ from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
 from base.proxy_api import ProxyAPI
-from base.server import Server
+from base.operations import Ops
 
 class ServerProxy(ProxyAPI):
     """
-    Implementation of base.proxy.ProxyAPI that has a base.server.Server instance
+    Implementation of base.proxy.ProxyAPI that has a base.operations.Ops instance
     and makes direct calls to it. This is of no practical value in a finished
     application, it is used in this demo just to show an initial step that
     ensures that your client code can use the services that your sevice code
     provides by proxy.
     """
 
-    def __init__(self, server:Server):
+    def __init__(self, server:Ops):
         self.server = server
         
     async def create_customer(self, first_name: str, last_name: str, address: str) -> Customer:

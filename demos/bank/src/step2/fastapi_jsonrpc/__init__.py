@@ -1,1 +1,0 @@
-# FastAPI + JSON-RPC banking service implementation
