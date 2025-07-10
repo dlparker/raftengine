@@ -4,9 +4,9 @@ This checklist tracks which tests have been upgraded to include feature definiti
 
 ## Status Summary
 - **Total Tests**: 74
-- **Tests with Feature Definitions**: 8 (all properly implemented)
-- **Tests Remaining**: 66
-- **Completion Rate**: 10.8%
+- **Tests with Feature Definitions**: 11 (all properly implemented)
+- **Tests Remaining**: 63
+- **Completion Rate**: 14.9%
 - **API Status**: ✓ All existing feature registry calls now use correct API pattern
 
 ## Test Files and Methods
@@ -17,15 +17,15 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [NA] `test_class_edges.py::test_enum_edges`
 - [NA] `test_class_edges.py::test_message_ops`
 
-### test_commands_1.py (5/13 complete)
+### test_commands_1.py (8/13 complete)
 - [x] `test_commands_1.py::test_command_1` ✓
 - [x] `test_commands_1.py::test_command_2_leaders_1` ✓
 - [x] `test_commands_1.py::test_command_sqlite_1` ✓
 - [x] `test_commands_1.py::test_command_2_leaders_2` ✓
 - [x] `test_commands_1.py::test_command_2_leaders_3` ✓
-- [ ] `test_commands_1.py::test_command_after_heal_1`
-- [ ] `test_commands_1.py::test_command_after_heal_2`
-- [ ] `test_commands_1.py::test_follower_explodes_in_command`
+- [x] `test_commands_1.py::test_command_after_heal_1` ✓
+- [x] `test_commands_1.py::test_command_after_heal_2` ✓
+- [x] `test_commands_1.py::test_follower_explodes_in_command` ✓
 - [ ] `test_commands_1.py::test_leader_explodes_in_command`
 - [ ] `test_commands_1.py::test_long_catchup`
 - [ ] `test_commands_1.py::test_full_catchup`

@@ -495,15 +495,23 @@ async def test_command_after_heal_1(cluster_maker):
     old leader sends a heartbeat out. There wouldn't be any problem with the candidate resigning in this
     case because everybody's log roles match, but Raft is conservative on this point and requires
     that the candidate reject an append entries of a lower term. This test is identical
-    to test_command_after_heal_2 except that this version uses pre vote logic.
+    to test_command_after_heal_2 except that this version does NOT use pre vote logic.
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_partition_leader = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_term_rejection = registry.get_raft_feature("leader_election", "term_rejection")
+    f_partition_recovery = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
-    await cluster.test_trace.define_test("Testing command processing after network heal with pre-vote")
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing command processing after network heal without pre-vote")
+    
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await inner_command_after_heal(cluster, False)
     
@@ -518,12 +526,20 @@ async def test_command_after_heal_2(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_partition_leader = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_term_rejection = registry.get_raft_feature("leader_election", "term_rejection")
+    f_partition_recovery = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.start()
     await cluster.test_trace.define_test("Testing command processing after network heal without pre-vote")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await inner_command_after_heal(cluster, False)
     
 async def inner_command_after_heal(cluster, use_pre_vote):
@@ -539,14 +555,19 @@ async def inner_command_after_heal(cluster, use_pre_vote):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger.info('-------------- Election done, about to split network leaving leader %s isolated ', uri_1)
-    await cluster.test_trace.start_subtest("Node 1 is leader, splitting network to isolate it")
+    f_partition_leader = registry.get_raft_feature("network_partition", "leader_isolation")
+    spec = dict(used=[f_partition_leader], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, splitting network to isolate it", features=spec)
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
     #logger.info('-------------- Split network done, starting election of %s', uri_2)
     # now ts_2 and ts_3 are alone, have ts_2
-    await cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats")
+    f_term_rejection = registry.get_raft_feature("leader_election", "term_rejection")
+    f_partition_recovery = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    spec = dict(used=[], tested=[f_term_rejection, f_partition_recovery])
+    await cluster.test_trace.start_subtest("Triggering node 2 to start an election, then healing network and triggering old leader to send heartbeats", features=spec)
     await ts_2.start_campaign()
     assert ts_2.get_role_name() == "CANDIDATE"
     last_term = await ts_2.log.get_term()
@@ -599,6 +620,12 @@ async def test_follower_explodes_in_command(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_follower_error_recovery = registry.get_raft_feature("state_machine_command", "follower_error_recovery")
+    f_partial_failure_tolerance = registry.get_raft_feature("log_replication", "partial_failure_tolerance")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -606,7 +633,9 @@ async def test_follower_explodes_in_command(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower error during command execution")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -621,7 +650,9 @@ async def test_follower_explodes_in_command(cluster_maker):
     assert ts_2.operations.total == 1
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
-    await cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command")
+    
+    spec = dict(used=[], tested=[f_partial_failure_tolerance])
+    await cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command", features=spec)
 
     # The node 3 follower will blow up trying to apply command, so
     # we use the test control sequence that allows us to specify
@@ -638,7 +669,8 @@ async def test_follower_explodes_in_command(cluster_maker):
     assert ts_2.operations.total == 2
     assert ts_3.operations.total == 1
 
-    await cluster.test_trace.start_subtest("Second command succeed, but not at node3. Disarming bomb and sending hearbeats, should cause run and commit")
+    spec = dict(used=[], tested=[f_follower_error_recovery])
+    await cluster.test_trace.start_subtest("Second command succeed, but not at node3. Disarming bomb and sending hearbeats, should cause run and commit", features=spec)
     # clear the trigger and run heartbeats, node 3 should rerun command and succeed
     ts_3.operations.explode = False
     await ts_1.send_heartbeats()
