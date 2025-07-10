@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Integration test for step1 transport components"""
 import pytest
-import asyncio
 import tempfile
 import os
 from pathlib import Path
@@ -15,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from base.operations import Ops
 from base.client import Client
 from base.datatypes import AccountType, Customer, Account
-from step1.proxy import ServerProxy
-from step1.setup_helper import SetupHelper
+from step1.direct.proxy import ServerProxy
+from step1.direct.setup_helper import SetupHelper
 
 
 @pytest.mark.integration

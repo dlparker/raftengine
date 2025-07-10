@@ -1,22 +1,17 @@
-"""
-Configuration for steps and transports in the banking demo.
-
-This module defines the available implementations for each step in the banking demo evolution:
-- step1: Direct in-process implementation
-- step2: Network-based client-server implementations
-
-Each step contains available transport mechanisms with their module paths.
-"""
 
 setup_configs = {
     'step1': {
-        'direct': 'step1.setup_helper',
+        'direct': 'step1.direct.setup_helper',
     },
     'step2': {
         'aiozmq': 'step2.aiozmq.setup_helper',
         'grpc': 'step2.grpc.setup_helper', 
         'fastapi': 'step2.fastapi.setup_helper',
-    }
+    },
+    'step3': {
+        'direct': 'step3.direct.setup_helper',
+        'astream': 'step3.astream.setup_helper',
+    },
 }
 
 def get_available_steps():

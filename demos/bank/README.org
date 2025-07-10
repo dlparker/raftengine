@@ -19,7 +19,7 @@ Raftengine library to add Raft consensus support, this directory lays out a proc
 for building it by layering functionality build sequentially. If you already have
 a client server application that you are going to enhance, most of this process
 is still relevant, you would just start in the middle somewhere based on the
-degree of completeness.
+degree of completeness, probably at major step 3.
 
 The demo application here is a simple banking simulation that operates on customer
 and account records that are stored in a Sqlite database.
@@ -35,17 +35,17 @@ process. More detailed descriptions may be found in the next section.
 
 ** Major step one
 
-1. Build your server functionality and define the API the client will use.
-2. Build your client functionality for using the server API.
+1. Build your server operations functionality and define the API the client will use.
+2. Build your client functionality for using the server operations API.
 3. Build an in-process version of your app that allows the client to call
-   the server with direct access, though through a proxy.
+   the operations with direct access, though through a proxy.
 4. Build a validator that ensures that the client gets the expected results
-   from the server.
+   from the operations.
 
 ** Major step two
 
 1. Build a transport and a proxy to manage it for the client.
-2. Run the validator to ensure that the transport provides full access to the server
+2. Run the validator to ensure that the transport provides full access to the server, operations.
 
 
 ** Major step three
@@ -55,40 +55,97 @@ means that your request to the server needs to be stored in a Raft Log record, t
 across the cluster, and only after a majority of servers have saved the record, then applied to
 underlying operational logic.
 
-Your server methods therefore need to be accessible by converting a serialized repsentation of the
-method identity and the method arguments that can be deserialized later and use to call the server.
+Your operations methods therefore need to be accessible by converting a serialized repsentation of the
+method identity and the method arguments that can be deserialized later and use to call the operations logic.
 
 A peculiarity of this design is that the results of the serialized command do not need to be
 serialized. The client will only ever receive a result from the cluster leader, and the cluster
 leader server is the same one that receives the full RPC from the client, so it can return the
 result in original python object form. The non-leader servers will apply the serialized command
-and simply discard the results.
+and simply discard the results. 
 
 This might make the process a little hard to understand, so it is a good idea to build the
 infrastructure for performing this conversion and testing it directly before integrating it with
 the RPC mechanisms, much less the Raftengine library.
 
+The final target form of this process will have the client calling the server operatiosn API methods via
+the ServerProxy to send RPCs to the Raft Leader server which will then serialize the RPC request and deliver it
+to the Raftengine library. The Raftengine library will save the request in the Raft log and then
+replicate the log record to the other servers. Once enough servers have received the log record the
+Leader will mark the record committed, then it will apply the command to the local Operations logic.
+The follower servers will soon learn that the record is committed and will retrieve the command
+from the log record an apply it to the local Operations logic.
+
+So in this architecture the RPCs are never directly connect to the Operations logic in the server.
+Even at the Leader server the Raft library logic applies the command to the Operations logic just
+as it does in the folowers.
+
+For the purposes of this discussion the server component that receives the RPC is call a Collector,
+as it collects all the RPC signatures into a single serialize command format and passes it on to
+the Raft Libary. The component that applies that serialized command to the Operations is called
+the Dispatcher.
+
+Major step three is the development of the Collector and Dispatcher.
+
+1. Build a Collector class that implements the OpsProxyAPI and that converts the method
+   calls and arguments of that API to JSON compatible serialized command string.
+2. Build a Dispatcher that unpacks the command and calls the actual Operations methods
+   with the unpacked arguments, and directly returns the results.
+3. To verify before moving on the the next step, and to easy verification and debugging
+   of future changes in API signatures, build a single process test of the Client to
+   Collector to Dispatcher to Operations flow and test all the operations.
+
 ** Major step four
 
-The final target form of this process will have the client calling the Server API methods via
-the ServerProxy to access the Server functions, and the.
+Major step four is to build RPC support for the Raft libary via a new RPC that passes
+a single string argument, which will be a JSON encodeed Raft message, possibly including
+your command, but Raft has other uses for these messages as well.
+
+There is a choice to be made about how this RPC fits into the overall architecture. The two
+possibilities are to encorporate the RPC into your existing set, the OperationsAPI, or to
+make it a separate RPC interface. There are arguments on both sides.
+
+1. Separate RPC interfaces:
+   1. Pros
+      1. Network admins can use separate networks for server to server versus client to server
+	 which may benefit security, performance an reliability engineering concerns.
+      2. Should it be desirable to add a different RPC mechanism for client to server operations,
+	 it would not be necessary to replace the server to server mechanism. This would greatly
+	 ease a phased rollout of the change since the cluster would keep operating normally
+	 as you switched the server population over to the new client RPC mechanism
+      3. It is slightly less confusing to developers because there is no overlap of usage. Clients
+	 call servers with the first RPC interface but never the second, and servers call each other
+	 with the second but never the first.
+   2. Cons
+      1. More complex since you need to build and manage two RPC servers, or at least one server with two
+	 interfaces.
+      2. Each server needs two network endpoints instead of one.
+      3. Could be more confusing to developers depending on how much code structure is needed to organize
+	 and support the two interfaces.
+2. Singe RPC interface
+   1. Pros
+      1. Implementation is simpler, just add an RPC to existing interface.
+      2. Slightly reduces the likelihood that you'll have maintenance headaches with changes
+	 to the serialized datatypes.
+      3. Code structure is much simpler
+   2. Cons
+      1. Possibly a bit confusing to developers because clients processes are clients of all the RPCs
+	 except the Raft message RPC, and servers are clients of the Raft message RPCs but not
+	 of all the other RPCs in the same interface.
+	 
+
+Whichever path you choose, stepwise development will be easier if you begin by building an RPC interface
+for just the Raft message RPC and testing that it works when placed between the Collector and Dispatcher.
+In the final form the Collector and Dispatcher will be separated by the Raft library, and by time as the
+log replication process intervenes, but building this direct RPC connection between them will ease both
+initial development and longer term maintenance. It will be very difficult to test and debug these functions
+when they are driven by Raft protocol sequences and timing considerations.
+
+
 
 This step can be folded into step five if you prefer, assuming you make the choice to combine
 your client to server and server to server RPCs.
    
-
-
-terms.
-   1. A "Collector" class that composes "commands" that indicate the API method to target
-      and include the arguments that would normally be sent via an RPC. This needs to be
-      in a form that can be serialized to JSON as part of the Raft Append Entries message.
-   2. A "Dispatcher" class that takes a "collected" command and arguments, expands it and
-      calls the server, and converts the server response into a JSON serializable form.
-   3. Build a test that verifies that all the Server API elements work correctly when
-      passed through the Collector and Dispatcher.
-   4. Build a direct in-process use of Client, Proxy, Colector, Dispatcher and Server,
-      because it can be difficult to debug these components with an RPC layer between
-      the Proxy and the Collector.
 
 
    
@@ -104,11 +161,11 @@ terms.
       its arguments.
    2. Build an encoder to convert the method call data structure to string or bytes
    3. Build a decoders for the method call data structures
-5. Build a ProxyWrapper class that implements your application's ServerProxyAPI that converts
+5. Build a ProxyWrapper class that implements your application's OpsProxyAPI that converts
       the methods to encode using your new encoders.
 6. Build a Dispatcher class that decodes your messages into specific server calls and returns the result to
       the caller.
-7. Build a special TestFacade that implements ServerProxyAPI that will only be used for
+7. Build a special TestFacade that implements OpsProxyAPI that will only be used for
    this stage of development and will  be discarded when the Raftengine library is
    integrated in a later step. This will be used in the server, not the client.
    1. Provide it with the server instance and an instance of the ProxyWrapper class and an instance
@@ -131,10 +188,10 @@ This server has no functions except those that the client will
 trigger with RPCs. Your server may differ, but this
 discussion only considers RPC support and Raft support.
 
-The ServerProxyAPI is just a convenience to ensure you
+The OpsProxyAPI is just a convenience to ensure you
 provide all the methods in your ServerProxy class. This
 can be helpful when moving from one step in this process
-to the next. You can discard the ServerProxyAPI class
+to the next. You can discard the OpsProxyAPI class
 when development is done and replace it with your
 concreate ServerProxy class.
 
@@ -142,7 +199,7 @@ concreate ServerProxy class.
 
 In the demo in src/base/client.py
 
-Our client does nothing except call the Server methods via the ServerProxyAPI,
+Our client does nothing except call the Server methods via the OpsProxyAPI,
 but it is common for real world clients to do other things such as caching
 handles, emitting events, etc.
 
@@ -162,7 +219,7 @@ variants.
 In demo in src/direct/proxy.py.
 
 Build a concrete implementation of the proxy api that has direct access to a server object.
-The ServerProxyAPI is intended for use in the client side, so normally it would
+The OpsProxyAPI is intended for use in the client side, so normally it would
 not be in the same process as the server, but here that is the goal, to skip using
 any actual RPCs and use the proxy instance as a substitute. 
 
@@ -268,7 +325,7 @@ the same architectural pattern but uses different RPC mechanisms.
 
 All Step 2 implementations share:
 - *Common Serialization*: =src/base/msgpack_helpers.py= handles complex banking datatypes
-- *Identical Interface*: All implement =base.proxy_api.ProxyAPI= for seamless interchangeability
+- *Identical Interface*: All implement =base.proxy_api.OpsProxyAPI= for seamless interchangeability
 - *Same Banking Logic*: All use =base.server.Server= for business operations
 - *Unified CLI*: Same command-line tools work with all transports via =src/cli/transports.py=
 

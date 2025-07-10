@@ -6,10 +6,10 @@ import aiozmq.rpc
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import ProxyAPI
+from base.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import BankPacker, get_bank_translation_table
 
-class ServerProxy(ProxyAPI):
+class ServerProxy(OpsProxyAPI):
     """
     """
 

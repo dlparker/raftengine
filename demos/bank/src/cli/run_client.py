@@ -25,6 +25,7 @@ from cli.setup_configs import (
 )
 from base.test_banking import test_banking
 
+
 async def main_async(args=None):
     """Main async function that can be called directly or from command line"""
     parser = argparse.ArgumentParser(
@@ -71,6 +72,9 @@ Available step/transport combinations:
     # Get step and transport
     step = parsed_args.step
     transport = parsed_args.transport
+    if parsed_args.transport != "direct":
+        if not parsed_args.port:
+            parser.error("--port is required for non-direct")
     
     # Validate combination
     valid, message = validate_step_transport(step, transport)
@@ -83,11 +87,9 @@ Available step/transport combinations:
     SetupHelper = getattr(module, "SetupHelper")
     helper = SetupHelper()
     
-    if step == "step1":
+    if parsed_args.transport == "direct":
         client = await helper.get_client(db_file=Path(parsed_args.database))
     else:
-        if not parsed_args.port:
-            parser.error("--port is required for step2 transports")
         client = await helper.get_client(host='localhost', port=parsed_args.port)
     
     await test_banking(client)

@@ -6,11 +6,11 @@ from typing import List, Optional, Dict
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import ProxyAPI
+from base.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 
-class ServerProxy(ProxyAPI):
+class ServerProxy(OpsProxyAPI):
     """
     HTTP client proxy for JSON-RPC banking operations with msgpack serialization
     """

@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import ProxyAPI
+from base.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 # These will be generated from the proto file
@@ -12,7 +12,7 @@ from . import banking_pb2
 from . import banking_pb2_grpc
 
 
-class ServerProxy(ProxyAPI):
+class ServerProxy(OpsProxyAPI):
     """
     gRPC client proxy for banking operations with msgpack serialization
     """

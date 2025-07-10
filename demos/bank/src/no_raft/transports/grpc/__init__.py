@@ -1,1 +1,0 @@
-# gRPC transport for banking service

@@ -46,7 +46,7 @@ The banking system is built around a layered architecture:
 
 **Command Pattern**: Banking operations are converted to serializable commands (CommandType enum) that can be replicated across a Raft cluster. This is demonstrated in the proxy implementations where method calls become command objects.
 
-**Proxy Pattern**: The ProxyAPI abstraction allows the same client code to work with different transport mechanisms (direct, TCP, gRPC) and different consensus approaches (no-raft vs raft-enabled).
+**Proxy Pattern**: The OpsProxyAPI abstraction allows the same client code to work with different transport mechanisms (direct, TCP, gRPC) and different consensus approaches (no-raft vs raft-enabled).
 
 **Async-First Design**: All banking operations are async, supporting both high-concurrency scenarios and integration with async transport layers.
 
@@ -123,7 +123,7 @@ The transition from no-raft to raft-prep demonstrates how to convert method call
 The BankDatabase class provides a complete SQLite implementation showing how to integrate banking operations with persistent storage, including transaction history and monthly statement generation.
 
 ### Transport Flexibility
-The ProxyAPI abstraction allows the same banking client code to work with any transport mechanism, making it easy to compare different RPC approaches and migrate between them.
+The OpsProxyAPI abstraction allows the same banking client code to work with any transport mechanism, making it easy to compare different RPC approaches and migrate between them.
 
 ## Important Lessons Learned
 
@@ -211,7 +211,7 @@ from decimal import Decimal
 
 from src.base.client import Client
 from src.base.datatypes import Customer, Account, AccountType, CommandType
-from src.base.proxy_api import ProxyAPI
+from src.base.proxy_api import OpsProxyAPI
 from src.base.json_helpers import bank_json_dumps, bank_json_loads
 
 class RaftASClient:
@@ -226,7 +226,7 @@ class RaftASClient:
         # Complete implementation copied from no_raft but standalone
         # ...
 
-class RaftServerProxy(ProxyAPI):
+class RaftServerProxy(OpsProxyAPI):
     """Proxy for Raft-enabled banking operations via async streams"""
     def __init__(self, as_client: RaftASClient) -> None:
         self.as_client = as_client

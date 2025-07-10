@@ -5,7 +5,7 @@ from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
 
 
-class ProxyAPI(ABC): 
+class OpsProxyAPI(ABC): 
     """Abstract base class defining the interface for banking proxy implementations"""
     
     @abstractmethod
