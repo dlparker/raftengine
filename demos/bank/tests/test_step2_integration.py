@@ -17,20 +17,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from base.operations import Ops
 from base.client import Client
 from base.datatypes import AccountType, Customer, Account
+from banking_workflow_helper import validate_banking_workflow
 
-# Import helpers for testing optional dependencies
-def check_dependency(module_name):
-    """Check if a module is available"""
+# Import helpers for testing dependencies
+def require_dependency(module_name):
+    """Check if a module is available, raise ImportError if not"""
     try:
         __import__(module_name)
-        return True
     except ImportError:
-        return False
-
-# Check available transports
-HAS_AIOZMQ = check_dependency('aiozmq')
-HAS_FASTAPI = check_dependency('fastapi')
-HAS_GRPC = check_dependency('grpc')
+        raise ImportError(f"Required dependency '{module_name}' is not installed. Install it to run this step2 integration test.")
 
 def get_free_port():
     """Get a free port for testing"""
@@ -76,9 +71,9 @@ class TestStep2Integration:
         await asyncio.sleep(0.5)
         return server
     
-    @pytest.mark.skipif(not HAS_AIOZMQ, reason="aiozmq not installed")
     async def test_aiozmq_component_initialization(self):
         """Test that aiozmq step2 components initialize correctly"""
+        require_dependency('aiozmq')
         from step2.aiozmq.setup_helper import SetupHelper
         from step2.aiozmq.proxy import ServerProxy
         from step2.aiozmq.server import Server as RPCServer
@@ -99,9 +94,9 @@ class TestStep2Integration:
         assert isinstance(client, Client)
         assert isinstance(client.server_proxy, ServerProxy)
     
-    @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
     async def test_fastapi_component_initialization(self):
         """Test that FastAPI step2 components initialize correctly"""
+        require_dependency('fastapi')
         from step2.fastapi.setup_helper import SetupHelper
         from step2.fastapi.proxy import ServerProxy
         
@@ -121,9 +116,9 @@ class TestStep2Integration:
         assert isinstance(client, Client)
         assert isinstance(client.server_proxy, ServerProxy)
     
-    @pytest.mark.skipif(not HAS_GRPC, reason="grpcio not installed")
     async def test_grpc_component_initialization(self):
         """Test that gRPC step2 components initialize correctly"""
+        require_dependency('grpc')
         from step2.grpc.setup_helper import SetupHelper
         from step2.grpc.proxy import ServerProxy
         from step2.grpc.server import BankingServiceImpl
@@ -144,9 +139,9 @@ class TestStep2Integration:
         assert isinstance(client, Client)
         assert isinstance(client.server_proxy, ServerProxy)
     
-    @pytest.mark.skipif(not HAS_AIOZMQ, reason="aiozmq not installed")
     async def test_aiozmq_banking_workflow(self):
         """Test complete banking workflow through aiozmq transport"""
+        require_dependency('aiozmq')
         from step2.aiozmq.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -158,26 +153,12 @@ class TestStep2Integration:
         # Create client
         client = await setup_helper.get_client(host='127.0.0.1', port=str(port))
         
-        # Test basic banking operations
-        customer = await client.create_customer("John", "Smith", "123 Main St")
-        assert customer.first_name == "John"
-        
-        account = await client.create_account("Smith,John", AccountType.CHECKING)
-        assert account.account_type == AccountType.CHECKING
-        
-        balance = await client.deposit(account.account_id, Decimal('1000.00'))
-        assert balance == Decimal('1000.00')
-        
-        balance = await client.withdraw(account.account_id, Decimal('100.00'))
-        assert balance == Decimal('900.00')
-        
-        accounts = await client.list_accounts()
-        assert len(accounts) == 1
-        assert accounts[0].balance == Decimal('900.00')
+        # Run comprehensive banking test
+        await validate_banking_workflow(client)
     
-    @pytest.mark.skipif(not HAS_GRPC, reason="grpcio not installed")
     async def test_grpc_banking_workflow(self):
         """Test complete banking workflow through gRPC transport"""
+        require_dependency('grpc')
         from step2.grpc.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -192,26 +173,12 @@ class TestStep2Integration:
         # Create client
         client = await setup_helper.get_client(host='127.0.0.1', port=str(port))
         
-        # Test basic banking operations
-        customer = await client.create_customer("Jane", "Doe", "456 Oak St")
-        assert customer.first_name == "Jane"
-        
-        account = await client.create_account("Doe,Jane", AccountType.SAVINGS)
-        assert account.account_type == AccountType.SAVINGS
-        
-        balance = await client.deposit(account.account_id, Decimal('500.00'))
-        assert balance == Decimal('500.00')
-        
-        balance = await client.withdraw(account.account_id, Decimal('50.00'))
-        assert balance == Decimal('450.00')
-        
-        accounts = await client.list_accounts()
-        assert len(accounts) == 1
-        assert accounts[0].balance == Decimal('450.00')
+        # Run comprehensive banking test
+        await validate_banking_workflow(client)
     
-    @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
     async def test_fastapi_banking_workflow(self):
         """Test complete banking workflow through FastAPI transport"""
+        require_dependency('fastapi')
         from step2.fastapi.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -226,26 +193,12 @@ class TestStep2Integration:
         # Create client
         client = await setup_helper.get_client(host='127.0.0.1', port=str(port))
         
-        # Test basic banking operations
-        customer = await client.create_customer("Alice", "Johnson", "789 Pine St")
-        assert customer.first_name == "Alice"
-        
-        account = await client.create_account("Johnson,Alice", AccountType.CHECKING)
-        assert account.account_type == AccountType.CHECKING
-        
-        balance = await client.deposit(account.account_id, Decimal('750.00'))
-        assert balance == Decimal('750.00')
-        
-        balance = await client.withdraw(account.account_id, Decimal('75.00'))
-        assert balance == Decimal('675.00')
-        
-        accounts = await client.list_accounts()
-        assert len(accounts) == 1
-        assert accounts[0].balance == Decimal('675.00')
+        # Run comprehensive banking test
+        await validate_banking_workflow(client)
     
-    @pytest.mark.skipif(not HAS_AIOZMQ, reason="aiozmq not installed")
     async def test_aiozmq_error_handling(self):
         """Test error handling through aiozmq transport"""
+        require_dependency('aiozmq')
         from step2.aiozmq.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -264,9 +217,9 @@ class TestStep2Integration:
         with pytest.raises(Exception):
             await client.deposit(999, Decimal('100.00'))
     
-    @pytest.mark.skipif(not HAS_GRPC, reason="grpcio not installed")
     async def test_grpc_error_handling(self):
         """Test error handling through gRPC transport"""
+        require_dependency('grpc')
         from step2.grpc.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -286,9 +239,9 @@ class TestStep2Integration:
         with pytest.raises(Exception):
             await client.deposit(999, Decimal('100.00'))
     
-    @pytest.mark.skipif(not HAS_FASTAPI, reason="fastapi not installed")
     async def test_fastapi_error_handling(self):
         """Test error handling through FastAPI transport"""
+        require_dependency('fastapi')
         from step2.fastapi.setup_helper import SetupHelper
         
         port = get_free_port()
@@ -308,24 +261,3 @@ class TestStep2Integration:
         with pytest.raises(Exception):
             await client.deposit(999, Decimal('100.00'))
 
-@pytest.mark.integration
-class TestStep2AvailableTransports:
-    """Test to show which step2 transports are available"""
-    
-    def test_transport_availability(self):
-        """Show which transports are available for testing"""
-        transports = {
-            'aiozmq': HAS_AIOZMQ,
-            'fastapi_jsonrpc': HAS_FASTAPI,
-            'grpc': HAS_GRPC
-        }
-        
-        available = [name for name, available in transports.items() if available]
-        unavailable = [name for name, available in transports.items() if not available]
-        
-        print(f"\nAvailable step2 transports: {available}")
-        print(f"Unavailable step2 transports: {unavailable}")
-        
-        # At least show the transport status
-        assert isinstance(transports, dict)
-        assert len(transports) == 3

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cli.setup_configs import setup_configs
 from cli.run_client import main_async as client_main_async
-from cli.run_server import main_async as server_main_async
+from cli.run_server import main_async as server_main_async, start_server
 
 
 def get_free_port():
@@ -27,19 +27,12 @@ def get_free_port():
         return s.getsockname()[1]
 
 
-def check_dependency(module_name):
-    """Check if a module is available"""
+def require_dependency(module_name):
+    """Check if a module is available, raise ImportError if not"""
     try:
         __import__(module_name)
-        return True
     except ImportError:
-        return False
-
-
-# Check available transports
-HAS_GRPC = check_dependency('grpc')
-HAS_AIOZMQ = check_dependency('aiozmq')
-HAS_FASTAPI = check_dependency('fastapi')
+        raise ImportError(f"Required dependency '{module_name}' is not installed. Install it to run this integration test.")
 
 
 @pytest.mark.integration
@@ -71,9 +64,13 @@ class TestCLITransports:
         assert hasattr(module, 'SetupHelper')
         
         # Test step2 modules if dependencies are available
-        if HAS_GRPC:
+        try:
+            require_dependency('grpc')
             module = importlib.import_module(setup_configs['step2']['grpc'])
             assert hasattr(module, 'SetupHelper')
+        except ImportError:
+            # Skip this test if grpc not available
+            pass
 
 
 @pytest.mark.integration
@@ -332,10 +329,27 @@ class TestCLIDirectFunctionCalls:
         args = ['--step', 'step2', '--transport', 'invalid_transport', '-p', '12345']
         with pytest.raises(SystemExit):
             await server_main_async(args)
+    
+    async def test_start_server_function_direct(self):
+        """Test start_server function directly for coverage"""
+        require_dependency('grpc')
+        # We'll test the server setup logic by mocking the serve method
+        # This allows us to test module loading and server creation without actually serving
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        
+        # Mock the serve method to avoid actually starting the server
+        with patch('step2.grpc.setup_helper.SetupHelper.serve', new_callable=AsyncMock) as mock_serve:
+            mock_serve.return_value = None
+            
+            # This should now successfully test the server setup logic
+            await start_server('step2', 'grpc', str(self.db_path), port=get_free_port())
+            
+            # Verify that serve was called
+            mock_serve.assert_called_once()
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not HAS_GRPC, reason="grpc not installed")
 class TestCLIClientServerIntegration:
     """End-to-end integration tests with both client and server CLI tools"""
     
@@ -368,6 +382,7 @@ class TestCLIClientServerIntegration:
     
     def test_grpc_client_server_integration(self):
         """Test gRPC client-server integration via CLI tools"""
+        require_dependency('grpc')
         # Start server in background
         self.server_process = subprocess.Popen([
             sys.executable, str(self.run_server_script),

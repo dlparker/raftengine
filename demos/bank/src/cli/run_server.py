@@ -25,6 +25,15 @@ from cli.setup_configs import (
     get_module_path, validate_step_transport
 )
 
+async def start_server(step, transport, db_file, port=None, uri=None):
+    """Start a server with the given step/transport configuration"""
+    module_path = get_module_path(step, transport)
+    module = importlib.import_module(module_path)
+    SetupHelper = getattr(module, "SetupHelper")
+    helper = SetupHelper()
+    server = await helper.get_server(db_file=Path(db_file), port=port)
+    await helper.serve(server=server)
+
 async def main_async(args=None):
     """Main async function that can be called directly or from command line"""
     parser = argparse.ArgumentParser(
@@ -84,12 +93,7 @@ Available step/transport combinations:
     if parsed_args.port is None and parsed_args.uri is None:
         parser.error('step2 transports require either --port or --uri')
 
-    module_path = get_module_path(step, transport)
-    module = importlib.import_module(module_path)
-    SetupHelper = getattr(module, "SetupHelper")
-    helper = SetupHelper()
-    server = await helper.get_server(db_file=Path(parsed_args.database), port=parsed_args.port)
-    await helper.serve(server=server)
+    await start_server(step, transport, parsed_args.database, parsed_args.port, parsed_args.uri)
 
 def main():
     """Entry point for command line usage"""

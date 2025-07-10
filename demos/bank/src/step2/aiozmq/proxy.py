@@ -72,7 +72,8 @@ class ServerProxy(ProxyAPI):
     async def list_statements(self, account_id: int) -> List[date]:
         if self.client is None:
             await self.connect()
-        return await self.client.call.list_statements(account_id)
+        result = await self.client.call.list_statements(account_id)
+        return list(result) if result is not None else []
     
     async def advance_time(self, delta_time: timedelta) -> None:
         if self.client is None:
