@@ -47,79 +47,6 @@ process. More detailed descriptions may be found in the next section.
 1. Build a transport and a proxy to manage it for the client.
 2. Run the validator to ensure that the transport provides full access to the server
 
-** Step Two Implementation Examples
-
-The demo includes three complete RPC transport implementations in =src/step2/= to demonstrate
-different approaches to building distributed banking applications. Each implementation follows
-the same architectural pattern but uses different RPC mechanisms, allowing developers to
-choose the approach most familiar to their team or best suited to their production environment.
-
-*** Available RPC Transports
-
-**** aiozmq (Zero Message Queue)
-- *Location*: =src/step2/aiozmq/=
-- *Protocol*: TCP with MessagePack serialization
-- *Use Case*: High-performance, low-latency messaging
-- *Benefits*: Excellent for server-to-server Raft communication, minimal overhead
-- *Command*: =python src/cli/run_server.py -t step2_aiozmq -p 55555=
-
-**** gRPC (Google Remote Procedure Call)
-- *Location*: =src/step2/grpc/=
-- *Protocol*: HTTP/2 with Protocol Buffers + MessagePack for complex types
-- *Use Case*: Enterprise applications, microservices architecture
-- *Benefits*: Industry standard, excellent tooling, strong typing
-- *Command*: =python src/cli/run_server.py -t step2_grpc -p 50051=
-
-**** FastAPI + JSON-RPC (HTTP-based RPC)
-- *Location*: =src/step2/fastapi_jsonrpc/=
-- *Protocol*: HTTP with JSON-RPC 2.0 + base64-encoded MessagePack
-- *Use Case*: Web-friendly applications, REST API familiarity
-- *Benefits*: HTTP standard, easy debugging, web ecosystem compatibility
-- *Command*: =python src/cli/run_server.py -t step2_fastapi_jsonrpc -p 8000=
-
-*** Shared Architecture
-
-All Step 2 implementations share:
-- *Common Serialization*: =src/base/msgpack_helpers.py= handles complex banking datatypes
-- *Identical Interface*: All implement =base.proxy_api.ProxyAPI= for seamless interchangeability
-- *Same Banking Logic*: All use =base.server.Server= for business operations
-- *Unified CLI*: Same command-line tools work with all transports via =src/cli/transports.py=
-
-*** Testing All Transports
-
-Each transport can be tested with the same banking operations:
-
-#+BEGIN_SRC bash
-# Test aiozmq transport
-python src/cli/run_server.py -t step2_aiozmq -p 55555 &
-python src/cli/run_client.py -t step2_aiozmq -p 55555
-
-# Test gRPC transport  
-python src/cli/run_server.py -t step2_grpc -p 50051 &
-python src/cli/run_client.py -t step2_grpc -p 50051
-
-# Test FastAPI JSON-RPC transport
-python src/cli/run_server.py -t step2_fastapi_jsonrpc -p 8000 &
-python src/cli/run_client.py -t step2_fastapi_jsonrpc -p 8000
-#+END_SRC
-
-*** Educational Value
-
-These implementations demonstrate:
-- *RPC Design Patterns*: How to adapt the same business logic to different transport mechanisms
-- *Serialization Strategies*: Handling complex Python datatypes across network boundaries
-- *Async Programming*: All implementations are fully async-compatible
-- *Production Readiness*: Each approach is suitable for real-world Raft server communication
-
-*** Choosing a Transport for Raft
-
-For the final Raft integration (Major Step Three), consider:
-- *gRPC*: Best for enterprise environments, strong typing, excellent tooling
-- *FastAPI + JSON-RPC*: Most familiar to web developers, easy debugging
-- *aiozmq*: Highest performance for server-to-server communication
-
-All three are suitable for Raft server-to-server communication and will be carried forward
-to demonstrate Raft message passing in the final implementation stage.
 
 ** Major step three
 
@@ -275,14 +202,86 @@ have a hardcoded registry of the available variants and the
 needed setup tool and chooses the right one based on user input.
 
 
+* Major step two details
 
+The details of this step are dependent upon what RPC mechanism you decide to use. The
+demo contains three one of which will hopefully be close enough to your own choice
+to see how the same process can apply to your choice. If you are using something not
+demonstrated here, you might want to add another demo variant just to make sure your
+choice is compatible with the process. In partcular, you can get into issues if your
+server code is async and your RPC mechanism is not. 
 
+** Step Two Implementation Examples
 
-   
+The demo includes three complete RPC transport implementations in =src/step2/= to demonstrate
+different approaches to making the bank demo a distributed app. Each implementation follows
+the same architectural pattern but uses different RPC mechanisms.
 
-   
-   
-   the client and server portions of your application logic as separate
-classes, create a proxy class for the server class and have the client class call the server class to perform the operations.
-In this demo these classes are in src/base/client.py and src/base/server.py
- 
+*** Available RPC Transports
+
+**** aiozmq (Zero Message Queue)
+- *Location*: =src/step2/aiozmq/=
+- *Protocol*: TCP with MessagePack serialization
+- *Use Case*: High-performance, low-latency messaging
+- *Benefits*: Excellent for server-to-server Raft communication, minimal overhead
+- *Command*: =python src/cli/run_server.py -t step2_aiozmq -p 55555=
+
+**** gRPC (Google Remote Procedure Call)
+- *Location*: =src/step2/grpc/=
+- *Protocol*: HTTP/2 with Protocol Buffers + MessagePack for complex types
+- *Use Case*: Enterprise applications, microservices architecture
+- *Benefits*: Industry standard, excellent tooling, strong typing
+- *Command*: =python src/cli/run_server.py -t step2_grpc -p 50051=
+
+**** FastAPI + JSON-RPC (HTTP-based RPC)
+- *Location*: =src/step2/fastapi_jsonrpc/=
+- *Protocol*: HTTP with JSON-RPC 2.0 + base64-encoded MessagePack
+- *Use Case*: Web-friendly applications, REST API familiarity
+- *Benefits*: HTTP standard, easy debugging, web ecosystem compatibility
+- *Command*: =python src/cli/run_server.py -t step2_fastapi_jsonrpc -p 8000=
+
+*** Shared Architecture
+
+All Step 2 implementations share:
+- *Common Serialization*: =src/base/msgpack_helpers.py= handles complex banking datatypes
+- *Identical Interface*: All implement =base.proxy_api.ProxyAPI= for seamless interchangeability
+- *Same Banking Logic*: All use =base.server.Server= for business operations
+- *Unified CLI*: Same command-line tools work with all transports via =src/cli/transports.py=
+
+*** Testing All Transports
+
+Each transport can be tested with the same banking operations. Look in requirements for the
+requirements.txt that matches to transport you choose to try.
+
+#+BEGIN_SRC bash
+# Test aiozmq transport
+python src/cli/run_server.py -t step2_aiozmq -p 55555 &
+python src/cli/run_client.py -t step2_aiozmq -p 55555
+
+# Test gRPC transport  
+python src/cli/run_server.py -t step2_grpc -p 50051 &
+python src/cli/run_client.py -t step2_grpc -p 50051
+
+# Test FastAPI JSON-RPC transport
+python src/cli/run_server.py -t step2_fastapi_jsonrpc -p 8000 &
+python src/cli/run_client.py -t step2_fastapi_jsonrpc -p 8000
+#+END_SRC
+
+*** Educational Value
+
+These implementations demonstrate:
+- *RPC Design Patterns*: How to adapt the same business logic to different transport mechanisms
+- *Serialization Strategies*: Handling complex Python datatypes across network boundaries
+- *Async Programming*: All implementations are fully async-compatible
+- *Production Readiness*: Each approach is suitable for real-world Raft server communication
+
+*** Choosing a Transport for Raft
+
+For the final Raft integration (Major Step Three), consider:
+- *gRPC*: Best for enterprise environments, strong typing, excellent tooling
+- *FastAPI + JSON-RPC*: Most familiar to web developers, easy debugging
+- *aiozmq*: Highest performance for server-to-server communication
+
+All three are suitable for Raft server-to-server communication and will be carried forward
+to demonstrate Raft message passing in the final implementation stage.
+

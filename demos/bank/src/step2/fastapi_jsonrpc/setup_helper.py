@@ -10,7 +10,7 @@ from step2.fastapi_jsonrpc.proxy import ServerProxy
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.WARN,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
