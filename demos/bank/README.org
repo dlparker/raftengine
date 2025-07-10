@@ -66,25 +66,49 @@ and simply discard the results.
 
 This might make the process a little hard to understand, so it is a good idea to build the
 infrastructure for performing this conversion and testing it directly before integrating it with
-the raft library.
+the RPC mechanisms, much less the Raftengine library.
 
-1. Update the client, proxy, server and transport to support the Raft Message operations
+** Major step four
+
+The final target form of this process will have the client calling the Server API methods via
+the ServerProxy to access the Server functions, and the.
+
+This step can be folded into step five if you prefer, assuming you make the choice to combine
+your client to server and server to server RPCs.
+   
+
+
+terms.
+   1. A "Collector" class that composes "commands" that indicate the API method to target
+      and include the arguments that would normally be sent via an RPC. This needs to be
+      in a form that can be serialized to JSON as part of the Raft Append Entries message.
+   2. A "Dispatcher" class that takes a "collected" command and arguments, expands it and
+      calls the server, and converts the server response into a JSON serializable form.
+   3. Build a test that verifies that all the Server API elements work correctly when
+      passed through the Collector and Dispatcher.
+   4. Build a direct in-process use of Client, Proxy, Colector, Dispatcher and Server,
+      because it can be difficult to debug these components with an RPC layer between
+      the Proxy and the Collector.
+
+
+   
+3. Update the client, proxy, server and transport to support the Raft Message operations
    which require a single additional RPC that transports an encoded raft message and
    receives an encoded raft reply. You can call it what you like,
    a natural name is "raft_message". This will be used by the servers for the message
    traffic that is needed to manage the cluster, hold elections, replicate log records,
    everything that the Raft protocol does that requires interaction between the nodes. 
-2. Build a set of tools that convert your API calls and their arguments into byte or string encoded
+4. Build a set of tools that convert your API calls and their arguments into byte or string encoded
    data.
    1. For each API function, define a method call data structure that contains identifies the API function and
       its arguments.
    2. Build an encoder to convert the method call data structure to string or bytes
    3. Build a decoders for the method call data structures
-3. Build a ProxyWrapper class that implements your application's ServerProxyAPI that converts
+5. Build a ProxyWrapper class that implements your application's ServerProxyAPI that converts
       the methods to encode using your new encoders.
-4. Build a Dispatcher class that decodes your messages into specific server calls and returns the result to
+6. Build a Dispatcher class that decodes your messages into specific server calls and returns the result to
       the caller.
-5. Build a special TestFacade that implements ServerProxyAPI that will only be used for
+7. Build a special TestFacade that implements ServerProxyAPI that will only be used for
    this stage of development and will  be discarded when the Raftengine library is
    integrated in a later step. This will be used in the server, not the client.
    1. Provide it with the server instance and an instance of the ProxyWrapper class and an instance
@@ -94,7 +118,7 @@ the raft library.
       2. Pass the serialized request to the Dispatcher 
       3. Collect the result of the Dispatcher call and return it.
    3. Build a server that uses this TestFacade in place of the actual server
-6. Run the client validator against this TestFacade server
+8. Run the client validator against this TestFacade server
 
 
 * Major step one details
