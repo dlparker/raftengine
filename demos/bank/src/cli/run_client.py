@@ -35,18 +35,25 @@ async def main():
     )
     parser.add_argument('--database', '-d', 
                        default='banking_direct.db',
-                       help='Database file path (default: banking_direct.db)')
+                       help='ONLY WITH -t direct! Database file path (default: banking_direct.db)')
+    parser.add_argument('-p', '--port', type=int, help='Server Port Number (required if not -u, not used for direct)')
     
 
     # Parse arguments
     args = parser.parse_args()
+
     module_path = transport_table[args.transport]
     module = importlib.import_module(module_path)
     SetupHelper = getattr(module, "SetupHelper")
     helper = SetupHelper()
-    client = await helper.get_client(db_file=Path(args.database))
+    if args.transport == "direct":
+        client = await helper.get_client(db_file=Path(args.database))
+    else:
+        client = await helper.get_client(host='localhost', port=args.port)
     await test_banking(client)
+        
     
+        
 
     
 if __name__ == "__main__":

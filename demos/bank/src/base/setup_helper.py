@@ -11,12 +11,17 @@ class SetupHelperAPI(ABC):
         raise NotImplemented
 
     @abstractmethod
+    async def get_proxy(self, **kwargs):
+        """ get a server proxy instance configured with the kwargs contents"""
+        raise NotImplemented
+    
+    @abstractmethod
     async def get_server(self, **kwargs):
         """ get a server instance configured with the kwargs contents"""
         raise NotImplemented
     
     @abstractmethod
-    async def get_proxy(self, **kwargs):
-        """ get a server proxy instance configured with the kwargs contents"""
+    async def serve(self, **kwargs):
+        """ enter the servers run loop """
         raise NotImplemented
-    
+        

@@ -19,3 +19,5 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(server=server)
         
     
+    async def serve(self, server):
+        pass

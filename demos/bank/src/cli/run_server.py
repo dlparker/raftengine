@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+import importlib
 
 # Dynamically find the 'src' directory relative to this script
 script_dir = Path(__file__).resolve().parent
@@ -19,18 +20,25 @@ else:
 if src_dir not in sys.path:
     sys.path.insert(0, str(src_dir))
 
+from cli.transports import transport_table
 
 async def main():
     parser = argparse.ArgumentParser(description='Banking Server Runner')
     # Define the list of valid choices
 
-    VALID_TRANSPORTS = ['direct', 'async_streams', 'grpc']
+    valid_transports = list(transport_table.keys())
     parser.add_argument(
         '-t', '--transport',  # Short and long option names
         required=True,   # Make the argument mandatory
-        choices=VALID_TRANSPORTS,  # Restrict to this list
-        help=f'Type of transport (must be one of: {", ".join(VALID_TRANSPORTS)})'
+        choices=valid_transports,  # Restrict to this list
+        help=f'Type of transport (must be one of: {", ".join(valid_transports)})'
     )
+    parser.add_argument('--database', '-d', 
+                        default='banking_direct.db',
+                        help='Database file path (default: banking_direct.db)')
+    
+    parser.add_argument('-u', '--uri', type=int, help='Uri from cluster node list')
+    parser.add_argument('-p', '--port', type=int, help='Server Port Number (required if not -u, not used for direct)')
 
     # Parse arguments
     args = parser.parse_args()
@@ -38,6 +46,15 @@ async def main():
         print("For testing direct transport, just execute run_client.py, it creates server")
         raise SystemExit(0)
 
+    if args.port is None and args.uri is None:
+        parser.error('must have either --port or --uri')
+
+    module_path = transport_table[args.transport]
+    module = importlib.import_module(module_path)
+    SetupHelper = getattr(module, "SetupHelper")
+    helper = SetupHelper()
+    server = await helper.get_server(db_file=Path(args.database), port=args.port)
+    await helper.serve(server=server)
     
 if __name__ == "__main__":
     asyncio.run(main())
