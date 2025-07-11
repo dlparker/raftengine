@@ -9,6 +9,7 @@ from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteRespo
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from dev_tools.sequences import SNormalElection
+from dev_tools.features import registry, FeatureRegistry
 
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.log_control import setup_logging
@@ -19,6 +20,7 @@ default_level="error"
 #default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 save_trace = True
 
@@ -36,6 +38,10 @@ async def test_election_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test  
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
+    f_append_entries_success = registry.get_raft_feature("log_replication", "normal_replication")
 
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
@@ -44,7 +50,9 @@ async def test_election_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing basic election happy path with 3 nodes")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
 
     # tell first one to start election, should send request vote messages to other two
@@ -70,7 +78,8 @@ async def test_election_1(cluster_maker):
     await ts_1.do_next_in_msg()
     assert ts_1.get_role_name() == "LEADER"
 
-    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
+    spec = dict(used=[f_term_start_entry], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record", features=spec)
 
     # leader should send append_entries to everyone else in cluster,
     # check for delivery pending
@@ -81,7 +90,8 @@ async def test_election_1(cluster_maker):
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     
-    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
+    spec = dict(used=[f_append_entries_success], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3", features=spec)
     # now deliver those, we should get two replies at first one,
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()

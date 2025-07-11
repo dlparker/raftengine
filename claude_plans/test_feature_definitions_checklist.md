@@ -4,9 +4,9 @@ This checklist tracks which tests have been upgraded to include feature definiti
 
 ## Status Summary
 - **Total Tests**: 74
-- **Tests with Feature Definitions**: 14 (all properly implemented)
-- **Tests Remaining**: 60
-- **Completion Rate**: 18.9%
+- **Tests with Feature Definitions**: 17 (all properly implemented)
+- **Tests Remaining**: 57
+- **Completion Rate**: 23.0%
 - **API Status**: ✓ All existing feature registry calls now use correct API pattern
 
 ## Test Files and Methods
@@ -17,7 +17,7 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [NA] `test_class_edges.py::test_enum_edges`
 - [NA] `test_class_edges.py::test_message_ops`
 
-### test_commands_1.py (11/13 complete)
+### test_commands_1.py (13/13 complete)
 - [x] `test_commands_1.py::test_command_1` ✓
 - [x] `test_commands_1.py::test_command_2_leaders_1` ✓
 - [x] `test_commands_1.py::test_command_sqlite_1` ✓
@@ -29,14 +29,14 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [x] `test_commands_1.py::test_leader_explodes_in_command` ✓
 - [x] `test_commands_1.py::test_long_catchup` ✓
 - [x] `test_commands_1.py::test_full_catchup` ✓
-- [ ] `test_commands_1.py::test_follower_run_error`
-- [ ] `test_commands_1.py::test_follower_rewrite_1`
+- [x] `test_commands_1.py::test_follower_run_error` ✓
+- [x] `test_commands_1.py::test_follower_rewrite_1` ✓
 
 ### test_dev_tools.py (0/1 complete) USES NO RAFT FEATURES
 - [NA] `test_dev_tools.py::test_log_stuff`
 
-### test_elections_1.py (0/7 complete)
-- [ ] `test_elections_1.py::test_election_1`
+### test_elections_1.py (1/7 complete)
+- [x] `test_elections_1.py::test_election_1` ✓
 - [ ] `test_elections_1.py::test_election_2`
 - [ ] `test_elections_1.py::test_reelection_1`
 - [ ] `test_elections_1.py::test_reelection_2`

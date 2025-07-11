@@ -916,6 +916,11 @@ async def test_follower_run_error(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_crash_simulation = registry.get_raft_feature("node_lifecycle", "crash_simulation")
+    f_error_handling = registry.get_raft_feature("state_machine_command", "error_handling")
     
     cluster = cluster_maker(3)
     cluster.set_configs()
@@ -924,7 +929,9 @@ async def test_follower_run_error(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower error reporting during command execution")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -942,7 +949,8 @@ async def test_follower_run_error(cluster_maker):
     # should go through without problem.
 
     logger.info('---------!!!!!!! spliting network ')
-    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3  and running a command")
+    spec = dict(used=[f_crash_simulation], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3  and running a command", features=spec)
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, running', uri_3)
     
@@ -952,7 +960,8 @@ async def test_follower_run_error(cluster_maker):
     logger.debug('------------------------ Correct command 1 done')
 
     logger.info('------------------ restarted follower %s to hit error running command', uri_3)
-    await cluster.test_trace.start_subtest("Setting return error trigger on node 3, recovering it, and running heartbeats")
+    spec = dict(used=[f_crash_simulation], tested=[f_error_handling])
+    await cluster.test_trace.start_subtest("Setting return error trigger on node 3, recovering it, and running heartbeats", features=spec)
     ts_3.operations.return_error = True
     await ts_3.recover_from_crash()
     logger.info('---------!!!!!!! starting comms')
@@ -962,7 +971,8 @@ async def test_follower_run_error(cluster_maker):
         await cluster.deliver_all_pending()
     assert ts_3.operations.reported_error
     logger.info('------------------------ Error as expected, removing error insertion and trying again')
-    await cluster.test_trace.start_subtest("Node 3 reported error, removing trigger and running heartbeats to retry")
+    spec = dict(used=[f_error_handling], tested=[])
+    await cluster.test_trace.start_subtest("Node 3 reported error, removing trigger and running heartbeats to retry", features=spec)
     ts_3.operations.return_error = False
     await ts_1.send_heartbeats()
     start_time = time.time()
@@ -990,6 +1000,13 @@ async def test_follower_rewrite_1(cluster_maker):
     Sheesh.
 
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_leader_isolation = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_split_brain_election = registry.get_raft_feature("leader_election", "split_brain_resolution")
+    f_log_conflict_resolution = registry.get_raft_feature("log_replication", "conflict_resolution")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -997,7 +1014,9 @@ async def test_follower_rewrite_1(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing follower log rewrite after leader change")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -1009,7 +1028,8 @@ async def test_follower_rewrite_1(cluster_maker):
     running_total = 0
     last_index = await ts_1.log.get_last_index()
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, blocking network traffic to it like a partition and sending two commands")
+    spec = dict(used=[f_leader_isolation], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, blocking network traffic to it like a partition and sending two commands", features=spec)
     logger.info("---------!!!!!!! Blocking leader's network ")
     ts_1.block_network()
     logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
@@ -1020,12 +1040,14 @@ async def test_follower_rewrite_1(cluster_maker):
     assert await ts_1.log.get_last_index() == last_index + 2
     logger.debug('------------------------ Starting an election, favoring %s ---', uri_2)
     # now let the others do a new election
-    await cluster.test_trace.start_subtest("Starting election at node 2, which it will win")
+    spec = dict(used=[f_split_brain_election], tested=[])
+    await cluster.test_trace.start_subtest("Starting election at node 2, which it will win", features=spec)
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_2.get_role_name() == "LEADER"
     logger.debug('------------------------ Elected %s, demoting ex-leader %s ---', uri_2, uri_1)
-    await cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader")
+    spec = dict(used=[f_command_all_sync], tested=[])
+    await cluster.test_trace.start_subtest("Demoting old leader to follower but not reconnecting it yet, running one command at new leader", features=spec)
     # we do this now so that the cluster run_command method will not get confused
     # about which server is the leader
     await ts_1.do_demote_and_handle(None)
@@ -1063,7 +1085,8 @@ async def test_follower_rewrite_1(cluster_maker):
     orig_rec_2 = await ts_1.log.read(first_relevant_index) # the first record is start term record
     orig_rec_3 = await ts_1.log.read(first_relevant_index + 1)
     logger.debug('------------------------ Unblocking ex-leader, should overwrite logs ---')
-    await cluster.test_trace.start_subtest("Reconnecting old leader as follower, now it should have log records that have to be purged, sending heartbeats")
+    spec = dict(used=[f_log_conflict_resolution], tested=[])
+    await cluster.test_trace.start_subtest("Reconnecting old leader as follower, now it should have log records that have to be purged, sending heartbeats", features=spec)
     ts_1.unblock_network() # discards missed messages
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
