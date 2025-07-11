@@ -12,6 +12,11 @@ setup_configs = {
         'direct': 'step3.direct.setup_helper',
         'astream': 'step3.astream.setup_helper',
     },
+    'step4': {
+        'aiozmq': 'step4.aiozmq.setup_helper',
+        'grpc': 'step4.grpc.setup_helper', 
+        'fastapi': 'step4.fastapi.setup_helper',
+    },
 }
 
 def get_available_steps():

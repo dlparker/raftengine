@@ -1,0 +1,81 @@
+import argparse
+import asyncio
+from pathlib  import Path
+from typing import List, Optional, Dict
+import aiozmq.rpc
+from datetime import timedelta, date
+from decimal import Decimal
+from base.datatypes import Customer, Account, AccountType
+from base.proxy_api import OpsProxyAPI
+from base.msgpack_helpers import BankPacker, get_bank_translation_table
+
+class ServerProxy(OpsProxyAPI):
+    """
+    """
+
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.client = None
+        self.translation_table = get_bank_translation_table()
+
+    async def connect(self):
+        # Connect to the RPC server
+        uri = f'tcp://{self.host}:{self.port}'
+        print("connecting on uri", uri)
+        self.client = await aiozmq.rpc.connect_rpc(
+            connect=uri,
+            translation_table=self.translation_table
+        )
+        print("connected")
+        
+    async def create_customer(self, first_name: str, last_name: str, address: str) -> Customer:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.create_customer(first_name, last_name, address)
+
+    async def create_account(self, customer_id: str, account_type: AccountType) -> Account:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.create_account(customer_id, account_type)
+
+    async def deposit(self, account_id: int, amount: Decimal) -> Decimal:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.deposit(account_id, amount)
+    
+    async def withdraw(self, account_id: int, amount: Decimal) -> Decimal:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.withdraw(account_id, amount)
+    
+    async def transfer(self, from_account_id: int, to_account_id: int, amount: Decimal) -> Optional[Dict[str, Decimal]]:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.transfer(from_account_id, to_account_id, amount)
+
+    async def cash_check(self, account_id: int, amount: Decimal) -> Decimal:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.cash_check(account_id, amount)
+    
+    async def list_accounts(self) -> List[Account]:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.list_accounts()
+    
+    async def get_accounts(self, customer_id: str) -> List[int]:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.get_accounts(customer_id)
+    
+    async def list_statements(self, account_id: int) -> List[date]:
+        if self.client is None:
+            await self.connect()
+        result = await self.client.call.list_statements(account_id)
+        return list(result) if result is not None else []
+    
+    async def advance_time(self, delta_time: timedelta) -> None:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.advance_time(delta_time)
