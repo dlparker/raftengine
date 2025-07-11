@@ -285,7 +285,12 @@ async def test_reelection_3(cluster_maker):
     votes from repeating indefinitely.
 
     """
-    
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_timeout_driven_election = registry.get_raft_feature("leader_election", "timeout_driven_election")
+    f_split_vote_resolution = registry.get_raft_feature("leader_election", "split_vote_resolution")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion") 
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
     
     cluster = cluster_maker(3)
     cluster.set_configs()
@@ -309,7 +314,8 @@ async def test_reelection_3(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing reelection with split votes and timeouts")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_timeout_driven_election, f_election_with_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start(timers_disabled=False)
     # give ts_3 time to timeout and start campaign
     start_time = time.time()
@@ -325,7 +331,8 @@ async def test_reelection_3(cluster_maker):
     assert leader == ts_3
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
-    await cluster.test_trace.start_subtest("Election complete, node 3 won as expected, setting up re-election to have node 2 win")
+    spec = dict(used=[f_leader_demotion, f_split_vote_resolution, f_term_start_entry], tested=[])
+    await cluster.test_trace.start_subtest("Election complete, node 3 won as expected, setting up re-election to have node 2 win", features=spec)
 
     logger.warning('setting up re-election')
     # tell leader to resign and manually trigger elections on all the
@@ -385,12 +392,17 @@ async def test_pre_election_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
+    f_append_entries_success = registry.get_raft_feature("log_replication", "normal_replication")
 
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     await cluster.test_trace.define_test("Testing election with pre-vote enabled")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_election_with_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -438,7 +450,8 @@ async def test_pre_election_1(cluster_maker):
     await ts_1.do_next_in_msg()
     assert ts_1.get_role_name() == "LEADER"
 
-    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record")
+    spec = dict(used=[f_term_start_entry], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record", features=spec)
 
     # leader should send append_entries to everyone else in cluster,
     # check for delivery pending
@@ -449,7 +462,8 @@ async def test_pre_election_1(cluster_maker):
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     assert ts_3.in_messages[0].get_code() == AppendEntriesMessage.get_code()
     
-    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3")
+    spec = dict(used=[f_append_entries_success], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 should get success replies to append entries from nodes 2 and 3", features=spec)
     # now deliver those, we should get two replies at first one,
     await ts_2.do_next_in_msg()
     await ts_2.do_next_out_msg()
@@ -471,12 +485,17 @@ async def test_pre_vote_reject_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_prevote_rejection = registry.get_raft_feature("leader_election", "prevote_rejection")
+    f_heartbeat_authority = registry.get_raft_feature("log_replication", "heartbeat_authority")
 
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     await cluster.test_trace.define_test("Testing pre-vote rejection after normal election")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_election_with_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -493,7 +512,8 @@ async def test_pre_vote_reject_1(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
 
 
-    await cluster.test_trace.start_subtest("Node 3 starting campaign, should get no votes only")
+    spec = dict(used=[f_prevote_rejection, f_heartbeat_authority], tested=[])
+    await cluster.test_trace.start_subtest("Node 3 starting campaign, should get no votes only", features=spec)
     await ts_3.start_campaign()
     await cluster.deliver_all_pending(out_only=True)
     assert len(ts_1.in_messages) == 1

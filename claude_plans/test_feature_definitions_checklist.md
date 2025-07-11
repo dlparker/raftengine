@@ -4,9 +4,9 @@ This checklist tracks which tests have been upgraded to include feature definiti
 
 ## Status Summary
 - **Total Tests**: 74
-- **Tests with Feature Definitions**: 20 (all properly implemented)
-- **Tests Remaining**: 54
-- **Completion Rate**: 27.0%
+- **Tests with Feature Definitions**: 23 (all properly implemented)
+- **Tests Remaining**: 51
+- **Completion Rate**: 31.1%
 - **API Status**: ✓ All existing feature registry calls now use correct API pattern
 
 ## Test Files and Methods
@@ -35,14 +35,14 @@ This checklist tracks which tests have been upgraded to include feature definiti
 ### test_dev_tools.py (0/1 complete) USES NO RAFT FEATURES
 - [NA] `test_dev_tools.py::test_log_stuff`
 
-### test_elections_1.py (4/7 complete)
+### test_elections_1.py (7/7 complete)
 - [x] `test_elections_1.py::test_election_1` ✓
 - [x] `test_elections_1.py::test_election_2` ✓
 - [x] `test_elections_1.py::test_reelection_1` ✓
 - [x] `test_elections_1.py::test_reelection_2` ✓
-- [ ] `test_elections_1.py::test_reelection_3`
-- [ ] `test_elections_1.py::test_pre_election_1`
-- [ ] `test_elections_1.py::test_pre_vote_reject_1`
+- [x] `test_elections_1.py::test_reelection_3` ✓
+- [x] `test_elections_1.py::test_pre_election_1` ✓
+- [x] `test_elections_1.py::test_pre_vote_reject_1` ✓
 
 ### test_elections_2.py (0/13 complete)
 - [ ] `test_elections_2.py::test_stepwise_election_1`
