@@ -696,6 +696,11 @@ async def test_leader_explodes_in_command(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_leader_error_recovery = registry.get_raft_feature("state_machine_command", "leader_error_recovery")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -703,7 +708,9 @@ async def test_leader_explodes_in_command(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing leader error during command execution")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -720,7 +727,8 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert ts_3.operations.total == 1
     logger.debug('------------------------ Correct command done')
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command")
+    spec = dict(used=[], tested=[f_leader_error_recovery])
+    await cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command", features=spec)
 
     # now arrange for leader to blow up.
     ts_1.operations.explode = True
@@ -754,6 +762,13 @@ async def test_long_catchup(cluster_maker):
     """
 
     
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_follower_isolation = registry.get_raft_feature("network_partition", "follower_isolation")
+    f_batch_catchup = registry.get_raft_feature("log_replication", "batch_catchup")
+    f_follower_recovery_catchup = registry.get_raft_feature("log_replication", "follower_recovery_catchup")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -761,7 +776,9 @@ async def test_long_catchup(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing long catchup after network partition")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -784,7 +801,9 @@ async def test_long_catchup(cluster_maker):
 
     cfg = ts_1.cluster_init_config
     loop_limit = cfg.max_entries_per_message * 2 + 2
-    await cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands")
+    
+    spec = dict(used=[f_follower_isolation], tested=[f_batch_catchup])
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, partitioning network so that node 3 is isolated, then running {loop_limit} commands", features=spec)
     
     part1 = {uri_3: ts_3}
     part2 = {uri_1: ts_1,
@@ -810,7 +829,8 @@ async def test_long_catchup(cluster_maker):
     # restore the loggers
     # will discard the messages that were blocked
     logger.debug('------------------ unblocking follower %s should catch up to total %d', uri_3, total)
-    await cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up")
+    spec = dict(used=[], tested=[f_follower_recovery_catchup])
+    await cluster.test_trace.start_subtest("Commands run, now healing network and triggering a heartbeat, node 3 should catch up", features=spec)
     #await cluster.deliver_all_pending()
     await cluster.unsplit()
     logger.info('---------!!!!!!! starting comms')
@@ -831,6 +851,11 @@ async def test_full_catchup(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_crash_simulation = registry.get_raft_feature("node_lifecycle", "crash_simulation")
+    f_full_recovery_catchup = registry.get_raft_feature("log_replication", "full_recovery_catchup")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -838,7 +863,9 @@ async def test_full_catchup(cluster_maker):
     logger = logging.getLogger("test_code")
 
     await cluster.test_trace.define_test("Testing full catchup after follower crash")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_with_prevote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -852,7 +879,8 @@ async def test_full_catchup(cluster_maker):
     # follower and make sure that
     # the catchup process gets them all the messages
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3, then running two commands")
+    spec = dict(used=[f_crash_simulation], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing node 3, then running two commands", features=spec)
     logger.info('---------!!!!!!! stopping comms')
     await ts_3.simulate_crash()
     logger.info('------------------ follower %s crashed, starting command loop', uri_3)
@@ -866,7 +894,8 @@ async def test_full_catchup(cluster_maker):
     logger.debug('------------------------ Correct command 2 done')
 
 
-    await cluster.test_trace.start_subtest("Recovering node 3, then sending heartbeat which should result in catchup")
+    spec = dict(used=[], tested=[f_full_recovery_catchup])
+    await cluster.test_trace.start_subtest("Recovering node 3, then sending heartbeat which should result in catchup", features=spec)
     await ts_3.recover_from_crash(save_log=False, save_ops=False)
     logger.info('------------------ restarting follower %s should catch up to total %d', uri_3, ts_1.operations.total)
     assert ts_3.operations.total != ts_1.operations.total

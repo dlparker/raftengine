@@ -1,0 +1,1 @@
+Individual Follower Network Isolation
