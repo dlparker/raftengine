@@ -114,13 +114,18 @@ async def test_election_2(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
+    f_heartbeat_commit = registry.get_raft_feature("log_replication", "heartbeat_commit_update")
     
     cluster = cluster_maker(5)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing basic election with 5 nodes")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
@@ -129,7 +134,9 @@ async def test_election_2(cluster_maker):
     # vote requests, then vote responses
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "LEADER"
-    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    
+    spec = dict(used=[f_term_start_entry, f_heartbeat_commit], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit", features=spec)
     # append entries, then responses
     await cluster.deliver_all_pending()
     assert ts_2.get_leader_uri() == uri_1
@@ -148,12 +155,19 @@ async def test_reelection_1(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    f_follower_promotion = registry.get_raft_feature("leader_election", "follower_promotion")
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing hard-triggered reelection with 3 nodes")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -167,7 +181,8 @@ async def test_reelection_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, demoting it and triggering leader_lost at node 2")
+    spec = dict(used=[f_leader_demotion, f_follower_promotion, f_term_start_entry], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, demoting it and triggering leader_lost at node 2", features=spec)
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
     assert ts_1.get_role_name() == "FOLLOWER"
@@ -188,12 +203,19 @@ async def test_reelection_2(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    # Feature definitions for this test
+    f_election_no_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.without_pre_vote")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    f_follower_promotion = registry.get_raft_feature("leader_election", "follower_promotion")
+    f_term_start_entry = registry.get_raft_feature("log_replication", "term_start_entry")
+    
     cluster = cluster_maker(5)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing hard-triggered reelection with 5 nodes")
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    spec = dict(used=[f_election_no_prevote], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -210,7 +232,8 @@ async def test_reelection_2(cluster_maker):
     assert ts_4.get_leader_uri() == uri_1
     assert ts_5.get_leader_uri() == uri_1
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
+    spec = dict(used=[f_leader_demotion, f_follower_promotion, f_term_start_entry], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, force demoting it and triggering leader_lost on node 2", features=spec)
     logger.debug("Node 1 is leader, force demoting it and triggering leader_lost on node 2")
     # now have leader resign, by telling it to become follower
     await ts_1.do_demote_and_handle(None)
