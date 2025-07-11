@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import OpsProxyAPI
+from step4.base_plus.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 
@@ -159,6 +159,12 @@ class ServerProxy(OpsProxyAPI):
         await self._make_request("advance_time", {
             "delta_time_data": delta_time_data
         })
+    
+    async def raft_message(self, message: str) -> str:
+        result = await self._make_request("raft_message", {
+            "message": message
+        })
+        return result
 
     async def close(self):
         """Close the HTTP connection"""

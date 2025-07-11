@@ -58,3 +58,4 @@ class OpsProxyAPI(ABC):
     async def advance_time(self, delta_time: timedelta) -> None: # pragma: no cover
         """Advance the simulation time by the given delta"""
         raise NotImplemented
+    

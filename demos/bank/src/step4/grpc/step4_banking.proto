@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package banking;
+package step4_banking;
 
 service BankingService {
   rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse);
@@ -13,6 +13,7 @@ service BankingService {
   rpc GetAccounts(GetAccountsRequest) returns (GetAccountsResponse);
   rpc ListStatements(ListStatementsRequest) returns (ListStatementsResponse);
   rpc AdvanceTime(AdvanceTimeRequest) returns (AdvanceTimeResponse);
+  rpc RaftMessage(RaftMessageRequest) returns (RaftMessageResponse);
 }
 
 // Request/Response messages
@@ -102,4 +103,12 @@ message AdvanceTimeRequest {
 
 message AdvanceTimeResponse {
   // Empty response
+}
+
+message RaftMessageRequest {
+  string message = 1;
+}
+
+message RaftMessageResponse {
+  string response = 1;
 }

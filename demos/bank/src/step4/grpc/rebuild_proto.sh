@@ -5,7 +5,7 @@ set -e  # Exit on any error
 
 # Get the directory containing this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROTO_FILE="$SCRIPT_DIR/banking.proto"
+PROTO_FILE="$SCRIPT_DIR/step4_banking.proto"
 
 echo "Rebuilding protobuf files from $PROTO_FILE"
 
@@ -30,17 +30,17 @@ python -m grpc_tools.protoc \
     -I. \
     --python_out=. \
     --grpc_python_out=. \
-    banking.proto
+    step4_banking.proto
 
 # Check if files were created
-if [ -f "banking_pb2.py" ] && [ -f "banking_pb2_grpc.py" ]; then
-    echo "✓ Successfully generated banking_pb2.py"
-    echo "✓ Successfully generated banking_pb2_grpc.py"
+if [ -f "step4_banking_pb2.py" ] && [ -f "step4_banking_pb2_grpc.py" ]; then
+    echo "✓ Successfully generated step4_banking_pb2.py"
+    echo "✓ Successfully generated step4_banking_pb2_grpc.py"
     
     # Fix the import in the generated grpc file
-    if [ -f "banking_pb2_grpc.py" ]; then
-        sed -i 's/import banking_pb2 as banking__pb2/from . import banking_pb2 as banking__pb2/' banking_pb2_grpc.py
-        echo "✓ Fixed import in banking_pb2_grpc.py"
+    if [ -f "step4_banking_pb2_grpc.py" ]; then
+        sed -i 's/import step4_banking_pb2 as step4_banking__pb2/from . import step4_banking_pb2 as step4_banking__pb2/' step4_banking_pb2_grpc.py
+        echo "✓ Fixed import in step4_banking_pb2_grpc.py"
     fi
     
     echo "✓ Files created in $SCRIPT_DIR"

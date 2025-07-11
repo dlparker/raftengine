@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Common banking test functions used across all no_raft"""
+"""Common banking test functions used across all """
 from decimal import Decimal
 from datetime import timedelta
 from pathlib import Path

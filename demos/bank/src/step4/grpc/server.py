@@ -10,8 +10,8 @@ from base.operations import Ops
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 # These will be generated from the proto file
-from . import banking_pb2
-from . import banking_pb2_grpc
+from . import step4_banking_pb2 as banking_pb2
+from . import step4_banking_pb2_grpc as banking_pb2_grpc
 
 
 class BankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
@@ -162,6 +162,16 @@ class BankingServiceImpl(banking_pb2_grpc.BankingServiceServicer):
             context.set_details(str(e))
             context.set_code(grpc.StatusCode.INTERNAL)
             return banking_pb2.AdvanceTimeResponse()
+
+    async def RaftMessage(self, request, context):
+        """Handle Raft message"""
+        try:
+            response = f"echo: {request.message}"
+            return banking_pb2.RaftMessageResponse(response=response)
+        except Exception as e:
+            context.set_details(str(e))
+            context.set_code(grpc.StatusCode.INTERNAL)
+            return banking_pb2.RaftMessageResponse()
 
 
 async def create_server(host: str, port: int, banking_server: Ops):

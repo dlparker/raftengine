@@ -4,12 +4,12 @@ from typing import List, Optional, Dict
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import OpsProxyAPI
+from step4.base_plus.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import bank_msgpack_dumps, bank_msgpack_loads
 
 # These will be generated from the proto file
-from . import banking_pb2
-from . import banking_pb2_grpc
+from . import step4_banking_pb2 as banking_pb2
+from . import step4_banking_pb2_grpc as banking_pb2_grpc
 
 
 class ServerProxy(OpsProxyAPI):
@@ -116,6 +116,12 @@ class ServerProxy(OpsProxyAPI):
             delta_time=bank_msgpack_dumps(delta_time)
         )
         await self.stub.AdvanceTime(request)
+    
+    async def raft_message(self, message: str) -> str:
+        await self._ensure_connected()
+        request = banking_pb2.RaftMessageRequest(message=message)
+        response = await self.stub.RaftMessage(request)
+        return response.response
 
     async def close(self):
         """Close the gRPC connection"""

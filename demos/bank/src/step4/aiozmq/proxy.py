@@ -6,7 +6,7 @@ import aiozmq.rpc
 from datetime import timedelta, date
 from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import OpsProxyAPI
+from step4.base_plus.proxy_api import OpsProxyAPI
 from base.msgpack_helpers import BankPacker, get_bank_translation_table
 
 class ServerProxy(OpsProxyAPI):
@@ -79,3 +79,8 @@ class ServerProxy(OpsProxyAPI):
         if self.client is None:
             await self.connect()
         return await self.client.call.advance_time(delta_time)
+    
+    async def raft_message(self, message: str) -> str:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.raft_message(message)

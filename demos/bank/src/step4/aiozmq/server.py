@@ -7,7 +7,6 @@ from decimal import Decimal
 import aiozmq.rpc
 
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import OpsProxyAPI
 from base.operations import Ops
 from base.msgpack_helpers import BankPacker, get_bank_translation_table
 
@@ -58,6 +57,10 @@ class Server(aiozmq.rpc.AttrHandler):
     @aiozmq.rpc.method
     async def advance_time(self, delta_time: timedelta) -> None:
         return await self.server.advance_time(delta_time)
+    
+    @aiozmq.rpc.method
+    async def raft_message(self, message: str) -> str:
+        return f"echo: {message}"
 
 
 async def create_server(host: str, port: int, handler):

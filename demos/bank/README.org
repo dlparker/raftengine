@@ -95,6 +95,18 @@ Major step three is the development of the Collector and Dispatcher.
    of future changes in API signatures, build a single process test of the Client to
    Collector to Dispatcher to Operations flow and test all the operations.
 
+The direct in-process version of the demo of this step is in step3/direct.
+
+For assurance that the code can work properly across processes, this step in the demo
+also includes a simple TCP socket RPC mechanism to support the single RPC in step3/astream.
+
+In this exercise the Collector is in the client whereas it would normally be in the server. It
+uses the TCP RPC client to send the condensed command to the Dispatcher in the server, via
+the TCP RPC server. In the final version the Collector would be in one server and the Dispatcher
+will be accessed via Raftengine library operations either in other servers or in the Leader
+server by retrieving the command from the log.
+
+
 ** Major step four
 
 Major step four is to build RPC support for the Raft libary via a new RPC that passes
@@ -134,18 +146,6 @@ make it a separate RPC interface. There are arguments on both sides.
 	 of all the other RPCs in the same interface.
 	 
 
-Whichever path you choose, stepwise development will be easier if you begin by building an RPC interface
-for just the Raft message RPC and testing that it works when placed between the Collector and Dispatcher.
-In the final form the Collector and Dispatcher will be separated by the Raft library, and by time as the
-log replication process intervenes, but building this direct RPC connection between them will ease both
-initial development and longer term maintenance. It will be very difficult to test and debug these functions
-when they are driven by Raft protocol sequences and timing considerations.
-
-
-
-This step can be folded into step five if you prefer, assuming you make the choice to combine
-your client to server and server to server RPCs.
-   
 
 
    

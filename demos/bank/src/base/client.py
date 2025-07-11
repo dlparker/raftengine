@@ -40,5 +40,5 @@ class Client:
     
     async def advance_time(self, delta_time: timedelta) -> None:
         return await self.server_proxy.advance_time(delta_time)
-
+    
     

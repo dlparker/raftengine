@@ -100,6 +100,11 @@ async def handle_advance_time(delta_time_data: str):
     return None
 
 
+async def handle_raft_message(message: str):
+    """Handle raft message"""
+    return f"echo: {message}"
+
+
 # Method registry
 METHOD_HANDLERS = {
     "create_customer": handle_create_customer,
@@ -112,6 +117,7 @@ METHOD_HANDLERS = {
     "get_accounts": handle_get_accounts,
     "list_statements": handle_list_statements,
     "advance_time": handle_advance_time,
+    "raft_message": handle_raft_message,
 }
 
 

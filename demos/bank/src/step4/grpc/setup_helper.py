@@ -2,10 +2,13 @@ import os
 import asyncio
 import logging
 from base.setup_helper import SetupHelperAPI
-from base.client import Client
+from step4.base_plus.client import Client
 from base.operations import Ops
 from step4.grpc.server import BankingServiceImpl, create_server
 from step4.grpc.proxy import ServerProxy
+from step4.raft_ops.collector import Collector
+from step4.raft_ops.dispatcher import Dispatcher
+from step4.raft_ops.raft_shim import RaftShim
 
 # Configure logging
 logging.basicConfig(
@@ -28,9 +31,12 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(host, port)
 
     async def get_server(self, db_file: os.PathLike, port='50051'):
-        server = Ops(db_file)
         self.port = port
-        return BankingServiceImpl(server)
+        ops = Ops(db_file)
+        dispatcher = Dispatcher(ops)
+        handler = RaftShim(dispatcher)
+        collector = Collector(handler)
+        return BankingServiceImpl(collector)
     
     async def serve(self, server=None):
         grpc_server = await start_server(server, self.port)
@@ -58,3 +64,5 @@ async def start_server(banking_service: BankingServiceImpl, port: str):
     except Exception as e:
         logger.error(f"Failed to start gRPC server: {e}", exc_info=True)
         raise
+
+    

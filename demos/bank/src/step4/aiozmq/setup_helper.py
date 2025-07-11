@@ -4,10 +4,13 @@ import logging
 import zmq
 import aiozmq.rpc
 from base.setup_helper import SetupHelperAPI
-from base.client import Client
+from step4.base_plus.client import Client
 from base.operations import Ops
 from step4.aiozmq.server import Server as RPCServer
 from step4.aiozmq.proxy import ServerProxy
+from step4.raft_ops.collector import Collector
+from step4.raft_ops.dispatcher import Dispatcher
+from step4.raft_ops.raft_shim import RaftShim
 
 # Configure logging with DEBUG level for aiozmq and custom code
 logging.basicConfig(
@@ -32,9 +35,12 @@ class SetupHelper(SetupHelperAPI):
         return ServerProxy(host, port)
 
     async def get_server(self, db_file:os.PathLike, port='55555'):
-        server = Ops(db_file)
         self.port = port
-        return RPCServer(server)
+        ops = Ops(db_file)
+        dispatcher = Dispatcher(ops)
+        handler = RaftShim(dispatcher)
+        collector = Collector(handler)
+        return RPCServer(collector)
     
     async def serve(self, server=None):
         a_server = await start_server(server, self.port)

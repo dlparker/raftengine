@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import banking_pb2 as banking__pb2
+from . import step4_banking_pb2 as step4__banking__pb2
 
 GRPC_GENERATED_VERSION = '1.73.1'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in banking_pb2_grpc.py depends on'
+        + f' but the generated code in step4_banking_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -35,54 +35,59 @@ class BankingServiceStub(object):
             channel: A grpc.Channel.
         """
         self.CreateCustomer = channel.unary_unary(
-                '/banking.BankingService/CreateCustomer',
-                request_serializer=banking__pb2.CreateCustomerRequest.SerializeToString,
-                response_deserializer=banking__pb2.CreateCustomerResponse.FromString,
+                '/step4_banking.BankingService/CreateCustomer',
+                request_serializer=step4__banking__pb2.CreateCustomerRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.CreateCustomerResponse.FromString,
                 _registered_method=True)
         self.CreateAccount = channel.unary_unary(
-                '/banking.BankingService/CreateAccount',
-                request_serializer=banking__pb2.CreateAccountRequest.SerializeToString,
-                response_deserializer=banking__pb2.CreateAccountResponse.FromString,
+                '/step4_banking.BankingService/CreateAccount',
+                request_serializer=step4__banking__pb2.CreateAccountRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.CreateAccountResponse.FromString,
                 _registered_method=True)
         self.Deposit = channel.unary_unary(
-                '/banking.BankingService/Deposit',
-                request_serializer=banking__pb2.DepositRequest.SerializeToString,
-                response_deserializer=banking__pb2.DepositResponse.FromString,
+                '/step4_banking.BankingService/Deposit',
+                request_serializer=step4__banking__pb2.DepositRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.DepositResponse.FromString,
                 _registered_method=True)
         self.Withdraw = channel.unary_unary(
-                '/banking.BankingService/Withdraw',
-                request_serializer=banking__pb2.WithdrawRequest.SerializeToString,
-                response_deserializer=banking__pb2.WithdrawResponse.FromString,
+                '/step4_banking.BankingService/Withdraw',
+                request_serializer=step4__banking__pb2.WithdrawRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.WithdrawResponse.FromString,
                 _registered_method=True)
         self.Transfer = channel.unary_unary(
-                '/banking.BankingService/Transfer',
-                request_serializer=banking__pb2.TransferRequest.SerializeToString,
-                response_deserializer=banking__pb2.TransferResponse.FromString,
+                '/step4_banking.BankingService/Transfer',
+                request_serializer=step4__banking__pb2.TransferRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.TransferResponse.FromString,
                 _registered_method=True)
         self.CashCheck = channel.unary_unary(
-                '/banking.BankingService/CashCheck',
-                request_serializer=banking__pb2.CashCheckRequest.SerializeToString,
-                response_deserializer=banking__pb2.CashCheckResponse.FromString,
+                '/step4_banking.BankingService/CashCheck',
+                request_serializer=step4__banking__pb2.CashCheckRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.CashCheckResponse.FromString,
                 _registered_method=True)
         self.ListAccounts = channel.unary_unary(
-                '/banking.BankingService/ListAccounts',
-                request_serializer=banking__pb2.ListAccountsRequest.SerializeToString,
-                response_deserializer=banking__pb2.ListAccountsResponse.FromString,
+                '/step4_banking.BankingService/ListAccounts',
+                request_serializer=step4__banking__pb2.ListAccountsRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.ListAccountsResponse.FromString,
                 _registered_method=True)
         self.GetAccounts = channel.unary_unary(
-                '/banking.BankingService/GetAccounts',
-                request_serializer=banking__pb2.GetAccountsRequest.SerializeToString,
-                response_deserializer=banking__pb2.GetAccountsResponse.FromString,
+                '/step4_banking.BankingService/GetAccounts',
+                request_serializer=step4__banking__pb2.GetAccountsRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.GetAccountsResponse.FromString,
                 _registered_method=True)
         self.ListStatements = channel.unary_unary(
-                '/banking.BankingService/ListStatements',
-                request_serializer=banking__pb2.ListStatementsRequest.SerializeToString,
-                response_deserializer=banking__pb2.ListStatementsResponse.FromString,
+                '/step4_banking.BankingService/ListStatements',
+                request_serializer=step4__banking__pb2.ListStatementsRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.ListStatementsResponse.FromString,
                 _registered_method=True)
         self.AdvanceTime = channel.unary_unary(
-                '/banking.BankingService/AdvanceTime',
-                request_serializer=banking__pb2.AdvanceTimeRequest.SerializeToString,
-                response_deserializer=banking__pb2.AdvanceTimeResponse.FromString,
+                '/step4_banking.BankingService/AdvanceTime',
+                request_serializer=step4__banking__pb2.AdvanceTimeRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.AdvanceTimeResponse.FromString,
+                _registered_method=True)
+        self.RaftMessage = channel.unary_unary(
+                '/step4_banking.BankingService/RaftMessage',
+                request_serializer=step4__banking__pb2.RaftMessageRequest.SerializeToString,
+                response_deserializer=step4__banking__pb2.RaftMessageResponse.FromString,
                 _registered_method=True)
 
 
@@ -149,64 +154,75 @@ class BankingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RaftMessage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_BankingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateCustomer': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateCustomer,
-                    request_deserializer=banking__pb2.CreateCustomerRequest.FromString,
-                    response_serializer=banking__pb2.CreateCustomerResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.CreateCustomerRequest.FromString,
+                    response_serializer=step4__banking__pb2.CreateCustomerResponse.SerializeToString,
             ),
             'CreateAccount': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateAccount,
-                    request_deserializer=banking__pb2.CreateAccountRequest.FromString,
-                    response_serializer=banking__pb2.CreateAccountResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.CreateAccountRequest.FromString,
+                    response_serializer=step4__banking__pb2.CreateAccountResponse.SerializeToString,
             ),
             'Deposit': grpc.unary_unary_rpc_method_handler(
                     servicer.Deposit,
-                    request_deserializer=banking__pb2.DepositRequest.FromString,
-                    response_serializer=banking__pb2.DepositResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.DepositRequest.FromString,
+                    response_serializer=step4__banking__pb2.DepositResponse.SerializeToString,
             ),
             'Withdraw': grpc.unary_unary_rpc_method_handler(
                     servicer.Withdraw,
-                    request_deserializer=banking__pb2.WithdrawRequest.FromString,
-                    response_serializer=banking__pb2.WithdrawResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.WithdrawRequest.FromString,
+                    response_serializer=step4__banking__pb2.WithdrawResponse.SerializeToString,
             ),
             'Transfer': grpc.unary_unary_rpc_method_handler(
                     servicer.Transfer,
-                    request_deserializer=banking__pb2.TransferRequest.FromString,
-                    response_serializer=banking__pb2.TransferResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.TransferRequest.FromString,
+                    response_serializer=step4__banking__pb2.TransferResponse.SerializeToString,
             ),
             'CashCheck': grpc.unary_unary_rpc_method_handler(
                     servicer.CashCheck,
-                    request_deserializer=banking__pb2.CashCheckRequest.FromString,
-                    response_serializer=banking__pb2.CashCheckResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.CashCheckRequest.FromString,
+                    response_serializer=step4__banking__pb2.CashCheckResponse.SerializeToString,
             ),
             'ListAccounts': grpc.unary_unary_rpc_method_handler(
                     servicer.ListAccounts,
-                    request_deserializer=banking__pb2.ListAccountsRequest.FromString,
-                    response_serializer=banking__pb2.ListAccountsResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.ListAccountsRequest.FromString,
+                    response_serializer=step4__banking__pb2.ListAccountsResponse.SerializeToString,
             ),
             'GetAccounts': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAccounts,
-                    request_deserializer=banking__pb2.GetAccountsRequest.FromString,
-                    response_serializer=banking__pb2.GetAccountsResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.GetAccountsRequest.FromString,
+                    response_serializer=step4__banking__pb2.GetAccountsResponse.SerializeToString,
             ),
             'ListStatements': grpc.unary_unary_rpc_method_handler(
                     servicer.ListStatements,
-                    request_deserializer=banking__pb2.ListStatementsRequest.FromString,
-                    response_serializer=banking__pb2.ListStatementsResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.ListStatementsRequest.FromString,
+                    response_serializer=step4__banking__pb2.ListStatementsResponse.SerializeToString,
             ),
             'AdvanceTime': grpc.unary_unary_rpc_method_handler(
                     servicer.AdvanceTime,
-                    request_deserializer=banking__pb2.AdvanceTimeRequest.FromString,
-                    response_serializer=banking__pb2.AdvanceTimeResponse.SerializeToString,
+                    request_deserializer=step4__banking__pb2.AdvanceTimeRequest.FromString,
+                    response_serializer=step4__banking__pb2.AdvanceTimeResponse.SerializeToString,
+            ),
+            'RaftMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.RaftMessage,
+                    request_deserializer=step4__banking__pb2.RaftMessageRequest.FromString,
+                    response_serializer=step4__banking__pb2.RaftMessageResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'banking.BankingService', rpc_method_handlers)
+            'step4_banking.BankingService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('banking.BankingService', rpc_method_handlers)
+    server.add_registered_method_handlers('step4_banking.BankingService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -227,9 +243,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/CreateCustomer',
-            banking__pb2.CreateCustomerRequest.SerializeToString,
-            banking__pb2.CreateCustomerResponse.FromString,
+            '/step4_banking.BankingService/CreateCustomer',
+            step4__banking__pb2.CreateCustomerRequest.SerializeToString,
+            step4__banking__pb2.CreateCustomerResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -254,9 +270,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/CreateAccount',
-            banking__pb2.CreateAccountRequest.SerializeToString,
-            banking__pb2.CreateAccountResponse.FromString,
+            '/step4_banking.BankingService/CreateAccount',
+            step4__banking__pb2.CreateAccountRequest.SerializeToString,
+            step4__banking__pb2.CreateAccountResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -281,9 +297,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/Deposit',
-            banking__pb2.DepositRequest.SerializeToString,
-            banking__pb2.DepositResponse.FromString,
+            '/step4_banking.BankingService/Deposit',
+            step4__banking__pb2.DepositRequest.SerializeToString,
+            step4__banking__pb2.DepositResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -308,9 +324,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/Withdraw',
-            banking__pb2.WithdrawRequest.SerializeToString,
-            banking__pb2.WithdrawResponse.FromString,
+            '/step4_banking.BankingService/Withdraw',
+            step4__banking__pb2.WithdrawRequest.SerializeToString,
+            step4__banking__pb2.WithdrawResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -335,9 +351,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/Transfer',
-            banking__pb2.TransferRequest.SerializeToString,
-            banking__pb2.TransferResponse.FromString,
+            '/step4_banking.BankingService/Transfer',
+            step4__banking__pb2.TransferRequest.SerializeToString,
+            step4__banking__pb2.TransferResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -362,9 +378,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/CashCheck',
-            banking__pb2.CashCheckRequest.SerializeToString,
-            banking__pb2.CashCheckResponse.FromString,
+            '/step4_banking.BankingService/CashCheck',
+            step4__banking__pb2.CashCheckRequest.SerializeToString,
+            step4__banking__pb2.CashCheckResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -389,9 +405,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/ListAccounts',
-            banking__pb2.ListAccountsRequest.SerializeToString,
-            banking__pb2.ListAccountsResponse.FromString,
+            '/step4_banking.BankingService/ListAccounts',
+            step4__banking__pb2.ListAccountsRequest.SerializeToString,
+            step4__banking__pb2.ListAccountsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -416,9 +432,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/GetAccounts',
-            banking__pb2.GetAccountsRequest.SerializeToString,
-            banking__pb2.GetAccountsResponse.FromString,
+            '/step4_banking.BankingService/GetAccounts',
+            step4__banking__pb2.GetAccountsRequest.SerializeToString,
+            step4__banking__pb2.GetAccountsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -443,9 +459,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/ListStatements',
-            banking__pb2.ListStatementsRequest.SerializeToString,
-            banking__pb2.ListStatementsResponse.FromString,
+            '/step4_banking.BankingService/ListStatements',
+            step4__banking__pb2.ListStatementsRequest.SerializeToString,
+            step4__banking__pb2.ListStatementsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -470,9 +486,36 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/AdvanceTime',
-            banking__pb2.AdvanceTimeRequest.SerializeToString,
-            banking__pb2.AdvanceTimeResponse.FromString,
+            '/step4_banking.BankingService/AdvanceTime',
+            step4__banking__pb2.AdvanceTimeRequest.SerializeToString,
+            step4__banking__pb2.AdvanceTimeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RaftMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/step4_banking.BankingService/RaftMessage',
+            step4__banking__pb2.RaftMessageRequest.SerializeToString,
+            step4__banking__pb2.RaftMessageResponse.FromString,
             options,
             channel_credentials,
             insecure,
