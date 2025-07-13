@@ -78,12 +78,22 @@ class SimpleOps: # pragma: no cover
         self.return_error = False
         self.reported_error = False
         self.dump_state = False
+        self.sleep_next_command = None  # If set, sleep for this many seconds on next process_command
 
     async def process_command(self, command, serial):
+        import asyncio
         logger = logging.getLogger("SimpleOps")
         error = None
         result = None
         self.exploded = False
+        
+        # Handle sleep for timeout testing
+        if self.sleep_next_command is not None:
+            sleep_time = self.sleep_next_command
+            self.sleep_next_command = None  # Reset after use
+            logger.debug(f"SimpleOps sleeping for {sleep_time} seconds to force timeout")
+            await asyncio.sleep(sleep_time)
+        
         op, operand = command.split()
         if self.explode:
             #await asyncio.sleep(0.1)

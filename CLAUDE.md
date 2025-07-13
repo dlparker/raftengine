@@ -78,6 +78,14 @@ Tests are organized by functional areas:
 - `test_snapshots.py`: Snapshot creation and transfer
 - `test_timers_1.py`: Timeout and heartbeat scenarios
 
+## Testing Philosophy
+
+**100% Code Coverage Requirement**: This project insists upon 100% test coverage. Any code that cannot be tested to 100% coverage should be reconsidered - if you can't write a proper test for it, you might be wrong about what it's doing or what you think it should be doing.
+
+**Integration Tests Over Unit Tests**: Heavily prefer integration tests over unit tests with mocks and similar testing utilities. Integration tests tend to uncover elements that developers (or AI agents) do not fully understand about system behavior, interactions, and edge cases that unit tests with mocks often miss.
+
+**Test-Driven Understanding**: The ability to write comprehensive tests serves as validation that the implementation is correct and well-understood. Difficulty in achieving test coverage often indicates gaps in understanding or design flaws that should be addressed.
+
 ## Key Design Patterns
 
 ### Message-Based Architecture
