@@ -168,7 +168,7 @@ class PausingServer(PilotAPI):
         await self.deck.on_message(in_msg)
 
     # Part of PilotAPI
-    async def send_message(self, target, out_msg):
+    async def send_message(self, target, out_msg, serial_number):
         msg = self.deck.decode_message(out_msg)
         self.logger.debug("queueing out msg %s", msg)
         self.out_messages.append(msg)
@@ -176,7 +176,7 @@ class PausingServer(PilotAPI):
             self.out_message_history.append(msg)
 
     # Part of PilotAPI
-    async def send_response(self, target, out_msg, in_reply):
+    async def send_response(self, target, out_msg, in_reply, orig_serial_number):
         reply = self.deck.decode_message(in_reply)
         self.logger.debug("queueing out reply %s", reply)
         self.out_messages.append(reply)

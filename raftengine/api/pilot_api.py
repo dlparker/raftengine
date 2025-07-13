@@ -87,7 +87,7 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def send_message(self, target_uri: str, message:bytes) -> None: 
+    async def send_message(self, target_uri: str, message:bytes, serial_number: int) -> None: 
         """
         Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to when the raft engine
         needs to send a message to another server in the cluster. Pilot implementation
@@ -105,7 +105,8 @@ class PilotAPI(abc.ABC):
                                https://node2:8080
 
                                etc is good. Any string you know how to interpret is valid.
-            message (bytes): The raft message encoded as bytes. 
+            message (bytes): The raft message encoded as bytes.
+            serial_number (int): The serial number of the message for tracking purposes.
 
         Returns:
             None:
@@ -113,7 +114,7 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def send_response(self, target_uri: str, orig_message:bytes, reply:bytes) -> None: 
+    async def send_response(self, target_uri: str, orig_message:bytes, reply:bytes, orig_serial_number: int) -> None: 
         """
         Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to when the raft engine
         needs to send a response message to a previously received message. The
@@ -133,6 +134,7 @@ class PilotAPI(abc.ABC):
                                etc is good. Any string you know how to interpret is valid.
             orig_message (bytes): The original message to which this is a response
             reply (bytes): The response message encoded as bytes
+            orig_serial_number (int): The serial number of the original message being responded to
 
         Returns:
             None:

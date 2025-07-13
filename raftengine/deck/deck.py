@@ -395,15 +395,15 @@ class Deck(DeckAPI):
     # Called by Role
     async def send_message(self, message):
         self.logger.debug("Sending message type %s to %s", message.get_code(), message.receiver)
-        encoded = MessageCodec.encode_message(message)
-        await self.pilot.send_message(message.receiver, encoded)
+        encoded, serial_number = MessageCodec.encode_message(message)
+        await self.pilot.send_message(message.receiver, encoded, serial_number)
 
     # Called by Role
     async def send_response(self, message, response):
         self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
-        encoded = MessageCodec.encode_message(message)
-        encoded_reply = MessageCodec.encode_message(response)
-        await self.pilot.send_response(response.receiver, encoded, encoded_reply)
+        encoded, message_serial = MessageCodec.encode_message(message)
+        encoded_reply, response_serial = MessageCodec.encode_message(response)
+        await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)
 
     # Called by Role. This may seem odd, but it is done this
     # way to make it possible to protect against race conditions where a role

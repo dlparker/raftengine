@@ -7,8 +7,8 @@ class LogMessage(BaseMessage):
 
     code = "invalid"
     
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, reply_to_type=None):
-        super().__init__(sender, receiver, reply_to_type)
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, reply_to_type=None, serial_number:int=None):
+        super().__init__(sender, receiver, reply_to_type, serial_number)
         self.term = term
         self.prevLogIndex = prevLogIndex
         self.prevLogTerm = prevLogTerm

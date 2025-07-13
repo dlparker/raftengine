@@ -5,8 +5,8 @@ class PreVoteMessage(LogMessage):
 
     code = "pre_vote"
 
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, authorized:bool = False):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm)
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, authorized:bool = False, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, serial_number=serial_number)
         self.authorized = authorized
 
     def __repr__(self):
@@ -18,8 +18,8 @@ class PreVoteResponseMessage(LogMessage):
 
     code = "pre_vote_response"
 
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=PreVoteMessage)
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=PreVoteMessage, serial_number=serial_number)
         self.vote = vote
 
     def __repr__(self):

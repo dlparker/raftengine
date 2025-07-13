@@ -10,8 +10,8 @@ class RequestVoteResponseMessage(LogMessage):
 
     code = "request_vote_response"
 
-    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=RequestVoteMessage)
+    def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, vote:bool, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=RequestVoteMessage, serial_number=serial_number)
         self.vote = vote
         
     def __repr__(self):

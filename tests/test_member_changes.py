@@ -37,10 +37,10 @@ class PilotSim(PilotAPI):
     async def process_command(self, command: str, serial: int):
         raise NotImplementedError
 
-    async def send_message(self, target_uri: str, message:str):
+    async def send_message(self, target_uri: str, message:str, serial_number: int):
         raise NotImplementedError
 
-    async def send_response(self, target_uri: str, orig_message:str, reply:str):
+    async def send_response(self, target_uri: str, orig_message:str, reply:str, orig_serial_number: int):
         raise NotImplementedError
 
     async def stop_commanded(self) -> None:

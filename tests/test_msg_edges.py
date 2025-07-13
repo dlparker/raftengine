@@ -190,8 +190,9 @@ async def test_message_codec_edge_cases():
     msg = AppendEntriesMessage('sender', 'receiver', 1, 0, 0, [rec], 0)
     
     # Test successful encoding/decoding
-    encoded = MessageCodec.encode_message(msg)
+    encoded, serial_number = MessageCodec.encode_message(msg)
     assert isinstance(encoded, bytes)
+    assert isinstance(serial_number, int)
     decoded = MessageCodec.decode_message(encoded)
     assert decoded.get_code() == 'append_entries'
     

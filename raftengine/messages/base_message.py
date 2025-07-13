@@ -12,10 +12,14 @@ class BaseMessage:
 
     code = "invalid"
     
-    def __init__(self, sender:str, receiver:str, reply_to_type=None):
+    def __init__(self, sender:str, receiver:str, reply_to_type=None, serial_number:int=None):
         self.sender = sender
         self.receiver = receiver
         self.code = self.__class__.code
+        # Serial numbers are not used internally by the raft library for message handling
+        # (there will be one exception in future changes), so they don't need to be set
+        # until the message is transmitted over the network
+        self.serial_number = serial_number
         if reply_to_type:
             pair_mapping[self.__class__] = reply_to_type
 
@@ -42,7 +46,10 @@ class BaseMessage:
         return self.__repr__()
 
     def __repr__(self):
-        msg = f"{self.code}:{self.sender}->{self.receiver}: "
+        msg = f"{self.code}:{self.sender}->{self.receiver}"
+        if self.serial_number is not None:
+            msg += f" sn={self.serial_number}"
+        msg += ": "
         return msg
     
     @classmethod

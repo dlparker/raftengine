@@ -57,7 +57,7 @@ class Pilot(PilotAPI):
             return None, error_data  # Failure: return None and error message
 
     # PilotAPI
-    async def send_message(self, target_uri: str, message:str) -> None:
+    async def send_message(self, target_uri: str, message:str, serial_number: int) -> None:
         logger.debug(f"message for target {target_uri}")
         cli = await self.ensure_node_connection(target_uri)
         try:
@@ -76,7 +76,7 @@ class Pilot(PilotAPI):
             raise SystemExit()
 
     # PilotAPI
-    async def send_response(self, target_uri: str, orig_message:str, reply:str) -> None:
+    async def send_response(self, target_uri: str, orig_message:str, reply:str, orig_serial_number: int) -> None:
         logger.debug(f"response for target {target_uri}")
         await self.reply_callback(target_uri, orig_message, reply)
         

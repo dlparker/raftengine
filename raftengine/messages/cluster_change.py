@@ -30,8 +30,8 @@ class MembershipChangeMessage(BaseMessage):
 
     code = "membership_change"
 
-    def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str):
-        super().__init__(sender, receiver)
+    def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str, serial_number:int=None):
+        super().__init__(sender, receiver, serial_number=serial_number)
         self.op = op
         self.target_uri = target_uri
         self.code = self.__class__.code
@@ -46,8 +46,8 @@ class MembershipChangeResponseMessage(BaseMessage):
 
     code = "membership_change_response"
 
-    def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str, ok: bool):
-        super().__init__(sender, receiver, reply_to_type=MembershipChangeMessage)
+    def __init__(self, sender:str, receiver:str, op: ChangeOp, target_uri: str, ok: bool, serial_number:int=None):
+        super().__init__(sender, receiver, reply_to_type=MembershipChangeMessage, serial_number=serial_number)
         self.op = op
         self.target_uri = target_uri
         self.ok = ok

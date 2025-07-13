@@ -7,8 +7,8 @@ class SnapShotMessage(LogMessage):
     code = "snapshot"
     
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int, leaderId:str,
-                 offset:int, done:bool, data: bytes, clusterConfig:str = None):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm)
+                 offset:int, done:bool, data: bytes, clusterConfig:str = None, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, serial_number=serial_number)
         self.leaderId = leaderId
         self.offset = offset
         self.done = done
@@ -27,8 +27,8 @@ class SnapShotResponseMessage(LogMessage):
 
     code = "snapshot_response"
     
-    def __init__(self, sender:str, receiver:str, prevLogIndex:int, prevLogTerm:int, term:int, offset:int, success=True):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=SnapShotMessage)
+    def __init__(self, sender:str, receiver:str, prevLogIndex:int, prevLogTerm:int, term:int, offset:int, success=True, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=SnapShotMessage, serial_number=serial_number)
         self.offset = offset
         self.success = success
 

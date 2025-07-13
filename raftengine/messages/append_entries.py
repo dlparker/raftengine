@@ -10,8 +10,8 @@ class AppendEntriesMessage(LogMessage):
     code = "append_entries"
     
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,
-                 entries:List[Any], commitIndex: int=0):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm)
+                 entries:List[Any], commitIndex: int=0, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, serial_number=serial_number)
         self.entries = entries
         self.commitIndex = commitIndex
         
@@ -41,8 +41,8 @@ class AppendResponseMessage(LogMessage):
     code = "append_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,  maxIndex: int,
-                 success: bool, leaderId: str):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage)
+                 success: bool, leaderId: str, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage, serial_number=serial_number)
         self.leaderId = leaderId
         self.success = success
         self.maxIndex = maxIndex
