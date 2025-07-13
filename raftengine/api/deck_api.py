@@ -1,5 +1,5 @@
 import abc
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Callable
 from enum import Enum
 from dataclasses import dataclass
 from raftengine.api.log_api import LogAPI, LogRec
@@ -154,14 +154,28 @@ class DeckAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def on_message(self, in_message:bytes) -> None:
+    async def on_message(self, in_message:bytes, callback: Optional[Callable[[int, str, Optional[str], Optional[str]], None]] = None) -> None:
         """
         When the server receives a message for the RaftLibrary, it should pass it to this
         method. 
 
         :params bytes in_message: The incoming message bytes
+        :params Optional[Callable] callback: Optional callback for RPC-style operation.
+                                           Signature: (sent_serial_number, sent_message, response, error)
         :rtype None:
         
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def on_rpc_message(self, in_message:bytes, timeout:float = 5.0) -> str:
+        """
+        RPC-style message handling that waits for a response.
+        
+        :params bytes in_message: The incoming message bytes
+        :params float timeout: Maximum time to wait for response in seconds
+        :rtype str: The response message as a string
+        :raises Exception: If an error occurs or timeout is reached
         """
         raise NotImplementedError
 

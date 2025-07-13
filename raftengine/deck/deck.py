@@ -2,6 +2,7 @@ import asyncio
 import traceback
 import logging
 import time
+from typing import Optional, Callable, Dict, Tuple
 
 from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig
 from raftengine.api.deck_api import CommandResult
@@ -48,6 +49,41 @@ class Deck(DeckAPI):
         self.exit_result = None
         self.exit_waiter_handle = None
         self.stopped = False
+        
+        # RPC callback support
+        self.rpc_callbacks: Dict[int, Tuple[Callable, float, str]] = {}  # serial_number -> (callback, timestamp, sent_message)
+        self.callback_timeout_handle = None
+        self._start_callback_timeout_handler()
+    
+    def _start_callback_timeout_handler(self):
+        """Start the periodic callback timeout handler"""
+        loop = asyncio.get_event_loop()
+        self.callback_timeout_handle = loop.call_later(1.0, self._check_callback_timeouts)
+    
+    def _check_callback_timeouts(self):
+        """Check for and clean up timed-out callbacks"""
+        if self.stopped:
+            return
+            
+        current_time = time.time()
+        timed_out_callbacks = []
+        
+        for serial_number, (callback, timestamp, sent_message) in self.rpc_callbacks.items():
+            if current_time - timestamp > 5.0:  # 5 second timeout
+                timed_out_callbacks.append(serial_number)
+                
+        # Call timeout callbacks and remove them
+        for serial_number in timed_out_callbacks:
+            callback, _, sent_message = self.rpc_callbacks.pop(serial_number)
+            try:
+                callback(serial_number, sent_message, None, "Timeout waiting for response")
+            except Exception as e:
+                self.logger.error(f"Error calling timeout callback for serial {serial_number}: {e}")
+        
+        # Schedule next timeout check
+        if not self.stopped:
+            loop = asyncio.get_event_loop()
+            self.callback_timeout_handle = loop.call_later(1.0, self._check_callback_timeouts)
         
     # Part of API
     async def start(self):
@@ -126,7 +162,7 @@ class Deck(DeckAPI):
         return MessageCodec.decode_message(in_message)
     
     # Part of API
-    async def on_message(self, in_message):
+    async def on_message(self, in_message, callback: Optional[Callable[[int, str, Optional[str], Optional[str]], None]] = None):
         try:
             message = self.decode_message(in_message)
         except:
@@ -135,9 +171,47 @@ class Deck(DeckAPI):
             await self.record_message_problem(in_message, error)
             if EventType.error in self.event_control.active_events:
                 await self.event_control.emit_error(error)
+            if callback:
+                callback(0, in_message.decode() if isinstance(in_message, bytes) else str(in_message), None, error)
             return None
+        
+        # If callback is provided, register it with the message serial number
+        if callback:
+            serial_number = getattr(message, 'serial_number', None)
+            if serial_number:
+                self.rpc_callbacks[serial_number] = (callback, time.time(), in_message.decode() if isinstance(in_message, bytes) else str(in_message))
+        
         res = await self.inner_on_message(message)
         return res
+    
+    # Part of API
+    async def on_rpc_message(self, in_message: bytes, timeout: float = 5.0) -> str:
+        """
+        RPC-style message handling that waits for a response.
+        
+        :params bytes in_message: The incoming message bytes
+        :params float timeout: Maximum time to wait for response in seconds
+        :rtype str: The response message as a string
+        :raises Exception: If an error occurs or timeout is reached
+        """
+        result_future = asyncio.Future()
+        
+        def rpc_callback(sent_serial_number: int, sent_message: str, response: Optional[str], error: Optional[str]):
+            if not result_future.done():
+                if error:
+                    result_future.set_exception(Exception(error))
+                else:
+                    result_future.set_result(response or "")
+        
+        # Call on_message with our callback
+        await self.on_message(in_message, rpc_callback)
+        
+        # Wait for the result with timeout
+        try:
+            result = await asyncio.wait_for(result_future, timeout=timeout)
+            return result
+        except asyncio.TimeoutError:
+            raise Exception(f"RPC message timed out after {timeout} seconds")
         
     async def inner_on_message(self, message):
         res = None
@@ -318,6 +392,7 @@ class Deck(DeckAPI):
 
     # Part of API
     async def stop(self):
+        self.stopped = True
         await self.stop_role()
         if self.join_waiter_handle:
             self.joining_cluster = None
@@ -330,7 +405,16 @@ class Deck(DeckAPI):
             self.exiting_cluster = False
             await asyncio.sleep(0.001)
             self.exit_waiter_handle = None
-        self.stopped = True
+        if self.callback_timeout_handle:
+            self.callback_timeout_handle.cancel()
+            self.callback_timeout_handle = None
+        # Cancel any remaining RPC callbacks with error
+        for serial_number, (callback, _, sent_message) in self.rpc_callbacks.items():
+            try:
+                callback(serial_number, sent_message, None, "Deck stopped")
+            except Exception:
+                pass  # Ignore callback errors during shutdown
+        self.rpc_callbacks.clear()
         
     async def stop_role(self):
         await self.role.stop()
@@ -403,7 +487,21 @@ class Deck(DeckAPI):
         self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
         encoded, message_serial = MessageCodec.encode_message(message)
         encoded_reply, response_serial = MessageCodec.encode_message(response)
-        await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)
+        
+        # Check if there's a callback waiting for this response
+        if message_serial in self.rpc_callbacks:
+            callback, _, sent_message = self.rpc_callbacks.pop(message_serial)
+            try:
+                callback(message_serial, sent_message, encoded_reply.decode(), None)
+            except Exception as e:
+                self.logger.error(f"Error calling RPC callback for serial {message_serial}: {e}")
+                try:
+                    callback(message_serial, sent_message, None, f"Callback error: {e}")
+                except Exception:
+                    pass  # Avoid infinite error loops
+        else:
+            # No callback waiting, use normal pilot send_response
+            await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)
 
     # Called by Role. This may seem odd, but it is done this
     # way to make it possible to protect against race conditions where a role
