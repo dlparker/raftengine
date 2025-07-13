@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package step5_banking;
+
+service BankingService {
+  rpc CreateCustomer(CreateCustomerRequest) returns (CommandResult);
+  rpc CreateAccount(CreateAccountRequest) returns (CommandResult);
+  rpc Deposit(DepositRequest) returns (CommandResult);
+  rpc Withdraw(WithdrawRequest) returns (CommandResult);
+  rpc Transfer(TransferRequest) returns (CommandResult);
+  rpc CashCheck(CashCheckRequest) returns (CommandResult);
+  rpc ListAccounts(ListAccountsRequest) returns (CommandResult);
+  rpc GetAccounts(GetAccountsRequest) returns (CommandResult);
+  rpc ListStatements(ListStatementsRequest) returns (CommandResult);
+  rpc AdvanceTime(AdvanceTimeRequest) returns (CommandResult);
+  rpc RaftMessage(RaftMessageRequest) returns (RaftMessageResponse);
+}
+
+// CommandResult message matching raftengine.api.deck_api.CommandResult
+message CommandResult {
+  string error = 1;          // Error message if any
+  bool redirect = 2;         // Whether to redirect to leader
+  bool retry = 3;            // Whether to retry the operation
+  bytes result = 4;          // Serialized result data
+  string redirect_to = 5;    // Leader address for redirects
+}
+
+// Request/Response messages
+message CreateCustomerRequest {
+  string first_name = 1;
+  string last_name = 2;
+  string address = 3;
+}
+
+message CreateAccountRequest {
+  string customer_id = 1;
+  string account_type = 2;  // AccountType enum value
+}
+
+message DepositRequest {
+  int32 account_id = 1;
+  bytes amount = 2;  // msgpack serialized Decimal
+}
+
+message WithdrawRequest {
+  int32 account_id = 1;
+  bytes amount = 2;  // msgpack serialized Decimal
+}
+
+message TransferRequest {
+  int32 from_account_id = 1;
+  int32 to_account_id = 2;
+  bytes amount = 3;  // msgpack serialized Decimal
+}
+
+message CashCheckRequest {
+  int32 account_id = 1;
+  bytes amount = 2;  // msgpack serialized Decimal
+}
+
+message ListAccountsRequest {
+  // Empty request
+}
+
+message GetAccountsRequest {
+  string customer_id = 1;
+}
+
+message ListStatementsRequest {
+  int32 account_id = 1;
+}
+
+message AdvanceTimeRequest {
+  bytes delta_time = 1;  // msgpack serialized timedelta
+}
+
+message RaftMessageRequest {
+  string message = 1;
+}
+
+message RaftMessageResponse {
+  string response = 1;
+}

@@ -175,10 +175,10 @@ During development, we initially tried inheritance-based approaches but found th
 
 **❌ Before (Inheritance-based):**
 ```python
-# raft_prep/transports/async_streams/proxy.py
-from src.no_raft.transports.async_streams.proxy import ServerProxy, ASServer, ASClient
+# raft_prep/transports/async_streams/rpc_client.py
+from src.no_raft.transports.async_streams.proxy import RPCClient, ASServer, ASClient
 
-class RaftServerProxy(ServerProxy):
+class RaftServerProxy(RPCClient):
     async def raft_message(self, in_message) -> None:
         args = locals()
         del args['self']
@@ -202,7 +202,7 @@ def get_astream_client(host: str, port: int):
 
 **✅ After (Direct implementation):**
 ```python
-# raft_prep/transports/async_streams/proxy.py
+# raft_prep/transports/async_streams/rpc_client.py
 import asyncio
 from operator import methodcaller
 from typing import List, Optional, Dict, Any
@@ -251,7 +251,7 @@ class RaftServerProxy(OpsProxyAPI):
 
 **❌ Before (Inheritance-based):**
 ```python
-# raft_prep/transports/grpc/server.py
+# raft_prep/transports/grpc/rpc_server.py
 from src.no_raft.transports.grpc.server import BankingServiceImpl
 
 class RaftBankingServiceImpl(BankingServiceImpl):
@@ -272,7 +272,7 @@ class RaftBankingServiceImpl(BankingServiceImpl):
 
 **✅ After (Direct implementation):**
 ```python
-# raft_prep/transports/grpc/server.py
+# raft_prep/transports/grpc/rpc_server.py
 import asyncio
 import grpc
 from concurrent import futures

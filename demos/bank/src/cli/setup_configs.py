@@ -17,6 +17,11 @@ setup_configs = {
         'grpc': 'step4.grpc.setup_helper', 
         'fastapi': 'step4.fastapi.setup_helper',
     },
+    'step5': {
+        'aiozmq': 'step5.aiozmq.setup_helper',
+        'grpc': 'step5.grpc.setup_helper', 
+        'fastapi': 'step5.fastapi.setup_helper',
+    },
 }
 
 def get_available_steps():

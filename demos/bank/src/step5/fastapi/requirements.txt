@@ -1,0 +1,16 @@
+# FastAPI Banking Service Dependencies
+
+# Core FastAPI and ASGI server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# HTTP client for proxy
+httpx>=0.25.0
+
+# Serialization (shared with other transports)
+msgpack>=1.0.0
+
+# Optional: For development and debugging
+# uvicorn[standard] includes websockets, watchfiles, python-multipart, etc.
+# python-multipart for form parsing (not needed for this use case)
+# watchfiles for auto-reload during development

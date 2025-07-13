@@ -2,9 +2,49 @@
 
 1. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting that level for those loggers.
-2. Consider removing "result" storage from command processing. There isn't any need for it from the client
-   point of view, as the client will only talk to the leader, and the leader will return the result directly.
+2. update the message api elements to include a message serial number that is
+   generated in raftengine cause it is hard for callers to keep track of what is happening.
+   Do something like jan 1 2025 as base (1) * 100000 plus the number of days since then plus the seconds
+   since midnight (max 86399, so max first day serial would be 186399, next day 286399) so timebase.
+   Then multiply timebase * 1000000 (for a million msg per second)
 
+#+BEGIN_SRC python
+import time
+from datetime import datetime, timezone
+
+# Epoch: January 1, 2025, 00:00:00 UTC
+EPOCH = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+
+class SerialNumberGenerator:
+    def __init__(self):
+        self.last_timebase = None
+        self.counter = 0
+
+    def generate(self):
+        # Get current UTC time
+        now = time.time()
+        # Calculate days and seconds since epoch
+        seconds_since_epoch = int(now - EPOCH)
+        days_since_epoch = seconds_since_epoch // 86400
+        seconds_since_midnight = seconds_since_epoch % 86400
+        # Compute timebase
+        timebase = days_since_epoch * 86400 + seconds_since_midnight
+        # Reset counter if timebase has changed
+        if timebase != self.last_timebase:
+            self.counter = 0
+            self.last_timebase = timebase
+        # Generate serial number
+        serial = timebase * 1000000 + self.counter
+        # Increment counter (up to 999,999)
+        self.counter = (self.counter + 1) % 1000000
+        return serial
+
+# Example usage
+generator = SerialNumberGenerator()
+for _ in range(5):
+    print(generator.generate())
+    time.sleep(0.1)  # Simulate sending messages
+#+END_SRC
   
    
 * Test questions and issues and Demo issues

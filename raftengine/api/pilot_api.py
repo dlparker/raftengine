@@ -47,7 +47,7 @@ class PilotAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def process_command(self, command: str, serial: int) -> str: 
+    async def process_command(self, command: str, serial: int) -> list[str, str]: 
         """
         Called by raft :py:class:`raftengine.api.deck_api.DeckAPI` to trigger
         user defined commands once the raft algorithm has determined

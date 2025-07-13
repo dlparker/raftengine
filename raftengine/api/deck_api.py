@@ -9,6 +9,17 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.api.types import ClusterSettings, ClusterConfig
 
+@dataclass
+class CommandResult:
+    command: str
+    result: Optional[str] = None
+    committed: bool = False
+    retry: bool = False
+    redirect: Optional[str] = None
+    logRec: Optional[LogRec] = None
+    error: Optional[str] = None
+    timeout_expired: Optional[bool] = False
+
 class DeckAPI(abc.ABC):
     """
     Main entry and control point for RaftEngine library.
@@ -155,7 +166,7 @@ class DeckAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def run_command(self, command:str, timeout:float = 2.0) -> "CommandResult":
+    async def run_command(self, command:str, timeout:float = 2.0) -> CommandResult:
         """
         Call this method to run a command through the Raft consensus process.
         Once consesus has been achieved on the associated log update, the command will
@@ -219,14 +230,4 @@ class DeckAPI(abc.ABC):
         raise NotImplementedError
 
     
-@dataclass
-class CommandResult:
-    command: str
-    result: Optional[str] = None
-    committed: bool = False
-    retry: bool = False
-    redirect: Optional[str] = None
-    logRec: Optional[LogRec] = None
-    error: Optional[str] = None
-    timeout_expired: Optional[bool] = False
     

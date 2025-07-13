@@ -12,7 +12,7 @@ from step3.astream.dispatcher import Dispatcher
 
 class SetupHelper(SetupHelperAPI):
     """
-    This version uses the Collector on the client side as a ServerProxy and
+    This version uses the Collector on the client side as a RPCClient and
     connects an async streams implementation to send packed commands to the
     server over that mechanism. The Server side async streams code sends
     the package to the Dispatcher, which dispatches to the Operations instance.

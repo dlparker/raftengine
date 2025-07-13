@@ -144,10 +144,10 @@ class Leader(BaseRole):
         log_rec = await self.log.append(raw_rec)
         self.logger.debug("%s saved log record at index %d", self.my_uri(), log_rec.index)
         # now send it to everybody
-        await self.broadcast_log_record(log_rec)
         waiter = CommandWaiter(self, log=self.log, orig_log_record=log_rec, timeout=timeout)
         self.command_waiters[log_rec.index] = waiter
         self.logger.info("%s waiting for completion of pending command", self.my_uri())
+        await self.broadcast_log_record(log_rec)
         result = await waiter.wait_for_result()
         return result
 
@@ -385,6 +385,8 @@ class Leader(BaseRole):
                               self.my_uri(), await self.log.get_applied_index())
         waiter = self.command_waiters[log_rec.index]
         if waiter:
+            self.logger.debug("%s found waiter for command at log index %d, delivering", 
+                              self.my_uri(), log_rec.index)
             await waiter.handle_run_result(result, error_data)
 
     async def start_snapshot_send(self, target_uri):
@@ -556,6 +558,8 @@ class CommandWaiter:
             await self.leader.deck.event_control.emit_error(error_data)
         self.result = result
         async with self.done_condition:
+            self.leader.logger.debug("%s notifying done condition",
+                                         self.leader.my_uri())
             self.done_condition.notify()
         return 
         

@@ -53,6 +53,7 @@ class Deck(DeckAPI):
     async def start(self):
         await self.cluster_ops.get_cluster_config()
         self.started = True
+        self.logger.info("%s starting", self.get_my_uri())
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())

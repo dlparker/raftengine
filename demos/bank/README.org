@@ -69,7 +69,7 @@ infrastructure for performing this conversion and testing it directly before int
 the RPC mechanisms, much less the Raftengine library.
 
 The final target form of this process will have the client calling the server operatiosn API methods via
-the ServerProxy to send RPCs to the Raft Leader server which will then serialize the RPC request and deliver it
+the RPCClient to send RPCs to the Raft Leader server which will then serialize the RPC request and deliver it
 to the Raftengine library. The Raftengine library will save the request in the Raft log and then
 replicate the log record to the other servers. Once enough servers have received the log record the
 Leader will mark the record committed, then it will apply the command to the local Operations logic.
@@ -189,11 +189,11 @@ trigger with RPCs. Your server may differ, but this
 discussion only considers RPC support and Raft support.
 
 The OpsProxyAPI is just a convenience to ensure you
-provide all the methods in your ServerProxy class. This
+provide all the methods in your RPCClient class. This
 can be helpful when moving from one step in this process
 to the next. You can discard the OpsProxyAPI class
 when development is done and replace it with your
-concreate ServerProxy class.
+concreate RPCClient class.
 
 ** Build your client.
 
