@@ -8,14 +8,18 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.api.types import ClusterSettings, ClusterConfig
 
-@dataclass
+
+# done as a regular class for easier serialization
 class CommandResult:
-    command: str
-    result: Optional[str] = None
-    retry: bool = False
-    redirect: Optional[str] = None
-    error: Optional[str] = None
-    timeout_expired: Optional[bool] = False
+    def __init__(self, command: str, result: Optional[str] = None,
+                 retry: bool = False,  redirect: Optional[str] = None,
+                 error: Optional[str] = None, timeout_expired: Optional[bool] = False):
+        self.command = command
+        self.result = result
+        self.retry = retry
+        self.redirect = redirect
+        self.error = error
+        self.timeout_expired = timeout_expired
 
 @runtime_checkable
 class DeckAPI(Protocol): # pragma: no cover

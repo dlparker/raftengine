@@ -32,11 +32,6 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [x] `test_commands_1.py::test_follower_run_error` ✓
 - [x] `test_commands_1.py::test_follower_rewrite_1` ✓
 
-### test_commands_1_rpc.py (1/1 complete)
-- [x] `test_commands_1_rpc.py::test_command_1_rpc` ✓
-
-### test_rpc_error_paths.py (1/1 complete)  
-- [x] `test_rpc_error_paths.py::test_rpc_callback_error_paths` ✓
 
 ### test_dev_tools.py (0/1 complete) USES NO RAFT FEATURES
 - [NA] `test_dev_tools.py::test_log_stuff`
@@ -135,9 +130,6 @@ This checklist tracks which tests have been upgraded to include feature definiti
 5. **Snapshot Tests** (test_snapshots.py) - 5 tests
 6. **Timer Tests** (test_timers_1.py) - 4 tests
 7. **Log Recovery Tests** (test_log_fiddles.py) - 2 tests
-
-### Infrastructure Tests (Complete)
-8. **RPC Callback Tests** (test_commands_1_rpc.py, test_rpc_error_paths.py) - 2 tests ✓
 
 ### Lower Priority (Edge Cases and System Tests)
 9. **Event System Tests** (test_events.py) - 2 tests
