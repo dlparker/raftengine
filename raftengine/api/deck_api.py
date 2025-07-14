@@ -12,10 +12,8 @@ from raftengine.api.types import ClusterSettings, ClusterConfig
 class CommandResult:
     command: str
     result: Optional[str] = None
-    committed: bool = False
     retry: bool = False
     redirect: Optional[str] = None
-    logRec: Optional[LogRec] = None
     error: Optional[str] = None
     timeout_expired: Optional[bool] = False
 

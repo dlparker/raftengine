@@ -534,13 +534,11 @@ class CommandWaiter:
                 self.leader.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
                                          self.leader.my_uri(), self.leader.deck.leader_uri)
                 self.result = CommandResult(command=self.orig_log_record.command,
-                                            committed=False,
                                             redirect=self.leader.deck.leader_uri)
             else:
                 self.leader.logger.debug("%s command timeout exception",
                                          self.leader.my_uri())
                 self.result = CommandResult(command=self.orig_log_record.command,
-                                            committed=False,
                                             timeout_expired=True)
         return self.result
 
@@ -549,7 +547,6 @@ class CommandWaiter:
             self.committed = True
         self.local_error = error_data
         result = CommandResult(command=self.orig_log_record.command,
-                               committed=self.committed,
                                timeout_expired=False,
                                result=command_result,
                                error=error_data,
@@ -561,5 +558,7 @@ class CommandWaiter:
             self.leader.logger.debug("%s notifying done condition",
                                          self.leader.my_uri())
             self.done_condition.notify()
+            
         return 
         
+
