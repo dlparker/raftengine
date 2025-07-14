@@ -8,7 +8,7 @@ class RPCServer(aiozmq.rpc.AttrHandler):
 
     @aiozmq.rpc.method
     async def send_command(self, command):
-        return await self.raft_server.send_command(command)
+        return await self.raft_server.run_command(command)
 
     @aiozmq.rpc.method
     async def raft_message(self, message):

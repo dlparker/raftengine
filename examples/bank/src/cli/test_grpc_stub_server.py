@@ -2,7 +2,7 @@
 import asyncio
 from pathlib import Path
 import sys
-import aiozmq.rpc
+import grpc
 
 this_dir = Path(__file__).resolve().parent
 for parent in this_dir.parents:
@@ -12,25 +12,33 @@ for parent in this_dir.parents:
             break
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
-from tx_aiozmq.rpc_server import RPCServer
+
+from tx_grpc.rpc_server import BankingServicer
+from tx_grpc import banking_pb2_grpc
 from raft_stubs.stubs import DeckStub
 from raft_stubs.stubs import RaftServerStub
 
 async def main():
     host = "localhost"
-    port = 50051
+    port = 50052
     raft_server = RaftServerStub(DeckStub())
-    rpc_server = RPCServer(raft_server)
-    azmq_server = await aiozmq.rpc.serve_rpc(
-        rpc_server,
-        bind=f'tcp://{host}:{port}'
-    )
+    
+    # Create gRPC server
+    server = grpc.aio.server()
+    servicer = BankingServicer(raft_server)
+    banking_pb2_grpc.add_BankingServiceServicer_to_server(servicer, server)
+    
+    listen_addr = f'{host}:{port}'
+    server.add_insecure_port(listen_addr)
+    
+    await server.start()
+    print(f"gRPC server started on {listen_addr}")
+    
     try:
         # Keep the server running
-        await asyncio.Event().wait()
+        await server.wait_for_termination()
     finally:
-        azmq_server.close()
-        await azmq_server.wait_closed()
+        await server.stop(grace=5)
 
 if __name__=="__main__":
     asyncio.run(main())

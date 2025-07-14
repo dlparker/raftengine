@@ -1,5 +1,4 @@
 import asyncio
-import json
 import aiozmq.rpc
 
 class RPCClient:
@@ -12,7 +11,7 @@ class RPCClient:
     async def connect(self):
         uri = f'tcp://{self.host}:{self.port}'
         self.client = await aiozmq.rpc.connect_rpc(
-            connect=uri,
+            connect=uri
         )
 
     async def send_command(self, command):
@@ -24,4 +23,11 @@ class RPCClient:
         if self.client is None:
             await self.connect()
         return await self.client.call.raft_message(message)
+    
+    async def close(self):
+        """Close the client connection"""
+        if self.client is not None:
+            self.client.close()
+            await self.client.wait_closed()
+            self.client = None
     

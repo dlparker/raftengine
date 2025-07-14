@@ -11,10 +11,10 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 from cli.stub_client_common import validate
-from tx_aiozmq.rpc_client import RPCClient
+from tx_grpc.rpc_client import RPCClient
 
 async def main():
-    port = 50051
+    port = 50052
     rpc_client = RPCClient('localhost', port)
     await validate(rpc_client)
 
