@@ -12,23 +12,21 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
-from tx_fastapi.rpc_server import BankingServer
+from tx_fastapi.rpc_helper import RPCHelper
 from raft_stubs.stubs import DeckStub
 from raft_stubs.stubs import RaftServerStub
-import uvicorn
 
 async def main():
-    host = "localhost"
-    port = 8000
+    port = 50051
     raft_server = RaftServerStub(DeckStub())
     
     # Create FastAPI server
-    banking_server = BankingServer(raft_server)
-    config = uvicorn.Config(banking_server.app, host=host, port=port, log_level="info")
-    server = uvicorn.Server(config)
-    
-    print(f"FastAPI server starting on {host}:{port}")
-    await server.serve()
+    rpc_helper = RPCHelper(port)
+    rpc_server = await rpc_helper.get_rpc_server(raft_server)
+    print(f'running on port {port}')
+    await rpc_helper.start_server_task()
+    while rpc_helper.server_task is not None:
+        await asyncio.sleep(0.001)    
 
 if __name__=="__main__":
     asyncio.run(main())

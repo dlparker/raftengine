@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package banking;
+
+// Banking RPC service matching the aiozmq interface
+service BankingService {
+  // Send a banking command (JSON string) and receive response (JSON string)
+  rpc SendCommand(CommandRequest) returns (CommandResponse);
+  
+  // Send a raft message and receive response
+  rpc RaftMessage(RaftRequest) returns (RaftResponse);
+}
+
+// Request message for banking commands
+message CommandRequest {
+  string command = 1;  // JSON-encoded command
+}
+
+// Response message for banking commands
+message CommandResponse {
+  string result = 1;   // JSON-encoded result
+}
+
+// Request message for raft messages
+message RaftRequest {
+  string message = 1;  // Raft message content
+}
+
+// Response message for raft messages
+message RaftResponse {
+  string result = 1;   // Raft response content
+}

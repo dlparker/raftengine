@@ -19,7 +19,7 @@ from raftengine.deck.deck import Deck
 
 class PausingServer(PilotAPI):
 
-    def __init__(self, uri, cluster, use_log=MemoryLog, use_rpc_callbacks=False):
+    def __init__(self, uri, cluster, use_log=MemoryLog):
         self.uri = uri
         self.cluster = cluster
         self.cluster_init_config = None
@@ -30,7 +30,6 @@ class PausingServer(PilotAPI):
         self.lost_out_messages = []
         self.logger = logging.getLogger("PausingServer")
         self.use_log = use_log
-        self.use_rpc_callbacks = use_rpc_callbacks
         if use_log == MemoryLog:
             self.log = MemoryLog()
         elif use_log == SqliteLog:
@@ -195,21 +194,14 @@ class PausingServer(PilotAPI):
         self.logger.debug('%s stop_commanded from deck', self.uri)
         #await self.cluster.remove_node(self.uri)
 
-    async def on_message(self, in_msg):
+    async def _on_message(self, in_msg):
         if self.save_message_history:
             msg = self.deck.decode_message(in_msg)
             self.in_message_history.append(msg)
+        await self.deck.on_message(in_msg)
         
-        if self.use_rpc_callbacks:
-            # Use RPC-style synchronous message handling
-            try:
-                response = await self.deck.on_rpc_message(in_msg)
-                self.logger.debug(f"{self.uri} RPC response: {response}")
-            except Exception as e:
-                self.logger.error(f"{self.uri} RPC error: {e}")
-        else:
-            # Use traditional async message handling
-            await self.deck.on_message(in_msg)
+    async def on_message(self, in_msg):
+        await self._on_message(in_msg)
         
     async def exit_cluster(self, callback=None, timeout=10.0):
         await self.deck.exit_cluster(callback, timeout)
@@ -407,6 +399,7 @@ class PausingServer(PilotAPI):
                 if not msg and not omsg:
                     await asyncio.sleep(0.00001)
         if not done:
+            breakpoint()
             raise Exception(f'{self.uri} timeout waiting for triggers')
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
         self.am_paused = True
@@ -480,18 +473,18 @@ class Testdeck(Deck):
         res = self.current_config = await self.cluster_ops.get_cluster_config()
         return res
 
-    async def on_message(self, message, callback=None):
+    async def on_message(self, message):
         dmsg = self.decode_message(message)
         if self.break_on_message_code == dmsg.get_code():
             print('here to catch break')
         if self.explode_on_message_code == dmsg.get_code():
-            result = await super().on_message(b'{"code":"foo"}', callback)
+            result = await super().on_message(b'{"code":"foo"}')
         if self.corrupt_message_with_code == dmsg.get_code():
             dmsg.entries = [dict(a=1),]
             self.wrapper_logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)
             result = await self.inner_on_message(dmsg)
         else:
-            result = await super().on_message(message, callback)
+            result = await super().on_message(message)
         return result
 
     async def on_rpc_message(self, message, timeout=5.0):
@@ -501,13 +494,7 @@ class Testdeck(Deck):
             print('here to catch break')
         if self.explode_on_message_code == dmsg.get_code():
             result = await super().on_rpc_message(b'{"code":"foo"}', timeout)
-        if self.corrupt_message_with_code == dmsg.get_code():
-            dmsg.entries = [dict(a=1),]
-            self.wrapper_logger.error('%s corrupted message by inserting garbage as log rec', self.local_config.uri)
-            result = await self.inner_on_message(dmsg)
-            return "RPC_CORRUPT_MESSAGE_RESPONSE"
-        else:
-            result = await super().on_rpc_message(message, timeout)
+        result = await super().on_rpc_message(message, timeout)
         return result
 
     async def role_run_after(self, delay, target):

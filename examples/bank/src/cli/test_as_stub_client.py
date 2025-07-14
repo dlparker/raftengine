@@ -11,11 +11,12 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 from cli.stub_client_common import validate
-from tx_astream.rpc_client import RPCClient
+from tx_astream.rpc_helper import RPCHelper
 
 async def main():
     port = 50050
-    rpc_client = RPCClient('localhost', port)
+    uri = f"astream://localhost:{port}"
+    rpc_client = await RPCHelper().rpc_client_maker(uri)
     await validate(rpc_client)
 
 if __name__=="__main__":

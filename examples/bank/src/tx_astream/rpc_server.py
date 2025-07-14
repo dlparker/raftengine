@@ -4,17 +4,14 @@ import json
 
 class RPCServer:
 
-    def __init__(self, raft_server,  port):
+    def __init__(self, raft_server):
         self.raft_server = raft_server
-        self.port = port
-        print(f"asyncio_streams server on  {self.port}")
 
     def get_raft_server(self):
         return self.raft_server
     
     async def handle_client(self, reader, writer):
         info = writer.get_extra_info("peername")
-        print(f"Client connected f{info}")
         cf = ClientFollower(self, reader, writer)
         asyncio.create_task(cf.go())
 
@@ -41,7 +38,6 @@ class ClientFollower:
             
             if request['mtype'] == "command":
                 command = request['message']
-                print(f'running command {command}')
                 result = await self.raft_server.run_command(command)
             else:
                 result = await self.raft_server.raft_message(request['message'])
@@ -53,5 +49,4 @@ class ClientFollower:
 
         self.writer.close()
         await self.writer.wait_closed()
-        print(self.info, "closed")
 

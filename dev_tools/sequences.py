@@ -29,7 +29,7 @@ class SNormalElection(StdSequence):
             self.expected_count += 1
 
     async def runner_wrapper(self, node):
-        await node.run_till_triggers()
+        await node.run_till_triggers(timeout=self.timeout)
         self.done_count += 1
 
     async def wait_till_done(self):
@@ -222,7 +222,7 @@ class SPartialCommand(StdSequence):
 
     async def runner_wrapper(self, node):
         # wait until has commit index
-        await node.run_till_triggers()
+        await node.run_till_triggers(timeout=self.timeout + 0.1 * self.timeout)
         if node == self.leader:
             # also need to send heartbeats so others get the commit index update
             self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
@@ -248,10 +248,11 @@ class SPartialCommand(StdSequence):
     async def wait_till_done(self):
         async def do_timeout(timeout):
             start_time = time.time()
+            sleep_time  = min(timeout/100.0, 0.001)
             while self.done_count < self.expected_count and self.command_result is None:
-                await asyncio.sleep(timeout/100.0)
-            if not self.command_result and time.time() - start_time >= timeout:
-                raise TimeoutTaskGroup()
+                await asyncio.sleep(sleep_time)
+                if not self.command_result and time.time() - start_time >= timeout:
+                    raise TimeoutTaskGroup()
         try:
             self.command_result = None
             async with asyncio.TaskGroup() as tg:
@@ -260,7 +261,7 @@ class SPartialCommand(StdSequence):
                     node = self.network.nodes[uri]
                     tg.create_task(self.runner_wrapper(node))
                     self.logger.debug('scheduled runner task for node %s in %s', node.uri, self.name)
-                tg.create_task(do_timeout(self.timeout))
+                tg.create_task(do_timeout(self.timeout + 0.1 * self.timeout))
         except* TimeoutTaskGroup:
             raise TestServerTimeout('timeout on wait till done on %s!', self.name)
         except* CommandFailedTaskGroup:

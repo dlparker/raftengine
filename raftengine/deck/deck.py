@@ -24,9 +24,9 @@ from raftengine.api.events import EventType
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.cluster_ops import ClusterOps
 
-class Deck(DeckAPI):
+class Deck:
 
-    # Part of API
+    # Part of DeckAPI
     def __init__(self, initial_cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
         self.local_config = local_config
         if not isinstance(pilot, PilotAPI):
@@ -50,42 +50,7 @@ class Deck(DeckAPI):
         self.exit_waiter_handle = None
         self.stopped = False
         
-        # RPC callback support
-        self.rpc_callbacks: Dict[int, Tuple[Callable, float, str]] = {}  # serial_number -> (callback, timestamp, sent_message)
-        self.callback_timeout_handle = None
-        self._start_callback_timeout_handler()
-    
-    def _start_callback_timeout_handler(self):
-        """Start the periodic callback timeout handler"""
-        loop = asyncio.get_event_loop()
-        self.callback_timeout_handle = loop.call_later(1.0, self._check_callback_timeouts)
-    
-    def _check_callback_timeouts(self):
-        """Check for and clean up timed-out callbacks"""
-        if self.stopped:
-            return
-            
-        current_time = time.time()
-        timed_out_callbacks = []
-        
-        for serial_number, (callback, timestamp, sent_message) in self.rpc_callbacks.items():
-            if current_time - timestamp > 5.0:  # 5 second timeout
-                timed_out_callbacks.append(serial_number)
-                
-        # Call timeout callbacks and remove them
-        for serial_number in timed_out_callbacks:
-            callback, _, sent_message = self.rpc_callbacks.pop(serial_number)
-            try:
-                callback(serial_number, sent_message, None, "Timeout waiting for response")
-            except Exception as e:
-                self.logger.error(f"Error calling timeout callback for serial {serial_number}: {e}")
-        
-        # Schedule next timeout check
-        if not self.stopped:
-            loop = asyncio.get_event_loop()
-            self.callback_timeout_handle = loop.call_later(1.0, self._check_callback_timeouts)
-        
-    # Part of API
+    # Part of DeckAPI
     async def start(self):
         await self.cluster_ops.get_cluster_config()
         self.started = True
@@ -100,7 +65,7 @@ class Deck(DeckAPI):
     def get_role(self):
         return self.role
 
-    # Part of API
+    # Part of DeckAPI
     async def get_leader_uri(self):
         # just in case it has never been called
         await self.cluster_ops.get_cluster_config()
@@ -143,7 +108,7 @@ class Deck(DeckAPI):
             await self.stop()
         self.join_waiter_handle = None
         
-    # Part of API
+    # Part of DeckAPI
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
         config = await self.cluster_ops.get_cluster_config()
         if leader_uri not in config.nodes:
@@ -157,62 +122,23 @@ class Deck(DeckAPI):
         self.join_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
                                                 asyncio.create_task(self.join_waiter(timeout, callback)))
         
-    # Part of API
+    # Part of DeckAPI
     def decode_message(self, in_message):
         return MessageCodec.decode_message(in_message)
     
-    # Part of API
-    async def on_message(self, in_message, callback: Optional[Callable[[int, str, Optional[str], Optional[str]], None]] = None):
+    # Part of DeckAPI
+    async def on_message(self, in_message):
         try:
             message = self.decode_message(in_message)
+            res = await self.inner_on_message(message)
         except:
             error = traceback.format_exc()
             self.logger.error(error)
             await self.record_message_problem(in_message, error)
             if EventType.error in self.event_control.active_events:
                 await self.event_control.emit_error(error)
-            if callback:
-                callback(0, in_message.decode() if isinstance(in_message, bytes) else str(in_message), None, error)
-            return None
-        
-        # If callback is provided, register it with the message serial number
-        if callback:
-            serial_number = getattr(message, 'serial_number', None)
-            if serial_number:
-                self.rpc_callbacks[serial_number] = (callback, time.time(), in_message.decode() if isinstance(in_message, bytes) else str(in_message))
-        
-        res = await self.inner_on_message(message)
-        return res
+        return None
     
-    # Part of API
-    async def on_rpc_message(self, in_message: bytes, timeout: float = 5.0) -> str:
-        """
-        RPC-style message handling that waits for a response.
-        
-        :params bytes in_message: The incoming message bytes
-        :params float timeout: Maximum time to wait for response in seconds
-        :rtype str: The response message as a string
-        :raises Exception: If an error occurs or timeout is reached
-        """
-        result_future = asyncio.Future()
-        
-        def rpc_callback(sent_serial_number: int, sent_message: str, response: Optional[str], error: Optional[str]):
-            if not result_future.done():
-                if error:
-                    result_future.set_exception(Exception(error))
-                else:
-                    result_future.set_result(response or "")
-        
-        # Call on_message with our callback
-        await self.on_message(in_message, rpc_callback)
-        
-        # Wait for the result with timeout
-        try:
-            result = await asyncio.wait_for(result_future, timeout=timeout)
-            return result
-        except asyncio.TimeoutError:
-            raise Exception(f"RPC message timed out after {timeout} seconds")
-        
     async def inner_on_message(self, message):
         res = None
         error = None
@@ -228,7 +154,7 @@ class Deck(DeckAPI):
             await self.record_message_problem(message, error)
         return res
 
-    # Part of API
+    # Part of DeckAPI
     async def run_command(self, command, timeout=1):
         if self.role.role_name == RoleName.leader:
             result = await self.role.run_command(command, timeout=timeout)
@@ -238,11 +164,11 @@ class Deck(DeckAPI):
             result = CommandResult(command, retry=1)
         return result
 
-    # Part of API
+    # Part of DeckAPI
     async def add_event_handler(self, handler):
         return self.event_control.add_handler(handler)
     
-    # Part of API
+    # Part of DeckAPI
     async def remove_event_handler(self, handler):
         return self.event_control.remove_handler(handler)
     
@@ -338,7 +264,7 @@ class Deck(DeckAPI):
             self.exit_waiter_handle = None
             await self.stop()
 
-    # Part of API
+    # Part of DeckAPI
     async def take_snapshot(self, timeout=2.0) -> SnapShot:
         if self.role.role_name == "LEADER":
             nodes = self.cluster_ops.get_cluster_node_ids()
@@ -363,7 +289,7 @@ class Deck(DeckAPI):
         await self.role.start()
         return snapshot
     
-    # Part of API 
+    # Part of DeckAPI 
     async def exit_cluster(self, callback=None, timeout=10.0):
         self.exiting_cluster = True
         self.exit_result = None
@@ -378,19 +304,20 @@ class Deck(DeckAPI):
                                                 asyncio.create_task(self.exit_waiter(timeout, callback)))
         await asyncio.sleep(0)
         
-    # Part of API 
+    # Part of DeckAPI 
     async def update_settings(self, settings):
         if self.role.role_name != "LEADER":
             raise Exception("must only call at leader")
         await self.role.do_update_settings(settings)
-    # Part of API
+
+    # Part of DeckAPI
     def get_message_problem_history(self, clear=False):
         res =  self.message_problem_history
         if clear:
             self.message_problem_history = []
         return res
 
-    # Part of API
+    # Part of DeckAPI
     async def stop(self):
         self.stopped = True
         await self.stop_role()
@@ -405,16 +332,6 @@ class Deck(DeckAPI):
             self.exiting_cluster = False
             await asyncio.sleep(0.001)
             self.exit_waiter_handle = None
-        if self.callback_timeout_handle:
-            self.callback_timeout_handle.cancel()
-            self.callback_timeout_handle = None
-        # Cancel any remaining RPC callbacks with error
-        for serial_number, (callback, _, sent_message) in self.rpc_callbacks.items():
-            try:
-                callback(serial_number, sent_message, None, "Deck stopped")
-            except Exception:
-                pass  # Ignore callback errors during shutdown
-        self.rpc_callbacks.clear()
         
     async def stop_role(self):
         await self.role.stop()
@@ -487,21 +404,7 @@ class Deck(DeckAPI):
         self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
         encoded, message_serial = MessageCodec.encode_message(message)
         encoded_reply, response_serial = MessageCodec.encode_message(response)
-        
-        # Check if there's a callback waiting for this response
-        if message_serial in self.rpc_callbacks:
-            callback, _, sent_message = self.rpc_callbacks.pop(message_serial)
-            try:
-                callback(message_serial, sent_message, encoded_reply.decode(), None)
-            except Exception as e:
-                self.logger.error(f"Error calling RPC callback for serial {message_serial}: {e}")
-                try:
-                    callback(message_serial, sent_message, None, f"Callback error: {e}")
-                except Exception:
-                    pass  # Avoid infinite error loops
-        else:
-            # No callback waiting, use normal pilot send_response
-            await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)
+        await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)
 
     # Called by Role. This may seem odd, but it is done this
     # way to make it possible to protect against race conditions where a role

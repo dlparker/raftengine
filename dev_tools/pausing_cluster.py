@@ -15,9 +15,8 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 
 class PausingCluster:
 
-    def __init__(self, node_count, use_log=MemoryLog, use_rpc_callbacks=False):
+    def __init__(self, node_count, use_log=MemoryLog):
         self.use_log = use_log
-        self.use_rpc_callbacks = use_rpc_callbacks
         self.node_uris = []
         self.nodes = dict()
         self.logger = logging.getLogger("PausingCluster")
@@ -28,7 +27,7 @@ class PausingCluster:
             nid = i + 1
             uri = f"mcpy://{nid}"
             self.node_uris.append(uri)
-            t1s = PausingServer(uri, self, use_log=use_log, use_rpc_callbacks=use_rpc_callbacks)
+            t1s = PausingServer(uri, self, use_log=use_log)
             self.nodes[uri] = t1s
         self.net_mgr = NetManager(self.nodes)
         self.net_mgr.set_test_trace(self.test_trace)
@@ -78,7 +77,7 @@ class PausingCluster:
         nid = len(self.nodes) + 1 # one offset
         uri = f"mcpy://{nid}"
         self.node_uris.append(uri)
-        ps = PausingServer(uri, self, use_log=self.use_log, use_rpc_callbacks=self.use_rpc_callbacks)
+        ps = PausingServer(uri, self, use_log=self.use_log)
         self.nodes[uri] = ps
         node_uris=self.node_uris,
         self.net_mgr.add_node(ps)

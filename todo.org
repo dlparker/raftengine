@@ -1,12 +1,9 @@
 * immediate
 
 1. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
-   log output is made when selecting that level for those loggers.
-2. update the message api elements to include a message serial number that is
-   generated in raftengine cause it is hard for callers to keep track of what is happening.
-   Do something like jan 1 2025 as base (1) * 100000 plus the number of days since then plus the seconds
-   since midnight (max 86399, so max first day serial would be 186399, next day 286399) so timebase.
-   Then multiply timebase * 1000000 (for a million msg per second)
+   log output is made when selecting info level for those loggers.
+2. update the command handling to use a generated message serial, update the log record to include it,
+   then pass it to the process_command pilot method.
 
 #+BEGIN_SRC python
 import time

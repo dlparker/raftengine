@@ -17,6 +17,7 @@ from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+log_control.set_default_level('debug')
 
 registry = FeatureRegistry.get_registry()
 
@@ -234,7 +235,7 @@ async def test_command_sqlite_1(cluster_maker):
     rec_2 = await ts_2.log.read(index)
     rec_3 = await ts_3.log.read(index)
     await cluster.stop_auto_comms()
-    
+
 async def double_leader_inner(cluster, discard):
     """
     This function is called once by each of two actual test functions. Once with

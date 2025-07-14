@@ -15,7 +15,7 @@ class RaftRequest(BaseModel):
 class RaftResponse(BaseModel):
     result: str
 
-class BankingServer:
+class RPCServer:
     """FastAPI server implementing the banking service interface"""
     
     def __init__(self, raft_server):
