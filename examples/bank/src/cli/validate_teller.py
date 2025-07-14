@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import asyncio
 from pathlib import Path
 import sys
@@ -9,15 +10,16 @@ for parent in this_dir.parents:
             break
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
-from astream.rpc_client import RPCClient
-from base.collector import Collector
-from base.test_teller import test_teller
+from base.validate_teller import validate_teller
+from base.operations import Teller
+
 
 async def main():
-    port = 50050
-    client = RPCClient('localhost', port)
-    collector = Collector(client)
-    await test_teller(collector)
+    db_path = Path("/tmp/test_banking.db")
+    if db_path.exists():
+        db_path.unlink()
+    teller = Teller(db_file=db_path)
+    await validate_teller(teller)
 
 if __name__=="__main__":
     asyncio.run(main())

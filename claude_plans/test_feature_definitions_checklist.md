@@ -3,10 +3,10 @@
 This checklist tracks which tests have been upgraded to include feature definitions according to the Raft Feature Identification Methodology. Tests are marked as **complete** (✓) when they have `registry.get_raft_feature()` calls properly integrated.
 
 ## Status Summary
-- **Total Tests**: 74
-- **Tests with Feature Definitions**: 23 (all properly implemented)
+- **Total Tests**: 76
+- **Tests with Feature Definitions**: 25 (all properly implemented)
 - **Tests Remaining**: 51
-- **Completion Rate**: 31.1%
+- **Completion Rate**: 32.9%
 - **API Status**: ✓ All existing feature registry calls now use correct API pattern
 
 ## Test Files and Methods
@@ -31,6 +31,12 @@ This checklist tracks which tests have been upgraded to include feature definiti
 - [x] `test_commands_1.py::test_full_catchup` ✓
 - [x] `test_commands_1.py::test_follower_run_error` ✓
 - [x] `test_commands_1.py::test_follower_rewrite_1` ✓
+
+### test_commands_1_rpc.py (1/1 complete)
+- [x] `test_commands_1_rpc.py::test_command_1_rpc` ✓
+
+### test_rpc_error_paths.py (1/1 complete)  
+- [x] `test_rpc_error_paths.py::test_rpc_callback_error_paths` ✓
 
 ### test_dev_tools.py (0/1 complete) USES NO RAFT FEATURES
 - [NA] `test_dev_tools.py::test_log_stuff`
@@ -130,11 +136,14 @@ This checklist tracks which tests have been upgraded to include feature definiti
 6. **Timer Tests** (test_timers_1.py) - 4 tests
 7. **Log Recovery Tests** (test_log_fiddles.py) - 2 tests
 
+### Infrastructure Tests (Complete)
+8. **RPC Callback Tests** (test_commands_1_rpc.py, test_rpc_error_paths.py) - 2 tests ✓
+
 ### Lower Priority (Edge Cases and System Tests)
-8. **Event System Tests** (test_events.py) - 2 tests
-9. **Message Edge Cases** (test_msg_edges.py) - 2 tests
-10. **Class/API Tests** (test_class_edges.py) - 4 tests
-11. **Development Tests** (test_dev_tools.py) - 1 test
+9. **Event System Tests** (test_events.py) - 2 tests
+10. **Message Edge Cases** (test_msg_edges.py) - 2 tests
+11. **Class/API Tests** (test_class_edges.py) - 4 tests
+12. **Development Tests** (test_dev_tools.py) - 1 test
 
 ## Notes
 - Tests marked with ✓ have been confirmed to include `registry.get_raft_feature()` calls

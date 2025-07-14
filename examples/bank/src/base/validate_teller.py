@@ -17,7 +17,7 @@ else:
 from base.datatypes import AccountType
 
 
-async def test_teller(teller):
+async def validate_teller(teller):
     """Test all banking operations through any teller interface"""
     
     try:
@@ -84,28 +84,7 @@ async def test_teller(teller):
         print(f"✗ Error: {e}")
         raise
 
-if __name__=="__main__":
-    from base.collector import Collector
-    from base.dispatcher import Dispatcher
-    from base.fake_rpc_pipe import FakeRPCPipe
-    from base.operations import Teller
-    from base.proxy import TellerWrapper
-    
-    db_path = Path("/tmp/test_banking.db")
-    if db_path.exists():
-        db_path.unlink()
-    teller = Teller(db_file=db_path)
-    asyncio.run(test_teller(teller))
-    db_path.unlink()
-    proxy = TellerWrapper(Teller(db_file=db_path))
-    asyncio.run(test_teller(proxy))
 
-    db_path.unlink()
-    teller = Teller(db_file=db_path)
-    dispatcher = Dispatcher(teller)
-    fake_pipe = FakeRPCPipe(dispatcher)
-    collector = Collector(fake_pipe)
-    asyncio.run(test_teller(collector))
     
     
     
