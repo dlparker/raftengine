@@ -32,10 +32,11 @@ class BankDatabase:
             CREATE TABLE IF NOT EXISTS accounts (
                 account_id INTEGER PRIMARY KEY,
                 account_type TEXT NOT NULL,
-                customer_id TEXT NOT NULL,
+                customer_id INTEGER NOT NULL,
                 balance TEXT NOT NULL,
                 create_time TEXT NOT NULL,
-                update_time TEXT NOT NULL
+                update_time TEXT NOT NULL,
+                FOREIGN KEY (customer_id) REFERENCES customers (cust_id)
             )
         """)
         
@@ -55,9 +56,10 @@ class BankDatabase:
         # Create customer_accounts junction table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS customer_accounts (
-                customer_id TEXT NOT NULL,
+                customer_id INTEGER NOT NULL,
                 account_id INTEGER NOT NULL,
                 PRIMARY KEY (customer_id, account_id),
+                FOREIGN KEY (customer_id) REFERENCES customers (cust_id),
                 FOREIGN KEY (account_id) REFERENCES accounts (account_id)
             )
         """)
@@ -100,7 +102,7 @@ class BankDatabase:
         conn.commit()
         conn.close()
     
-    def create_account(self, account: Account, customer_key: str) -> None:
+    def create_account(self, account: Account, customer_key: int) -> None:
         """Insert a new account into the database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -159,7 +161,7 @@ class BankDatabase:
         conn.commit()
         conn.close()
     
-    def get_customer(self, customer_key: str) -> Optional[Customer]:
+    def get_customer(self, customer_key: int) -> Optional[Customer]:
         """Retrieve a customer by key (last_name,first_name)"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -167,7 +169,7 @@ class BankDatabase:
         cursor.execute("""
             SELECT cust_id, first_name, last_name, address, create_time, update_time
             FROM customers
-            WHERE (last_name || ',' || first_name) = ?
+            WHERE cust_id = ?
         """, (customer_key,))
         
         row = cursor.fetchone()

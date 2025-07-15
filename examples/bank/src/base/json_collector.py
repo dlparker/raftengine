@@ -1,3 +1,10 @@
+"""
+This version of the Collector uses the built in python json module and custom actions
+to implement the serialization of the TellerProxyAPI. It is a pain, and error prone.
+It is provided here for illustration only. All the running code uses the json_pickle
+version in collector.py. Each version needs a matching dispatcher.
+
+"""
 from typing import List, Optional, Dict, Any
 import logging
 import json

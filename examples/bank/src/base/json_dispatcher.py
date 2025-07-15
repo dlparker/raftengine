@@ -1,3 +1,10 @@
+"""
+This version of the Dispatcher uses the built in python json module and custom actions
+to implement the serialization of the TellerProxyAPI. It is a pain, and error prone.
+It is provided here for illustration only. All the running code uses the json_pickle
+version in dispatcher.py. Each version needs a matching collector.
+
+"""
 import logging
 import json
 from typing import Any

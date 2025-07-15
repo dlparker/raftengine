@@ -28,12 +28,10 @@ class ClientFollower:
 
     async def do_command(self, command):
         raw_result = await self.raft_server.run_command(command)
-        print(f'client {self.info} command')
         result = json.dumps(raw_result, default=lambda o:o.__dict__)
         return result
 
     async def do_raft(self, message):
-        print(f'client {self.info} raft_message')
         # we don't wait for the response, gets tricky with overlapping
         # calls
         asyncio.create_task(self.raft_server.raft_message(message))
@@ -41,31 +39,37 @@ class ClientFollower:
         return result
         
     async def go(self):
-        while True:
-            try:
-                len_data = await self.reader.read(20)
-                if not len_data:
+        try:
+            while True:
+                try:
+                    len_data = await self.reader.read(20)
+                    if not len_data:
+                        break
+                    msg_len = int(len_data.decode())
+                    data = await self.reader.read(msg_len)
+                    if not data:
+                        break
+                    # Process the line
+                    request = json.loads(data.decode())
+                    if request['mtype'] == "command":
+                        result = await self.do_command(request['message'])
+                    else:
+                        result = await self.do_raft(request['message'])
+                    response = result.encode()
+                    count = str(len(response))
+                    self.writer.write(f"{count:20s}".encode())
+                    self.writer.write(response)
+                    await self.writer.drain()
+                except asyncio.CancelledError:
+                    # Server is shutting down, exit gracefully
                     break
-                msg_len = int(len_data.decode())
-                data = await self.reader.read(msg_len)
-                if not data:
-                    print(f"exiting server loop for client {self.info}")
+                except Exception:
+                    # Other errors, print and continue
+                    traceback.print_exc()
                     break
-                print(f'client {self.info} sent {msg_len} bytes')
-                # Process the line
-                request = json.loads(data.decode())
-                if request['mtype'] == "command":
-                    result = await self.do_command(request['message'])
-                else:
-                    result = await self.do_raft(request['message'])
-                response = result.encode()
-                count = str(len(response))
-                self.writer.write(f"{count:20s}".encode())
-                self.writer.write(response)
-                await self.writer.drain()
-                print(f'message loop done for client {self.info}')
-            except:
-                trackback.print_exc()
-        self.writer.close()
-        await self.writer.wait_closed()
+        finally:
+            # Always close the writer
+            if not self.writer.is_closing():
+                self.writer.close()
+                await self.writer.wait_closed()
 

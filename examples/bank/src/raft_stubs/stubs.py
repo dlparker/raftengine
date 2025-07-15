@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from base.operations import Teller
 from base.proxy import TellerProxyAPI
 from base.dispatcher import Dispatcher
@@ -6,8 +7,11 @@ from raftengine.api.deck_api import CommandResult
 
 class DeckStub:
 
-    def __init__(self):
-        self.teller = Teller("/tmp/bank.db")
+    def __init__(self, clear=True):
+        db_path = Path("/tmp/bank.db")
+        if db_path.exists():
+            db_path.unlink()
+        self.teller = Teller(db_path)
         self.dispatcher = Dispatcher(self.teller)
 
     async def run_command(self, command):

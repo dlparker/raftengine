@@ -1,10 +1,10 @@
 import asyncio
 import aiohttp
 import json
+from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
 
-class RPCClient:
-    """FastAPI HTTP client for banking service"""
+class RPCClient(RPCAPI):
     
     def __init__(self, host, port):
         self.host = host
@@ -54,3 +54,11 @@ class RPCClient:
         if self.session is not None:
             await self.session.close()
             self.session = None
+            
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        await self.close()

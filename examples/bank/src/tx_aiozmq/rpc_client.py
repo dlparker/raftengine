@@ -1,8 +1,9 @@
 import asyncio
 import aiozmq.rpc
+from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
 
-class RPCClient:
+class RPCClient(RPCAPI):
 
     def __init__(self, host, port):
         self.host = host

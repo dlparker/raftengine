@@ -18,7 +18,7 @@ class Collector(TellerProxyAPI):
         command = Command(command_name=CommandType.CREATE_CUSTOMER, args=CustomerArgs(first_name=first_name, last_name=last_name, address=address))
         return await self.build_command(command, Customer)
 
-    async def create_account(self, customer_id: str, account_type: AccountType) -> Account:
+    async def create_account(self, customer_id: int, account_type: AccountType) -> Account:
         command = Command(command_name=CommandType.CREATE_ACCOUNT, args=AccountArgs(customer_id=customer_id, account_type=account_type))
         return await self.build_command(command, Account)
 
@@ -42,7 +42,7 @@ class Collector(TellerProxyAPI):
         command = Command(command_name=CommandType.LIST_ACCOUNTS, args={})
         return await self.build_command(command, List[Account])
 
-    async def get_accounts(self, customer_id: str) -> List[int]:
+    async def get_accounts(self, customer_id: int) -> List[int]:
         command = Command(command_name=CommandType.GET_ACCOUNTS, args=GetAccountsArgs(customer_id=customer_id))
         return await self.build_command(command, List[int])
 
@@ -74,7 +74,7 @@ class CustomerArgs:
         self.address = address
 
 class AccountArgs:
-    def __init__(self, customer_id: str, account_type: AccountType):
+    def __init__(self, customer_id: int, account_type: AccountType):
         self.customer_id = customer_id
         self.account_type = account_type
 
@@ -100,7 +100,7 @@ class CashCheckArgs:
         self.amount = amount
 
 class GetAccountsArgs:
-    def __init__(self, customer_id: str):
+    def __init__(self, customer_id: int):
         self.customer_id = customer_id
 
 class ListStatementsArgs:

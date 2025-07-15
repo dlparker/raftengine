@@ -2,10 +2,11 @@ import asyncio
 import time
 import json
 import traceback
+from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
 
 
-class RPCClient:
+class RPCClient(RPCAPI):
 
     def __init__(self, host, port):
         self.host = host
@@ -30,21 +31,17 @@ class RPCClient:
             msg = message.encode()
             count = str(len(msg))
             self.writer.write(f"{count:20s}".encode())
-            print(f'writing {count} to {self.port}')
             self.writer.write(msg)
             await self.writer.drain()
-            print(f'wrote {count} to {self.port}')
             len_data = (await self.reader.read(20))
             if not len_data:
                 self.in_progress = False
                 raise Exception('server gone!')
             msg_len = int(len_data.decode())
-            print(f'reading {msg_len} from {self.port}')
             data = await self.reader.read(msg_len)
             if not data:
                 self.in_progress = False
                 raise Exception('server gone!')
-            print(f'finished {msg_len} from {self.port}')
             self.in_progress = False
             return data.decode()
         except:
@@ -63,3 +60,19 @@ class RPCClient:
         msg = json.dumps(wrapped)
         await self.send_message(msg)
         return None
+    
+    async def close(self):
+        """Close the connection"""
+        if self.writer:
+            self.writer.close()
+            await self.writer.wait_closed()
+            self.writer = None
+            self.reader = None
+            
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        await self.close()

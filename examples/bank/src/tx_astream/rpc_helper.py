@@ -30,16 +30,27 @@ class RPCHelper(RPCHelperAPI):
             try:
                 # Keep the server running
                 await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Server is being shut down
+                pass
             finally:
-                self.sock_server.close()
-                await self.sock_server.wait_closed()
+                if self.sock_server:
+                    self.sock_server.close()
+                    await self.sock_server.wait_closed()
                 self.server_task = None
         self.server_task = asyncio.create_task(serve())
                 
     async def stop_server_task(self):
+        if self.sock_server:
+            self.sock_server.close()
+            await self.sock_server.wait_closed()
+            self.sock_server = None
         if self.server_task:
             self.server_task.cancel()
-            await asyncio.sleep(0.0)
+            try:
+                await self.server_task
+            except asyncio.CancelledError:
+                pass
             self.server_task = None
         
     

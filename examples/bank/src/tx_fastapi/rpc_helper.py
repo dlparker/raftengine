@@ -36,9 +36,20 @@ class RPCHelper(RPCHelperAPI):
         self.server_task = asyncio.create_task(serve())
                 
     async def stop_server_task(self):
+        if self.uvicorn_server:
+            self.uvicorn_server.should_exit = True
+            # Give server more time to gracefully shut down
+            for _ in range(10):  # Wait up to 1 second
+                if not self.uvicorn_server.started:
+                    break
+                await asyncio.sleep(0.1)
         if self.server_task:
-            self.server_task.cancel()
-            await asyncio.sleep(0.0)
+            if not self.server_task.done():
+                self.server_task.cancel()
+                try:
+                    await self.server_task
+                except asyncio.CancelledError:
+                    pass
             self.server_task = None
         
     

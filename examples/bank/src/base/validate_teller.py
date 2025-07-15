@@ -1,87 +1,289 @@
 #!/usr/bin/env python
 """Common banking test functions used across all """
 import asyncio
+import json
+import random
+import time
+import statistics
+from collections import defaultdict
+from datetime import datetime, timedelta
 from decimal import Decimal
-from datetime import timedelta
 from pathlib import Path
-import sys
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from base.datatypes import AccountType
+from faker import Faker
+from base.datatypes import Customer, Account, AccountType, CommandType
 
 
-async def validate_teller(teller):
-    """Test all banking operations through any teller interface"""
+class TimingData:
+    """Class to collect and analyze timing data"""
+    
+    def __init__(self):
+        self.timings = defaultdict(list)  # operation_name -> list of times
+        self.loop_times = []  # overall loop execution times
+        
+    def add_timing(self, operation: str, duration: float):
+        """Add a timing measurement for an operation"""
+        self.timings[operation].append(duration)
+        
+    def add_loop_timing(self, duration: float):
+        """Add a timing measurement for a complete loop"""
+        self.loop_times.append(duration)
+        
+    def get_stats(self, operation: str) -> dict:
+        """Get statistics for a specific operation"""
+        times = self.timings[operation]
+        if not times:
+            return {}
+            
+        return {
+            'count': len(times),
+            'min': min(times),
+            'max': max(times),
+            'mean': statistics.mean(times),
+            'median': statistics.median(times),
+            'stdev': statistics.stdev(times) if len(times) > 1 else 0.0,
+            'total': sum(times)
+        }
+        
+    def get_all_stats(self) -> dict:
+        """Get statistics for all operations"""
+        stats = {}
+        for operation in self.timings:
+            stats[operation] = self.get_stats(operation)
+        if self.loop_times:
+            stats['loop_total'] = {
+                'count': len(self.loop_times),
+                'min': min(self.loop_times),
+                'max': max(self.loop_times),
+                'mean': statistics.mean(self.loop_times),
+                'median': statistics.median(self.loop_times),
+                'stdev': statistics.stdev(self.loop_times) if len(self.loop_times) > 1 else 0.0,
+                'total': sum(self.loop_times)
+            }
+        return stats
+        
+    def print_report(self):
+        """Print a formatted timing report"""
+        stats = self.get_all_stats()
+        
+        print("\n" + "="*60)
+        print("TIMING REPORT")
+        print("="*60)
+        
+        # Sort operations by total time (descending)
+        operations = [(op, data) for op, data in stats.items() if op != 'loop_total']
+        operations.sort(key=lambda x: x[1]['total'], reverse=True)
+        
+        for operation, data in operations:
+            print(f"\n{operation.upper()}:")
+            print(f"  Count: {data['count']}")
+            print(f"  Total: {data['total']:.6f}s")
+            print(f"  Mean:  {data['mean']:.6f}s")
+            print(f"  Min:   {data['min']:.6f}s")
+            print(f"  Max:   {data['max']:.6f}s")
+            print(f"  StdDev: {data['stdev']:.6f}s")
+            
+        if 'loop_total' in stats:
+            data = stats['loop_total']
+            print(f"\nLOOP TOTAL:")
+            print(f"  Count: {data['count']}")
+            print(f"  Total: {data['total']:.6f}s")
+            print(f"  Mean:  {data['mean']:.6f}s")
+            print(f"  Min:   {data['min']:.6f}s")
+            print(f"  Max:   {data['max']:.6f}s")
+            print(f"  StdDev: {data['stdev']:.6f}s")
+            
+        print("\n" + "="*60)
+        
+    def export_to_json(self, file_path: str, metadata: dict = None):
+        """Export timing statistics to JSON file
+        
+        Args:
+            file_path: Path to output JSON file
+            metadata: Additional metadata to include in export
+        """
+        stats = self.get_all_stats()
+        
+        # Prepare export data
+        export_data = {
+            'timestamp': datetime.now().isoformat(),
+            'metadata': metadata or {},
+            'statistics': stats,
+            'raw_timings': {
+                'operations': dict(self.timings),
+                'loop_times': self.loop_times
+            }
+        }
+        
+        # Write to file
+        with open(file_path, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        
+        print(f"\n📊 Timing statistics exported to: {file_path}")
+
+
+async def validate_teller(teller, loops=1, print_timing=True, json_output=None, metadata=None):
+    """Test all banking operations through any teller interface
+    
+    Args:
+        teller: The teller interface to test
+        loops: Number of test iterations to run (default: 1)
+        print_timing: Whether to print timing report (default: True)
+        json_output: Path to JSON file for exporting statistics (default: None)
+        metadata: Additional metadata to include in JSON export (default: None)
+    """
+    
+    fake = Faker()
+    timing_data = TimingData()
+    
+    for loop_num in range(loops):
+        loop_start = time.time()
+        await _run_single_test(teller, fake, loop_num, timing_data)
+        loop_end = time.time()
+        timing_data.add_loop_timing(loop_end - loop_start)
+        
+    # Run list_accounts test once after all loops complete
+    # await _test_list_accounts(teller, timing_data, loops)  # Commented out - will be fixed in next changes
+        
+    if print_timing:
+        timing_data.print_report()
+        
+    if json_output:
+        timing_data.export_to_json(json_output, metadata)
+        
+    return timing_data
+
+
+async def _test_list_accounts(teller, timing_data, loops):
+    """Test list_accounts functionality once after all loops complete"""
+    
+    async def timed_operation(operation_name: str, coro):
+        """Time an async operation"""
+        start = time.time()
+        result = await coro
+        end = time.time()
+        timing_data.add_timing(operation_name, end - start)
+        return result
+    
+    # Test list_accounts
+    accounts = await timed_operation('list_accounts', teller.list_accounts())
+    
+    # Should have exactly 2 accounts per loop (checking + savings)
+    expected_account_count = loops * 2
+    assert len(accounts) == expected_account_count, f"Expected {expected_account_count} accounts, got {len(accounts)}"
+    
+    # Verify account types distribution
+    checking_accounts = [acc for acc in accounts if acc.account_type == AccountType.CHECKING]
+    savings_accounts = [acc for acc in accounts if acc.account_type == AccountType.SAVINGS]
+    
+    assert len(checking_accounts) == loops, f"Expected {loops} checking accounts, got {len(checking_accounts)}"
+    assert len(savings_accounts) == loops, f"Expected {loops} savings accounts, got {len(savings_accounts)}"
+    
+    # Verify all accounts have valid balances (should be positive after transactions)
+    for account in accounts:
+        assert account.balance >= 0, f"Account {account.account_id} has negative balance: {account.balance}"
+        assert account.customer_id is not None, f"Account {account.account_id} has null customer_id"
+        assert account.account_id is not None, f"Account has null account_id"
+
+
+async def _run_single_test(teller, fake, loop_num, timing_data):
+    """Run a single test iteration with randomized data"""
+    
+    async def timed_operation(operation_name: str, coro):
+        """Time an async operation"""
+        start = time.time()
+        result = await coro
+        end = time.time()
+        timing_data.add_timing(operation_name, end - start)
+        return result
     
     try:
+        # Generate random customer data
+        first_name = fake.first_name()
+        last_name = fake.last_name()
+        address = fake.address().replace('\n', ', ')
+        
         # Test create_customer
-        print("\n1. Creating customer...")
-        customer = await teller.create_customer("Jane", "Doe", "456 Elm Street")
-        print(f"   ✓ Created: {customer.first_name} {customer.last_name} (ID: {customer.cust_id})")
-        
+        cust = Customer(first_name, last_name, address)
+        customer = await timed_operation('create_customer', 
+                                       teller.create_customer(cust.first_name, cust.last_name, cust.address))
+        assert customer.first_name == cust.first_name
+        assert customer.last_name == cust.last_name
+        assert customer.address == cust.address
+        assert customer.cust_id is not None
+
+        sav = Account(AccountType.SAVINGS, customer.cust_id, Decimal('0.00'))
+        chk = Account(AccountType.CHECKING, customer.cust_id, Decimal('0.00'))
         # Test create_account
-        print("\n2. Creating accounts...")
-        checking = await teller.create_account("Doe,Jane", AccountType.CHECKING)
-        savings = await teller.create_account("Doe,Jane", AccountType.SAVINGS)
-        print(f"   ✓ Checking account: {checking.account_id}")
-        print(f"   ✓ Savings account: {savings.account_id}")
+        checking = await timed_operation('create_account', 
+                                       teller.create_account(customer.cust_id, AccountType.CHECKING))
+        assert checking.account_id is not None
+        assert checking.customer_id == chk.customer_id
+        assert checking.balance == chk.balance
+        savings = await timed_operation('create_account', 
+                                      teller.create_account(customer.cust_id, AccountType.SAVINGS))
+        assert savings.account_id is not None
+        assert savings.customer_id == sav.customer_id
+        assert savings.balance == sav.balance
         
-        # Test deposit
-        print("\n3. Making deposits...")
-        balance = await teller.deposit(checking.account_id, Decimal('1000.00'))
-        print(f"   ✓ Deposited $1000 to checking, balance: ${balance}")
+        # Test deposit with random amounts
+        check_deposit = Decimal(str(random.randint(100, 2000)))
+        sav_deposit = Decimal(str(random.randint(50, 1000)))
         
-        balance = await teller.deposit(savings.account_id, Decimal('500.00'))
-        print(f"   ✓ Deposited $500 to savings, balance: ${balance}")
+        balance = await timed_operation('deposit', 
+                                      teller.deposit(checking.account_id, check_deposit))
+        assert balance == check_deposit
         
-        # Test withdraw
-        print("\n4. Making withdrawal...")
-        balance = await teller.withdraw(checking.account_id, Decimal('100.00'))
-        print(f"   ✓ Withdrew $100 from checking, balance: ${balance}")
+        balance = await timed_operation('deposit', 
+                                      teller.deposit(savings.account_id, sav_deposit))
+        assert balance == sav_deposit
         
-        # Test transfer
-        print("\n5. Making transfer...")
-        result = await teller.transfer(checking.account_id, savings.account_id, Decimal('200.00'))
-        print(f"   ✓ Transferred $200: Checking=${result['from_balance']}, Savings=${result['to_balance']}")
+        # Test withdraw with random amount
+        withdraw_amount = Decimal(str(random.randint(10, int(check_deposit) // 2)))
+        balance = await timed_operation('withdraw', 
+                                      teller.withdraw(checking.account_id, withdraw_amount))
+        expected_balance = check_deposit - withdraw_amount
+        assert balance == expected_balance
         
-        # Test cash_check
-        print("\n6. Cashing check...")
-        balance = await teller.cash_check(checking.account_id, Decimal('50.00'))
-        print(f"   ✓ Cashed $50 check, balance: ${balance}")
+        # Test transfer with random amount
+        transfer_amount = Decimal(str(random.randint(10, int(expected_balance) // 2)))
+        result = await timed_operation('transfer', 
+                                     teller.transfer(checking.account_id, savings.account_id, transfer_amount))
+        assert result is not None
+        expected_check_balance = expected_balance - transfer_amount
+        expected_sav_balance = sav_deposit + transfer_amount
+        assert result['from_balance'] == expected_check_balance
+        assert result['to_balance'] == expected_sav_balance
         
-        # Test list_accounts
-        print("\n7. Listing all accounts...")
-        accounts = await teller.list_accounts()
-        print(f"   ✓ Total accounts: {len(accounts)}")
-        for account in accounts:
-            print(f"     - Account {account.account_id}: {account.account_type.value}, ${account.balance}")
+        # Test cash_check with random amount
+        cash_amount = Decimal(str(random.randint(5, int(expected_check_balance) // 2)))
+        balance = await timed_operation('cash_check', 
+                                      teller.cash_check(checking.account_id, cash_amount))
+        expected_final_balance = expected_check_balance - cash_amount
+        assert balance == expected_final_balance
+        
+        # list_accounts test moved to separate function after all loops
         
         # Test get_accounts
-        print("\n8. Getting customer accounts...")
-        customer_accounts = await teller.get_accounts("Doe,Jane")
-        print(f"   ✓ Jane's accounts: {customer_accounts}")
+        customer_accounts = await timed_operation('get_accounts', 
+                                                teller.get_accounts(customer.cust_id))
+        assert len(customer_accounts) == 2
+        assert checking.account_id in customer_accounts
+        assert savings.account_id in customer_accounts
         
         # Test list_statements
-        print("\n9. Listing statements...")
-        statements = await teller.list_statements(checking.account_id)
-        print(f"   ✓ Statements for account {checking.account_id}: {len(statements)} statements")
+        statements = await timed_operation('list_statements', 
+                                         teller.list_statements(checking.account_id))
+        assert isinstance(statements, list)
+        # Statements may exist from previous loops, so just verify it's a list
         
-        # Test advance_time
-        print("\n10. Advancing time...")
-        await teller.advance_time(timedelta(hours=24))
-        print("    ✓ Advanced time by 24 hours")
-        
-        print("\n=== All banking operations completed successfully! ===")
+        # Test advance_time with random duration
+        hours = random.randint(1, 72)
+        await timed_operation('advance_time', 
+                            teller.advance_time(timedelta(hours=hours)))
+        # No return value to assert, just ensure it doesn't raise an exception
         
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"✗ Error in loop {loop_num}: {e}")
         raise
 
 

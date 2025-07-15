@@ -23,7 +23,7 @@ class Teller:
         self.db.create_customer(crec)
         return crec
 
-    async def create_account(self, customer_id: str, account_type: AccountType) -> Account:
+    async def create_account(self, customer_id: int, account_type: AccountType) -> Account:
         cust_rec = self.db.get_customer(customer_id)
         if not cust_rec:
             raise ValueError(f"Customer {customer_id} not found")
@@ -133,7 +133,7 @@ class Teller:
     async def list_accounts(self) -> List[Account]:
         return self.db.get_all_accounts()
     
-    async def get_accounts(self, customer_id: str) -> List[int]:
+    async def get_accounts(self, customer_id: int) -> List[int]:
         cust_rec = self.db.get_customer(customer_id)
         if not cust_rec:
             raise ValueError(f"Customer {customer_id} not found")
