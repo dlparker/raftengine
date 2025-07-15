@@ -13,6 +13,10 @@ class RPCClient(RPCAPI):
         self.port = port
         self.channel = None
         self.stub = None
+        self.uri = f'grpc://{self.host}:{self.port}'
+
+    def get_uri(self):
+        return self.uri
     
     async def connect(self):
         """Establish connection to gRPC server"""

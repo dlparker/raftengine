@@ -120,8 +120,10 @@ class ClusterManager(App):
         Binding("f1", "show_help", "Help"),
         Binding("f2", "clear", "Clear"),
     ]
-    def __init__(self):
+    def __init__(self, transport='grpc', base_port=50050):
         super().__init__()
+        self.transport = transport
+        self.base_port = base_port
         self.nodes = self._initialize_nodes()
         self.cluster_state = "stopped"
         self.log_buffer_size = 1000
@@ -131,13 +133,53 @@ class ClusterManager(App):
         # Color schemes for each node
         self.node_colors = ["cyan", "green", "yellow"]
         
+        # Initialize cluster control server_defs
+        self._setup_server_defs()
+        
+    def _setup_server_defs(self):
+        """Initialize server_defs for cluster control functions"""
+        transport_offsets = {
+            'astream': 0,
+            'aiozmq': 100,
+            'fastapi': 200,
+            'grpc': 300
+        }
+        port_offset = transport_offsets[self.transport]
+        
+        # Import cluster control and initialize server_defs directly
+        import cli.control_raft_server as cluster_control
+        
+        # Clear and initialize server definitions
+        cluster_control.server_defs.clear()
+        for index in range(3):
+            port = self.base_port + port_offset + index
+            url = f"{self.transport}://127.0.0.1:{port}"
+            work_dir = Path('/tmp', f"raft_server.{self.transport}.{index}")
+            
+            cluster_control.server_defs[index] = {
+                'url': url,
+                'transport': self.transport,
+                'work_dir': work_dir,
+                'base_port': self.base_port + port_offset,
+                'args_base_port': self.base_port,
+                'port': port
+            }
+        
     def _initialize_nodes(self) -> Dict[int, NodeInfo]:
         """Initialize the 3-node cluster configuration"""
         nodes = {}
-        base_port = 50055
+        # Calculate transport offset using the same pattern as control_raft_server.py
+        transport_offsets = {
+            'astream': 0,
+            'aiozmq': 100,
+            'fastapi': 200,
+            'grpc': 300
+        }
+        port_offset = transport_offsets[self.transport]
+        
         for i in range(3):
-            port = base_port + i
-            uri = f"grpc://localhost:{port}"
+            port = self.base_port + port_offset + i
+            uri = f"{self.transport}://127.0.0.1:{port}"
             nodes[i] = NodeInfo(
                 index=i,
                 uri=uri,
@@ -202,7 +244,7 @@ class ClusterManager(App):
         for node in self.nodes.values():
             # Use control_server to get real status
             try:
-                status = await get_server_status(node.index)
+                status = await get_server_status(node.index, list(self.nodes[i].uri for i in range(3)))
                 
                 # Update node state based on actual status
                 if status['running']:
@@ -371,7 +413,7 @@ class ClusterManager(App):
         
         try:
             # Use control_server.start_server() instead of subprocess
-            success = await start_server(node_index)
+            success = await start_server(node_index, pause=False, slow_timeouts=True)
             if success:
                 node.state = NodeState.RUNNING
                 node.start_time = datetime.now()
@@ -437,7 +479,7 @@ class ClusterManager(App):
     
     async def _monitor_node_logs(self, node: NodeInfo):
         """Monitor log files for a node"""
-        work_dir = Path('/tmp', f"rserver_{node.index}")
+        work_dir = Path('/tmp', f"raft_server.{self.transport}.{node.index}")
         stdout_file = work_dir / 'server.stdout'
         stderr_file = work_dir / 'server.stderr'
         
@@ -624,7 +666,9 @@ class ClusterManager(App):
     
     async def cmd_help(self, args: List[str]) -> str:
         """Show help information"""
-        help_text = """
+        help_text = f"""
+Raft Cluster Manager - Transport: {self.transport}, Base Port: {self.base_port}
+
 Available commands:
   start [node...]     - Start all nodes or specific nodes (0, 1, 2)
   stop [node...]      - Stop all nodes or specific nodes
@@ -646,6 +690,11 @@ Examples:
   stop 2              - Stop node 2
   restart             - Restart all nodes
   logs 0              - Show recent logs for node 0
+
+Cluster Configuration:
+  Transport: {self.transport}
+  Base Port: {self.base_port}
+  Working Directory Pattern: /tmp/raft_server.{self.transport}.<index>
 """
         return help_text
     
@@ -671,12 +720,18 @@ Examples:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Raft Cluster Manager (Textual)')
+    parser.add_argument('--transport', '-t', 
+                        choices=['astream', 'aiozmq', 'fastapi', 'grpc'],
+                        default='grpc',
+                        help='Transport mechanism to use (default: grpc)')
+    parser.add_argument('--base-port', '-b', type=int, default=50050,
+                        help='Base port for cluster (default: 50050)')
     parser.add_argument('--auto-start', action='store_true',
                        help='Automatically start all nodes on startup')
     
     args = parser.parse_args()
     
-    app = ClusterManager()
+    app = ClusterManager(args.transport, args.base_port)
     app.run()
 
 

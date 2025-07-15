@@ -1,10 +1,9 @@
 from base.collector import Collector
 from base.validate_teller import validate_teller
 from base.demo_teller import demo_teller
-from raft_stubs.stubs import CommandClient
 
 async def validate(rpc_client, mode='demo', loops=1, use_random_data=False, 
-                 print_timing=True, json_output=None, check_raft_message=False):
+                   print_timing=True, json_output=None, raft_stubs=False):
     """Common validation function for all stub clients
     
     Args:
@@ -14,9 +13,12 @@ async def validate(rpc_client, mode='demo', loops=1, use_random_data=False,
         use_random_data: Use random data for testing
         print_timing: Print timing report (test mode only)
         json_output: Path to JSON output file
-        check_raft_message: Test the raft_message stub
     """
-    command_client = CommandClient(rpc_client)
+    if raft_stubs:
+        from raft_stubs.stubs import RaftClient
+    else:
+        from raft_ops.raft_client import RaftClient
+    command_client = RaftClient(rpc_client)
     collector = Collector(command_client)
     
     # Prepare metadata for JSON export
@@ -25,7 +27,6 @@ async def validate(rpc_client, mode='demo', loops=1, use_random_data=False,
         'transport': 'stub_client',
         'loops': loops,
         'random_data': use_random_data,
-        'check_raft_message': check_raft_message
     }
     
     if mode == 'demo':
@@ -43,11 +44,6 @@ async def validate(rpc_client, mode='demo', loops=1, use_random_data=False,
         else:
             print("✓ Test passed successfully!")
 
-    if check_raft_message:
-        msg = "Howdy"
-        result = await rpc_client.raft_message(msg)
-        print(f"test of stub raft_message '{msg}' returned '{result}'")
-
 
 def add_common_arguments(parser):
     """Add common arguments to argument parser"""
@@ -61,5 +57,5 @@ def add_common_arguments(parser):
                         help='Disable timing report (only for test mode)')
     parser.add_argument('--json-output', type=str, metavar='FILE',
                         help='Export timing statistics to JSON file')
-    parser.add_argument('--check-raft', action='store_true',
-                        help='Test the raft_message stub function')
+    parser.add_argument('--raft-stubs', action='store_true',
+                        help='Calling raft stub server')

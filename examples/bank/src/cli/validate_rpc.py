@@ -250,7 +250,7 @@ Available transports:
                           use_random_data=args.random,
                           print_timing=not args.no_timing,
                           json_output=args.json_output,
-                          check_raft_message=args.check_raft)
+                          raft_stubs=args.raft_stubs)
             
             print(f"Successfully completed {args.transport} validation")
         finally:

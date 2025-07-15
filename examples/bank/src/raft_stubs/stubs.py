@@ -3,6 +3,7 @@ from pathlib import Path
 from base.operations import Teller
 from base.proxy import TellerProxyAPI
 from base.dispatcher import Dispatcher
+from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
 
 class DeckStub:
@@ -35,23 +36,39 @@ class RaftServerStub:
         return await self.deck.on_message(message)
 
 
-class CommandClient:
-    
-    def __init__(self, rpc_client):
+class RaftClient(RPCAPI):
+    """
+    """
+
+    def __init__(self, rpc_client, client_maker=None):
+        self.current_leader = rpc_client.get_uri()
         self.rpc_client = rpc_client
+        
+    def get_uri(self):
+        return self.current_leader
+    
 
-    async def run_command(self, command):
-        command_result = await self.rpc_client.run_command(command)
-        if command_result.error:
-            raise Exception(command_result.error)
-        if command_result.timeout_expired:
-            raise Exception("timeout expired")
-        if command_result.redirect:
-            raise Exception(f"Redirected to {command_result.redirect}")
-        if command_result.retry:
-            raise Exception(f"Retry needed")
-        return command_result.result
-
+    async def raft_message(self, message:str) -> None:
+        return await self.rpc_client.raft_message(message)
+        
+    async def run_command(self, command:str) -> CommandResult:
+        result = await self.rpc_client.run_command(command)
+        if result.result:
+            return result.result
+        if result.error:
+            raise Exception(f'got error from server {result.error}')
+        if result.timeout_expired:
+            raise Exception(f'got timeout at server, cluster not available')
+        if result.redirect:
+            raise Exception(f'got redirect from stub????')
+        if not result.retry:
+            raise Exception(f"Command result does not make sense {result.__dict__}")
+        start_time = time.time()
+        while result.retry and time.time() - start_time < 1.0:
+            await asyncio.sleep(0.0001)
+            result = self.rpc_client.run_command(command)
+        if result.retry:
+            raise Exception('could not process message at server, cluster not available')
         
         
 

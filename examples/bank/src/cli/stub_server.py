@@ -44,7 +44,7 @@ async def run_aiozmq_server(host, port, delete_db):
         await azmq_server.wait_closed()
         print("aiozmq server stopped.")
 
-async def run_grpc_server(host, port):
+async def run_grpc_server(host, port, delete_db):
     """Run gRPC stub server"""
     from tx_grpc.rpc_helper import RPCHelper
     
@@ -88,7 +88,7 @@ async def run_fastapi_server(host, port, delete_db):
     finally:
         print("FastAPI server stopped.")
 
-async def run_astream_server(host, port):
+async def run_astream_server(host, port, delete_db):
     """Run AsyncStream stub server"""
     from tx_astream.rpc_helper import RPCHelper
     

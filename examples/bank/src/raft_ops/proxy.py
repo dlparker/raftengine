@@ -6,7 +6,7 @@ from datetime import timedelta, date
 from decimal import Decimal
 from functools import wraps
 from base.datatypes import Customer, Account, AccountType
-from base.proxy_api import TellerProxyAPI
+from base.proxy import TellerProxyAPI
 
 
 def raft_command():
@@ -113,7 +113,7 @@ def raft_command():
     return decorator
 
 
-class ServerProxy(OpsProxyAPI):
+class ServerProxy(TellerProxyAPI):
     """
     """
 

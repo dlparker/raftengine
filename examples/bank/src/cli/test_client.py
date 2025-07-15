@@ -51,7 +51,7 @@ Examples:
   %(prog)s --transport grpc demo --random
   %(prog)s --transport aiozmq test --loops 10 --json-output results.json
   %(prog)s --transport fastapi test --loops 5 --no-timing
-  %(prog)s --transport grpc --port 8300 test --check-raft
+  %(prog)s --transport grpc --port 8300 test --raft-stubs
 
 Available transports:
   astream, aiozmq, fastapi, grpc
@@ -107,7 +107,7 @@ Available transports:
                       use_random_data=args.random,
                       print_timing=not args.no_timing,
                       json_output=args.json_output,
-                      check_raft_message=args.check_raft)
+                      raft_stubs=args.raft_stubs)
     except Exception as e:
         print(f"Error during validation: {e}")
         sys.exit(1)

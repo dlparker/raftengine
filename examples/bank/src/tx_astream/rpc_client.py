@@ -15,6 +15,9 @@ class RPCClient(RPCAPI):
         self.writer = None
         self.in_progress = False
 
+    def get_uri(self):
+        return f"astream://{self.host}:{self.port}"
+    
     async def send_message(self, message):
         try:
             start_time = time.time()

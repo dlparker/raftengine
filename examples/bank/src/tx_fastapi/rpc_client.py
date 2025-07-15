@@ -12,6 +12,9 @@ class RPCClient(RPCAPI):
         self.base_url = f"http://{host}:{port}"
         self.session = None
     
+    def get_uri(self):
+        return f"fasapi://{self.host}:{self.port}"
+
     async def connect(self):
         """Create HTTP session"""
         self.session = aiohttp.ClientSession()

@@ -9,11 +9,14 @@ class RPCClient(RPCAPI):
         self.host = host
         self.port = port
         self.client = None
+        self.uri = f'tcp://{self.host}:{self.port}'
+
+    def get_uri(self):
+        return self.uri
 
     async def connect(self):
-        uri = f'tcp://{self.host}:{self.port}'
         self.client = await aiozmq.rpc.connect_rpc(
-            connect=uri
+            connect=self.uri
         )
 
     async def run_command(self, command):
