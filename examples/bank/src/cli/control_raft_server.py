@@ -268,7 +268,7 @@ Available transports:
     parser.add_argument('--slow_timeouts', '-s', action='store_true',
                         help='Use slow timeouts for debugging (10+ seconds)')
     parser.add_argument('--transport', '-t', required=True,
-                        choices=['grpc', 'fastapi', 'aiozmq'],
+                        choices=['astream', 'grpc', 'fastapi', 'aiozmq'],
                         help='Transport mechanism (default: grpc)')
     parser.add_argument('--base_port', '-b', type=int, default=50050,
                         help='Base port for first node (default: 50050)')

@@ -15,7 +15,7 @@ from raft_stubs.stubs import DeckStub
 from raft_stubs.stubs import RaftServerStub
 
 async def main():
-    port = 50060
+    port = 50050
     raft_server = RaftServerStub(DeckStub())
     rpc_helper = RPCHelper(port)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
