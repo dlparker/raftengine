@@ -53,6 +53,41 @@ def is_server_running(index: int) -> bool:
             pid_file.unlink()
         return False
 
+def kill_server(index: int) -> bool:
+    """Hard kill server if it is running"""
+    server_spec = server_defs[index]
+    work_dir = server_spec['work_dir']
+
+    pid_file = work_dir / 'server.pid'
+    
+    if not pid_file.exists():
+        return False
+    
+    try:
+        with open(pid_file, 'r') as f:
+            pid = int(f.read().strip())
+        
+        # Check if process with this PID exists
+        try:
+            # Send signal 0 to check if process exists
+            os.kill(pid, 0)
+            os.kill(pid, 9)
+            pid_file.unlink()
+            return True
+        except ProcessLookupError:
+            # Process doesn't exist, clean up stale PID file
+            pid_file.unlink()
+            return False
+        except PermissionError:
+            # Process exists but we don't have permission to signal it
+            return True
+            
+    except (ValueError, IOError):
+        # Invalid PID file, clean it up
+        if pid_file.exists():
+            pid_file.unlink()
+        return False
+
 
 async def get_server_status(index: int, nodes: list) -> dict:
     """Get detailed status of server"""
@@ -183,7 +218,9 @@ async def stop_server(index: int) -> bool:
                 return True
             await asyncio.sleep(1)  # Use async sleep
         
-        print(f"Server {index} did not stop within {max_wait} seconds")
+        print(f"Server {index} did not stop within {max_wait} seconds, killing")
+        kill_server(index)
+        
         return False
         
     except Exception as e:

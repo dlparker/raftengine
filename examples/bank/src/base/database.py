@@ -231,10 +231,10 @@ class BankDatabase:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT count(*) FROM accounts
-        """)
         if offset == -1:
+            cursor.execute("""
+                SELECT count(*) FROM accounts
+            """)
             count = cursor.fetchone()[0]
             if count == 0:
                 cursor.close()
@@ -275,10 +275,10 @@ class BankDatabase:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT count(*) FROM accounts
-        """)
         if offset == -1:
+            cursor.execute("""
+                    SELECT count(*) FROM customers
+            """)
             count = cursor.fetchone()[0]
             if count == 0:
                 cursor.close()
@@ -288,7 +288,6 @@ class BankDatabase:
                 offset = 0
             else:
                 offset = count - limit
-            
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         

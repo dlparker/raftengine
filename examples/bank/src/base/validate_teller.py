@@ -5,6 +5,7 @@ import json
 import random
 import time
 import statistics
+import traceback
 from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -135,25 +136,26 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     fake = Faker()
     timing_data = TimingData()
 
-    last_accounts = await teller.list_accounts(-1,1)
-    # the database works and the tests too
-    if len(last_accounts) == 0:
-        starting_account_pos = 0
-    else:
-        # we can get the number of accounts from the id value, with the way
-        starting_account_pos = last_accounts[0].account_id - 1
-    
     last_customers = await teller.list_customers(-1,1)
     # the database works and the tests too
     if len(last_customers) == 0:
-        starting_customer_pos = 0
+        starting_customer_id = 0
     else:
         # we can get the number of customers from the id value, with the way
-        starting_customer_pos = last_customers[0].customer_id - 1
+        starting_customer_id = last_customers[0].cust_id
+
+    last_accounts = await teller.list_accounts(-1,1)
+    # the database works and the tests too
+    if len(last_accounts) == 0:
+        starting_account_id = 0
+    else:
+        # we can get the number of accounts from the id value, with the way
+        starting_account_id = last_accounts[0].account_id 
+    
     
     for loop_num in range(loops):
         loop_start = time.time()
-        await run_single_test(teller, fake, loop_num, timing_data, starting_account_pos, starting_customer_pos)
+        await run_single_test(teller, fake, loop_num, timing_data, starting_account_id, starting_customer_id)
         loop_end = time.time()
         timing_data.add_loop_timing(loop_end - loop_start)
         
@@ -167,7 +169,7 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     return timing_data
 
 
-async def run_single_test(teller, fake, loop_num, timing_data, starting_account_pos, starting_customer_pos):
+async def run_single_test(teller, fake, loop_num, timing_data, starting_account_id, starting_customer_id):
     """Run a single test iteration with randomized data"""
     
     async def timed_operation(operation_name: str, coro):
@@ -193,7 +195,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert customer.address == cust.address
         assert customer.cust_id is not None
 
-        pos = starting_customer_pos + loop_num
+        pos = starting_customer_id + 1 + loop_num
         customers = await timed_operation('list_customers', teller.list_customers(pos, 100))
         assert len(customers) == 1
 
@@ -211,7 +213,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert savings.customer_id == sav.customer_id
         assert savings.balance == sav.balance
         
-        pos = starting_account_pos + (loop_num * 2)
+        pos = starting_account_id + 1 + (loop_num * 2)
         accounts = await timed_operation('list_accounts', teller.list_accounts(pos, 100))
         assert len(accounts) == 2
 
@@ -273,7 +275,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         # No return value to assert, just ensure it doesn't raise an exception
         
     except Exception as e:
-        print(f"✗ Error in loop {loop_num}: {e}")
+        print(f"✗ Error in loop {loop_num}: {traceback.format_exc()}")
         raise
 
 

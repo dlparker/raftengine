@@ -35,7 +35,7 @@ async def main():
     args = parser.parse_args()
     
     db_path = Path("/tmp/test_banking.db")
-    if db_path.exists():
+    if db_path.exists() and False:
         db_path.unlink()
     teller = Teller(db_file=db_path)
     dispatcher = Dispatcher(teller)
