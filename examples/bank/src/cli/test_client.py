@@ -19,29 +19,6 @@ else:
 
 from cli.test_client_common import validate, add_common_arguments
 
-async def create_aiozmq_client(host, port):
-    """Create aiozmq RPC client"""
-    from tx_aiozmq.rpc_client import RPCClient
-    return RPCClient(host, port)
-
-async def create_grpc_client(host, port):
-    """Create gRPC RPC client"""
-    from tx_grpc.rpc_helper import RPCHelper
-    uri = f"grpc://{host}:{port}"
-    return await RPCHelper().rpc_client_maker(uri)
-
-async def create_fastapi_client(host, port):
-    """Create FastAPI RPC client"""
-    from tx_fastapi.rpc_helper import RPCHelper
-    uri = f"fastapi://{host}:{port}"
-    return await RPCHelper().rpc_client_maker(uri)
-
-async def create_astream_client(host, port):
-    """Create AsyncStream RPC client"""
-    from tx_astream.rpc_helper import RPCHelper
-    uri = f"astream://{host}:{port}"
-    return await RPCHelper().rpc_client_maker(uri)
-
 async def main():
     parser = argparse.ArgumentParser(
         description='Unified Raft Banking Test Client',
@@ -89,13 +66,21 @@ Available transports:
     
     # Create the appropriate RPC client
     if args.transport == 'aiozmq':
-        rpc_client = await create_aiozmq_client(args.host, port)
+        from tx_aiozmq.rpc_helper import RPCHelper
+        uri = f"aiozmq://{args.host}:{port}"
+        rpc_client = await RPCHelper().rpc_client_maker(uri)
     elif args.transport == 'grpc':
-        rpc_client = await create_grpc_client(args.host, port)
+        from tx_grpc.rpc_helper import RPCHelper
+        uri = f"grpc://{args.host}:{port}"
+        rpc_client = await RPCHelper().rpc_client_maker(uri)
     elif args.transport == 'fastapi':
-        rpc_client = await create_fastapi_client(args.host, port)
+        from tx_fastapi.rpc_helper import RPCHelper
+        uri = f"fastapi://{args.host}:{port}"
+        rpc_client = await RPCHelper().rpc_client_maker(uri)
     elif args.transport == 'astream':
-        rpc_client = await create_astream_client(args.host, port)
+        from tx_astream.rpc_helper import RPCHelper
+        uri = f"astream://{args.host}:{port}"
+        rpc_client = await RPCHelper().rpc_client_maker(uri)
     else:
         raise ValueError(f"Unsupported transport: {args.transport}")
     
@@ -107,7 +92,8 @@ Available transports:
                       use_random_data=args.random,
                       print_timing=not args.no_timing,
                       json_output=args.json_output,
-                      raft_stubs=args.raft_stubs)
+                      raft_stubs=args.raft_stubs,
+                      rpc_client_maker=RPCHelper.rpc_client_maker)
     except Exception as e:
         print(f"Error during validation: {e}")
         sys.exit(1)

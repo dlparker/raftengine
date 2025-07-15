@@ -3,7 +3,8 @@ from base.validate_teller import validate_teller
 from base.demo_teller import demo_teller
 
 async def validate(rpc_client, mode='demo', loops=1, use_random_data=False, 
-                   print_timing=True, json_output=None, raft_stubs=False):
+                   print_timing=True, json_output=None, raft_stubs=False,
+                   rpc_client_maker=None):
     """Common validation function for all stub clients
     
     Args:
@@ -18,7 +19,7 @@ async def validate(rpc_client, mode='demo', loops=1, use_random_data=False,
         from raft_stubs.stubs import RaftClient
     else:
         from raft_ops.raft_client import RaftClient
-    command_client = RaftClient(rpc_client)
+    command_client = RaftClient(rpc_client, rpc_client_maker)
     collector = Collector(command_client)
     
     # Prepare metadata for JSON export
