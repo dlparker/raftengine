@@ -10,6 +10,18 @@ from typing import Callable, Union
 import importlib
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
+
+# Dynamically find the 'src' directory relative to this script
+this_dir = Path(__file__).resolve().parent
+for parent in this_dir.parents:
+    if parent.name == 'src':
+        if parent not in sys.path:
+            sys.path.insert(0, str(parent))
+            src_dir = parent
+            break
+else:
+    raise ImportError("Could not find 'src' directory in the path hierarchy")
+# Now import modules that depend on the src path
 from raft_ops.raft_server import RaftServer
 my_loggers = [('bank_demo', 'Demo raft integration banking app'),
               ('RaftServer', 'Server component that combines raft support for Raftengine library'),
@@ -277,3 +289,6 @@ Available transports:
     print(f"cluster nodes: {nodes}, starting {uri} with workdir={work_dir}")
     await server_main(rpc_helper, uri, c_config,  local_config, start_pause=args.startup_pause)
 
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main_async())

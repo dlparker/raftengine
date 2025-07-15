@@ -11,6 +11,7 @@ for parent in this_dir.parents:
     if parent.name == 'src':
         if parent not in sys.path:
             sys.path.insert(0, str(parent))
+            src_dir = parent
             break
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
@@ -145,24 +146,13 @@ async def start_server(index: int, pause=True, slow_timeouts=False) -> bool:
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
         
-        # Find the src directory and add it to PYTHONPATH for the subprocess
-        script_dir = Path(__file__).resolve().parent
-        src_dir = None
-        for parent in script_dir.parents:
-            if parent.name == 'src':
-                src_dir = parent
-                break
-        
-        if src_dir:
-            # Add src directory to PYTHONPATH
-            current_path = env.get('PYTHONPATH', '')
-            if current_path:
-                env['PYTHONPATH'] = f"{src_dir}:{current_path}"
-            else:
-                env['PYTHONPATH'] = str(src_dir)
-        
+        # Add src directory to PYTHONPATH
+        current_path = env.get('PYTHONPATH', '')
+        env['PYTHONPATH'] = str(src_dir)
+        print(env['PYTHONPATH'])
         # Start process in background with log file redirection using subprocess.Popen
         # This ensures the process is truly detached from the parent
+        print(" ".join(cmd))
         with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
             process = subprocess.Popen(
                 cmd,
@@ -335,8 +325,10 @@ Available transports:
                                   args_base_port=args.base_port, port=pnum)
 
     print(nodes)
+    starting_all = False
     if args.all or args.index is None:
         indices = list(range(len(nodes)))
+        starting_all = True
     else:
         indices = [args.index]
     
@@ -350,8 +342,13 @@ Available transports:
     
     if args.command == 'start':
         for index in indices:
+            if starting_all and index == 0:
+                # start 0 last so that it can hold an election and find
+                # the others running
+                continue
             await start_server(index, args.startup_paused, args.slow_timeouts)
-            
+        if starting_all:
+            await start_server(0, args.startup_paused, args.slow_timeouts)
     
     elif args.command == 'stop':
         for index in indices:
