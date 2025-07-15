@@ -33,7 +33,7 @@ async def main():
     args = parser.parse_args()
     
     db_path = Path("/tmp/test_banking.db")
-    if db_path.exists() and agrs.delete_db:
+    if db_path.exists() and args.delete_db:
         db_path.unlink()
     teller = Teller(db_file=db_path)
     

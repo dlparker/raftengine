@@ -137,9 +137,9 @@ class Records:
         params.append(entry.error)
         params.append(entry.term)
         if entry.serial:
-            params.append(f'{entry.serial:,}')
+            params.append(str(entry.serial))
         else:
-            params.append(entry.serial)
+            params.append(None)
         params.append(entry.leader_id)
         params.append(entry.committed)
         params.append(entry.applied)

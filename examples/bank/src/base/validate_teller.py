@@ -195,8 +195,8 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert customer.address == cust.address
         assert customer.cust_id is not None
 
-        pos = starting_customer_id + 1 + loop_num
-        customers = await timed_operation('list_customers', teller.list_customers(pos, 100))
+        offset = customer.cust_id - 1
+        customers = await timed_operation('list_customers', teller.list_customers(offset, 10))
         assert len(customers) == 1
 
         sav = Account(AccountType.SAVINGS, customer.cust_id, Decimal('0.00'))
@@ -212,9 +212,9 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert savings.account_id is not None
         assert savings.customer_id == sav.customer_id
         assert savings.balance == sav.balance
-        
-        pos = starting_account_id + 1 + (loop_num * 2)
-        accounts = await timed_operation('list_accounts', teller.list_accounts(pos, 100))
+
+        offset = checking.account_id - 1
+        accounts = await timed_operation('list_accounts', teller.list_accounts(offset, 10))
         assert len(accounts) == 2
 
         # Test deposit with random amounts

@@ -18,7 +18,7 @@ class BankDatabase:
         # Create customers table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS customers (
-                cust_id INTEGER PRIMARY KEY,
+                cust_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 address TEXT NOT NULL,
@@ -30,7 +30,7 @@ class BankDatabase:
         # Create accounts table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS accounts (
-                account_id INTEGER PRIMARY KEY,
+                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 account_type TEXT NOT NULL,
                 customer_id INTEGER NOT NULL,
                 balance TEXT NOT NULL,
@@ -88,10 +88,9 @@ class BankDatabase:
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO customers (cust_id, first_name, last_name, address, create_time, update_time)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO customers (first_name, last_name, address, create_time, update_time)
+            VALUES (?, ?, ?, ?, ?)
         """, (
-            customer.cust_id,
             customer.first_name,
             customer.last_name,
             customer.address,
@@ -100,7 +99,9 @@ class BankDatabase:
         ))
         
         conn.commit()
+        customer.cust_id = cursor.lastrowid
         conn.close()
+        return customer
     
     def create_account(self, account: Account, customer_key: int) -> None:
         """Insert a new account into the database"""
@@ -108,16 +109,16 @@ class BankDatabase:
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO accounts (account_id, account_type, customer_id, balance, create_time, update_time)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO accounts (account_type, customer_id, balance, create_time, update_time)
+            VALUES (?, ?, ?, ?, ?)
         """, (
-            account.account_id,
             account.account_type.value if hasattr(account.account_type, 'value') else account.account_type,
             account.customer_id,
             str(account.balance),
             account.create_time.isoformat(),
             account.update_time.isoformat()
         ))
+        account.account_id = cursor.lastrowid
         
         # Link account to customer
         cursor.execute("""
@@ -127,6 +128,7 @@ class BankDatabase:
         
         conn.commit()
         conn.close()
+        return account
     
     def update_account_balance(self, account_id: int, new_balance: Decimal, update_time: datetime.datetime) -> None:
         """Update account balance and update_time"""
@@ -240,7 +242,6 @@ class BankDatabase:
                 cursor.close()
                 return []
             if count < limit:
-                limit = count
                 offset = 0
             else:
                 offset = count - limit
@@ -284,7 +285,6 @@ class BankDatabase:
                 cursor.close()
                 return []
             if count < limit:
-                limit = count
                 offset = 0
             else:
                 offset = count - limit
