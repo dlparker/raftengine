@@ -18,8 +18,8 @@ async def main():
     parser = argparse.ArgumentParser(
         description='Raft Banking FastAPI validator client')
     
-    parser.add_argument('--port', '-p', type=int, default=50051,
-                        help='port for leader node, default=50051')
+    parser.add_argument('--port', '-p', type=int, default=50061,
+                        help='port for leader node, default=50061')
     
     args = parser.parse_args()
     

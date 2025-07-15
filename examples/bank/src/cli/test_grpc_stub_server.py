@@ -18,7 +18,7 @@ from tx_grpc.rpc_helper import RPCHelper
 
 async def main():
     host = "localhost"
-    port = 50052
+    port = 50064
     raft_server = RaftServerStub(DeckStub())
     
     # Create gRPC server

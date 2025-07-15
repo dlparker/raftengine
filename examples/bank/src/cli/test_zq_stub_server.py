@@ -18,7 +18,7 @@ from raft_stubs.stubs import RaftServerStub
 
 async def main():
     host = "localhost"
-    port = 50051
+    port = 50061
     raft_server = RaftServerStub(DeckStub())
     rpc_server = RPCServer(raft_server)
     azmq_server = await aiozmq.rpc.serve_rpc(

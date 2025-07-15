@@ -4,8 +4,8 @@ package banking;
 
 // Banking RPC service matching the aiozmq interface
 service BankingService {
-  // Send a banking command (JSON string) and receive response (JSON string)
-  rpc SendCommand(CommandRequest) returns (CommandResponse);
+  // Send a banking command (JSON string) and receive response (CommandResult)
+  rpc RunCommand(CommandRequest) returns (CommandResult);
   
   // Send a raft message and receive response
   rpc RaftMessage(RaftRequest) returns (RaftResponse);
@@ -16,11 +16,6 @@ message CommandRequest {
   string command = 1;  // JSON-encoded command
 }
 
-// Response message for banking commands
-message CommandResponse {
-  string result = 1;   // JSON-encoded result
-}
-
 // Request message for raft messages
 message RaftRequest {
   string message = 1;  // Raft message content
@@ -29,4 +24,12 @@ message RaftRequest {
 // Response message for raft messages
 message RaftResponse {
   string result = 1;   // Raft response content
+}
+// CommandResult message matching raftengine.api.deck_api.CommandResult
+message CommandResult {
+  string command = 1;        // sent command	
+  string error = 2;          // Error message if any
+  bool redirect = 3;         // Whether to redirect to leader
+  bool retry = 4;            // Whether to retry the operation
+  string result = 5;          // Serialized result data
 }

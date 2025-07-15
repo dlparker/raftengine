@@ -1,15 +1,15 @@
 import asyncio
-import uvicorn
+import aiozmq.rpc
 from base.rpc_helper import RPCHelperAPI
-from tx_fastapi.rpc_client import RPCClient
-from tx_fastapi.rpc_server import RPCServer
+from tx_aiozmq.rpc_client import RPCClient
+from tx_aiozmq.rpc_server import RPCServer
 
 
 class RPCHelper(RPCHelperAPI):
 
     def __init__(self, port=None): # port not used for client maker
         self.port = port
-        self.uvicorn_server = None
+        self.sock_server = None
         self.server_task = None
         self.rpc_server = None
         
@@ -23,22 +23,31 @@ class RPCHelper(RPCHelperAPI):
         return self.rpc_server
     
     async def start_server_task(self):
-        config = uvicorn.Config(self.rpc_server.app, host='localhost',
-                                port=self.port, log_level="error")
-        self.uvicorn_server = uvicorn.Server(config)
-        
+        self.zmq_server = await aiozmq.rpc.serve_rpc(
+            self.rpc_server,
+            bind=f'tcp://127.0.0.1:{self.port}',
+            log_exceptions=True  # Log unhandled exceptions in RPC methods
+        )
+        print(f"Aiozmq rpc server created on {self.port}")
         async def serve():
             try:
                 # Keep the server running
-                await self.uvicorn_server.serve()
+                await asyncio.Event().wait()
             finally:
+                self.zmq_server.close()
+                await zmq_server.wait_closed()
                 self.server_task = None
         self.server_task = asyncio.create_task(serve())
                 
     async def stop_server_task(self):
+        if self.zmq_server:
+            self.zmq_server.close()
+            await zmq_server.wait_closed()
+            
         if self.server_task:
             self.server_task.cancel()
             await asyncio.sleep(0.0)
             self.server_task = None
+        self.zmq_server = None
         
     

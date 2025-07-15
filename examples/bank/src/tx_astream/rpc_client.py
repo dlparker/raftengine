@@ -1,5 +1,7 @@
 import asyncio
 import json
+from raftengine.api.deck_api import CommandResult
+
 
 class RPCClient:
 
@@ -28,10 +30,12 @@ class RPCClient:
             raise Exception('server gone!')
         return data.decode()
 
-    async def send_command(self, command):
+    async def run_command(self, command):
         wrapped = dict(mtype="command", message=command)
         msg = json.dumps(wrapped)
-        return await self.send_message(msg)
+        res =  await self.send_message(msg)
+        result = CommandResult(**json.loads(res))
+        return result
 
     async def raft_message(self, message):
         wrapped = dict(mtype="raft_message", message=message)

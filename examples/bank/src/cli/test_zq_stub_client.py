@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import asyncio
+import argparse
 from pathlib import Path
 import sys
 this_dir = Path(__file__).resolve().parent
@@ -14,7 +15,15 @@ from cli.stub_client_common import validate
 from tx_aiozmq.rpc_client import RPCClient
 
 async def main():
-    port = 50051
+    parser = argparse.ArgumentParser(
+        description='Raft Banking FastAPI validator client')
+    
+    parser.add_argument('--port', '-p', type=int, default=50061,
+                        help='port for leader node, default=50061')
+    
+    args = parser.parse_args()
+    
+    port = args.port
     rpc_client = RPCClient('localhost', port)
     await validate(rpc_client)
 

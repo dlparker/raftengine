@@ -35,10 +35,10 @@ class BankingServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.SendCommand = channel.unary_unary(
-                '/banking.BankingService/SendCommand',
+        self.RunCommand = channel.unary_unary(
+                '/banking.BankingService/RunCommand',
                 request_serializer=banking__pb2.CommandRequest.SerializeToString,
-                response_deserializer=banking__pb2.CommandResponse.FromString,
+                response_deserializer=banking__pb2.CommandResult.FromString,
                 _registered_method=True)
         self.RaftMessage = channel.unary_unary(
                 '/banking.BankingService/RaftMessage',
@@ -51,8 +51,8 @@ class BankingServiceServicer(object):
     """Banking RPC service matching the aiozmq interface
     """
 
-    def SendCommand(self, request, context):
-        """Send a banking command (JSON string) and receive response (JSON string)
+    def RunCommand(self, request, context):
+        """Send a banking command (JSON string) and receive response (CommandResult)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -68,10 +68,10 @@ class BankingServiceServicer(object):
 
 def add_BankingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'SendCommand': grpc.unary_unary_rpc_method_handler(
-                    servicer.SendCommand,
+            'RunCommand': grpc.unary_unary_rpc_method_handler(
+                    servicer.RunCommand,
                     request_deserializer=banking__pb2.CommandRequest.FromString,
-                    response_serializer=banking__pb2.CommandResponse.SerializeToString,
+                    response_serializer=banking__pb2.CommandResult.SerializeToString,
             ),
             'RaftMessage': grpc.unary_unary_rpc_method_handler(
                     servicer.RaftMessage,
@@ -91,7 +91,7 @@ class BankingService(object):
     """
 
     @staticmethod
-    def SendCommand(request,
+    def RunCommand(request,
             target,
             options=(),
             channel_credentials=None,
@@ -104,9 +104,9 @@ class BankingService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/banking.BankingService/SendCommand',
+            '/banking.BankingService/RunCommand',
             banking__pb2.CommandRequest.SerializeToString,
-            banking__pb2.CommandResponse.FromString,
+            banking__pb2.CommandResult.FromString,
             options,
             channel_credentials,
             insecure,

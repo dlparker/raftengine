@@ -18,8 +18,8 @@ async def main():
     parser = argparse.ArgumentParser(
         description='Raft Banking GRPC validator client')
     
-    parser.add_argument('--port', '-p', type=int, default=50050,
-                        help='port for leader node, default=50050')
+    parser.add_argument('--port', '-p', type=int, default=50064,
+                        help='port for leader node, default=50064')
     
     args = parser.parse_args()
     

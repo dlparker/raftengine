@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rbanking.proto\x12\x07\x62\x61nking\"!\n\x0e\x43ommandRequest\x12\x0f\n\x07\x63ommand\x18\x01 \x01(\t\"!\n\x0f\x43ommandResponse\x12\x0e\n\x06result\x18\x01 \x01(\t\"\x1e\n\x0bRaftRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x1e\n\x0cRaftResponse\x12\x0e\n\x06result\x18\x01 \x01(\t2\x8e\x01\n\x0e\x42\x61nkingService\x12@\n\x0bSendCommand\x12\x17.banking.CommandRequest\x1a\x18.banking.CommandResponse\x12:\n\x0bRaftMessage\x12\x14.banking.RaftRequest\x1a\x15.banking.RaftResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rbanking.proto\x12\x07\x62\x61nking\"!\n\x0e\x43ommandRequest\x12\x0f\n\x07\x63ommand\x18\x01 \x01(\t\"\x1e\n\x0bRaftRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x1e\n\x0cRaftResponse\x12\x0e\n\x06result\x18\x01 \x01(\t\"`\n\rCommandResult\x12\x0f\n\x07\x63ommand\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\t\x12\x10\n\x08redirect\x18\x03 \x01(\x08\x12\r\n\x05retry\x18\x04 \x01(\x08\x12\x0e\n\x06result\x18\x05 \x01(\t2\x8b\x01\n\x0e\x42\x61nkingService\x12=\n\nRunCommand\x12\x17.banking.CommandRequest\x1a\x16.banking.CommandResult\x12:\n\x0bRaftMessage\x12\x14.banking.RaftRequest\x1a\x15.banking.RaftResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,12 +33,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_COMMANDREQUEST']._serialized_start=26
   _globals['_COMMANDREQUEST']._serialized_end=59
-  _globals['_COMMANDRESPONSE']._serialized_start=61
-  _globals['_COMMANDRESPONSE']._serialized_end=94
-  _globals['_RAFTREQUEST']._serialized_start=96
-  _globals['_RAFTREQUEST']._serialized_end=126
-  _globals['_RAFTRESPONSE']._serialized_start=128
-  _globals['_RAFTRESPONSE']._serialized_end=158
-  _globals['_BANKINGSERVICE']._serialized_start=161
-  _globals['_BANKINGSERVICE']._serialized_end=303
+  _globals['_RAFTREQUEST']._serialized_start=61
+  _globals['_RAFTREQUEST']._serialized_end=91
+  _globals['_RAFTRESPONSE']._serialized_start=93
+  _globals['_RAFTRESPONSE']._serialized_end=123
+  _globals['_COMMANDRESULT']._serialized_start=125
+  _globals['_COMMANDRESULT']._serialized_end=221
+  _globals['_BANKINGSERVICE']._serialized_start=224
+  _globals['_BANKINGSERVICE']._serialized_end=363
 # @@protoc_insertion_point(module_scope)

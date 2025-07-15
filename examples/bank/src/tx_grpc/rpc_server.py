@@ -12,10 +12,18 @@ class RPCServer(banking_pb2_grpc.BankingServiceServicer):
     def __init__(self, raft_server):
         self.raft_server = raft_server
     
-    async def SendCommand(self, request, context):
+    async def RunCommand(self, request, context):
         """Handle banking command requests"""
         result = await self.raft_server.run_command(request.command)
-        return banking_pb2.CommandResponse(result=json.dumps(result.__dict__))
+        return banking_pb2.CommandResult(
+            command=result.command,
+            error=result.error,
+            redirect=result.redirect,
+            retry=result.retry,
+            result=result.result
+        )
+
+
     
     async def RaftMessage(self, request, context):
         """Handle raft message requests"""

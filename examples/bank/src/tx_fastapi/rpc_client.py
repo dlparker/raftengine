@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import json
+from raftengine.api.deck_api import CommandResult
 
 class RPCClient:
     """FastAPI HTTP client for banking service"""
@@ -15,18 +16,19 @@ class RPCClient:
         """Create HTTP session"""
         self.session = aiohttp.ClientSession()
     
-    async def send_command(self, command):
+    async def run_command(self, command):
         """Send a banking command to the server"""
         if self.session is None:
             await self.connect()
         
-        url = f"{self.base_url}/send_command"
+        url = f"{self.base_url}/run_command"
         data = {"command": command}
         
         async with self.session.post(url, json=data) as response:
             if response.status == 200:
                 result = await response.json()
-                return result["result"]
+                cmd_result = CommandResult(**json.loads(result))
+                return cmd_result
             else:
                 error_text = await response.text()
                 raise Exception(f"HTTP {response.status}: {error_text}")

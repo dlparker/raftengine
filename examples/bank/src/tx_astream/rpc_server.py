@@ -38,7 +38,8 @@ class ClientFollower:
             
             if request['mtype'] == "command":
                 command = request['message']
-                result = await self.raft_server.run_command(command)
+                raw_result = await self.raft_server.run_command(command)
+                result = json.dumps(raw_result, default=lambda o:o.__dict__)
             else:
                 result = await self.raft_server.raft_message(request['message'])
             response = result.encode()

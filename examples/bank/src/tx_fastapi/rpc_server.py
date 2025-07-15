@@ -1,19 +1,8 @@
 import asyncio
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import json
+from fastapi import FastAPI, Request
 import uvicorn
-
-class CommandRequest(BaseModel):
-    command: str
-
-class CommandResponse(BaseModel):
-    result: str
-
-class RaftRequest(BaseModel):
-    message: str
-
-class RaftResponse(BaseModel):
-    result: str
+from raftengine.api.deck_api import CommandResult
 
 class RPCServer:
     """FastAPI server implementing the banking service interface"""
@@ -26,27 +15,23 @@ class RPCServer:
     def _setup_routes(self):
         """Setup FastAPI routes"""
         
-        @self.app.post("/send_command", response_model=CommandResponse)
-        async def send_command(request: CommandRequest):
+        @self.app.post("/run_command")
+        async def run_command(request: Request):
             """Handle banking command requests"""
-            try:
-                result = await self.raft_server.run_command(request.command)
-                return CommandResponse(result=result)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            data = await request.json()
+            result = await self.raft_server.run_command(data["command"])
+            return json.dumps(result, default=lambda o:o.__dict__)
         
-        @self.app.post("/raft_message", response_model=RaftResponse)
-        async def raft_message(request: RaftRequest):
+        @self.app.post("/raft_message")
+        async def raft_message(request: Request):
             """Handle raft message requests"""
-            try:
-                result = await self.raft_server.raft_message(request.message)
-                return RaftResponse(result=result)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            data = await request.json()
+            result = await self.raft_server.raft_message(data["message"])
+            return {"result": result}
 
 async def start_server(raft_server, host='localhost', port=8000):
     """Start the FastAPI server"""
-    banking_server = BankingServer(raft_server)
+    banking_server = RPCServer(raft_server)
     config = uvicorn.Config(banking_server.app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()

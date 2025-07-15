@@ -1,5 +1,6 @@
 import asyncio
 import aiozmq.rpc
+from raftengine.api.deck_api import CommandResult
 
 class RPCClient:
 
@@ -14,10 +15,11 @@ class RPCClient:
             connect=uri
         )
 
-    async def send_command(self, command):
+    async def run_command(self, command):
         if self.client is None:
             await self.connect()
-        return await self.client.call.send_command(command)
+        result = await self.client.call.run_command(command)
+        return CommandResult(**result)
 
     async def raft_message(self, message):
         if self.client is None:

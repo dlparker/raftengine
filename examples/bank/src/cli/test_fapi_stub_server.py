@@ -17,7 +17,7 @@ from raft_stubs.stubs import DeckStub
 from raft_stubs.stubs import RaftServerStub
 
 async def main():
-    port = 50051
+    port = 50061
     raft_server = RaftServerStub(DeckStub())
     
     # Create FastAPI server
