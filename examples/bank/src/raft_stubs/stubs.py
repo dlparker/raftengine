@@ -9,8 +9,6 @@ class DeckStub:
 
     def __init__(self, clear=False):
         db_path = Path("/tmp/bank.db")
-        if db_path.exists():
-            db_path.unlink()
         self.teller = Teller(db_path)
         self.dispatcher = Dispatcher(self.teller)
 

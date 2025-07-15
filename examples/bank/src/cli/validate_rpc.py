@@ -24,10 +24,11 @@ from raft_stubs.stubs import DeckStub, RaftServerStub
 class ServerManager:
     """Manages background server lifecycle"""
     
-    def __init__(self, transport, host, port):
+    def __init__(self, transport, host, port, delete_db):
         self.transport = transport
         self.host = host
         self.port = port
+        self.delete_db = delete_db
         self.server_task = None
         self.server_instance = None
         
@@ -51,7 +52,7 @@ class ServerManager:
         
         print(f"Starting aiozmq server on {self.host}:{self.port}")
         
-        raft_server = RaftServerStub(DeckStub())
+        raft_server = RaftServerStub(DeckStub(self.delete_db))
         rpc_server = RPCServer(raft_server)
         self.server_instance = await aiozmq.rpc.serve_rpc(
             rpc_server,
@@ -67,7 +68,7 @@ class ServerManager:
         
         print(f"Starting gRPC server on {self.host}:{self.port}")
         
-        raft_server = RaftServerStub(DeckStub())
+        raft_server = RaftServerStub(DeckStub(self.delete_db))
         rpc_helper = RPCHelper(self.port)
         rpc_server = await rpc_helper.get_rpc_server(raft_server)
         
@@ -83,7 +84,7 @@ class ServerManager:
         
         print(f"Starting FastAPI server on {self.host}:{self.port}")
         
-        raft_server = RaftServerStub(DeckStub())
+        raft_server = RaftServerStub(DeckStub(self.delete_db))
         rpc_helper = RPCHelper(self.port)
         rpc_server = await rpc_helper.get_rpc_server(raft_server)
         
@@ -99,7 +100,7 @@ class ServerManager:
         
         print(f"Starting AsyncStream server on {self.host}:{self.port}")
         
-        raft_server = RaftServerStub(DeckStub())
+        raft_server = RaftServerStub(DeckStub(self.delete_db))
         rpc_helper = RPCHelper(self.port)
         rpc_server = await rpc_helper.get_rpc_server(raft_server)
         
@@ -207,6 +208,8 @@ Available transports:
                         help='Base port for transport offset calculation (default: 50050)')
     parser.add_argument('--server-startup-delay', type=float, default=1.0,
                         help='Delay in seconds to wait for server startup (default: 1.0)')
+    parser.add_argument('--delete_db',  action='store_true',
+                        help='Delete target db before running')
     
     # Add common validation arguments
     add_common_arguments(parser)
@@ -226,7 +229,7 @@ Available transports:
         port = args.port
     
     # Create server manager
-    server_manager = ServerManager(args.transport, args.host, port)
+    server_manager = ServerManager(args.transport, args.host, port, args.delete_db)
     
     try:
         # Start server in background

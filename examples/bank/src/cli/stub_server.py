@@ -19,14 +19,14 @@ else:
 
 from raft_stubs.stubs import DeckStub, RaftServerStub
 
-async def run_aiozmq_server(host, port):
+async def run_aiozmq_server(host, port, delete_db):
     """Run aiozmq stub server"""
     import aiozmq.rpc
     from tx_aiozmq.rpc_server import RPCServer
     
     print(f"Starting aiozmq stub server on {host}:{port}")
     
-    raft_server = RaftServerStub(DeckStub())
+    raft_server = RaftServerStub(DeckStub(delete_db))
     rpc_server = RPCServer(raft_server)
     azmq_server = await aiozmq.rpc.serve_rpc(
         rpc_server,
@@ -50,7 +50,7 @@ async def run_grpc_server(host, port):
     
     print(f"Starting gRPC stub server on {host}:{port}")
     
-    raft_server = RaftServerStub(DeckStub())
+    raft_server = RaftServerStub(DeckStub(delete_db))
     rpc_helper = RPCHelper(port)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
     
@@ -66,13 +66,13 @@ async def run_grpc_server(host, port):
     finally:
         print("gRPC server stopped.")
 
-async def run_fastapi_server(host, port):
+async def run_fastapi_server(host, port, delete_db):
     """Run FastAPI stub server"""
     from tx_fastapi.rpc_helper import RPCHelper
     
     print(f"Starting FastAPI stub server on {host}:{port}")
     
-    raft_server = RaftServerStub(DeckStub())
+    raft_server = RaftServerStub(DeckStub(delete_db))
     rpc_helper = RPCHelper(port)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
     
@@ -94,7 +94,7 @@ async def run_astream_server(host, port):
     
     print(f"Starting AsyncStream stub server on {host}:{port}")
     
-    raft_server = RaftServerStub(DeckStub())
+    raft_server = RaftServerStub(DeckStub(delete_db))
     rpc_helper = RPCHelper(port)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
     
@@ -134,6 +134,8 @@ Available transports:
                         help='Port to bind to (overrides base-port calculation)')
     parser.add_argument('--base-port', '-b', type=int, default=50050,
                         help='Base port for transport offset calculation (default: 50050)')
+    parser.add_argument('--delete_db',  action='store_true',
+                        help='Delete target db before running')
     
     args = parser.parse_args()
     
@@ -151,13 +153,13 @@ Available transports:
     
     # Run the appropriate server
     if args.transport == 'aiozmq':
-        await run_aiozmq_server(args.host, port)
+        await run_aiozmq_server(args.host, port, args.delete_db)
     elif args.transport == 'grpc':
-        await run_grpc_server(args.host, port)
+        await run_grpc_server(args.host, port, args.delete_db)
     elif args.transport == 'fastapi':
-        await run_fastapi_server(args.host, port)
+        await run_fastapi_server(args.host, port, args.delete_db)
     elif args.transport == 'astream':
-        await run_astream_server(args.host, port)
+        await run_astream_server(args.host, port, args.delete_db)
     else:
         raise ValueError(f"Unsupported transport: {args.transport}")
 

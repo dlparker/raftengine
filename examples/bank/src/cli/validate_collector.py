@@ -32,10 +32,12 @@ async def main():
                         help='Disable timing report (only for test mode)')
     parser.add_argument('--json-output', type=str, metavar='FILE',
                         help='Export timing statistics to JSON file')
+    parser.add_argument('--delete_db',  action='store_true',
+                        help='Delete target db before running')
     args = parser.parse_args()
     
     db_path = Path("/tmp/test_banking.db")
-    if db_path.exists() and False:
+    if db_path.exists() and agrs.delete_db:
         db_path.unlink()
     teller = Teller(db_file=db_path)
     dispatcher = Dispatcher(teller)
