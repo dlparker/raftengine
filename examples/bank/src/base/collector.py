@@ -38,9 +38,13 @@ class Collector(TellerProxyAPI):
         command = Command(command_name=CommandType.CASH_CHECK, args=CashCheckArgs(account_id=account_id, amount=amount))
         return await self.build_command(command, Decimal)
 
-    async def list_accounts(self) -> List[Account]:
-        command = Command(command_name=CommandType.LIST_ACCOUNTS, args={})
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        command = Command(command_name=CommandType.LIST_ACCOUNTS, args=ListAccountsArgs(offset=offset, limit=limit))
         return await self.build_command(command, List[Account])
+    
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
+        command = Command(command_name=CommandType.LIST_CUSTOMERS, args=ListCustomersArgs(offset=offset, limit=limit))
+        return await self.build_command(command, List[Customer])
 
     async def get_accounts(self, customer_id: int) -> List[int]:
         command = Command(command_name=CommandType.GET_ACCOUNTS, args=GetAccountsArgs(customer_id=customer_id))
@@ -110,3 +114,13 @@ class ListStatementsArgs:
 class AdvanceTimeArgs:
     def __init__(self, delta_time: timedelta):
         self.delta_time = delta_time
+
+class ListAccountsArgs:
+    def __init__(self, offset: int = 0, limit: int = 100):
+        self.offset = offset
+        self.limit = limit
+
+class ListCustomersArgs:
+    def __init__(self, offset: int = 0, limit: int = 100):
+        self.offset = offset
+        self.limit = limit

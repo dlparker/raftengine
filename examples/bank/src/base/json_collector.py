@@ -52,11 +52,20 @@ class Collector(TellerProxyAPI):
         res = await self.build_command(CommandType.CASH_CHECK, kwargs)
         return Decimal(str(res)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     
-    async def list_accounts(self) -> List[Account]:
-        res = await self.build_command(CommandType.LIST_ACCOUNTS, {})
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        kwargs = dict(offset=offset, limit=limit)
+        res = await self.build_command(CommandType.LIST_ACCOUNTS, kwargs)
         result = []
         for item in res:
             result.append(Account.from_dict(item))
+        return result
+    
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
+        kwargs = dict(offset=offset, limit=limit)
+        res = await self.build_command(CommandType.LIST_CUSTOMERS, kwargs)
+        result = []
+        for item in res:
+            result.append(Customer.from_dict(item))
         return result
     
     async def get_accounts(self, customer_id: str) -> List[int]:

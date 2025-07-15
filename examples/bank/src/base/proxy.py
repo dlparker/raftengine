@@ -38,8 +38,13 @@ class TellerProxyAPI(ABC):
         raise NotImplemented
     
     @abstractmethod
-    async def list_accounts(self) -> List[Account]: # pragma: no cover
-        """List all accounts in the system"""
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]: # pragma: no cover
+        """List accounts in the system with pagination"""
+        raise NotImplemented
+    
+    @abstractmethod
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]: # pragma: no cover
+        """List customers in the system with pagination"""
         raise NotImplemented
     
     @abstractmethod
@@ -84,8 +89,11 @@ class TellerWrapper(TellerProxyAPI):
     async def cash_check(self, account_id: int, amount: Decimal) -> Decimal:
         return await self.teller.cash_check(account_id, amount)
     
-    async def list_accounts(self) -> List[Account]:
-        return await self.teller.list_accounts()
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        return await self.teller.list_accounts(offset, limit)
+    
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
+        return await self.teller.list_customers(offset, limit)
     
     async def get_accounts(self, customer_id: str) -> List[int]:
         return await self.teller.get_accounts(customer_id)

@@ -23,6 +23,7 @@ class CommandType(StrEnum):
     TRANSFER = auto()
     CASH_CHECK = auto()
     LIST_ACCOUNTS = auto()
+    LIST_CUSTOMERS = auto()
     GET_ACCOUNTS = auto()
     LIST_STATEMENTS = auto()
     ADVANCE_TIME = auto()

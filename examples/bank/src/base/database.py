@@ -223,15 +223,35 @@ class BankDatabase:
         conn.close()
         return None
     
-    def get_all_accounts(self) -> List[Account]:
-        """Retrieve all accounts"""
+    def get_all_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        """
+        Retrieve accounts with pagination. If offset is -1, then it will work
+        like file system seek, starting at the end and seeking back up to limit
+        records. This makes it easy to get the last 10 or 20 (or x) records.
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        cursor.execute("""
+            SELECT count(*) FROM accounts
+        """)
+        if offset == -1:
+            count = cursor.fetchone()[0]
+            if count == 0:
+                cursor.close()
+                return []
+            if count < limit:
+                limit = count
+                offset = 0
+            else:
+                offset = count - limit
+            
         
         cursor.execute("""
             SELECT account_id, account_type, customer_id, balance, create_time, update_time
             FROM accounts
-        """)
+            ORDER BY account_id
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
         
         accounts = []
         for row in cursor.fetchall():
@@ -247,6 +267,60 @@ class BankDatabase:
         
         conn.close()
         return accounts
+    
+    def get_all_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
+        """Retrieve customers with pagination. If offset is -1, then it will work
+        like file system seek, starting at the end and seeking back up to limit
+        records. This makes it easy to get the last 10 or 20 (or x) records.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT count(*) FROM accounts
+        """)
+        if offset == -1:
+            count = cursor.fetchone()[0]
+            if count == 0:
+                cursor.close()
+                return []
+            if count < limit:
+                limit = count
+                offset = 0
+            else:
+                offset = count - limit
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT cust_id, first_name, last_name, address, create_time, update_time
+            FROM customers
+            ORDER BY cust_id
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
+        
+        customers = []
+        for row in cursor.fetchall():
+            # Get customer's accounts
+            cursor.execute("""
+                SELECT account_id FROM customer_accounts
+                WHERE customer_id = ?
+            """, (row[0],))
+            accounts = [account_row[0] for account_row in cursor.fetchall()]
+            
+            customer = Customer(
+                cust_id=row[0],
+                first_name=row[1],
+                last_name=row[2],
+                address=row[3],
+                accounts=accounts,
+                create_time=datetime.datetime.fromisoformat(row[4]),
+                update_time=datetime.datetime.fromisoformat(row[5])
+            )
+            customers.append(customer)
+        
+        conn.close()
+        return customers
     
     def get_customer_count(self) -> int:
         """Get the total number of customers"""

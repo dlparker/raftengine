@@ -134,15 +134,29 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     
     fake = Faker()
     timing_data = TimingData()
+
+    last_accounts = await teller.list_accounts(-1,1)
+    # the database works and the tests too
+    if len(last_accounts) == 0:
+        starting_account_pos = 0
+    else:
+        # we can get the number of accounts from the id value, with the way
+        starting_account_pos = last_accounts[0].account_id - 1
+    
+    last_customers = await teller.list_customers(-1,1)
+    # the database works and the tests too
+    if len(last_customers) == 0:
+        starting_customer_pos = 0
+    else:
+        # we can get the number of customers from the id value, with the way
+        starting_customer_pos = last_customers[0].customer_id - 1
     
     for loop_num in range(loops):
         loop_start = time.time()
-        await _run_single_test(teller, fake, loop_num, timing_data)
+        await run_single_test(teller, fake, loop_num, timing_data, starting_account_pos, starting_customer_pos)
         loop_end = time.time()
         timing_data.add_loop_timing(loop_end - loop_start)
         
-    # Run list_accounts test once after all loops complete
-    # await _test_list_accounts(teller, timing_data, loops)  # Commented out - will be fixed in next changes
         
     if print_timing:
         timing_data.print_report()
@@ -153,39 +167,7 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     return timing_data
 
 
-async def _test_list_accounts(teller, timing_data, loops):
-    """Test list_accounts functionality once after all loops complete"""
-    
-    async def timed_operation(operation_name: str, coro):
-        """Time an async operation"""
-        start = time.time()
-        result = await coro
-        end = time.time()
-        timing_data.add_timing(operation_name, end - start)
-        return result
-    
-    # Test list_accounts
-    accounts = await timed_operation('list_accounts', teller.list_accounts())
-    
-    # Should have exactly 2 accounts per loop (checking + savings)
-    expected_account_count = loops * 2
-    assert len(accounts) == expected_account_count, f"Expected {expected_account_count} accounts, got {len(accounts)}"
-    
-    # Verify account types distribution
-    checking_accounts = [acc for acc in accounts if acc.account_type == AccountType.CHECKING]
-    savings_accounts = [acc for acc in accounts if acc.account_type == AccountType.SAVINGS]
-    
-    assert len(checking_accounts) == loops, f"Expected {loops} checking accounts, got {len(checking_accounts)}"
-    assert len(savings_accounts) == loops, f"Expected {loops} savings accounts, got {len(savings_accounts)}"
-    
-    # Verify all accounts have valid balances (should be positive after transactions)
-    for account in accounts:
-        assert account.balance >= 0, f"Account {account.account_id} has negative balance: {account.balance}"
-        assert account.customer_id is not None, f"Account {account.account_id} has null customer_id"
-        assert account.account_id is not None, f"Account has null account_id"
-
-
-async def _run_single_test(teller, fake, loop_num, timing_data):
+async def run_single_test(teller, fake, loop_num, timing_data, starting_account_pos, starting_customer_pos):
     """Run a single test iteration with randomized data"""
     
     async def timed_operation(operation_name: str, coro):
@@ -211,6 +193,10 @@ async def _run_single_test(teller, fake, loop_num, timing_data):
         assert customer.address == cust.address
         assert customer.cust_id is not None
 
+        pos = starting_customer_pos + loop_num
+        customers = await timed_operation('list_customers', teller.list_customers(pos, 100))
+        assert len(customers) == 1
+
         sav = Account(AccountType.SAVINGS, customer.cust_id, Decimal('0.00'))
         chk = Account(AccountType.CHECKING, customer.cust_id, Decimal('0.00'))
         # Test create_account
@@ -225,6 +211,10 @@ async def _run_single_test(teller, fake, loop_num, timing_data):
         assert savings.customer_id == sav.customer_id
         assert savings.balance == sav.balance
         
+        pos = starting_account_pos + (loop_num * 2)
+        accounts = await timed_operation('list_accounts', teller.list_accounts(pos, 100))
+        assert len(accounts) == 2
+
         # Test deposit with random amounts
         check_deposit = Decimal(str(random.randint(100, 2000)))
         sav_deposit = Decimal(str(random.randint(50, 1000)))

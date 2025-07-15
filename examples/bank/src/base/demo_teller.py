@@ -104,6 +104,13 @@ async def demo_teller(teller, use_random_data=False):
         for account in accounts:
             print(f"     - Account {account.account_id}: {account.account_type.value}, ${account.balance}")
         
+        # Test list_customers
+        print("\n7b. Listing all customers...")
+        customers = await teller.list_customers()
+        print(f"   ✓ Total customers: {len(customers)}")
+        for customer in customers:
+            print(f"     - Customer {customer.cust_id}: {customer.first_name} {customer.last_name}, {len(customer.accounts)} accounts")
+        
         # Test get_accounts
         print("\n8. Getting customer accounts...")
         customer_accounts = await teller.get_accounts(customer.cust_id)

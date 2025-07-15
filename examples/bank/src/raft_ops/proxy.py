@@ -154,7 +154,11 @@ class ServerProxy(OpsProxyAPI):
         pass
     
     @raft_command()
-    async def list_accounts(self) -> List[Account]:
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        pass
+    
+    @raft_command()
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
         pass
     
     @raft_command()

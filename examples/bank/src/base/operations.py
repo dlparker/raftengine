@@ -130,8 +130,11 @@ class Teller:
     async def cash_check(self, account_id: int, amount: Decimal) -> Decimal:
         return await self.withdraw(account_id, amount)
     
-    async def list_accounts(self) -> List[Account]:
-        return self.db.get_all_accounts()
+    async def list_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
+        return self.db.get_all_accounts(offset, limit)
+    
+    async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
+        return self.db.get_all_customers(offset, limit)
     
     async def get_accounts(self, customer_id: int) -> List[int]:
         cust_rec = self.db.get_customer(customer_id)
