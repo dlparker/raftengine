@@ -811,11 +811,18 @@ async def test_failed_first_election_2(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - failed election recovery with pre-vote
+    f_failed_election_recovery = registry.get_raft_feature("leader_election", "failed_election_recovery_with_pre_vote")
+    f_leader_crash_during_election = registry.get_raft_feature("system_reliability", "leader_crash_during_election")
+    f_term_start_interruption = registry.get_raft_feature("log_replication", "term_start_interruption")
+    f_log_term_conflict_resolution = registry.get_raft_feature("log_replication", "log_term_conflict_resolution")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing election failure due to crashed leader (with pre-vote)", logger=logger)
-    await inner_failed_first_election(cluster, True)
+    await inner_failed_first_election(cluster, True, f_failed_election_recovery, f_leader_crash_during_election, f_term_start_interruption, f_log_term_conflict_resolution)
     
 async def inner_failed_first_election(cluster, use_pre_vote, f_main_feature, f_leader_crash, f_term_start_interruption, f_log_conflict_resolution):
 
@@ -939,6 +946,12 @@ async def test_power_transfer_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - power transfer
+    f_power_transfer = registry.get_raft_feature("leader_election", "power_transfer")
+    f_voluntary_step_down = registry.get_raft_feature("leader_election", "voluntary_step_down")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -949,7 +962,10 @@ async def test_power_transfer_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer in election", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election, f_test_sequencing], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -960,7 +976,9 @@ async def test_power_transfer_1(cluster_maker):
 
     logger.info("-------- Initial election completion, doing power transfer")
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election")
+    # Section 2: Power transfer initiation
+    spec = dict(used=[f_power_transfer, f_voluntary_step_down], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to transfer power to node 2 and waiting for election", features=spec)
 
     await ts_1.transfer_power(ts_2.uri)
     await asyncio.sleep(0.0001)
@@ -968,7 +986,9 @@ async def test_power_transfer_1(cluster_maker):
     await asyncio.sleep(0.0001)
     await cluster.deliver_all_pending()
     assert ts_2.get_role_name() != "FOLLOWER"
-    await cluster.test_trace.start_subtest("Allowing full election run to complete")
+    # Section 3: Power transfer completion via election
+    spec = dict(used=[f_test_sequencing], tested=[f_power_transfer])
+    await cluster.test_trace.start_subtest("Allowing full election run to complete", features=spec)
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -988,6 +1008,14 @@ async def test_power_transfer_2(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - power transfer with outdated target
+    f_power_transfer_outdated = registry.get_raft_feature("leader_election", "power_transfer_with_outdated_target")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    f_error_handling = registry.get_raft_feature("system_reliability", "api_error_handling")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -998,7 +1026,10 @@ async def test_power_transfer_2(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer with outdated target node", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election, f_test_sequencing], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -1009,6 +1040,10 @@ async def test_power_transfer_2(cluster_maker):
 
     logger.info("-------- Initial election completion, crashing node 2 and running some commands")
 
+    # Section 2: Error handling validation and log divergence creation
+    spec = dict(used=[f_crash_recovery, f_command_execution], tested=[f_error_handling])
+    await cluster.test_trace.start_subtest("Testing power transfer error handling, node crash, and command execution", features=spec)
+    
     # make sure calling transfer on something that is not  a leader doesn't work
     with pytest.raises(Exception):
         await ts_3.deck.transfer_power(ts_1.uri)
@@ -1020,7 +1055,9 @@ async def test_power_transfer_2(cluster_maker):
     for i in range(0, 3):
         command_result = await ts_1.run_command("add 1")
 
-    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer")
+    # Section 3: Power transfer with outdated target node
+    spec = dict(used=[f_crash_recovery], tested=[f_power_transfer_outdated])
+    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and then doing power transfer", features=spec)
 
     logger.info("-------- Buncho commands run, doing recover and transfer")
     await ts_2.recover_from_crash()
@@ -1029,7 +1066,9 @@ async def test_power_transfer_2(cluster_maker):
     while time.time() - start_time < 1.0 and ts_2.get_role_name() == "FOLLOWER":
         await asyncio.sleep(0.0001)
     assert ts_2.get_role_name() != "FOLLOWER"
-    await cluster.test_trace.start_subtest("Allowing full election run to complete")
+    # Section 4: Power transfer completion via election
+    spec = dict(used=[f_test_sequencing], tested=[f_power_transfer_outdated])
+    await cluster.test_trace.start_subtest("Allowing full election run to complete", features=spec)
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
@@ -1052,6 +1091,15 @@ async def test_power_transfer_fails_1(cluster_maker):
   
    """
     
+    # Feature definitions - power transfer failure handling
+    f_power_transfer_timeout = registry.get_raft_feature("leader_election", "power_transfer_timeout")
+    f_command_retry_logic = registry.get_raft_feature("log_replication", "command_retry_logic")
+    f_network_blocking = registry.get_raft_feature("test_infrastructure", "network_blocking")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.001
     election_timeout_min = 0.02
@@ -1068,7 +1116,10 @@ async def test_power_transfer_fails_1(cluster_maker):
 
 
     await cluster.test_trace.define_test("Testing power transfer failure due to timeout", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election, f_test_sequencing], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -1079,13 +1130,19 @@ async def test_power_transfer_fails_1(cluster_maker):
 
     logger.info("-------- Initial election completion, crashing node 2 and running some commands")
 
+    # Section 2: Log divergence creation through crash and commands
+    spec = dict(used=[f_crash_recovery, f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Crashing node 2 and executing commands to create log divergence", features=spec)
+    
     await ts_2.simulate_crash()
     await cluster.start_auto_comms()
     for i in range(0, 3):
         command_result = await ts_1.run_command("add 1")
     await cluster.stop_auto_comms()
 
-    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and blocking it and trying doing power transfer")
+    # Section 3: Power transfer failure via network blocking and timeout
+    spec = dict(used=[f_crash_recovery, f_network_blocking], tested=[f_power_transfer_timeout, f_command_retry_logic])
+    await cluster.test_trace.start_subtest("Buncho commands run, recovering node 2 and blocking it and trying doing power transfer", features=spec)
 
     logger.info("-------- Buncho commands run, doing recover")
     await ts_2.recover_from_crash()
@@ -1100,7 +1157,10 @@ async def test_power_transfer_fails_1(cluster_maker):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.0001)
     assert ts_1.deck.role.accepting_commands
-    await cluster.test_trace.start_subtest("Allowing full election run to complete")
+    
+    # Section 4: Recovery from failed power transfer
+    spec = dict(used=[f_command_execution], tested=[f_power_transfer_timeout])
+    await cluster.test_trace.start_subtest("Allowing full election run to complete", features=spec)
 
     ts_2.unblock_network()
     await cluster.start_auto_comms()

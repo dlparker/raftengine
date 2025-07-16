@@ -1,0 +1,1 @@
+Conflicting Log Terms Are Resolved During Recovery
