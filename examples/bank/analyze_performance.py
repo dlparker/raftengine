@@ -207,7 +207,6 @@ def main():
         metrics = all_metrics.get(layer, {})
         mean_time = metrics.get('loop_total_mean', 0)
         total_time = metrics.get('loop_total_total', 0)
-        
         if layer == 'Bare Teller':
             print(f"{layer:25s}: {mean_time:8.6f}s  (baseline)")
         else:
@@ -232,6 +231,7 @@ def main():
     for metric_key, op_name in key_operations:
         print(f"\n{op_name}:")
         baseline = all_metrics.get('Bare Teller', {}).get(metric_key, 0)
+        prev_time = None
         
         for layer in layers:
             metrics = all_metrics.get(layer, {})
@@ -239,9 +239,13 @@ def main():
             
             if layer == 'Bare Teller':
                 print(f"  {layer:23s}: {op_time:8.6f}s")
+                prev_time = op_time
             else:
                 overhead_pct, multiplier = calculate_overhead(baseline, op_time)
-                print(f"  {layer:23s}: {op_time:8.6f}s  (+{overhead_pct:6.1f}% / {multiplier:5.2f}x)")
+                layer_pct, layer_mult = calculate_overhead(prev_time, op_time)
+                print(f"  {layer:23s}: {op_time:8.6f}s  (+{overhead_pct:6.1f}% / {multiplier:5.2f}x)",
+                      f"  relative (+{layer_pct:6.1f}% / {layer_mult:5.2f}x)")
+                prev_time = op_time
     
     print()
     print("=" * 80)
