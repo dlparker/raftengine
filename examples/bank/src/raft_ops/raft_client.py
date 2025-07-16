@@ -19,6 +19,7 @@ class RaftClient(RPCAPI):
         self.current_leader = uri
         self.rpc_clients = dict(uri=rpc_client)
         self.rpc_client = rpc_client
+        self.client_maker = client_maker
         
     async def get_uri(self):
         return self.current_leader
@@ -28,7 +29,7 @@ class RaftClient(RPCAPI):
     
     async def set_new_leader(self, uri):
         if uri not in self.rpc_clients:
-            self.rpc_clients[uri] = client_maker(uri)
+            self.rpc_clients[uri] = await self.client_maker(uri)
             self.current_leader = uri
             self.rpc_client = self.rpc_clients[uri]
         return self.rpc_clients[uri]

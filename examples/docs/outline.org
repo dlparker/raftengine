@@ -1,0 +1,107 @@
+
+
+* Raft Enablement Process
+
+These examples are built to retain all the stages of development so that they can serve as
+examples of how this stepwise layering of functionality could work. It turns out that
+it can be usefull to retain the structure of the earlier stages for debugging and
+performance analisys, so you might want to do the same when building your raft system.
+
+
+** Primary operations
+
+The part of your application that you intend to protect with Raft consensus logic
+might be called the "operations". The Raft thesis refers to this as the "state machine"
+but when thinking about the actual application that feels uncomfortable to me, so
+I use "operations". Your mileage may vary.
+
+In the examples the operations are to be found in the creatively named "src/base/operations.py".
+You may need more than a single file for your application, but it is good to place all the
+API elements that will be Raft enabled in a single file, or even a single class.
+
+
+
+As such it has
+some abstractions and complexity that you might not want to retain in your production
+code base. There may be some value in keeping some of it, since having a single process
+implementation that connects your client and server code can be useful for debugging
+when the problem is not related to the functions of the remoting method (RPCs or whatnot),
+or indeed to find out if it is related.
+
+Anywho, the structure is important to preserving clarity in this demo where there
+are multiple transport options and multiple versions of the app with varying degrees
+of completeness of the stepwise process.
+
+If you are starting from scratch in building your client server app that will use the
+Raftengine library to add Raft consensus support, this directory lays out a process
+for building it by layering functionality build sequentially. If you already have
+a client server application that you are going to enhance, most of this process
+is still relevant, you would just start in the middle somewhere based on the
+degree of completeness, probably at major step 3.
+
+The demo application here is a simple banking simulation that operates on customer
+and account records that are stored in a Sqlite database.
+
+* Development Major Steps
+
+** Step 1. Build your application functionality in with three components.
+
+These components are precursors of functions that later steps will perform
+to deliver RPC access to the Operations. Separating them this way greatly
+aids the later stages of development
+
+
+1. Operations - methods that implement your applications operations. In Raft
+   terminology, this will be the "state machine". 
+2. Proxy - a facade or wrapper that matches the Operations method signatures
+   that will serve as a layer of separation between the Operations and the Client
+3. Client - The class that application user code will interact with to get
+   access to the Operation functions.
+4. Build a single process step tool that connects these components together for use,
+   providing a function or method that returns a Client instance that is prepared
+   for use.
+5. Build a validator that uses the setup tool to get a Client, and then ensures
+   that calls to the Client reach the Operations and return expected results. 
+
+
+** Step 2. Add RPC functionality to your components
+
+
+1. Add a RPC server, a wrapper that provides RPC interface access to all the Operations
+   methods.
+2. Write a new Proxy implementation that uses RPC client calls to talk to the server.
+3. Build a setup tool that provides a server instance for running as a process, and a client
+   instance for connecting to it.
+4. Construct a new version of the validator that uses the RPC enabled client and server to
+   validate that all operations work.
+
+   
+** Step 3. Add a set of components to make Operations access indirect.
+
+Starting with the Step 1 code base, add these components:
+
+1. A Collector component that implements the Proxy interface but takes
+   each method call and converts it and its arguments to a serialized
+   form as a string.
+2. A Dispatcher component that takes a serialized method call and
+   converts it to a call to the Operations component.
+3. A temporary connector component that moves Collector packets to
+   the Dispatcher and returns results.
+
+Then:
+
+1. Build a setup tool that connects Client to Collector (serving as Proxy) which
+   is connected to connector which is connected to Dispatcher which is connected
+   to Operations.
+2. Construct a validator that checks the operations of the composed components.
+
+** Step 4. Combine the results of step2 and step3 and prepare the Raft message RPC
+
+1. Edit the components as needed to move the Collector to the RPC server and
+   wire the Collector and Dispatcher as in step 3.
+2. Update the RPC interface to add a "raft_message" RPC that takes and returns
+   a string.
+3. Configure client and server setup as in step 2.
+4. Build a validator that is like the one in step2.
+   
+** Step 5. Integrate Raftengine library.

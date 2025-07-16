@@ -164,8 +164,9 @@ class ServerManager:
 async def create_client(transport, host, port):
     """Create the appropriate RPC client"""
     if transport == 'aiozmq':
-        from tx_aiozmq.rpc_client import RPCClient
-        return RPCClient(host, port)
+        from tx_aiozmq.rpc_helper import RPCHelper
+        uri = f"grpc://{host}:{port}"
+        return await RPCHelper().rpc_client_maker(uri)
     elif transport == 'grpc':
         from tx_grpc.rpc_helper import RPCHelper
         uri = f"grpc://{host}:{port}"
@@ -245,12 +246,12 @@ Available transports:
         
         try:
             await validate(rpc_client, 
-                          mode=args.mode,
-                          loops=args.loops,
-                          use_random_data=args.random,
-                          print_timing=not args.no_timing,
-                          json_output=args.json_output,
-                          raft_stubs=args.raft_stubs)
+                           mode=args.mode,
+                           loops=args.loops,
+                           use_random_data=args.random,
+                           print_timing=not args.no_timing,
+                           json_output=args.json_output,
+                           raft_stubs=args.raft_stubs)
             
             print(f"Successfully completed {args.transport} validation")
         finally:

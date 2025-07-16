@@ -93,7 +93,7 @@ Available transports:
                       print_timing=not args.no_timing,
                       json_output=args.json_output,
                       raft_stubs=args.raft_stubs,
-                      rpc_client_maker=RPCHelper.rpc_client_maker)
+                      rpc_client_maker=RPCHelper().rpc_client_maker)
     except Exception as e:
         print(f"Error during validation: {e}")
         sys.exit(1)

@@ -29,7 +29,7 @@ message RaftResponse {
 message CommandResult {
   string command = 1;        // sent command	
   string error = 2;          // Error message if any
-  bool redirect = 3;         // Whether to redirect to leader
+  string redirect = 3;         // Whether to redirect to leader
   bool retry = 4;            // Whether to retry the operation
   string result = 5;          // Serialized result data
 }

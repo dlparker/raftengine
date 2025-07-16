@@ -145,8 +145,9 @@ class ClusterManager:
 async def create_client(transport, host, port):
     """Create the appropriate RPC client (reused from validate_rpc.py)"""
     if transport == 'aiozmq':
-        from tx_aiozmq.rpc_client import RPCClient
-        return RPCClient(host, port)
+        from tx_aiozmq.rpc_helper import RPCHelper
+        uri = f"grpc://{host}:{port}"
+        return await RPCHelper().rpc_client_maker(uri)
     elif transport == 'grpc':
         from tx_grpc.rpc_helper import RPCHelper
         uri = f"grpc://{host}:{port}"
