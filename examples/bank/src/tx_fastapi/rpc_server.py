@@ -26,8 +26,9 @@ class RPCServer:
         async def raft_message(request: Request):
             """Handle raft message requests"""
             data = await request.json()
-            result = await self.raft_server.raft_message(data["message"])
-            return {"result": result}
+            # result is always None and we don't want to wait
+            asyncio.create_task(self.raft_server.raft_message(data["message"]))
+            return {"result": None}
 
 async def start_server(raft_server, host='localhost', port=8000):
     """Start the FastAPI server"""

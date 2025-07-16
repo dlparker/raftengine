@@ -48,8 +48,9 @@ class RPCClient(RPCAPI):
             await self.connect()
         
         request = banking_pb2.RaftRequest(message=message)
-        response = await self.stub.RaftMessage(request)
-        return response.result
+        # we don't need response, it is always None, and we don't want to wait
+        asyncio.create_task(self.stub.RaftMessage(request))
+        return None
     
     async def close(self):
         """Close the client connection"""

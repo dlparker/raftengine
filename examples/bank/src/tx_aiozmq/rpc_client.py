@@ -28,7 +28,9 @@ class RPCClient(RPCAPI):
     async def raft_message(self, message):
         if self.client is None:
             await self.connect()
-        return await self.client.call.raft_message(message)
+        # we don't need the reply
+        asyncio.create_task(self.client.call.raft_message(message))
+        return
     
     async def close(self):
         """Close the client connection"""

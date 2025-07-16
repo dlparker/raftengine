@@ -27,5 +27,7 @@ class RPCServer(banking_pb2_grpc.BankingServiceServicer):
     
     async def RaftMessage(self, request, context):
         """Handle raft message requests"""
-        result = await self.raft_server.raft_message(request.message)
+        # we don't need response, it is always None, and we don't want to wait
+        asyncio.create_task(self.raft_server.raft_message(request.message))
+        result = None
         return banking_pb2.RaftResponse(result=result)

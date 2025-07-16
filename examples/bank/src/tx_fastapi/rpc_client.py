@@ -43,14 +43,18 @@ class RPCClient(RPCAPI):
         
         url = f"{self.base_url}/raft_message"
         data = {"message": message}
-        
-        async with self.session.post(url, json=data) as response:
-            if response.status == 200:
-                result = await response.json()
-                return result["result"]
-            else:
-                error_text = await response.text()
-                raise Exception(f"HTTP {response.status}: {error_text}")
+
+        async def responder():
+            async with self.session.post(url, json=data) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result["result"]
+                else:
+                    error_text = await response.text()
+                    raise Exception(f"HTTP {response.status}: {error_text}")
+        asyncio.create_task(responder())
+        # response is always None and we don't wait
+        return
     
     async def close(self):
         """Close the HTTP session"""
