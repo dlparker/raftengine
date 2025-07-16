@@ -17,6 +17,10 @@ from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandle
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection
 from dev_tools.log_control import setup_logging
+from dev_tools.features import registry, FeatureRegistry
+
+# Initialize feature registry
+registry = FeatureRegistry.get_registry()
 
 #extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
 #extra_logging = [dict(name=__name__, level="debug"),]
@@ -41,6 +45,16 @@ async def test_empty_log_1(cluster_maker):
     of the test.
     
     """
+    
+    # Feature definitions - empty log recovery testing
+    f_empty_log_recovery = registry.get_raft_feature("log_replication", "empty_log_recovery")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_timer_operations = registry.get_raft_feature("test_infrastructure", "timer_operations")
+    f_log_catchup = registry.get_raft_feature("log_replication", "log_catchup")
+    f_partial_election = registry.get_raft_feature("leader_election", "partial_election")
+    
     cluster = cluster_maker(3)
     # do real timer values, but start in the usual disabled state.
     heartbeat_period=0.005
@@ -55,7 +69,10 @@ async def test_empty_log_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.test_trace.define_test("Testing leader recovery with empty log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -69,15 +86,22 @@ async def test_empty_log_1(cluster_maker):
     # enough to get two full and one partial append_entries catchups.
     loop_limit = cfg.max_entries_per_message * 2 + 2
     await cluster.start_auto_comms()
-    await cluster.test_trace.start_subtest(f"Node 1 is leader, running {loop_limit} commands to fill log")
+    
+    # Section 2: Log population with commands
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, running {loop_limit} commands to fill log", features=spec)
     for i in range(loop_limit):
         command_result = await cluster.run_command("add 1", 1)
     await cluster.stop_auto_comms()
 
     assert ts_1.operations.total == loop_limit
+    
+    # Section 3: Leader crash, partial election, and empty log recovery
+    spec = dict(used=[f_crash_recovery, f_partial_election, f_timer_operations], tested=[f_empty_log_recovery, f_log_catchup])
+    await cluster.test_trace.start_subtest("Crashing leader node 1, clearing its log, restarting it, then letting timers run until catchup done", features=spec)
+    
     # Now "crash" the leader, run an election, then have
     # the leader come up with an empty log
-    await cluster.test_trace.start_subtest("Crashing leader node 1, clearing its log, restarting it, then letting timers run until catchup done")
     await ts_1.simulate_crash()
 
     await cluster.start_auto_comms()

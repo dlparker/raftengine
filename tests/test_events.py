@@ -11,6 +11,10 @@ from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElectio
 from dev_tools.log_control import setup_logging
 from dev_tools.triggers import WhenElectionDone
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.features import registry, FeatureRegistry
+
+# Initialize feature registry
+registry = FeatureRegistry.get_registry()
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
@@ -24,10 +28,24 @@ async def test_event_handlers(cluster_maker):
     """
     Test the event handling system and the various defined events.
     """
+    
+    # Feature definitions - event system testing
+    f_event_system = registry.get_raft_feature("system_reliability", "event_system")
+    f_event_handlers = registry.get_raft_feature("test_infrastructure", "event_handlers")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_role_transitions = registry.get_raft_feature("leader_election", "role_transitions")
+    f_log_resync = registry.get_raft_feature("log_replication", "log_resync_operations")
+    f_network_blocking = registry.get_raft_feature("test_infrastructure", "network_blocking")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_voluntary_step_down = registry.get_raft_feature("leader_election", "voluntary_step_down")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     await cluster.test_trace.define_test("Testing event handlers during election and command processing", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Event handler setup and initial election
+    spec = dict(used=[f_event_handlers], tested=[f_event_system])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
@@ -106,6 +124,11 @@ async def test_event_handlers(cluster_maker):
         await ts.deck.add_event_handler(resync_handler)
 
     await cluster.start()
+    
+    # Section 2: Election process with event monitoring
+    spec = dict(used=[f_automated_election], tested=[f_role_transitions, f_event_system])
+    await cluster.test_trace.start_subtest("Running election with comprehensive event monitoring", features=spec)
+    
     await ts_1.start_campaign()
     await cluster.run_election()
     assert cluster.get_leader() == ts_1
@@ -121,6 +144,10 @@ async def test_event_handlers(cluster_maker):
     assert election_op_counter == len(expecting)
 
 
+    # Section 3: Log resynchronization with network partition simulation
+    spec = dict(used=[f_network_blocking, f_command_execution], tested=[f_log_resync, f_event_system])
+    await cluster.test_trace.start_subtest("Network partition and log resync with event monitoring", features=spec)
+    
     # no block a follower while we run a couple of commands
     ts_2.block_network()
     command_result = await cluster.run_command("add 1", 1)
@@ -139,6 +166,10 @@ async def test_event_handlers(cluster_maker):
     for index, item in enumerate(r_expecting):
         assert item == resync_saves[index]
     assert resync_op_counter == len(r_expecting)
+    
+    # Section 4: Event handler removal and voluntary step down
+    spec = dict(used=[f_event_handlers], tested=[f_voluntary_step_down, f_event_system])
+    await cluster.test_trace.start_subtest("Event handler management and voluntary leader step down", features=spec)
     
     for ts in [ts_2, ts_3]:
         rch = rch_by_node[ts.uri]
@@ -162,6 +193,15 @@ async def test_message_errors(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - error handling and message corruption testing
+    f_error_injection = registry.get_raft_feature("test_infrastructure", "error_injection")
+    f_message_error_handling = registry.get_raft_feature("system_reliability", "message_error_handling")
+    f_event_system = registry.get_raft_feature("system_reliability", "event_system")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -174,7 +214,10 @@ async def test_message_errors(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.test_trace.define_test("Testing event handling for message processing errors", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Error handler setup and normal election
+    spec = dict(used=[f_test_sequencing], tested=[f_event_system])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
 
     error_counter = 0
     class ErrorHandler(EventHandler):
@@ -190,12 +233,21 @@ async def test_message_errors(cluster_maker):
         await ts.deck.add_event_handler(ErrorHandler())
     
     await cluster.start()
+    
+    # Section 2: Normal election establishment
+    spec = dict(used=[f_automated_election, f_test_sequencing], tested=[])
+    await cluster.test_trace.start_subtest("Establishing leader for error injection testing", features=spec)
+    
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
+    
+    # Section 3: Message explosion error injection and handling
+    spec = dict(used=[f_error_injection, f_heartbeat_processing], tested=[f_message_error_handling, f_event_system])
+    await cluster.test_trace.start_subtest("Injecting message explosion errors during heartbeat processing", features=spec)
     
     ts_1.deck.explode_on_message_code = AppendEntriesMessage.get_code()
     
@@ -211,6 +263,10 @@ async def test_message_errors(cluster_maker):
     
     ts_1.deck.explode_on_message_code = None
 
+    # Section 4: Message corruption error injection and handling
+    spec = dict(used=[f_error_injection, f_heartbeat_processing], tested=[f_message_error_handling, f_event_system])
+    await cluster.test_trace.start_subtest("Injecting message corruption errors during heartbeat processing", features=spec)
+    
     ts_1.deck.corrupt_message_with_code = AppendEntriesMessage.get_code()
     await ts_3.send_heartbeats()
     await ts_3.do_next_out_msg()

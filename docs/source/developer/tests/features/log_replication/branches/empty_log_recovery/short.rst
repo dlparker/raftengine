@@ -1,0 +1,1 @@
+Empty Log Recovery and Synchronization
