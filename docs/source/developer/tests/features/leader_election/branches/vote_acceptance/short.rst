@@ -1,0 +1,1 @@
+Validation of proper vote granting when followers have not yet voted in the current term

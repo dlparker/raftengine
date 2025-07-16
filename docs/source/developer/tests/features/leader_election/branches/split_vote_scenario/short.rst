@@ -1,0 +1,1 @@
+Creation and testing of split vote conditions with multiple competing candidates in the same term

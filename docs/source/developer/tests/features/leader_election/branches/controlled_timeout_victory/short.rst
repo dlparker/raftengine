@@ -1,0 +1,1 @@
+Deterministic election victory through strategic timeout configuration

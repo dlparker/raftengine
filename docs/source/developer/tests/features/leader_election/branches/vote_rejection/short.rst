@@ -1,0 +1,1 @@
+Validation of proper vote rejection when followers have already voted in the current term

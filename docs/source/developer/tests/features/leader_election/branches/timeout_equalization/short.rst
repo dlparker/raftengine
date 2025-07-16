@@ -1,0 +1,1 @@
+Timeout range normalization across all cluster nodes for fair election competition

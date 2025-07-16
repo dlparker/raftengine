@@ -1,0 +1,1 @@
+Automated Election Process Through Sequence Control Mechanism

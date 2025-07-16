@@ -1,0 +1,1 @@
+Sequential Leadership Transitions With Coordinated Trigger Management

@@ -1,0 +1,1 @@
+Enforcement of Raft's fundamental single-vote-per-term safety property during leader election

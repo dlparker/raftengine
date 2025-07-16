@@ -16,6 +16,7 @@ from dev_tools.triggers import WhenInMessageCount
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection
 from dev_tools.log_control import setup_logging
+from dev_tools.features import registry, FeatureRegistry
 
 extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
 #setup_logging(extra_logging, default_level="debug")
@@ -23,6 +24,7 @@ default_level="error"
 #default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 
 async def test_stepwise_election_1(cluster_maker):
@@ -37,6 +39,12 @@ async def test_stepwise_election_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
 
     """
+    
+    # Feature definitions - manual granular election control without pre-vote
+    f_manual_election = registry.get_raft_feature("leader_election", "manual_stepwise_control")
+    f_no_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_test_infrastructure = registry.get_raft_feature("test_infrastructure", "pausing_cluster_control")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -47,9 +55,11 @@ async def test_stepwise_election_1(cluster_maker):
     await ts_2.change_cluster_config(cfg)
     await ts_3.change_cluster_config(cfg)
 
-
     await cluster.test_trace.define_test("Testing stepwise election control with 3 nodes", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Manual election trigger and stepwise control
+    spec = dict(used=[f_no_pre_vote, f_manual_election], tested=[f_test_infrastructure])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     # using node 3 to make sure I don't have some sort of unintentional dependence on using node 1
     await cluster.start()
     await ts_3.start_campaign()
@@ -106,7 +116,10 @@ async def test_stepwise_election_1(cluster_maker):
     ts_3.set_trigger(WhenAllInMessagesHandled())
     await ts_3.run_till_triggers()
     ts_3.clear_triggers()
-    await cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record")
+    # Section 2: Election completion and term start replication
+    f_term_start = registry.get_raft_feature("log_replication", "term_start_log_entry")
+    spec = dict(used=[f_manual_election], tested=[f_term_start])
+    await cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record", features=spec)
     # Let all the messages fly until delivered
     await cluster.deliver_all_pending()
     assert ts_3.get_role_name() == "LEADER"
@@ -132,15 +145,25 @@ async def test_run_to_election_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - sequence control and automated election processes
+    f_sequence_election = registry.get_raft_feature("leader_election", "sequence_controlled_election")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    f_re_election = registry.get_raft_feature("leader_election", "re_election")
+    f_authorized_campaign = registry.get_raft_feature("leader_election", "authorized_campaign")
+    f_heartbeat_commit = registry.get_raft_feature("log_replication", "heartbeat_commit_confirmation")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-
     await cluster.test_trace.define_test("Testing election with sequence control and triggers", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Automated election using sequence control
+    spec = dict(used=[f_sequence_election], tested=[f_automated_election])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -151,7 +174,10 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
 
     logger.info("-------- Initial election completion pause test completed starting reelection")
-    await cluster.test_trace.start_subtest("Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete")
+    
+    # Section 2: Leader demotion and re-election with trigger coordination
+    spec = dict(used=[f_leader_demotion, f_authorized_campaign], tested=[f_re_election])
+    await cluster.test_trace.start_subtest("Node 3 is leader, force demoting it and pushing node 2 to start a new election, and waiting for each node to complete", features=spec)
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -173,7 +199,9 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
-    await cluster.test_trace.start_subtest("Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat")
+    # Section 3: Heartbeat to confirm commit after re-election
+    spec = dict(used=[f_re_election], tested=[f_heartbeat_commit])
+    await cluster.test_trace.start_subtest("Node 2 is now leader, but followers have not yet seen commit, so sending heartbeat", features=spec)
 
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -188,6 +216,13 @@ async def test_election_timeout_1(cluster_maker):
     win the election.
 
     """
+    
+    # Feature definitions - timer-based election control with timeout manipulation
+    f_timeout_manipulation = registry.get_raft_feature("leader_election", "timeout_manipulation")
+    f_timer_based_election = registry.get_raft_feature("leader_election", "timer_based_election")
+    f_controlled_timeout_victory = registry.get_raft_feature("leader_election", "controlled_timeout_victory")
+    f_leader_lost_simulation = registry.get_raft_feature("leader_election", "leader_lost_simulation")
+    f_timeout_equalization = registry.get_raft_feature("leader_election", "timeout_equalization")
     
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(election_timeout_min=0.01,
@@ -216,7 +251,10 @@ async def test_election_timeout_1(cluster_maker):
     assert ncc.settings.election_timeout_max == 0.011
     
     await cluster.test_trace.define_test("Testing election with manipulated timeouts", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Timer-based election with manipulated timeouts
+    spec = dict(used=[f_timeout_manipulation, f_timer_based_election], tested=[f_controlled_timeout_victory])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -233,7 +271,10 @@ async def test_election_timeout_1(cluster_maker):
                 f2 = ts
 
     logger.info("\n\n-------- Initial election completion, starting reelection\n\n")
-    await cluster.test_trace.start_subtest(f"{leader.uri} is leader know demoting it, timer values equal, poking node other node to start election ")
+    
+    # Section 2: Leader loss simulation with timeout equalization
+    spec = dict(used=[f_leader_lost_simulation, f_timeout_equalization], tested=[f_timer_based_election])
+    await cluster.test_trace.start_subtest(f"{leader.uri} is leader know demoting it, timer values equal, poking node other node to start election ", features=spec)
     # now have leader resign, by telling it to become follower
     await leader.do_demote_and_handle(None)
     assert leader.get_role_name() == "FOLLOWER"
@@ -331,17 +372,28 @@ async def test_election_vote_once_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - single vote per term enforcement and split vote scenarios
+    f_single_vote_per_term = registry.get_raft_feature("leader_election", "single_vote_per_term")
+    f_split_vote_scenario = registry.get_raft_feature("leader_election", "split_vote_scenario")
+    f_message_flow_control = registry.get_raft_feature("test_infrastructure", "message_flow_control")
+    f_competing_candidates = registry.get_raft_feature("leader_election", "competing_candidates")
+    f_vote_rejection = registry.get_raft_feature("leader_election", "vote_rejection")
+    f_vote_acceptance = registry.get_raft_feature("leader_election", "vote_acceptance")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-
     await cluster.test_trace.define_test("Testing single vote per term in election", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -352,7 +404,9 @@ async def test_election_vote_once_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
-    await cluster.test_trace.start_subtest("Node 3 is leader, forcing it to resign, making it and node 2 start election")
+    # Section 2: Setting up competing candidates scenario
+    spec = dict(used=[f_leader_demotion], tested=[f_competing_candidates])
+    await cluster.test_trace.start_subtest("Node 3 is leader, forcing it to resign, making it and node 2 start election", features=spec)
 
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
@@ -362,7 +416,9 @@ async def test_election_vote_once_1(cluster_maker):
     await ts_2.do_leader_lost()
     await ts_3.do_leader_lost()
 
-    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 2 only, and reply with a yes vote")
+    # Section 3: First vote acceptance - testing positive vote response
+    spec = dict(used=[f_message_flow_control, f_competing_candidates], tested=[f_vote_acceptance])
+    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 2 only, and reply with a yes vote", features=spec)
     # now let the remainging follower see only the vote request from 
     # one candidate, so let one of them send their two messages
     msg1 = await ts_2.do_next_out_msg()
@@ -376,7 +432,9 @@ async def test_election_vote_once_1(cluster_maker):
     assert vote_yes_msg.vote == True
     await ts_2.do_next_in_msg()
 
-    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 3, which should get a no response")
+    # Section 4: Single vote per term enforcement - testing vote rejection
+    spec = dict(used=[f_competing_candidates, f_message_flow_control], tested=[f_single_vote_per_term, f_vote_rejection])
+    await cluster.test_trace.start_subtest("Letting node 1 get the request vote message from node 3, which should get a no response", features=spec)
     # now let the other candidate send requests
     msg3 = await ts_3.do_next_out_msg()
     msg4 = await ts_3.do_next_out_msg()
@@ -391,7 +449,9 @@ async def test_election_vote_once_1(cluster_maker):
 
     # now it should just finish, everybody should know what to do
 
-    await cluster.test_trace.start_subtest("Allowing full election run to complete")
+    # Section 5: Split vote resolution - completing election after split vote
+    spec = dict(used=[f_split_vote_scenario], tested=[f_automated_election])
+    await cluster.test_trace.start_subtest("Allowing full election run to complete", features=spec)
     logger.info("-------- allowing election to continue ---")
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
