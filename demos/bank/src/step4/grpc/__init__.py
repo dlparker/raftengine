@@ -1,1 +1,0 @@
-# gRPC banking service implementation
