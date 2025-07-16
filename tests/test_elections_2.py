@@ -159,6 +159,12 @@ async def test_run_to_election_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
+    # Make sure returning immediately from on_message works. Many tests can't handle
+    # it because they want to see that the message was handled but waiting for the
+    # return, and this flag breaks that.
+    ts_1.deck.await_message = False
+    ts_2.deck.await_message = False
+    ts_3.deck.await_message = False
     await cluster.test_trace.define_test("Testing election with sequence control and triggers", logger=logger)
     
     # Section 1: Automated election using sequence control

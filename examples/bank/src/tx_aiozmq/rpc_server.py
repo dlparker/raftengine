@@ -15,5 +15,4 @@ class RPCServer(aiozmq.rpc.AttrHandler):
     @aiozmq.rpc.method
     async def raft_message(self, message):
         # we don't need the reply
-        asyncio.create_task(self.raft_server.raft_message(message))
-        return None
+        return await self.raft_server.raft_message(message)

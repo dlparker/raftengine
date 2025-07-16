@@ -61,7 +61,12 @@ class RPCClient(RPCAPI):
     async def raft_message(self, message):
         wrapped = dict(mtype="raft_message", message=message)
         msg = json.dumps(wrapped)
-        await self.send_message(msg)
+        # We don't need the reply which is always none and waiting for it slows
+        # down the Raft operations, so just spawn a task to do the message
+        # delivery and return right away. The messages and the code
+        # that uses them are designed to work with fully async message passing
+        # mechanisms that do not reply to the message like an RPC does.
+        asyncio.create_task(self.send_message(msg))
         return None
     
     async def close(self):

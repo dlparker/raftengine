@@ -151,6 +151,7 @@ def build_ordered(metrics):
             methods.append(key)
 
     xports = list(metrics['rpc'].keys())
+    print(xports)
             
     method_times = {}
     for method in methods:

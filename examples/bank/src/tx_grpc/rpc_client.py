@@ -48,7 +48,11 @@ class RPCClient(RPCAPI):
             await self.connect()
         
         request = banking_pb2.RaftRequest(message=message)
-        # we don't need response, it is always None, and we don't want to wait
+        # We don't need the reply which is always none and waiting for it slows
+        # down the Raft operations, so just spawn a task to do the message
+        # delivery and return right away. The messages and the code
+        # that uses them are designed to work with fully async message passing
+        # mechanisms that do not reply to the message like an RPC does.
         asyncio.create_task(self.stub.RaftMessage(request))
         return None
     

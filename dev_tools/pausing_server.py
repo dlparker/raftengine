@@ -456,6 +456,7 @@ class Testdeck(Deck):
         self.role_run_later_def = None
         self.timers_disabled = False
         self.wrapper_logger = logging.getLogger("SimulatedNetwork")
+        self.await_message = True
 
     # For testing only
     async def change_cluster_config(self, init: ClusterInitConfig):
@@ -485,16 +486,6 @@ class Testdeck(Deck):
             result = await self.inner_on_message(dmsg)
         else:
             result = await super().on_message(message)
-        return result
-
-    async def on_rpc_message(self, message, timeout=5.0):
-        # For testing, we just call the regular on_message method and return a simple response
-        dmsg = self.decode_message(message)
-        if self.break_on_message_code == dmsg.get_code():
-            print('here to catch break')
-        if self.explode_on_message_code == dmsg.get_code():
-            result = await super().on_rpc_message(b'{"code":"foo"}', timeout)
-        result = await super().on_rpc_message(message, timeout)
         return result
 
     async def role_run_after(self, delay, target):

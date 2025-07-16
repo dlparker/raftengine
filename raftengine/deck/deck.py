@@ -49,6 +49,7 @@ class Deck:
         self.exit_result = None
         self.exit_waiter_handle = None
         self.stopped = False
+        self.await_message = False
         
     # Part of DeckAPI
     async def start(self):
@@ -130,7 +131,18 @@ class Deck:
     async def on_message(self, in_message):
         try:
             message = self.decode_message(in_message)
-            res = await self.inner_on_message(message)
+            if self.await_message:
+                # This branch is preserved only because there are so
+                # many integration tests that depend on knowing that
+                # the incomming message has been handled when this
+                # method returns. Never used in production unless
+                # somebody sets the await_message flag directly. There
+                # is no harm in it except performance. It means that
+                # the caller experiences the full time it takes to
+                # handle the message.
+                res = await self.inner_on_message(message)
+            else:
+                asyncio.create_task(self.inner_on_message(message))
         except:
             error = traceback.format_exc()
             self.logger.error(error)
