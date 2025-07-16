@@ -1,0 +1,1 @@
+Candidate Resigns Election When Encountering Higher Terms

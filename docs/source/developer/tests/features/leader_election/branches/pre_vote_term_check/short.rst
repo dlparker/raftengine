@@ -1,0 +1,1 @@
+Pre-Vote Phase Includes Term Currency Validation

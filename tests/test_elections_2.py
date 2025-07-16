@@ -493,14 +493,29 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
 
+    # Feature definitions - term conflict resolution and candidate resignation
+    f_term_manipulation = registry.get_raft_feature("leader_election", "term_manipulation")
+    f_higher_term_discovery = registry.get_raft_feature("leader_election", "higher_term_discovery")
+    f_candidate_resignation = registry.get_raft_feature("leader_election", "candidate_resignation")
+    f_stale_vote_handling = registry.get_raft_feature("leader_election", "stale_vote_handling")
+    f_message_interception = registry.get_raft_feature("test_infrastructure", "message_interception")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    f_competing_candidates = registry.get_raft_feature("leader_election", "competing_candidates")
+    f_vote_acceptance = registry.get_raft_feature("leader_election", "vote_acceptance")
+
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    
     await cluster.test_trace.define_test("Testing election with candidate term conflict", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -512,7 +527,9 @@ async def test_election_candidate_too_slow_1(cluster_maker):
 
     logger.info("-------- Initial election completion, starting messed up re-election")
 
-    await cluster.test_trace.start_subtest("Node 3 is leader, pushing it and node 2 to start elections, but holding messages")
+    # Section 2: Setting up competing candidates with term manipulation
+    spec = dict(used=[f_leader_demotion, f_term_manipulation], tested=[f_competing_candidates])
+    await cluster.test_trace.start_subtest("Node 3 is leader, pushing it and node 2 to start elections, but holding messages", features=spec)
     # now have leader resign, by telling it to become follower
     await ts_3.do_demote_and_handle(None)
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -524,7 +541,9 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     await ts_3.log.set_term(term + 1)
     await ts_3.do_leader_lost()
 
-    await cluster.test_trace.start_subtest("Delivering request votes from node 2 and allowing node 1 to send yes, but holding it in node 2's queue")
+    # Section 3: Lower term candidate election attempt with message holding
+    spec = dict(used=[f_competing_candidates, f_message_interception], tested=[f_vote_acceptance])
+    await cluster.test_trace.start_subtest("Delivering request votes from node 2 and allowing node 1 to send yes, but holding it in node 2's queue", features=spec)
     # Let the low term one send vote request first,
     # then before it receives any replies let the second
     # one send requests.
@@ -541,7 +560,9 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     logger.debug("-------- First candidate is now has yes vote pending ---")
     # save the pending yes vote and let the other candidate's votes in
     # instead
-    await cluster.test_trace.start_subtest("Removing node 1's yes vote from queue and allowing node 3 (term 2) to sent request vote messages")
+    # Section 4: Higher term discovery and candidate resignation
+    spec = dict(used=[f_message_interception], tested=[f_higher_term_discovery, f_candidate_resignation])
+    await cluster.test_trace.start_subtest("Removing node 1's yes vote from queue and allowing node 3 (term 2) to sent request vote messages", features=spec)
     saved_vote = ts_2.in_messages.pop(0)
     # now let the second candidate requests in to the first one.
     # which should accept the new candidate because of the higher
@@ -555,7 +576,9 @@ async def test_election_candidate_too_slow_1(cluster_maker):
     assert ts_2.get_role_name() == "FOLLOWER"
     logger.debug("-------- First candidate has accepted second candidate and resigned ")
 
-    await cluster.test_trace.start_subtest("Node 2 has resigned, replacing node 1's yes vote in queue and allowing election to proceed to completion")
+    # Section 5: Stale vote handling and election completion
+    spec = dict(used=[f_candidate_resignation], tested=[f_stale_vote_handling, f_automated_election])
+    await cluster.test_trace.start_subtest("Node 2 has resigned, replacing node 1's yes vote in queue and allowing election to proceed to completion", features=spec)
     
     # Push the out of date vote back on to what used
     # to be the old candidate, just for completeness.
@@ -585,11 +608,18 @@ async def test_election_candidate_log_too_old_1(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - outdated log detection without pre-vote
+    f_outdated_log_detection = registry.get_raft_feature("leader_election", "outdated_log_detection")
+    f_log_comparison = registry.get_raft_feature("leader_election", "log_comparison")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing election with outdated candidate log (no pre-vote)", logger=logger)
-    await inner_candidate_log_too_old(cluster, False)
+    await inner_candidate_log_too_old(cluster, False, f_outdated_log_detection, f_log_comparison, f_crash_recovery, f_command_execution)
     
 async def test_election_candidate_log_too_old_2(cluster_maker):
     """
@@ -604,18 +634,29 @@ async def test_election_candidate_log_too_old_2(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - outdated log detection with pre-vote
+    f_outdated_log_detection = registry.get_raft_feature("leader_election", "outdated_log_detection")
+    f_log_comparison = registry.get_raft_feature("leader_election", "log_comparison")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_pre_vote_with_log_check = registry.get_raft_feature("leader_election", "pre_vote_with_log_check")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=True)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing election with outdated candidate log (with pre-vote)", logger=logger)
-    await inner_candidate_log_too_old(cluster, True)
+    await inner_candidate_log_too_old(cluster, True, f_pre_vote_with_log_check, f_log_comparison, f_crash_recovery, f_command_execution)
 
-async def inner_candidate_log_too_old(cluster, use_pre_vote):
+async def inner_candidate_log_too_old(cluster, use_pre_vote, f_main_feature, f_log_comparison, f_crash_recovery, f_command_execution):
     
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-        
-    await cluster.test_trace.start_subtest("Command triggering node one to start election")
+    
+    # Section 1: Initial election setup
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering node one to start election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -626,7 +667,9 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
 
     logger.info("-------- Initial election completion, crashing follower and running command ")
 
-    await cluster.test_trace.start_subtest("Election done, Node 1 is leader, crashing node 3 and then running a command")
+    # Section 2: Node crash and command execution to create log divergence
+    spec = dict(used=[f_crash_recovery, f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Election done, Node 1 is leader, crashing node 3 and then running a command", features=spec)
     await ts_3.simulate_crash()
 
     # now advance the commit index
@@ -636,7 +679,9 @@ async def inner_candidate_log_too_old(cluster, use_pre_vote):
     # once we arrange the election the right way
     logger.info("-------- Command complete,  starting messed up re-election")
     # demote leader to follower
-    await cluster.test_trace.start_subtest("Forcing leader to resign, restarting crashed node and forcing it into election")
+    # Section 3: Outdated candidate election attempt and log comparison
+    spec = dict(used=[f_crash_recovery], tested=[f_main_feature, f_log_comparison])
+    await cluster.test_trace.start_subtest("Forcing leader to resign, restarting crashed node and forcing it into election", features=spec)
     await ts_1.do_demote_and_handle(None)
     # restart the crashed server, which now has out of date log
     await ts_3.recover_from_crash()
@@ -677,6 +722,13 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - outdated term detection with pre-vote
+    f_outdated_term_detection = registry.get_raft_feature("leader_election", "outdated_term_detection")
+    f_pre_vote_term_check = registry.get_raft_feature("leader_election", "pre_vote_term_check")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_authorized_campaign = registry.get_raft_feature("leader_election", "authorized_campaign")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
 
@@ -684,7 +736,10 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing election with outdated candidate term", logger=logger)
-    await cluster.test_trace.start_subtest("Command triggering one three to start election")
+    
+    # Section 1: Initial election setup
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Command triggering one three to start election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -695,7 +750,9 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
 
     logger.info("-------- Initial election completion, crashing follower and running command ")
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election")
+    # Section 2: Leader crash and new election to advance term
+    spec = dict(used=[f_crash_recovery, f_authorized_campaign], tested=[f_automated_election])
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing it, then forcing a new election", features=spec)
     await ts_1.simulate_crash()
 
     await ts_3.start_campaign(authorized=True)
@@ -703,7 +760,9 @@ async def test_election_candidate_term_too_old_1(cluster_maker):
     # demote leader to follower
     assert ts_3.get_role_name() == "LEADER"
     assert ts_2.get_leader_uri() == uri_3
-    await cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term")
+    # Section 3: Outdated term candidate rejection via pre-vote
+    spec = dict(used=[f_crash_recovery, f_authorized_campaign], tested=[f_outdated_term_detection, f_pre_vote_term_check])
+    await cluster.test_trace.start_subtest("Node 3 is now leader, making node 1 start a campain which should fail because it has an old term", features=spec)
     await ts_1.recover_from_crash()
     assert await ts_1.get_term() < await ts_3.get_term()
     await ts_1.start_campaign(authorized=True)
@@ -728,11 +787,18 @@ async def test_failed_first_election_1(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - failed election recovery without pre-vote
+    f_failed_election_recovery = registry.get_raft_feature("leader_election", "failed_election_recovery")
+    f_leader_crash_during_election = registry.get_raft_feature("system_reliability", "leader_crash_during_election")
+    f_term_start_interruption = registry.get_raft_feature("log_replication", "term_start_interruption")
+    f_log_term_conflict_resolution = registry.get_raft_feature("log_replication", "log_term_conflict_resolution")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing election failure due to crashed leader (without pre-vote)", logger=logger)
-    await inner_failed_first_election(cluster, False)
+    await inner_failed_first_election(cluster, False, f_failed_election_recovery, f_leader_crash_during_election, f_term_start_interruption, f_log_term_conflict_resolution)
 
 async def test_failed_first_election_2(cluster_maker):
     """
@@ -751,11 +817,16 @@ async def test_failed_first_election_2(cluster_maker):
     await cluster.test_trace.define_test("Testing election failure due to crashed leader (with pre-vote)", logger=logger)
     await inner_failed_first_election(cluster, True)
     
-async def inner_failed_first_election(cluster, use_pre_vote):
+async def inner_failed_first_election(cluster, use_pre_vote, f_main_feature, f_leader_crash, f_term_start_interruption, f_log_conflict_resolution):
 
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    await cluster.test_trace.start_subtest("Command triggering node three to start election")
+    
+    # Section 1: Manual election control and vote collection
+    f_manual_election = registry.get_raft_feature("leader_election", "manual_stepwise_control")
+    f_vote_acceptance = registry.get_raft_feature("leader_election", "vote_acceptance")
+    spec = dict(used=[f_manual_election], tested=[f_vote_acceptance])
+    await cluster.test_trace.start_subtest("Command triggering node three to start election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
 
@@ -790,7 +861,9 @@ async def inner_failed_first_election(cluster, use_pre_vote):
     logger.debug("Candidate posted vote requests for term %d", await candidate.log.get_term())
     logger.debug("ts_1 term %d", await ts_1.log.get_term())
     logger.debug("ts_2 term %d", await ts_1.log.get_term())
-    await cluster.test_trace.start_subtest("Candidate requested votes")
+    # Section 2: Election success but term start interruption via crash
+    spec = dict(used=[f_vote_acceptance], tested=[f_leader_crash, f_term_start_interruption])
+    await cluster.test_trace.start_subtest("Candidate requested votes", features=spec)
 
     # let just these messages go
     ts_3.set_trigger(WhenAllMessagesForwarded())

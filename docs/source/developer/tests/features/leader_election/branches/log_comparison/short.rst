@@ -1,0 +1,1 @@
+Candidate Performs Log Comparison for Election Eligibility

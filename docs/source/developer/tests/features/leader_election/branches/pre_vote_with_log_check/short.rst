@@ -1,0 +1,1 @@
+Pre-Vote Phase Includes Log Currency Validation

@@ -1,0 +1,1 @@
+Candidate Properly Handles Stale Vote Responses

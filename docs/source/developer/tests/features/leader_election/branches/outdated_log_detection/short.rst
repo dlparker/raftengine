@@ -1,0 +1,1 @@
+Candidate Detects When Its Log Is Outdated During Election
