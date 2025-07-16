@@ -83,7 +83,7 @@ class Deck:
     async def join_waiter(self, timeout, callback=None):
         start_time = time.time()
         while time.time() - start_time < timeout and self.join_result is None and self.joining_cluster:
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.00001)
 
         if not self.joining_cluster:
             self.join_waiter_handle = None
@@ -239,7 +239,7 @@ class Deck:
     async def exit_waiter(self, timeout, callback=None):
         start_time = time.time()
         while time.time() - start_time < timeout and self.exit_result is None and self.exiting_cluster:
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.00001)
         self.logger.debug("%s detected exit result %s", self.get_my_uri(), self.exit_result)
         if not self.exiting_cluster:
             self.exit_waiter_handle = None
@@ -276,7 +276,7 @@ class Deck:
             await self.role.transfer_power(target)
             start_time = time.time()
             while time.time() - start_time < timeout and self.role.role_name == "LEADER":
-                await asyncio.sleep(0.001)
+                await asyncio.sleep(0.00001)
             if self.role.role_name == "LEADER":
                 raise Exception("could not start snapshot, node is leader and transfer power failed")
         await self.role.stop()
@@ -323,14 +323,14 @@ class Deck:
         await self.stop_role()
         if self.join_waiter_handle:
             self.joining_cluster = None
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.00001)
             if self.join_waiter_handle:
                 self.logger.debug("%s canceling join_waiter task", self.get_my_uri())
                 self.join_waiter_handle.cancel()
                 self.join_waiter_handle = None
         if self.exit_waiter_handle:
             self.exiting_cluster = False
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.00001)
             self.exit_waiter_handle = None
         
     async def stop_role(self):

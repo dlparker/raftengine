@@ -80,8 +80,8 @@ class Leader(BaseRole):
                         break
                 if not still_pending:
                     break
-                await asyncio.sleep(0.001)
-            await asyncio.sleep(0.01)
+                await asyncio.sleep(0.0001)
+            await asyncio.sleep(0.0001)
         if tracker.matchIndex < await self.log.get_commit_index():
             # we couldn't bring target up to date, have to give up
             self.logger.error("%s failed readiness check for power transfer to %s timeout", self.my_uri(), target_uri)
@@ -510,7 +510,7 @@ class CommandWaiter:
         async def do_timeout(timeout):
             start_time = time.time()
             while not self.committed and not self.local_error:
-                await asyncio.sleep(0.001)
+                await asyncio.sleep(0.000001)
                 if time.time() - start_time >= timeout:
                     self.time_expired = True
                     self.leader.logger.warning("%s !!!!!!!!!! Timeout on command ", self.leader.my_uri())

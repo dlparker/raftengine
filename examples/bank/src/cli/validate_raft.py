@@ -182,8 +182,8 @@ Available transports:
                         help='Transport mechanism to use')
     parser.add_argument('--base-port', '-b', type=int, default=50050,
                         help='Base port for cluster (default: 50050)')
-    parser.add_argument('--cluster-startup-delay', type=float, default=5.0,
-                        help='Delay in seconds to wait for cluster formation (default: 5.0)')
+    parser.add_argument('--cluster-startup-delay', type=float, default=1.0,
+                        help='Delay in seconds to wait for cluster formation (default: 1.0)')
     
     # Add common validation arguments
     add_common_arguments(parser)
