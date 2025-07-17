@@ -9,6 +9,9 @@ service BankingService {
   
   // Send a raft message and receive response
   rpc RaftMessage(RaftRequest) returns (RaftResponse);
+
+// Send a local command and receive response
+  rpc LocalCommand(LocalRequest) returns (LocalResponse);
 }
 
 // Request message for banking commands
@@ -27,13 +30,13 @@ message RaftResponse {
 }
 
 // Request message for "side" command
-message FreeRequest {
-  string command = 1;  // Free command content
+message LocalRequest {
+  string command = 1;  // Local command content
 }
 
 // Response message for side messages
-message FreeResponse {
-  string result = 1;   // Free response content
+message LocalResponse {
+  string result = 1;   // Local response content
 }
 
 // CommandResult message matching raftengine.api.deck_api.CommandResult

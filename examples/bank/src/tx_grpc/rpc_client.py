@@ -62,7 +62,7 @@ class RPCClient(RPCAPI):
             await self.connect()
         
         request = banking_pb2.LocalRequest(command=command)
-        response = await self.stub.RunCommand(request)
+        response = await self.stub.LocalCommand(request)
         return response.result
     
     async def close(self):

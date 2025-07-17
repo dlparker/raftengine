@@ -40,7 +40,8 @@ from rich.text import Text
 # Add the banking demo directory to the path
 # Import control_server functions
 from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
-from cli.control_raft_server import is_server_running, get_server_status, start_server, stop_server
+from cli.raft_admin import server_admin
+from raft_ops.local_ops import LocalCollector
 
 
 class NodeState(Enum):
@@ -205,7 +206,7 @@ class ClusterManager(App):
             with Container(id="command_container", classes="bordered"):
                 yield Static("Commands", classes="border-title")
                 yield Input(
-                    placeholder="Type commands: start, stop, restart, status, logs, clear, help, exit",
+                    placeholder="Commands: start, stop, restart, status, logs, clear, elect, start_raft, help, exit",
                     id="command_input"
                 )
         
@@ -213,9 +214,9 @@ class ClusterManager(App):
     
     def on_mount(self) -> None:
         """Called when app starts."""
-        # Setup the status table
+        # Setup the status table with enhanced columns
         table = self.query_one("#status_table", DataTable)
-        table.add_columns("Node", "URI", "State", "PID", "Uptime")
+        table.add_columns("Node", "URI", "State", "PID", "Role", "Term", "Leader")
         
         # Add initial rows for all nodes
         for node in self.nodes.values():
@@ -224,7 +225,9 @@ class ClusterManager(App):
                 node.uri,
                 node.state.value,
                 "-",
-                ""
+                "-",
+                "-",
+                "-"
             )
         
         # Start the status update timer
@@ -240,49 +243,76 @@ class ClusterManager(App):
         """Update the status table with current node information"""
         table = self.query_one("#status_table", DataTable)
         
+        # Get RPCHelper for this transport
+        nodes, RPCHelper = nodes_and_helper(self.transport, base_port=50050, node_count=3)
+        
         # Clear and repopulate table
         table.clear()
         for node in self.nodes.values():
-            # Use control_server to get real status
+            # Use LocalCollector to get detailed status
+            pid = "-"
+            role = "-"
+            term = "-"
+            leader = "-"
+            
             try:
-                status = await get_server_status(node.index, list(self.nodes[i].uri for i in range(3)))
+                rpc_client = await RPCHelper().rpc_client_maker(node.uri)
+                server_local_commands = LocalCollector(rpc_client)
+                
+                # Try to get PID first to see if server is reachable
+                pid = await server_local_commands.get_pid()
+                
+                # If we got PID, server is running - get full status
+                status = await server_local_commands.get_status()
                 
                 # Update node state based on actual status
-                if status['running']:
-                    if node.state != NodeState.RUNNING:
-                        node.state = NodeState.RUNNING
-                        node.start_time = datetime.now()  # Approximate start time
-                        # Start log monitoring for nodes that are already running
-                        if not hasattr(node, 'log_task') or node.log_task is None:
-                            node.log_task = asyncio.create_task(self._monitor_node_logs(node))
-                    node.pid = status['pid']
+                if node.state != NodeState.RUNNING:
+                    node.state = NodeState.RUNNING
+                    node.start_time = datetime.now()
+                    # Start log monitoring for nodes that are now running
+                    if not hasattr(node, 'log_task') or node.log_task is None:
+                        node.log_task = asyncio.create_task(self._monitor_node_logs(node))
+                
+                node.pid = pid
+                
+                # Extract Raft status information
+                if status.get('is_leader'):
+                    role = f"[bold green]Leader[/bold green]"
+                elif status.get('timers_running'):
+                    role = f"[yellow]Follower[/yellow]"
                 else:
-                    if node.state == NodeState.RUNNING:
-                        node.state = NodeState.STOPPED
-                        node.start_time = None
-                        # Cancel log monitoring for stopped nodes
-                        if hasattr(node, 'log_task') and node.log_task:
-                            node.log_task.cancel()
-                            node.log_task = None
-                    node.pid = None
-                    
+                    role = f"[dim]Stopped[/dim]"
+                
+                term = str(status.get('term', '-'))
+                leader_uri = status.get('leader_uri', '')
+                if leader_uri:
+                    # Extract just the port number for cleaner display
+                    leader = leader_uri.split(':')[-1] if ':' in leader_uri else leader_uri
+                else:
+                    leader = "-"
+                
+                await rpc_client.close()
+                
             except Exception:
-                # If we can't get status, don't update the state
-                pass
-            
-            # Calculate uptime
-            uptime = ""
-            if node.start_time and node.state == NodeState.RUNNING:
-                delta = datetime.now() - node.start_time
-                uptime = f"{delta.total_seconds():.0f}s"
+                # Server not reachable or error occurred
+                if node.state == NodeState.RUNNING:
+                    node.state = NodeState.STOPPED
+                    node.start_time = None
+                    # Cancel log monitoring for stopped nodes
+                    if hasattr(node, 'log_task') and node.log_task:
+                        node.log_task.cancel()
+                        node.log_task = None
+                node.pid = None
             
             # Add row with current data
             table.add_row(
                 f"Node {node.index}",
                 node.uri,
                 f"[{self._get_state_color(node.state)}]{node.state.value}[/]",
-                str(node.pid) if node.pid else "-",
-                uptime
+                str(pid) if pid != "-" else "-",
+                role,
+                term,
+                leader
             )
     
     def _get_state_color(self, state: NodeState) -> str:
@@ -368,6 +398,12 @@ class ClusterManager(App):
             elif cmd == 'clear':
                 result = await self.cmd_clear(args)
                 self._log_system(result)
+            elif cmd == 'elect':
+                result = await self.cmd_elect(args)
+                self._log_system(result)
+            elif cmd == 'start_raft':
+                result = await self.cmd_start_raft(args)
+                self._log_system(result)
             elif cmd == 'help':
                 result = await self.cmd_help(args)
                 logs_widget = self.query_one("#logs_display", RichLog)
@@ -404,7 +440,10 @@ class ClusterManager(App):
             node.log_lines = node.log_lines[-self.log_buffer_size:]
     
     async def _start_node(self, node_index: int) -> bool:
-        """Start a specific node using control_server"""
+        """Start a specific node using subprocess"""
+        import subprocess
+        import sys
+        
         node = self.nodes[node_index]
         if node.state != NodeState.STOPPED:
             return False
@@ -413,17 +452,31 @@ class ClusterManager(App):
         self._add_log_line(node_index, f"Starting Node {node_index}...")
         
         try:
-            # Use control_server.start_server() instead of subprocess
-            success = await start_server(node_index, pause=False, slow_timeouts=True)
-            if success:
+            # Use subprocess to start the server like cluster_control.py does
+            raft_server_path = Path(Path(__file__).parent, 'raft_server.py')
+            cmd = [sys.executable, str(raft_server_path), '--transport', self.transport,
+                   '--index', str(node_index), '--slow_timeouts']
+            
+            work_dir = Path('/tmp', f"raft_server.{self.transport}.{node_index}")
+            work_dir.mkdir(exist_ok=True)
+            stdout_file = Path(work_dir, 'server.stdout')
+            stderr_file = Path(work_dir, 'server.stderr')
+            
+            self._add_log_line(node_index, f"Command: {' '.join(cmd)}")
+            
+            with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
+                process = subprocess.Popen(cmd, stdout=stdout_f, stderr=stderr_f, start_new_session=True)
+            
+            # Wait a moment to see if process starts successfully
+            await asyncio.sleep(0.5)
+            if process.poll() is None:  # Process is still running
                 node.state = NodeState.RUNNING
                 node.start_time = datetime.now()
+                node.process = process
                 
-                # Get PID from server status
-                status = await get_server_status(node_index)
-                node.pid = status.get('pid')
-                
-                self._add_log_line(node_index, f"Node {node_index} started successfully with PID {node.pid}")
+                self._add_log_line(node_index, f"Node {node_index} started successfully")
+                self._add_log_line(node_index, f"stdout: {stdout_file}")
+                self._add_log_line(node_index, f"stderr: {stderr_file}")
                 
                 # Start log capture task for file-based monitoring
                 node.log_task = asyncio.create_task(self._monitor_node_logs(node))
@@ -431,7 +484,13 @@ class ClusterManager(App):
                 return True
             else:
                 node.state = NodeState.ERROR
-                self._add_log_line(node_index, f"Failed to start Node {node_index}")
+                self._add_log_line(node_index, f"Node {node_index} failed to start")
+                # Read the error logs
+                if stderr_file.exists():
+                    with open(stderr_file, 'r') as f:
+                        stderr_content = f.read()
+                    if stderr_content:
+                        self._add_log_line(node_index, f"stderr: {stderr_content}")
                 return False
                 
         except Exception as e:
@@ -440,7 +499,7 @@ class ClusterManager(App):
             return False
     
     async def _stop_node(self, node_index: int) -> bool:
-        """Stop a specific node using control_server"""
+        """Stop a specific node using LocalCollector"""
         node = self.nodes[node_index]
         if node.state not in [NodeState.RUNNING, NodeState.STARTING]:
             return False
@@ -457,21 +516,40 @@ class ClusterManager(App):
                 except asyncio.CancelledError:
                     pass
             
-            # Use control_server.stop_server() instead of direct process control
-            success = await stop_server(node_index)
-            if success:
+            # Use LocalCollector to send stop command
+            nodes, RPCHelper = nodes_and_helper(self.transport, base_port=50050, node_count=3)
+            try:
+                rpc_client = await RPCHelper().rpc_client_maker(node.uri)
+                server_local_commands = LocalCollector(rpc_client)
+                await server_local_commands.stop_server()
+                await rpc_client.close()
+                
                 node.state = NodeState.STOPPED
                 node.process = None
                 node.pid = None
                 node.start_time = None
                 if hasattr(node, 'log_task'):
                     node.log_task = None
-                self._add_log_line(node_index, f"Node {node_index} stopped")
+                self._add_log_line(node_index, f"Node {node_index} stopped via RPC")
                 return True
-            else:
-                self._add_log_line(node_index, f"Failed to stop Node {node_index}")
-                node.state = NodeState.ERROR
-                return False
+                
+            except Exception as rpc_error:
+                # If RPC fails, try direct process termination
+                self._add_log_line(node_index, f"RPC stop failed, trying process termination: {rpc_error}")
+                if hasattr(node, 'process') and node.process:
+                    node.process.terminate()
+                    await asyncio.sleep(1)
+                    if node.process.poll() is None:
+                        node.process.kill()
+                    
+                node.state = NodeState.STOPPED
+                node.process = None
+                node.pid = None
+                node.start_time = None
+                if hasattr(node, 'log_task'):
+                    node.log_task = None
+                self._add_log_line(node_index, f"Node {node_index} stopped via process termination")
+                return True
                 
         except Exception as e:
             self._add_log_line(node_index, f"Error stopping: {e}")
@@ -665,6 +743,80 @@ class ClusterManager(App):
         
         return "Logs cleared"
     
+    async def cmd_elect(self, args: List[str]) -> str:
+        """Trigger election on a specific node"""
+        if not args:
+            return "Usage: elect <node_index>"
+        
+        try:
+            node_index = int(args[0])
+            if 0 <= node_index <= 2:
+                node = self.nodes[node_index]
+                if node.state != NodeState.RUNNING:
+                    return f"Node {node_index} is not running"
+                
+                # Use LocalCollector to trigger election
+                nodes, RPCHelper = nodes_and_helper(self.transport, base_port=50050, node_count=3)
+                try:
+                    rpc_client = await RPCHelper().rpc_client_maker(node.uri)
+                    server_local_commands = LocalCollector(rpc_client)
+                    await server_local_commands.start_campaign()
+                    await rpc_client.close()
+                    
+                    return f"Election triggered on Node {node_index}"
+                except Exception as e:
+                    return f"Failed to trigger election on Node {node_index}: {e}"
+            else:
+                return f"Invalid node index: {node_index}"
+        except (ValueError, IndexError):
+            return "Usage: elect <node_index>"
+    
+    async def cmd_start_raft(self, args: List[str]) -> str:
+        """Start Raft operations on specific nodes"""
+        if not args:
+            # Start Raft on all running nodes
+            results = []
+            for i in range(3):
+                node = self.nodes[i]
+                if node.state == NodeState.RUNNING:
+                    try:
+                        nodes, RPCHelper = nodes_and_helper(self.transport, base_port=50050, node_count=3)
+                        rpc_client = await RPCHelper().rpc_client_maker(node.uri)
+                        server_local_commands = LocalCollector(rpc_client)
+                        await server_local_commands.start_raft()
+                        await rpc_client.close()
+                        results.append(f"✓ Node {i}")
+                    except Exception as e:
+                        results.append(f"✗ Node {i}: {e}")
+                else:
+                    results.append(f"- Node {i} (not running)")
+            return "Start Raft results: " + ", ".join(results)
+        else:
+            # Start Raft on specific nodes
+            results = []
+            for arg in args:
+                try:
+                    node_index = int(arg)
+                    if 0 <= node_index <= 2:
+                        node = self.nodes[node_index]
+                        if node.state == NodeState.RUNNING:
+                            try:
+                                nodes, RPCHelper = nodes_and_helper(self.transport, base_port=50050, node_count=3)
+                                rpc_client = await RPCHelper().rpc_client_maker(node.uri)
+                                server_local_commands = LocalCollector(rpc_client)
+                                await server_local_commands.start_raft()
+                                await rpc_client.close()
+                                results.append(f"✓ Node {node_index}")
+                            except Exception as e:
+                                results.append(f"✗ Node {node_index}: {e}")
+                        else:
+                            results.append(f"✗ Node {node_index} (not running)")
+                    else:
+                        results.append(f"✗ Invalid node: {arg}")
+                except ValueError:
+                    results.append(f"✗ Invalid node: {arg}")
+            return "Start Raft results: " + ", ".join(results)
+    
     async def cmd_help(self, args: List[str]) -> str:
         """Show help information"""
         help_text = f"""
@@ -674,6 +826,8 @@ Available commands:
   start [node...]     - Start all nodes or specific nodes (0, 1, 2)
   stop [node...]      - Stop all nodes or specific nodes
   restart [node...]   - Restart all nodes or specific nodes
+  start_raft [node...] - Start Raft operations on running nodes
+  elect <node>        - Trigger election on specific node
   status              - Show cluster status summary
   logs [node]         - Show recent logs for all nodes or specific node
   clear               - Clear all log buffers
@@ -690,7 +844,18 @@ Examples:
   start 0 1           - Start nodes 0 and 1
   stop 2              - Stop node 2
   restart             - Restart all nodes
+  start_raft          - Start Raft on all running nodes
+  elect 1             - Make node 1 start an election
   logs 0              - Show recent logs for node 0
+
+Status Table Columns:
+  Node    - Node identifier
+  URI     - Server endpoint
+  State   - Server process state
+  PID     - Process ID
+  Role    - Raft role (Leader/Follower/Stopped)
+  Term    - Current Raft term
+  Leader  - Current leader port
 
 Cluster Configuration:
   Transport: {self.transport}

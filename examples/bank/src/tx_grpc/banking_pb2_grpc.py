@@ -45,6 +45,11 @@ class BankingServiceStub(object):
                 request_serializer=banking__pb2.RaftRequest.SerializeToString,
                 response_deserializer=banking__pb2.RaftResponse.FromString,
                 _registered_method=True)
+        self.LocalCommand = channel.unary_unary(
+                '/banking.BankingService/LocalCommand',
+                request_serializer=banking__pb2.LocalRequest.SerializeToString,
+                response_deserializer=banking__pb2.LocalResponse.FromString,
+                _registered_method=True)
 
 
 class BankingServiceServicer(object):
@@ -65,6 +70,13 @@ class BankingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def LocalCommand(self, request, context):
+        """Send a local command and receive response
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_BankingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -77,6 +89,11 @@ def add_BankingServiceServicer_to_server(servicer, server):
                     servicer.RaftMessage,
                     request_deserializer=banking__pb2.RaftRequest.FromString,
                     response_serializer=banking__pb2.RaftResponse.SerializeToString,
+            ),
+            'LocalCommand': grpc.unary_unary_rpc_method_handler(
+                    servicer.LocalCommand,
+                    request_deserializer=banking__pb2.LocalRequest.FromString,
+                    response_serializer=banking__pb2.LocalResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,6 +151,33 @@ class BankingService(object):
             '/banking.BankingService/RaftMessage',
             banking__pb2.RaftRequest.SerializeToString,
             banking__pb2.RaftResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def LocalCommand(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/banking.BankingService/LocalCommand',
+            banking__pb2.LocalRequest.SerializeToString,
+            banking__pb2.LocalResponse.FromString,
             options,
             channel_credentials,
             insecure,

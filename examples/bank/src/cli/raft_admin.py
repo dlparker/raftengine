@@ -32,7 +32,7 @@ async def server_admin(target_nodes, command, RPCHelper):
                 server_local_commands = LocalCollector(rpc_client)
                 res = await server_local_commands.get_pid()
             except Exception as e:
-                print(f'Server {uri} not reachable, probably not running "{e}"')
+                print(f'Server {uri} not reachable, probably not running "{traceback.format_exc()}"')
                 try:
                     await rpc_client.close()
                 except:
