@@ -2,13 +2,13 @@ import argparse
 import asyncio
 from pathlib  import Path
 from typing import List, Optional, Dict, Callable, Any
+import time
 from datetime import timedelta, date
 from decimal import Decimal
 from functools import wraps
+from raftengine.api.deck_api import CommandResult
 from base.datatypes import Customer, Account, AccountType
 from base.rpc_api import RPCAPI
-from raftengine.api.deck_api import CommandResult
-
 
 class RaftClient(RPCAPI):
     """
@@ -34,9 +34,11 @@ class RaftClient(RPCAPI):
             self.rpc_client = self.rpc_clients[uri]
         return self.rpc_clients[uri]
 
+    # called by Collector
     async def raft_message(self, message:str) -> None:
         return await self.rpc_client.raft_message(message)
         
+    # called by Collector
     async def run_command(self, command:str) -> CommandResult:
         result = await self.rpc_client.run_command(command)
         if result.result:
@@ -56,3 +58,8 @@ class RaftClient(RPCAPI):
             result = await self.rpc_client.run_command(command)
         if result.retry:
             raise Exception('could not process message at server, cluster not available')
+
+    # called by LocalCollector
+    async def local_command(self, command:str) -> str:
+        return await self.rpc_client.local_command(command)
+    

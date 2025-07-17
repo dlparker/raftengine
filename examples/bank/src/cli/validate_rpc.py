@@ -255,11 +255,9 @@ Available transports:
             
             print(f"Successfully completed {args.transport} validation")
         finally:
-            # Properly close client connections
-            if hasattr(rpc_client, 'close'):
-                await rpc_client.close()
-                # Give client time to finish closing
-                await asyncio.sleep(0.2)
+            await rpc_client.close()
+            # Give client time to finish closing
+            await asyncio.sleep(0.2)
         
     except Exception as e:
         print(f"Error during validation: {e}")

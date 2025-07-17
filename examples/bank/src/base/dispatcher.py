@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 from operator import methodcaller
+import traceback
 import jsonpickle
 from base.datatypes import CommandType, Customer, Account, AccountType
 from base.collector import Command 
@@ -18,16 +19,18 @@ class Dispatcher:
             # Deserialize jsonpickle-encoded command
             command = jsonpickle.decode(request)
             if not isinstance(command, Command):
-                logger.error(f"Expected Command, got {type(command)}")
-                raise ValueError(f"Invalid command format: expected Command, got {type(command)}")
+                msg = f"Invalid command format: expected Command, got {type(command)}"
+                logger.error(msg)
+                raise ValueError(msg)
 
             command_name = command.command_name.value  # Extract string value from CommandType
             args = command.args
 
             # Validate method exists
             if not hasattr(self.teller, command_name):
-                logger.error(f"Teller class has no method '{command_name}'")
-                raise AttributeError(f"Teller class has no method '{command_name}'")
+                msg = f"Teller class has no method '{command_name}'"
+                logger.error(msg)
+                raise AttributeError(msg)
 
             # Convert args to dictionary for method call
             if args is None or args == {}:
@@ -43,10 +46,6 @@ class Dispatcher:
 
         except Exception as e:
             # Return error in CommandResult
-            command_result = CommandResult(
-                command=command_name if 'command_name' in locals() else "unknown",
-                error=str(e),
-                timeout_expired=False
-            )
+            command_result = CommandResult(error=traceback.format_exc())
             serialized_result = jsonpickle.encode(command_result)
             return serialized_result

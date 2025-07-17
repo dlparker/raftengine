@@ -30,6 +30,14 @@ class RPCServer:
             asyncio.create_task(self.raft_server.raft_message(data["message"]))
             return {"result": None}
 
+        @self.app.post("/local_command")
+        async def local_command(request: Request):
+            """Handle banking command requests"""
+            data = await request.json()
+            result = await self.raft_server.local_command(data["command"])
+            return json.dumps(result, default=lambda o:o.__dict__)
+        
+
 async def start_server(raft_server, host='localhost', port=8000):
     """Start the FastAPI server"""
     banking_server = RPCServer(raft_server)

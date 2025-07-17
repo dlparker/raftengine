@@ -60,6 +60,22 @@ class RPCClient(RPCAPI):
         asyncio.create_task(responder())
         return
     
+    async def local_command(self, command):
+        """Send a side command to the server"""
+        if self.session is None:
+            await self.connect()
+        
+        url = f"{self.base_url}/local_command"
+        data = {"command": command}
+        
+        async with self.session.post(url, json=data) as response:
+            if response.status == 200:
+                result = await response.json()
+                return result
+            else:
+                error_text = await response.text()
+                raise Exception(f"HTTP {response.status}: {error_text}")
+            
     async def close(self):
         """Close the HTTP session"""
         if self.session is not None:

@@ -16,6 +16,7 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
+from raft_ops.local_ops import LocalCollector 
 # Note: Server control operations work directly with server_main.py 
 # which handles its own src directory configuration
 
@@ -185,6 +186,29 @@ async def start_server(index: int, pause=True, slow_timeouts=False) -> bool:
         return False
 
 async def stop_server(index: int) -> bool:
+    server_spec = server_defs[index]
+    work_dir = server_spec['work_dir']
+    
+    if not is_server_running(index):
+        print(f"Server {index} is not running")
+        return False
+
+    client = await create_client(server_spec['transport'], server_spec['uri'])
+    server_local_commands = LocalCollector(client)
+    pid = await server_local_commands.get_pid()
+    print(f'Got pid {pid} via RPC')
+    await server_local_commands.stop_server()
+    await asyncio.sleep(0.1)
+    print("after stop {server_status}")
+    if is_server_running(index):
+        print(f"Server {index} is RPC stop failed, trying brute force")
+        await stop_server_by_file(index)
+    else:
+        print(f"Server {index} is RPC stop succeeded")
+
+
+    
+async def stop_server_by_file(index: int) -> bool:
     """Stop server using stop file (async version)"""
     server_spec = server_defs[index]
     work_dir = server_spec['work_dir']
@@ -267,6 +291,23 @@ async def tail_server_errors(index: int, lines: int = 10) -> bool:
         print(f"Error tailing server {index} error logs: {e}")
         return False
 
+async def create_client(transport, uri):
+    """Create the appropriate RPC client (reused from validate_rpc.py)"""
+    if transport == 'aiozmq':
+        from tx_aiozmq.rpc_helper import RPCHelper
+        return await RPCHelper().rpc_client_maker(uri)
+    elif transport == 'grpc':
+        from tx_grpc.rpc_helper import RPCHelper
+        return await RPCHelper().rpc_client_maker(uri)
+    elif transport == 'fastapi':
+        from tx_fastapi.rpc_helper import RPCHelper
+        return await RPCHelper().rpc_client_maker(uri)
+    elif transport == 'astream':
+        from tx_astream.rpc_helper import RPCHelper
+        return await RPCHelper().rpc_client_maker(uri)
+    else:
+        raise ValueError(f"Unsupported transport: {transport}")
+
 async def main():
     parser = argparse.ArgumentParser(
         description='Raft Banking Server Control',
@@ -317,10 +358,10 @@ Available transports:
         raise Exception(f"invalid transport {transport}, try {valid_txs}")
     global server_defs
     for index,pnum in enumerate(range(args.base_port + port_up, args.base_port + port_up + 3)):
-        url = f"{args.transport}://127.0.0.1:{pnum}"
-        nodes.append(url)
+        uri = f"{args.transport}://127.0.0.1:{pnum}"
+        nodes.append(uri)
         work_dir = Path('/tmp', f"raft_server.{args.transport}.{index}")
-        server_defs[index] = dict(url=url, transport=args.transport, work_dir=work_dir,
+        server_defs[index] = dict(uri=uri, transport=args.transport, work_dir=work_dir,
                                   base_port=args.base_port + port_up,
                                   args_base_port=args.base_port, port=pnum)
 

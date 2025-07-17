@@ -36,15 +36,22 @@ class RPCClient(RPCAPI):
             self.writer.write(f"{count:20s}".encode())
             self.writer.write(msg)
             await self.writer.drain()
-            len_data = (await self.reader.read(20))
+            try:
+                len_data = (await self.reader.read(20))
+            except ConnectionResetError:
+                self.reader = None
+                self.writer = None
+                self.in_progress = False
+                print(f'Connection reset waiting for response to {message[:300]}')
+                return None
             if not len_data:
                 self.in_progress = False
-                raise Exception('server gone!')
+                raise Exception('Read of reader return None, server gone!')
             msg_len = int(len_data.decode())
             data = await self.reader.read(msg_len)
             if not data:
                 self.in_progress = False
-                raise Exception('server gone!')
+                raise Exception('Read of reader return None, server gone!')
             self.in_progress = False
             return data.decode()
         except:
@@ -66,9 +73,26 @@ class RPCClient(RPCAPI):
         # delivery and return right away. The messages and the code
         # that uses them are designed to work with fully async message passing
         # mechanisms that do not reply to the message like an RPC does.
-        asyncio.create_task(self.send_message(msg))
+        async def message_sender(msg):
+            try:
+                result = await self.send_message(msg)
+                if result is not None and hasattr(result, 'error'):
+                    if result.error:
+                        raise Exception(f"server had error {result.error}")
+            except:
+                traceback.print_exc()
+        asyncio.create_task(message_sender(msg))
         return None
     
+    async def local_command(self, command):
+        """
+        Run command locally on target server, do not raft replicate it.
+        """
+        wrapped = dict(mtype="local_command", message=command)
+        msg = json.dumps(wrapped)
+        result =  await self.send_message(msg)
+        return result
+
     async def close(self):
         """Close the connection"""
         if self.writer:

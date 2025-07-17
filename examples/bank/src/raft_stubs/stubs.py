@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
+from raftengine.api.deck_api import CommandResult
 from base.operations import Teller
 from base.proxy import TellerProxyAPI
 from base.dispatcher import Dispatcher
 from base.rpc_api import RPCAPI
-from raftengine.api.deck_api import CommandResult
+from raft_ops.local_ops import LocalDispatcher
 
 class DeckStub:
 
@@ -27,15 +28,45 @@ class RaftServerStub:
 
     def __init__(self, deck):
         self.deck = deck
+        self.rpc_server_stopper = None
+        self.local_dispatcher = Dispatcher(self)
 
+    # RPC method
     async def run_command(self, command):
         raw_result = await self.deck.run_command(command)
         return raw_result
 
+    # RPC method
     async def raft_message(self, message):
         return await self.deck.on_message(message)
 
+    # RPC method
+    async def local_command(self, command):
+        return await self.local_dispatcher.local_command(command)
 
+    # local method reachable through local_command RPC
+    async def start(self):
+        logger.info("calling deck start")
+        await self.deck.start()
+        self.stopped = False
+    
+    # local method reachable through local_command RPC
+    async def stop(self, stop_rpc_server=True):
+        await self.deck.stop()
+        self.stopped = True
+        if stop_rpc_server and self.rpc_server_stopper:
+            await self.rpc_server_stopper()
+
+    # local method reachable through local_command RPC
+    @staticmethod
+    async def get_pid():
+        return os.getpid()
+
+    # local only method
+    def set_rpc_server_stopper(self, stopper):
+        self.rpc_server_stopper = stopper
+
+        
 class RaftClient(RPCAPI):
     """
     """
@@ -70,7 +101,8 @@ class RaftClient(RPCAPI):
         if result.retry:
             raise Exception('could not process message at server, cluster not available')
         
-        
+    async def local_command(self, command:str) -> str:
+        result = await self.rpc_client.local_command(command)
 
     
 

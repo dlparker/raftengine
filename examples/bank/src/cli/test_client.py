@@ -97,6 +97,10 @@ Available transports:
     except Exception as e:
         print(f"Error during validation: {e}")
         sys.exit(1)
+    finally:
+        await rpc_client.close()
+        await asyncio.sleep(0.2)
+       
     
     print(f"Successfully completed {args.transport} validation")
 

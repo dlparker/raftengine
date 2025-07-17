@@ -33,8 +33,18 @@ class RPCClient(RPCAPI):
         # delivery and return right away. The messages and the code
         # that uses them are designed to work with fully async message passing
         # mechanisms that do not reply to the message like an RPC does.
-        asyncio.create_task(self.client.call.raft_message(message))
+        async def message_sender(msg):
+            try:
+                result = await self.client.call.raft_message(msg)
+            except:
+                traceback.print_exc()
+        asyncio.create_task(message_sender(message))
         return None
+    
+    async def local_command(self, command:str) -> str:
+        if self.client is None:
+            await self.connect()
+        return await self.client.call.local_command(command)
     
     async def close(self):
         """Close the client connection"""

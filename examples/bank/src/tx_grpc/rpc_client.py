@@ -56,6 +56,15 @@ class RPCClient(RPCAPI):
         asyncio.create_task(self.stub.RaftMessage(request))
         return None
     
+    async def local_command(self, command:str) -> CommandResult:
+        """Send a banking command to the server"""
+        if self.stub is None:
+            await self.connect()
+        
+        request = banking_pb2.LocalRequest(command=command)
+        response = await self.stub.RunCommand(request)
+        return response.result
+    
     async def close(self):
         """Close the client connection"""
         if self.channel is not None:

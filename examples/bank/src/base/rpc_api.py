@@ -22,11 +22,8 @@ class RPCAPI(ABC):
         """
         raise NotImplemented
 
-
-class Foo(ABC):
-
     @abstractmethod
-    async def side_command(self, command:str) -> str:
+    async def local_command(self, command:str) -> str:
         """
         Sends a serialized command as to the server where it is handled outside
         the raft command logic. Probably should not do read access to anything that

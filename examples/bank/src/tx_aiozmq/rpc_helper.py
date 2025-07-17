@@ -35,14 +35,14 @@ class RPCHelper(RPCHelperAPI):
                 await asyncio.Event().wait()
             finally:
                 self.zmq_server.close()
-                await zmq_server.wait_closed()
+                await self.zmq_server.wait_closed()
                 self.server_task = None
         self.server_task = asyncio.create_task(serve())
                 
     async def stop_server_task(self):
         if self.zmq_server:
             self.zmq_server.close()
-            await zmq_server.wait_closed()
+            await self.zmq_server.wait_closed()
             
         if self.server_task:
             self.server_task.cancel()

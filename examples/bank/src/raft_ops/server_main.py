@@ -149,6 +149,7 @@ async def server_main(rpc_helper, uri, cluster_config, local_config, start_pause
     db_path = Path(path_root, 'raft_log.db')
     raft_server = RaftServer(cluster_config, local_config, rpc_helper.rpc_client_maker)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
+    raft_server.set_rpc_server_stopper(rpc_helper.stop_server_task)
     
     # Write process ID to server.pid file
     pid_file = Path(local_config.working_dir, 'server.pid')
@@ -163,7 +164,7 @@ async def server_main(rpc_helper, uri, cluster_config, local_config, start_pause
         """Handle detection of server.stop file"""
         # User will fill in the actions they want here
         logger.info(f"Stop file detected: {path} ({event_type})")
-        await raft_server.stop()
+        await raft_server.stop_raft()
         await rpc_helper.stop_server_task()
     
     stop_watcher = FileWatcher(stop_file, stop_detected, autodelete=True)

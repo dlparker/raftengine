@@ -1,7 +1,8 @@
-import logging
+import os
 import time
 import asyncio
 import traceback
+import logging
 from pathlib import Path
 from typing import Dict, Any
 from datetime import timedelta, date
@@ -14,6 +15,8 @@ from base.datatypes import Customer, Account, AccountType, CommandType
 from base.dispatcher import Dispatcher
 from raft_ops.sqlite_log import SqliteLog
 from raft_ops.pilot import Pilot
+from raft_ops.local_ops import LocalDispatcher
+
 
 logger = logging.getLogger("RaftServer")
 
@@ -35,16 +38,10 @@ class RaftServer:
         self.pilot.set_deck(self.deck)
         self.stopped = False
         self.replies = defaultdict(list)
+        self.rpc_server_stopper = None
+        self.local_dispatcher = LocalDispatcher(self)
 
-    async def start(self):
-        logger.info("calling deck start")
-        await self.deck.start()
-        self.stopped = False
-    
-    async def stop(self):
-        await self.deck.stop()
-        self.stopped = True
-        
+    # RPC method
     async def run_command(self, command: str) -> CommandResult:
         reply = None
         try:
@@ -54,6 +51,7 @@ class RaftServer:
             # target server not reachable due to any error is a condition to tolerate
         return reply
 
+    # RPC method
     async def raft_message(self, message: str) -> str:
         reply = None
         try:
@@ -65,4 +63,49 @@ class RaftServer:
             # target server not reachable due to any error is a condition to tolerate
         return reply
         
+    # RPC method executed locally, not via Raft replication
+    async def local_command(self, command: str):
+        return await self.local_dispatcher.local_command(command)
+
+    # local only method
+    async def start(self):
+        logger.info("calling deck start")
+        await self.deck.start()
+        self.stopped = False
+    
+    # local method reachable through local_command RPC
+    async def start_raft(self):
+        return await self.start()
+
+    # local method reachable through local_command RPC
+    async def start_campaign(self):
+        return await self.deck.start_campaign()
+
+    async def stop_raft(self):
+        if self.deck:
+            await self.deck.start()
+            logger.warning("Raft server operations stopped on command")
+        self.stopped = True
+    
+    # local method reachable through local_command RPC
+    async def stop_server(self):
+        async def stopper(delay):
+            try:
+                await asyncio.sleep(delay)
+                await self.stop_raft()
+                await self.rpc_server_stopper()
+                logger.warning("Raft server operations stopped on stop_server local command RPC")
+            except:
+                traceback.print_exc()
+        delay = 0.05
+        asyncio.create_task(stopper(delay))
+        return delay
         
+    # local method reachable through local_command RPC
+    @staticmethod
+    async def get_pid():
+        return os.getpid()
+        
+    # local only method
+    def set_rpc_server_stopper(self, stopper):
+        self.rpc_server_stopper = stopper

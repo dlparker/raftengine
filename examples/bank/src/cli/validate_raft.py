@@ -6,6 +6,7 @@ Manages a 3-node Raft cluster, runs validation tests against the leader (node 0)
 import asyncio
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 this_dir = Path(__file__).resolve().parent
@@ -17,6 +18,7 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
+from raft_ops.local_ops import LocalCollector 
 # Import existing functionality to reuse
 from cli.test_client_common import validate, add_common_arguments
 
@@ -103,7 +105,7 @@ class ClusterManager:
             await self.stop_cluster()
             return False
     
-    async def stop_cluster(self) -> bool:
+    async def file_stop_cluster(self) -> bool:
         """Stop all servers in the cluster"""
         print("Stopping cluster...")
         success_count = 0
@@ -115,6 +117,32 @@ class ClusterManager:
                     success_count += 1
             except Exception as e:
                 print(f"Error stopping server {index}: {e}")
+        
+        print(f"Stopped {success_count}/3 servers")
+        return success_count == 3
+
+    async def stop_cluster(self) -> bool:
+        """Stop all servers in the cluster"""
+        print("Stopping cluster via local_commands ...")
+        success_count = 0
+        
+        for index in range(3):
+            try:
+                node_uri = self.cluster_nodes[index]
+                host, port = node_uri.split('/')[-1].split(':')
+                client = await create_client(self.transport, host, port)
+                server_local_commands = LocalCollector(client)
+                pid = await server_local_commands.get_pid()
+                print(f'Got pid {pid} via RPC')
+                await server_local_commands.stop_server()
+                server_status = await cluster_control.get_server_status(index, self.cluster_nodes)
+                await asyncio.sleep(0.1)
+                print("after stop {server_status}")
+                success = await cluster_control.stop_server(index)
+                if success:
+                    success_count += 1
+            except Exception as e:
+                print(f"Error stopping server {index}: {traceback.format_exc()}")
         
         print(f"Stopped {success_count}/3 servers")
         return success_count == 3
@@ -211,7 +239,6 @@ Available transports:
         
         # Create client connection to leader
         rpc_client = await create_client(args.transport, leader_host, leader_port)
-        
         try:
             # Run validation against the leader
             await validate(rpc_client, 
@@ -224,10 +251,8 @@ Available transports:
             print(f"Successfully completed {args.transport} cluster validation")
             
         finally:
-            # Close client connection
-            if hasattr(rpc_client, 'close'):
-                await rpc_client.close()
-                await asyncio.sleep(0.2)
+            await rpc_client.close()
+            await asyncio.sleep(0.2)
     
     except Exception as e:
         print(f"Error during cluster validation: {e}")

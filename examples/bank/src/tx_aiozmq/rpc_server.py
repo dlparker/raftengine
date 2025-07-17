@@ -16,3 +16,8 @@ class RPCServer(aiozmq.rpc.AttrHandler):
     async def raft_message(self, message):
         # we don't need the reply
         return await self.raft_server.raft_message(message)
+
+    @aiozmq.rpc.method
+    async def local_command(self, command):
+        # we don't need the reply
+        return await self.raft_server.local_command(command)

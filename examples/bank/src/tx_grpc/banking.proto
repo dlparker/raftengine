@@ -25,6 +25,17 @@ message RaftRequest {
 message RaftResponse {
   string result = 1;   // Raft response content
 }
+
+// Request message for "side" command
+message FreeRequest {
+  string command = 1;  // Free command content
+}
+
+// Response message for side messages
+message FreeResponse {
+  string result = 1;   // Free response content
+}
+
 // CommandResult message matching raftengine.api.deck_api.CommandResult
 message CommandResult {
   string command = 1;        // sent command	

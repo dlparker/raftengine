@@ -31,6 +31,11 @@ class ClientFollower:
         result = json.dumps(raw_result, default=lambda o:o.__dict__)
         return result
 
+    async def local_command(self, command):
+        raw_result = await self.raft_server.local_command(command)
+        result = json.dumps(raw_result, default=lambda o:o.__dict__)
+        return result
+
     async def do_raft(self, message):
         # we don't wait for the response, gets tricky with overlapping
         # calls
@@ -51,11 +56,18 @@ class ClientFollower:
                         break
                     # Process the line
                     request = json.loads(data.decode())
-                    if request['mtype'] == "command":
-                        result = await self.do_command(request['message'])
-                    else:
-                        result = await self.do_raft(request['message'])
-                    response = result.encode()
+                    try:
+                        if request['mtype'] == "command":
+                            result = await self.do_command(request['message'])
+                        elif request['mtype'] == "local_command":
+                            result = await self.local_command(request['message'])
+                        else:
+                            result = await self.do_raft(request['message'])
+                        response = result.encode()
+                    except:
+                        res = dict(result=None, error=traceback.format_exc())
+                        result = json.dumps(res)
+                        response = res.encode()
                     count = str(len(response))
                     self.writer.write(f"{count:20s}".encode())
                     self.writer.write(response)
@@ -71,5 +83,8 @@ class ClientFollower:
             # Always close the writer
             if not self.writer.is_closing():
                 self.writer.close()
-                await self.writer.wait_closed()
+                try:
+                    await self.writer.wait_closed()
+                except asyncio.CancelledError:
+                    pass
 
