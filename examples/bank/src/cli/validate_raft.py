@@ -19,11 +19,10 @@ else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
 from raft_ops.local_ops import LocalCollector 
+from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
+from cli.raft_admin import server_admin
 # Import existing functionality to reuse
 from cli.test_client_common import validate, add_common_arguments
-
-# Import cluster management functions
-import cli.control_raft_server as cluster_control
 
 class ClusterManager:
     """Manages a 3-node Raft cluster lifecycle"""
@@ -32,69 +31,28 @@ class ClusterManager:
         self.transport = transport
         self.base_port = base_port
         self.slow_timeouts = slow_timeouts
-        self.cluster_nodes = []
         
-        # Calculate transport offset and initialize cluster configuration
-        transport_offsets = {
-            'astream': 0,
-            'aiozmq': 100,
-            'fastapi': 200,
-            'grpc': 300
-        }
-        
-        if transport not in transport_offsets:
-            raise ValueError(f"Unsupported transport: {transport}")
-            
-        port_offset = transport_offsets[transport]
-        
-        # Initialize server definitions exactly like control_raft_server.py
-        cluster_control.server_defs = {}
-        for index in range(3):  # 3-node cluster
-            port = base_port + port_offset + index  # Sequential ports
-            url = f"{transport}://127.0.0.1:{port}"
-            work_dir = Path('/tmp', f"raft_server.{transport}.{index}")
-            
-            cluster_control.server_defs[index] = {
-                'url': url,
-                'transport': transport,
-                'work_dir': work_dir,
-                'base_port': base_port + port_offset,
-                'args_base_port': base_port,
-                'port': port
-            }
-            self.cluster_nodes.append(url)
+        # Get cluster nodes and RPC helper using the new method
+        self.cluster_nodes, self.RPCHelper = nodes_and_helper(transport, base_port=base_port, node_count=3)
     
     async def start_cluster(self) -> bool:
-        """Start all 3 servers in the cluster"""
+        """Start all 3 servers in the cluster using subprocess"""
+        import subprocess
+        import sys
+        
         print(f"Starting {self.transport} cluster on base port {self.base_port}")
         print(f"Cluster nodes: {self.cluster_nodes}")
         
         success_count = 0
         
-        # Start servers 1 and 2 first (as per control_raft_server.py logic)
-        for index in [1, 2]:
+        # Start all servers using subprocess
+        for index in range(3):
             print(f"Starting server {index}...")
-            success = await cluster_control.start_server(
-                index, 
-                pause=False,  # Don't use pause - let them start immediately
-                slow_timeouts=self.slow_timeouts
-            )
+            success = await self._start_server(index)
             if success:
                 success_count += 1
             else:
                 print(f"Failed to start server {index}")
-        
-        # Start server 0 last (it will become the leader)
-        print("Starting server 0 (leader)...")
-        success = await cluster_control.start_server(
-            0, 
-            pause=False,  # Don't use pause 
-            slow_timeouts=self.slow_timeouts
-        )
-        if success:
-            success_count += 1
-        else:
-            print("Failed to start server 0")
         
         if success_count == 3:
             print("All servers started successfully")
@@ -105,91 +63,113 @@ class ClusterManager:
             await self.stop_cluster()
             return False
     
-    async def file_stop_cluster(self) -> bool:
-        """Stop all servers in the cluster"""
-        print("Stopping cluster...")
-        success_count = 0
+    async def _start_server(self, index: int) -> bool:
+        """Start a specific server using subprocess"""
+        import subprocess
+        import sys
         
-        for index in range(3):
-            try:
-                success = await cluster_control.stop_server(index)
-                if success:
-                    success_count += 1
-            except Exception as e:
-                print(f"Error stopping server {index}: {e}")
-        
-        print(f"Stopped {success_count}/3 servers")
-        return success_count == 3
-
+        try:
+            # Use subprocess to start the server like cluster_control.py does
+            raft_server_path = Path(Path(__file__).parent, 'raft_server.py')
+            cmd = [sys.executable, str(raft_server_path), '--transport', self.transport,
+                   '--index', str(index)]
+            if self.slow_timeouts:
+                cmd.append('--slow_timeouts')
+            
+            work_dir = Path('/tmp', f"raft_server.{self.transport}.{index}")
+            work_dir.mkdir(exist_ok=True)
+            stdout_file = Path(work_dir, 'server.stdout')
+            stderr_file = Path(work_dir, 'server.stderr')
+            
+            print(f"Command: {' '.join(cmd)}")
+            
+            with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
+                process = subprocess.Popen(cmd, stdout=stdout_f, stderr=stderr_f, start_new_session=True)
+            
+            # Wait a moment to see if process starts successfully
+            await asyncio.sleep(0.5)
+            if process.poll() is None:  # Process is still running
+                print(f"Server {index} started successfully")
+                print(f"  stdout: {stdout_file}")
+                print(f"  stderr: {stderr_file}")
+                return True
+            else:
+                print(f"Server {index} failed to start")
+                # Read the error logs
+                if stderr_file.exists():
+                    with open(stderr_file, 'r') as f:
+                        stderr_content = f.read()
+                    if stderr_content:
+                        print(f"stderr: {stderr_content}")
+                return False
+                
+        except Exception as e:
+            print(f"Error starting server {index}: {e}")
+            return False
+    
     async def stop_cluster(self) -> bool:
-        """Stop all servers in the cluster"""
-        print("Stopping cluster via local_commands ...")
+        """Stop all servers in the cluster using LocalCollector"""
+        print("Stopping cluster via local_commands...")
         success_count = 0
         
         for index in range(3):
             try:
                 node_uri = self.cluster_nodes[index]
-                host, port = node_uri.split('/')[-1].split(':')
-                client = await create_client(self.transport, host, port)
-                server_local_commands = LocalCollector(client)
-                pid = await server_local_commands.get_pid()
-                print(f'Got pid {pid} via RPC')
-                await server_local_commands.stop_server()
-                server_status = await cluster_control.get_server_status(index, self.cluster_nodes)
-                await asyncio.sleep(0.1)
-                print("after stop {server_status}")
-                success = await cluster_control.stop_server(index)
-                if success:
+                print(f"Stopping server {index} at {node_uri}")
+                
+                # Try to connect and send stop command via RPC
+                try:
+                    rpc_client = await self.RPCHelper().rpc_client_maker(node_uri)
+                    server_local_commands = LocalCollector(rpc_client)
+                    
+                    # Get PID first to confirm server is reachable
+                    pid = await server_local_commands.get_pid()
+                    print(f'Server {index} has PID {pid}')
+                    
+                    # Send stop command
+                    await server_local_commands.stop_server()
+                    await rpc_client.close()
+                    
+                    print(f"Sent stop command to server {index}")
                     success_count += 1
+                    
+                except Exception as rpc_error:
+                    print(f"RPC stop failed for server {index}: {rpc_error}")
+                    # Server might already be stopped or unreachable
+                    success_count += 1
+                    
             except Exception as e:
-                print(f"Error stopping server {index}: {traceback.format_exc()}")
+                print(f"Error stopping server {index}: {e}")
         
-        print(f"Stopped {success_count}/3 servers")
+        print(f"Sent stop commands to {success_count}/3 servers")
+        
+        # Wait a moment for servers to shut down
+        await asyncio.sleep(1.0)
+        
         return success_count == 3
     
     async def get_cluster_status(self) -> dict:
-        """Get status of all cluster nodes"""
+        """Get status of all cluster nodes using LocalCollector"""
         status = {}
         for index in range(3):
             try:
-                server_status = await cluster_control.get_server_status(index, self.cluster_nodes)
+                node_uri = self.cluster_nodes[index]
+                rpc_client = await self.RPCHelper().rpc_client_maker(node_uri)
+                server_local_commands = LocalCollector(rpc_client)
+                
+                # Get detailed status from the server
+                server_status = await server_local_commands.get_status()
+                server_status['running'] = True
+                await rpc_client.close()
+                
                 status[index] = server_status
             except Exception as e:
                 status[index] = {'error': str(e), 'running': False}
         return status
     
-    def get_leader_connection_info(self):
-        """Get connection info for the leader (node 0)"""
-        # Calculate the exact port for node 0
-        transport_offsets = {
-            'astream': 0,
-            'aiozmq': 100,
-            'fastapi': 200,
-            'grpc': 300
-        }
-        leader_port = self.base_port + transport_offsets[self.transport]
-        return 'localhost', leader_port
-
-async def create_client(transport, host, port):
-    """Create the appropriate RPC client (reused from validate_rpc.py)"""
-    if transport == 'aiozmq':
-        from tx_aiozmq.rpc_helper import RPCHelper
-        uri = f"grpc://{host}:{port}"
-        return await RPCHelper().rpc_client_maker(uri)
-    elif transport == 'grpc':
-        from tx_grpc.rpc_helper import RPCHelper
-        uri = f"grpc://{host}:{port}"
-        return await RPCHelper().rpc_client_maker(uri)
-    elif transport == 'fastapi':
-        from tx_fastapi.rpc_helper import RPCHelper
-        uri = f"fastapi://{host}:{port}"
-        return await RPCHelper().rpc_client_maker(uri)
-    elif transport == 'astream':
-        from tx_astream.rpc_helper import RPCHelper
-        uri = f"astream://{host}:{port}"
-        return await RPCHelper().rpc_client_maker(uri)
-    else:
-        raise ValueError(f"Unsupported transport: {transport}")
+    def get_leader_uri(self):
+        """Get URI for the leader (node 0)"""
+        return self.cluster_nodes[0]
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -229,16 +209,58 @@ Available transports:
             print("Failed to start cluster")
             sys.exit(1)
         
-        # Wait for cluster formation and leader election
+        # Wait for cluster formation
         print(f"Waiting {args.cluster_startup_delay}s for cluster formation...")
         await asyncio.sleep(args.cluster_startup_delay)
         
-        # Get leader connection info (node 0)
-        leader_host, leader_port = cluster.get_leader_connection_info()
-        print(f"Connecting to leader at {leader_host}:{leader_port}")
+        # Start Raft operations on all servers
+        print("Starting Raft operations on all servers...")
+        for index in range(3):
+            try:
+                node_uri = cluster.cluster_nodes[index]
+                rpc_client = await cluster.RPCHelper().rpc_client_maker(node_uri)
+                server_local_commands = LocalCollector(rpc_client)
+                await server_local_commands.start_raft()
+                await rpc_client.close()
+                print(f"  Started Raft on node {index}")
+            except Exception as e:
+                print(f"  Warning: Failed to start Raft on node {index}: {e}")
+        
+        # Wait a moment for Raft to initialize
+        await asyncio.sleep(0.5)
+        
+        # Trigger leader election since we're using slow timeouts
+        print("Triggering leader election on node 0...")
+        try:
+            leader_uri = cluster.cluster_nodes[0]
+            rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
+            server_local_commands = LocalCollector(rpc_client)
+            await server_local_commands.start_campaign()
+            await rpc_client.close()
+            print("Election triggered successfully")
+            
+            # Wait a moment for election to complete
+            await asyncio.sleep(1.0)
+        except Exception as e:
+            print(f"Warning: Failed to trigger election: {e}")
+        
+        # Check cluster status
+        print("Checking cluster status...")
+        cluster_status = await cluster.get_cluster_status()
+        for index, status in cluster_status.items():
+            if status.get('running'):
+                role = "Leader" if status.get('is_leader') else "Follower"
+                term = status.get('term', 'unknown')
+                print(f"  Node {index}: {role} (term {term})")
+            else:
+                print(f"  Node {index}: Not running - {status.get('error', 'unknown error')}")
+        
+        # Get leader URI (node 0)
+        leader_uri = cluster.get_leader_uri()
+        print(f"Connecting to leader at {leader_uri}")
         
         # Create client connection to leader
-        rpc_client = await create_client(args.transport, leader_host, leader_port)
+        rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
         try:
             # Run validation against the leader
             await validate(rpc_client, 
