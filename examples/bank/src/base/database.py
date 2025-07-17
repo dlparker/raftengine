@@ -229,25 +229,10 @@ class BankDatabase:
     
     def get_all_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
         """
-        Retrieve accounts with pagination. If offset is -1, then it will work
-        like file system seek, starting at the end and seeking back up to limit
-        records. This makes it easy to get the last 10 or 20 (or x) records.
+        Retrieve accounts with pagination. 
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        if offset == -1:
-            cursor.execute("""
-                SELECT count(*) FROM accounts
-            """)
-            count = cursor.fetchone()[0]
-            if count == 0:
-                cursor.close()
-                return []
-            if count < limit:
-                offset = 0
-            else:
-                offset = count - limit
-            
         
         cursor.execute("""
             SELECT account_id, account_type, customer_id, balance, create_time, update_time
@@ -272,24 +257,7 @@ class BankDatabase:
         return accounts
     
     def get_all_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
-        """Retrieve customers with pagination. If offset is -1, then it will work
-        like file system seek, starting at the end and seeking back up to limit
-        records. This makes it easy to get the last 10 or 20 (or x) records.
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        if offset == -1:
-            cursor.execute("""
-                    SELECT count(*) FROM customers
-            """)
-            count = cursor.fetchone()[0]
-            if count == 0:
-                cursor.close()
-                return []
-            if count < limit:
-                offset = 0
-            else:
-                offset = count - limit
+        """Retrieve customers with pagination. """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         

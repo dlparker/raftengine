@@ -27,6 +27,8 @@ class CommandType(StrEnum):
     GET_ACCOUNTS = auto()
     LIST_STATEMENTS = auto()
     ADVANCE_TIME = auto()
+    GET_CUSTOMER_COUNT = auto()
+    GET_ACCOUNT_COUNT = auto()
 
 @dataclass
 class Customer:

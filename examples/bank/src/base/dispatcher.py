@@ -45,7 +45,6 @@ class Dispatcher:
             return serialized_result
 
         except Exception as e:
-            # Return error in CommandResult
-            command_result = CommandResult(error=traceback.format_exc())
+            command_result = traceback.format_exc()
             serialized_result = jsonpickle.encode(command_result)
             return serialized_result

@@ -71,6 +71,16 @@ class Collector(TellerProxyAPI):
                           args=AdvanceTimeArgs(delta_time=delta_time))
         await self.build_command(command, None)
 
+    async def get_customer_count(self) -> int:
+        command = Command(command_name=CommandType.GET_CUSTOMER_COUNT,
+                          args=None)
+        return await self.build_command(command, int)
+
+    async def get_account_count(self) -> int:
+        command = Command(command_name=CommandType.GET_ACCOUNT_COUNT,
+                          args=None)
+        return await self.build_command(command, int)
+
     async def build_command(self, command: 'Command', return_type: Any) -> Any:
         # Serialize command object to JSON
         request = jsonpickle.encode(command)

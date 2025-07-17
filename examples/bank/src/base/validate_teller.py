@@ -136,26 +136,12 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     fake = Faker()
     timing_data = TimingData()
 
-    last_customers = await teller.list_customers(-1,1)
-    # the database works and the tests too
-    if len(last_customers) == 0:
-        starting_customer_id = 0
-    else:
-        # we can get the number of customers from the id value, with the way
-        starting_customer_id = last_customers[0].cust_id
-
-    last_accounts = await teller.list_accounts(-1,1)
-    # the database works and the tests too
-    if len(last_accounts) == 0:
-        starting_account_id = 0
-    else:
-        # we can get the number of accounts from the id value, with the way
-        starting_account_id = last_accounts[0].account_id 
-    
+    starting_customer_count = teller.get_customer_count()
+    starting_account_count = teller.get_account_count()
     
     for loop_num in range(loops):
         loop_start = time.time()
-        await run_single_test(teller, fake, loop_num, timing_data, starting_account_id, starting_customer_id)
+        await run_single_test(teller, fake, loop_num, timing_data, starting_account_count, starting_customer_count)
         loop_end = time.time()
         timing_data.add_loop_timing(loop_end - loop_start)
         
@@ -169,7 +155,7 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     return timing_data
 
 
-async def run_single_test(teller, fake, loop_num, timing_data, starting_account_id, starting_customer_id):
+async def run_single_test(teller, fake, loop_num, timing_data, starting_account_count, starting_customer_count):
     """Run a single test iteration with randomized data"""
     
     async def timed_operation(operation_name: str, coro):
@@ -195,7 +181,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert customer.address == cust.address
         assert customer.cust_id is not None
 
-        offset = customer.cust_id - 1
+        offset = starting_customer_count
         customers = await timed_operation('list_customers', teller.list_customers(offset, 10))
         assert len(customers) == 1
 
@@ -213,7 +199,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         assert savings.customer_id == sav.customer_id
         assert savings.balance == sav.balance
 
-        offset = checking.account_id - 1
+        offset = starting_account_count
         accounts = await timed_operation('list_accounts', teller.list_accounts(offset, 10))
         assert len(accounts) == 2
 
