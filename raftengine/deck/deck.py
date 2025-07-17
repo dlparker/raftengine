@@ -170,10 +170,10 @@ class Deck:
     async def run_command(self, command, timeout=1):
         if self.role.role_name == RoleName.leader:
             result = await self.role.run_command(command, timeout=timeout)
-        elif self.role.role_name == RoleName.follower:
+        elif self.role.role_name == RoleName.follower and self.leader_uri is not None:
             result = CommandResult(command, redirect=self.leader_uri)
-        elif self.role.role_name == RoleName.candidate:
-            result = CommandResult(command, retry=1)
+        else:
+            result = CommandResult(command, retry=True)
         return result
 
     # Part of DeckAPI
