@@ -8,6 +8,7 @@ import argparse
 import traceback
 from pathlib import Path
 import sys
+from pprint import pprint
 
 this_dir = Path(__file__).resolve().parent
 for parent in this_dir.parents:
@@ -22,6 +23,50 @@ from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
 from raft_ops.local_ops import LocalCollector 
 from cli.test_client_common import validate, add_common_arguments
 
+async def server_admin(target_nodes, command, RPCHelper):
+    
+    for uri in target_nodes:
+        try:
+            try:
+                rpc_client = await RPCHelper().rpc_client_maker(uri)
+                server_local_commands = LocalCollector(rpc_client)
+                res = await server_local_commands.get_pid()
+            except Exception as e:
+                print(f'Server {uri} not reachable, probably not running "{e}"')
+                try:
+                    await rpc_client.close()
+                except:
+                    pass
+                continue
+            if command == 'getpid':
+                pid = await server_local_commands.get_pid()
+                print(f'Server {uri} pid = {pid}')
+            elif command == 'start_raft':
+                res = await server_local_commands.start_raft()
+                print(f'Sent start_raft to server {uri} ')
+            elif command == 'stop':
+                try:
+                    res = await server_local_commands.get_pid()
+                except:
+                    print(f'Server {uri} not reachable, probably not running')
+                res = await server_local_commands.stop_server()
+                print(f'Sent stop command to server {uri} {res}')
+            elif command == 'status':
+                try:
+                    status = await server_local_commands.get_status()
+                    print(f'Server {uri}')
+                    pprint(status)
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
+            elif command == 'take_power':
+                res = await server_local_commands.start_campaign()
+                print(f'Server {uri} should now start a campaign')
+            await rpc_client.close()
+        except:
+            traceback.print_exc()
+            print(f'could not complete command for {uri}')
 async def main():
     parser = argparse.ArgumentParser(description="Raft Server admin client")
     
@@ -47,23 +92,7 @@ async def main():
     else:
         target_nodes = [nodes[args.index],]
 
-    for uri in target_nodes:
-        rpc_client = await RPCHelper().rpc_client_maker(uri)
-        #print(f"Connecting to {args.transport} server at {uri}")
-        server_local_commands = LocalCollector(rpc_client)
-        if args.command == 'getpid':
-            pid = await server_local_commands.get_pid()
-            print(f'Server {uri} pid = {pid}')
-        elif args.command == 'start_raft':
-            res = await server_local_commands.start_raft()
-            print(f'Sent start_raft to server {uri} ')
-        elif args.command == 'stop':
-            res = await server_local_commands.stop_server()
-            print(f'Sent stop command to server {uri} {res}')
-        elif args.command == 'take_power':
-            res = await server_local_commands.start_campaign()
-            print(f'Server {uri} should now start a campaign')
-        await rpc_client.close()
+    await server_admin(target_nodes, args.command, RPCHelper)
 
 if __name__ == "__main__":
     asyncio.run(main())

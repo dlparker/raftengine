@@ -39,6 +39,7 @@ from rich.text import Text
 
 # Add the banking demo directory to the path
 # Import control_server functions
+from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
 from cli.control_raft_server import is_server_running, get_server_status, start_server, stop_server
 
 

@@ -32,6 +32,9 @@ class LocalCommandType(StrEnum):
     # Will stop Raft ops then whole server process
     STOP_SERVER = auto()
 
+    # Will return some status about the server
+    GET_STATUS = auto()
+
     # Will cause target server to try to take power.
     # Bad idea in production, useful in testing, running
     # demos, etc.
@@ -58,6 +61,10 @@ class LocalCollector:
 
     async def get_pid(self) -> int:
         command = LocalCommand(command_name=LocalCommandType.GET_PID, args=None)
+        return await self.build_command(command)
+
+    async def get_status(self) -> int:
+        command = LocalCommand(command_name=LocalCommandType.GET_STATUS, args=None)
         return await self.build_command(command)
 
     async def start_raft(self) -> int:

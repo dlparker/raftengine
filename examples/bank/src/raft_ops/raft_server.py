@@ -27,17 +27,17 @@ class RaftServer:
         self.local_config = local_config
         self.working_dir = Path(local_config.working_dir)
         self.client_maker = client_maker
-        app_db_file = Path(self.working_dir, "bank.db")
-        self.teller = Teller(app_db_file)
-        raft_log_file = Path(self.working_dir, "raftlog.db")
-        self.log = SqliteLog(raft_log_file)
+        self.app_db_file = Path(self.working_dir, "bank.db")
+        self.teller = Teller(self.app_db_file)
+        self.raft_log_file = Path(self.working_dir, "raftlog.db")
+        self.log = SqliteLog(self.raft_log_file)
         self.log.start()
         self.dispatcher = Dispatcher(self.teller)
         self.pilot = Pilot(self.log, self.client_maker, self.dispatcher)
         self.deck = Deck(self.initial_config, self.local_config, self.pilot)
         self.pilot.set_deck(self.deck)
+        self.timers_running = False
         self.stopped = False
-        self.replies = defaultdict(list)
         self.rpc_server_stopper = None
         self.local_dispatcher = LocalDispatcher(self)
 
@@ -69,9 +69,12 @@ class RaftServer:
 
     # local only method
     async def start(self):
-        logger.info("calling deck start")
-        await self.deck.start()
-        self.stopped = False
+        if not self.timers_running:
+            logger.info("calling deck start")
+            await self.deck.start()
+            self.stopped = False
+            self.timers_running = True
+            
     
     # local method reachable through local_command RPC
     async def start_raft(self):
@@ -86,6 +89,7 @@ class RaftServer:
             await self.deck.start()
             logger.warning("Raft server operations stopped on command")
         self.stopped = True
+        self.timers_running = True
     
     # local method reachable through local_command RPC
     async def stop_server(self):
@@ -106,6 +110,22 @@ class RaftServer:
     async def get_pid():
         return os.getpid()
         
+    # local method reachable through local_command RPC
+    async def get_status(self):
+        res = dict(pid=os.getpid(),
+                   working_dir=str(self.working_dir),
+                   raft_log_file=str(self.raft_log_file),
+                   teller_file=str(self.app_db_file),
+                   timers_running=self.timers_running,
+                   leader_uri=await self.deck.get_leader_uri(),
+                   uri=self.deck.get_my_uri(),
+                   is_leader=self.deck.is_leader(),
+                   last_log_index=await self.deck.log.get_last_index(),
+                   last_log_term=await self.deck.log.get_last_term(),
+                   term=await self.deck.log.get_term(),
+                   customer_count=await self.teller.get_customer_count(),
+                   account_count=await self.teller.get_account_count())
+        return res
     # local only method
     def set_rpc_server_stopper(self, stopper):
         self.rpc_server_stopper = stopper

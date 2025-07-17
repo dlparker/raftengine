@@ -135,6 +135,12 @@ class Teller:
     
     async def list_customers(self, offset: int = 0, limit: int = 100) -> List[Customer]:
         return self.db.get_all_customers(offset, limit)
+
+    async def get_customer_count(self) -> int:
+        return self.db.get_customer_count()
+    
+    async def get_account_count(self) -> int:
+        return self.db.get_account_count()
     
     async def get_accounts(self, customer_id: int) -> List[int]:
         cust_rec = self.db.get_customer(customer_id)

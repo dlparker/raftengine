@@ -225,6 +225,8 @@ class BankDatabase:
         conn.close()
         return None
     
+    
+    
     def get_all_accounts(self, offset: int = 0, limit: int = 100) -> List[Account]:
         """
         Retrieve accounts with pagination. If offset is -1, then it will work
