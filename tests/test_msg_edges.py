@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.messages.message_codec import MessageCodec, encode_message, decode_message
+from raftengine.messages.message_codec import MessageCodec
 from raftengine.api.log_api import LogRec
 
 from dev_tools.triggers import WhenElectionDone
@@ -172,73 +172,3 @@ async def test_message_errors(cluster_maker):
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
 
-
-async def test_message_codec_edge_cases():
-    """
-    Test edge cases and error conditions for MessageCodec to achieve 100% coverage.
-    
-    This tests:
-    1. Encoding failures (non-serializable objects)
-    2. Decoding failures (invalid JSON, malformed data)
-    3. Invalid data types
-    4. Missing message codes
-    5. Unknown message types
-    6. Convenience functions
-    """
-    # Test normal operation first
-    rec = LogRec(index=1, term=1, command="test", committed=True, applied=True)
-    msg = AppendEntriesMessage('sender', 'receiver', 1, 0, 0, [rec], 0)
-    
-    # Test successful encoding/decoding
-    encoded, serial_number = MessageCodec.encode_message(msg)
-    assert isinstance(encoded, bytes)
-    assert isinstance(serial_number, int)
-    decoded = MessageCodec.decode_message(encoded)
-    assert decoded.get_code() == 'append_entries'
-    
-    # Test string input to decode_message
-    json_str = json.dumps(msg, default=lambda o: o.__dict__)
-    decoded_from_string = MessageCodec.decode_message(json_str)
-    assert decoded_from_string.get_code() == 'append_entries'
-    
-    # Test convenience functions
-    encoded_conv = encode_message(msg)
-    assert isinstance(encoded_conv, bytes)
-    decoded_conv = decode_message(encoded_conv)
-    assert decoded_conv.get_code() == 'append_entries'
-    
-    # Test encoding failure - patch json.dumps to raise an exception
-    import unittest.mock
-    
-    with unittest.mock.patch('raftengine.messages.message_codec.json.dumps') as mock_dumps:
-        mock_dumps.side_effect = Exception("Mock encoding error")
-        
-        # This should raise a TypeError due to the mocked exception
-        with pytest.raises(TypeError, match="Failed to encode message"):
-            MessageCodec.encode_message(msg)
-    
-    # Test invalid data type for decode_message
-    with pytest.raises(ValueError, match="Data must be bytes or string, got"):
-        MessageCodec.decode_message(123)  # Invalid type
-    
-    # Test invalid JSON
-    with pytest.raises(ValueError, match="Failed to decode message"):
-        MessageCodec.decode_message(b'invalid json')
-    
-    # Test invalid JSON as string
-    with pytest.raises(ValueError, match="Failed to decode message"):
-        MessageCodec.decode_message('invalid json')
-    
-    # Test missing message code
-    missing_code_json = json.dumps({'sender': 'a', 'receiver': 'b'})
-    with pytest.raises(ValueError, match="Message missing required 'code' field"):
-        MessageCodec.decode_message(missing_code_json)
-    
-    # Test unknown message type
-    unknown_msg_json = json.dumps({'code': 'unknown_message_type', 'sender': 'a', 'receiver': 'b'})
-    with pytest.raises(ValueError, match="Message is not decodeable as a raft type: unknown_message_type"):
-        MessageCodec.decode_message(unknown_msg_json)
-    
-    # Test malformed UTF-8 bytes
-    with pytest.raises(ValueError, match="Failed to decode message"):
-        MessageCodec.decode_message(b'\xff\xfe\xfd')  # Invalid UTF-8

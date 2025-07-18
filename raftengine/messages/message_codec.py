@@ -59,88 +59,39 @@ class MessageCodec:
     to bytes for network transmission and deserialize bytes back to message objects.
     """
     
-    # All supported message types
-    MESSAGE_TYPES = [
-        AppendEntriesMessage, AppendResponseMessage,
-        RequestVoteMessage, RequestVoteResponseMessage,
-        PreVoteMessage, PreVoteResponseMessage,
-        TransferPowerMessage, TransferPowerResponseMessage,
-        MembershipChangeMessage, MembershipChangeResponseMessage,
-        SnapShotMessage, SnapShotResponseMessage,
-    ]
+    MESSAGE_TYPE_BY_CODE = {
+        AppendEntriesMessage.get_code(): AppendEntriesMessage,
+        AppendResponseMessage.get_code(): AppendResponseMessage,
+        RequestVoteMessage.get_code(): RequestVoteMessage,
+        RequestVoteResponseMessage.get_code(): RequestVoteResponseMessage,
+        PreVoteMessage.get_code(): PreVoteMessage,
+        PreVoteResponseMessage.get_code(): PreVoteResponseMessage,
+        TransferPowerMessage.get_code(): TransferPowerMessage,
+        TransferPowerResponseMessage.get_code(): TransferPowerResponseMessage,
+        MembershipChangeMessage.get_code(): MembershipChangeMessage,
+        MembershipChangeResponseMessage.get_code(): MembershipChangeResponseMessage,
+        SnapShotMessage.get_code(): SnapShotMessage,
+        SnapShotResponseMessage.get_code(): SnapShotResponseMessage,
+    }
     
     @classmethod
     def encode_message(cls, message) -> tuple[bytes, int]:
-        """
-        Encode a message object to bytes.
-        
-        Args:
-            message: A Raft message object that extends BaseMessage
+        if not hasattr(message, 'serial_number') or message.serial_number is None or message.serial_number == 0:
+            message.serial_number = SerialNumberGenerator.get_generator().generate()
             
-        Returns:
-            tuple[bytes, int]: A tuple containing (encoded_message_bytes, serial_number)
-            
-        Raises:
-            TypeError: If message cannot be serialized
-        """
-        try:
-            # Auto-assign serial number if not set
-            if not hasattr(message, 'serial_number') or message.serial_number is None or message.serial_number == 0:
-                message.serial_number = SerialNumberGenerator.get_generator().generate()
-            
-            json_str = json.dumps(message, default=lambda o: o.__dict__)
-            return json_str.encode('utf-8'), message.serial_number
-        except Exception as e:
-            raise TypeError(f"Failed to encode message: {e}")
+        json_str = json.dumps(message, default=lambda o: o.__dict__)
+        return json_str.encode('utf-8'), message.serial_number
     
     @classmethod
     def decode_message(cls, data):
-        """
-        Decode bytes or string to a message object.
-        
-        Args:
-            data: bytes or string containing the encoded message
-            
-        Returns:
-            A Raft message object that extends BaseMessage
-            
-        Raises:
-            ValueError: If data cannot be decoded or message type is unknown
-        """
-        try:
-            if isinstance(data, bytes):
-                json_str = data.decode('utf-8')
-            elif isinstance(data, str):
-                json_str = data
-            else:
-                raise ValueError(f"Data must be bytes or string, got {type(data)}")
-            
-            message_dict = json.loads(json_str)
-        except Exception as e:
-            raise ValueError(f"Failed to decode message: {e}")
-        
-        # Find the appropriate message type based on the code
-        message_code = message_dict.get('code')
-        if not message_code:
-            raise ValueError("Message missing required 'code' field")
-        
-        for message_type in cls.MESSAGE_TYPES:
-            if message_dict['code'] == message_type.get_code():
-                return message_type.from_dict(message_dict)
-        
-        raise ValueError(f'Message is not decodeable as a raft type: {message_code}')
-
-
-# Convenience functions for backward compatibility
-def encode_message(message) -> bytes:
-    """Encode a message object to bytes. Returns only the bytes for backward compatibility."""
-    encoded_bytes, _ = MessageCodec.encode_message(message)
-    return encoded_bytes
-
-
-def decode_message(data):
-    """Decode bytes or string to a message object."""
-    return MessageCodec.decode_message(data)
+        # we let exceptions propogate, callers all have handlers
+        if isinstance(data, bytes):
+            json_str = data.decode('utf-8')
+        else:
+            json_str = data
+        message_dict = json.loads(json_str)
+        message_type = cls.MESSAGE_TYPE_BY_CODE[message_dict['code']]
+        return message_type.from_dict(message_dict)
 
 
 
