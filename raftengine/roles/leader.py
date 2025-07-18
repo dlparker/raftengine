@@ -14,6 +14,7 @@ from raftengine.messages.power import TransferPowerMessage, TransferPowerRespons
 from raftengine.messages.snapshot import SnapShotMessage
 from raftengine.messages.cluster_change import ChangeOp
 from raftengine.messages.base_message import BaseMessage
+from raftengine.messages.message_codec import SerialNumberGenerator
 from raftengine.roles.base_role import BaseRole
 from raftengine.deck.cluster_ops import SnapShotCursor
 
@@ -27,8 +28,9 @@ class Leader(BaseRole):
         super().__init__(deck, RoleName.leader, cluster_ops)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
-        self.command_waiters = dict()
         self.bcast_pendings = []
+        self.active_commands = {}
+        self.command_condition = asyncio.Condition()
         self.use_check_quorum = use_check_quorum
         self.accepting_commands = True
         self.exit_in_progress = False
@@ -133,23 +135,20 @@ class Leader(BaseRole):
         self.logger.info("%s leader exiting cluster", self.my_uri())
         await self.deck.note_exit_done(success=True)
         
-    async def run_command(self, command, timeout=1.0, serial=None):
+    async def run_command(self, command, timeout=1.0):
         if not self.accepting_commands:
+            # power transfer in progress
             return CommandResult(command=command,retry=True)
         # first save it in the log
-        if serial is None:
-            serial = await self.log.get_last_index() + 1
+        serial = SerialNumberGenerator.get_generator().generate()
         raw_rec = LogRec(command=command, term=await self.log.get_term(),
                          leader_id=self.my_uri(), serial=serial)
         log_rec = await self.log.append(raw_rec)
         self.logger.debug("%s saved log record at index %d", self.my_uri(), log_rec.index)
-        # now send it to everybody
-        waiter = CommandWaiter(self, log=self.log, orig_log_record=log_rec, timeout=timeout)
-        self.command_waiters[log_rec.index] = waiter
+        command_result = None
         self.logger.info("%s waiting for completion of pending command", self.my_uri())
-        await self.broadcast_log_record(log_rec)
-        result = await waiter.wait_for_result()
-        return result
+        command_result = await self.send_and_await_command(log_rec, timeout)
+        return command_result
 
     async def broadcast_log_record(self, log_record):
         prevLogIndex, prevLogTerm = await self.get_prev_record_id(log_record.index)
@@ -383,11 +382,8 @@ class Leader(BaseRole):
             await self.log.replace(log_rec)
             self.logger.debug("%s running command produced no error, apply_index is now %s",
                               self.my_uri(), await self.log.get_applied_index())
-        waiter = self.command_waiters[log_rec.index]
-        if waiter:
-            self.logger.debug("%s found waiter for command at log index %d, delivering", 
-                              self.my_uri(), log_rec.index)
-            await waiter.handle_run_result(result, error_data)
+        await self.report_command_result(log_rec, result, error_data)
+        return
 
     async def start_snapshot_send(self, target_uri):
         tracker = await self.cluster_ops.tracker_for_follower(target_uri)
@@ -491,74 +487,51 @@ class Leader(BaseRole):
     async def do_update_settings(self, settings):
         return await self.cluster_ops.do_update_settings(settings, self)
     
-    
-class CommandWaiter:
-
-    def __init__(self, leader, log, orig_log_record, timeout=1.0):
-        self.leader = leader
-        self.log = log
-        self.orig_log_record = orig_log_record
-        self.timeout = timeout
-        self.done_condition = asyncio.Condition()
-        self.committed = False
-        self.time_expired = False
-        self.local_error = None
-        self.result = None
-
-    async def wait_for_result(self):
-
-        async def do_timeout(timeout):
+    async def send_and_await_command(self, log_rec, timeout=5.0):
+        command_rec = dict(log_rec=log_rec, result=None, error_data=None)
+        self.active_commands[log_rec.index] = command_rec
+        result = None
+        async with self.command_condition:
+            self.logger.info("%s broadcasting command for log index %d", self.my_uri(), log_rec.index)
+            await self.broadcast_log_record(log_rec)
+            remaining_wait = timeout
             start_time = time.time()
-            while not self.committed and not self.local_error:
-                await asyncio.sleep(0.000001)
-                if time.time() - start_time >= timeout:
-                    self.time_expired = True
-                    self.leader.logger.warning("%s !!!!!!!!!! Timeout on command ", self.leader.my_uri())
-                    raise TimeoutTaskGroup(f"timeout after {timeout}")
-            
-        async def check_done():
-            while not self.time_expired and not self.result:
-                async with self.done_condition:
-                    await self.done_condition.wait()
-                    self.leader.logger.debug("%s check_done awake from command ", self.leader.my_uri())
-            return self.result
+            while True:
+                try:
+                    remaining_wait -= time.time()  - start_time 
+                    await asyncio.wait_for(self.command_condition.wait(), timeout=remaining_wait)
+                    if command_rec['result'] is not None or command_rec['error_data'] is not None:
+                        result = CommandResult(command=log_rec.command,
+                                               timeout_expired=False,
+                                               result=command_rec['result'],
+                                               error=command_rec['error_data'],
+                                               redirect=None)
+                        del self.active_commands[log_rec.index]
+                        if command_rec['result'] is not None:
+                            self.logger.info("%s command result for log index %d", self.my_uri(), log_rec.index)
+                        else:
+                            self.logger.warning("%s command error for log index %d", self.my_uri(), log_rec.index)
+                        break
+                except asyncio.TimeoutError:
+                    if self.deck.role != self:
+                        self.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
+                                                 self.my_uri(), self.deck.leader_uri)
+                        result = CommandResult(command=log_rec.command,
+                                               redirect=self.deck.leader_uri)
+                    else:
+                        result = CommandResult(command=log_rec.command,
+                                               timeout_expired=True,
+                                               result=None,
+                                               error=None,
+                                               redirect=None)
+                        self.logger.warning("%s command timeout log index %d", self.my_uri(), log_rec.index)
+                    break
+        return result
 
-        try:
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(check_done())
-                tg.create_task(do_timeout(self.timeout))
-                self.leader.logger.debug("%s scheduled timeout for %f and check_done", self.leader.my_uri(), self.timeout)
-        except* TimeoutTaskGroup:
-            self.leader.logger.debug("%s timeout exception", self.leader.my_uri())
-            if self.leader.deck.role != self.leader:
-                self.leader.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
-                                         self.leader.my_uri(), self.leader.deck.leader_uri)
-                self.result = CommandResult(command=self.orig_log_record.command,
-                                            redirect=self.leader.deck.leader_uri)
-            else:
-                self.leader.logger.debug("%s command timeout exception",
-                                         self.leader.my_uri())
-                self.result = CommandResult(command=self.orig_log_record.command,
-                                            timeout_expired=True)
-        return self.result
-
-    async def handle_run_result(self, command_result, error_data):
-        if not error_data:
-            self.committed = True
-        self.local_error = error_data
-        result = CommandResult(command=self.orig_log_record.command,
-                               timeout_expired=False,
-                               result=command_result,
-                               error=error_data,
-                               redirect=None)
-        if error_data:
-            await self.leader.deck.event_control.emit_error(error_data)
-        self.result = result
-        async with self.done_condition:
-            self.leader.logger.debug("%s notifying done condition",
-                                         self.leader.my_uri())
-            self.done_condition.notify()
-            
-        return 
+    async def report_command_result(self, log_rec, result, error_data):
+        rec =  self.active_commands[log_rec.index]
+        rec['result'] = result
+        rec['error_data'] = error_data
+        async with self.command_condition:
+            self.command_condition.notify_all()
         
-
