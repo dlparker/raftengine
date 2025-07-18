@@ -204,6 +204,12 @@ class Deck:
     async def run_command(self, command, timeout=1):
         if self.role.role_name == RoleName.leader:
             result = await self.role.run_command(command, timeout=timeout)
+            # if leader gets demoted mid stream because there is already
+            # a new leader, then the role should have changed, reply redirect
+            if self.role.role_name != RoleName.leader:
+                new_leader = self.leader_uri
+                retry = new_leader is None
+                result = CommandResult(command, redirect=new_leader, retry=retry)
         elif self.role.role_name == RoleName.follower and self.leader_uri is not None:
             result = CommandResult(command, redirect=self.leader_uri)
         else:

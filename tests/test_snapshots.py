@@ -21,11 +21,8 @@ from dev_tools.pausing_server import setup_sqlite_log
 from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
-#extra_logging = [dict(name=__name__, level="debug"),]
-#setup_logging(extra_logging)
-default_level='error'
-#default_level='debug'
 log_control = setup_logging()
+#log_control.set_default_level('debug')
 logger = logging.getLogger("test_code")
 
 

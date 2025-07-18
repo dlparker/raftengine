@@ -12,12 +12,9 @@ from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialCommand
 from dev_tools.log_control import setup_logging
 
-extra_logging = [dict(name="test_code", level="debug"), ]
-#setup_logging(extra_logging, default_level="debug")
-default_level="error"
-#default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+#log_control.set_default_level('debug')
 
 async def test_partition_1(cluster_maker):
     """

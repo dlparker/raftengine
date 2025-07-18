@@ -31,6 +31,7 @@ class Leader(BaseRole):
         self.bcast_pendings = []
         self.active_commands = {}
         self.command_condition = asyncio.Condition()
+        self.active_commands_lock = asyncio.Lock() 
         self.use_check_quorum = use_check_quorum
         self.accepting_commands = True
         self.exit_in_progress = False
@@ -72,6 +73,8 @@ class Leader(BaseRole):
         etime_min, etime_max = await self.cluster_ops.get_election_timeout_range()
         time_limit = time.time() + etime_max
         while tracker.matchIndex < await self.log.get_commit_index() and time.time() < time_limit:
+            self.logger.info("%s  %s matchIndex %d, should be %d", self.my_uri(),  target_uri,
+                             tracker.matchIndex, await self.log.get_commit_index())
             await self.send_heartbeats()
             last_pending = self.bcast_pendings[-1]
             while time.time() < time_limit:
@@ -107,6 +110,8 @@ class Leader(BaseRole):
                 asyncio.get_event_loop().call_later(0.01, lambda log_record=log_record:
                                          asyncio.create_task(self.delayed_exit(log_record)))
                 return
+        self.logger.info("%s demoting and expecting %s as new leader", self.my_uri(), target_uri)
+        await self.deck.demote_and_handle()
         return
 
     async def get_prev_record_id(self, this_index):
@@ -136,9 +141,10 @@ class Leader(BaseRole):
         await self.deck.note_exit_done(success=True)
         
     async def run_command(self, command, timeout=1.0):
-        if not self.accepting_commands:
-            # power transfer in progress
-            return CommandResult(command=command,retry=True)
+        async with self.active_commands_lock:
+            if not self.accepting_commands:
+                # power transfer in progress
+                return CommandResult(command=command,retry=True)
         # first save it in the log
         serial = SerialNumberGenerator.get_generator().generate()
         raw_rec = LogRec(command=command, term=await self.log.get_term(),
@@ -429,8 +435,10 @@ class Leader(BaseRole):
                 return
         await self.snapshot_send(message.sender)
         
+
     async def term_expired(self, message):
         await self.deck.set_term(message.term)
+        await self.notify_pending_commands_on_demotion()
         await self.deck.demote_and_handle(message)
         return None
 
@@ -461,16 +469,18 @@ class Leader(BaseRole):
             self.bcast_pendings.remove(pop_b)
         self.logger.debug("%s after in message pending broadcast records %d", self.my_uri(), len(self.bcast_pendings))
                 
+
     async def check_quorum(self):
         et_min, et_max = await self.cluster_ops.get_election_timeout_range()
         pop_bcasts = []
-        for b_index,pending in enumerate(self.bcast_pendings):
-            reply_count = pending['sent_count'] - len(pending['messages']) 
-            quorum = int(pending['sent_count']/2) # normal cluster is odd, yielding x.5 rounds up to x + 1, which works
+        for b_index, pending in enumerate(self.bcast_pendings):
+            reply_count = pending['sent_count'] - len(pending['messages'])
+            quorum = int(pending['sent_count'] / 2) 
             if reply_count >= quorum:
                 pop_bcasts.append(pending)
             elif time.time() - pending['time'] > et_max:
-                self.logger.warning("%s failed quorum check, resigning ", self.my_uri())
+                self.logger.warning("%s failed quorum check, resigning", self.my_uri())
+                await self.notify_pending_commands_on_demotion()
                 await self.deck.demote_and_handle()
                 return False
         for p_b in pop_bcasts:
@@ -488,52 +498,82 @@ class Leader(BaseRole):
         return await self.cluster_ops.do_update_settings(settings, self)
     
     async def send_and_await_command(self, log_rec, timeout=5.0):
-        command_rec = dict(log_rec=log_rec, result=None, error_data=None)
-        self.active_commands[log_rec.index] = command_rec
-        result = None
-        async with self.command_condition:
+        # Create command record with a Future for result signaling
+        command_rec = dict(log_rec=log_rec, result=None, error_data=None, future=asyncio.Future())
+        async with self.active_commands_lock:
+            self.active_commands[log_rec.index] = command_rec
+        try:
+            # Broadcast the log record
             self.logger.info("%s broadcasting command for log index %d", self.my_uri(), log_rec.index)
             await self.broadcast_log_record(log_rec)
-            remaining_wait = timeout
+            
+            # Wait for result with timeout
             start_time = time.time()
-            while True:
+            remaining_wait = timeout
+            while self.deck.role == self:
+                # if we are no longer the role, then the deck will ignore our
+                # response and decide whether a retry or redirect is needed
                 try:
-                    remaining_wait -= time.time()  - start_time 
-                    await asyncio.wait_for(self.command_condition.wait(), timeout=remaining_wait)
-                    if command_rec['result'] is not None or command_rec['error_data'] is not None:
-                        result = CommandResult(command=log_rec.command,
-                                               timeout_expired=False,
-                                               result=command_rec['result'],
-                                               error=command_rec['error_data'],
-                                               redirect=None)
-                        del self.active_commands[log_rec.index]
+                    # Wait for the future to resolve
+                    result_data = await asyncio.wait_for(
+                        command_rec['future'], timeout=remaining_wait
+                    )
+                    async with self.active_commands_lock:
+                        result = CommandResult(
+                            command=log_rec.command,
+                            timeout_expired=False,
+                            result=command_rec['result'],
+                            error=command_rec['error_data'],
+                            redirect=None
+                        )
                         if command_rec['result'] is not None:
                             self.logger.info("%s command result for log index %d", self.my_uri(), log_rec.index)
                         else:
                             self.logger.warning("%s command error for log index %d", self.my_uri(), log_rec.index)
-                        break
+                        return result
                 except asyncio.TimeoutError:
-                    if self.deck.role != self:
-                        self.logger.debug("%s after timeout exception and am no longer leader! maybe %s?",
-                                                 self.my_uri(), self.deck.leader_uri)
-                        result = CommandResult(command=log_rec.command,
-                                               redirect=self.deck.leader_uri)
-                    else:
-                        result = CommandResult(command=log_rec.command,
-                                               timeout_expired=True,
-                                               result=None,
-                                               error=None,
-                                               redirect=None)
-                        self.logger.warning("%s command timeout log index %d", self.my_uri(), log_rec.index)
+                    remaining_wait = timeout - (time.time() - start_time)
+                    if remaining_wait <= 0:
+                        self.logger.warning("%s command timeout for log index %d", self.my_uri(), log_rec.index)
+                        return CommandResult(
+                            command=log_rec.command,
+                            timeout_expired=True,
+                            result=None,
+                            error=None,
+                            redirect=None
+                        )
+                    # Continue loop to recheck leader status
+        finally:
+            # Ensure cleanup of active_commands
+            async with self.active_commands_lock:
+                if log_rec.index in self.active_commands:
                     del self.active_commands[log_rec.index]
-                    break
-        return result
 
     async def report_command_result(self, log_rec, result, error_data):
-        rec =  self.active_commands.get(log_rec.index, None)
-        if rec is not None: # might have timed out and deleted the record
+        async with self.active_commands_lock:
+            rec = self.active_commands.get(log_rec.index)
+            if rec is None:
+                self.logger.debug(
+                    "%s command result for log index %d ignored, command not active",
+                    self.my_uri(), log_rec.index
+                )
+                return
             rec['result'] = result
             rec['error_data'] = error_data
-            async with self.command_condition:
-                self.command_condition.notify_all()
-        
+            rec['future'].set_result(True)
+            self.logger.debug(
+                "%s reported command result for log index %d, error: %s",
+                self.my_uri(), log_rec.index, error_data
+            )
+
+    async def notify_pending_commands_on_demotion(self):
+        async with self.active_commands_lock:
+            for index, rec in list(self.active_commands.items()):
+                if not rec['future'].done():
+                    self.logger.debug(
+                        "%s notifying command at log index %d due to demotion", self.my_uri(), index
+                    )
+                    rec['future'].set_result(True)
+                    rec['error_data'] = "Leader demoted during command execution"
+                    rec['result'] = None
+            self.active_commands.clear()

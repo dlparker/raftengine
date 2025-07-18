@@ -18,12 +18,9 @@ from dev_tools.sequences import SNormalElection
 from dev_tools.log_control import setup_logging
 from dev_tools.features import registry, FeatureRegistry
 
-extra_logging = [dict(name="test_code", level="debug"),dict(name="SimulatedNetwork", level="warn")]
-#setup_logging(extra_logging, default_level="debug")
-default_level="error"
-#default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+#log_control.set_default_level('debug')
 registry = FeatureRegistry.get_registry()
 
 
