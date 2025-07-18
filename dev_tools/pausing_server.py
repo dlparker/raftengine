@@ -46,6 +46,7 @@ class PausingServer(PilotAPI):
         self.in_message_history = []
         self.out_message_history = []
         self.save_message_history = False
+        self.interceptors = {}
 
     def __str__(self):
         return self.uri
@@ -160,10 +161,21 @@ class PausingServer(PilotAPI):
     async def process_command(self, command, serial):
         return await self.operations.process_command(command, serial)
 
-
+    async def add_interceptor(self, interceptor, msg_op="out", msg_type="append_entries"):
+        index = f"{msg_op}:{msg_type}"
+        print(f"adding {index}")
+        self.interceptors[index] = interceptor
+        
     # Part of PilotAPI
     async def send_message(self, target, out_msg, serial_number):
         msg = self.deck.decode_message(out_msg)
+        index = f"out:{msg.code}"
+        if index in self.interceptors:
+            self.logger.debug("Calling out interceptor for msg %s", msg)
+            cont = await self.interceptors[index](target, msg, serial_number)
+            if not cont:
+                self.logger.debug("Interceptor bypassed msg %s", msg)
+                return
         self.logger.debug("queueing out msg %s", msg)
         self.out_messages.append(msg)
         if self.save_message_history:
@@ -172,6 +184,13 @@ class PausingServer(PilotAPI):
     # Part of PilotAPI
     async def send_response(self, target, out_msg, in_reply, orig_serial_number):
         reply = self.deck.decode_message(in_reply)
+        index = f"out:{reply.code}"
+        if index in self.interceptors:
+            self.logger.debug("Calling out interceptor for msg %s", reply)
+            cont = await self.interceptors[index](target, reply, reply.serial_number)
+            if not cont:
+                self.logger.debug("Interceptor bypassed msg %s", reply)
+                return
         self.logger.debug("queueing out reply %s", reply)
         self.out_messages.append(reply)
         if self.save_message_history:
@@ -193,15 +212,19 @@ class PausingServer(PilotAPI):
     async def stop_commanded(self) -> None:
         self.logger.debug('%s stop_commanded from deck', self.uri)
         #await self.cluster.remove_node(self.uri)
-
-    async def _on_message(self, in_msg):
-        if self.save_message_history:
-            msg = self.deck.decode_message(in_msg)
-            self.in_message_history.append(msg)
-        await self.deck.on_message(in_msg)
         
     async def on_message(self, in_msg):
-        await self._on_message(in_msg)
+        msg = self.deck.decode_message(in_msg)
+        if self.save_message_history:
+            self.in_message_history.append(msg)
+        index = f"in:{msg.code}"
+        if index in self.interceptors:
+            self.logger.debug("Calling in msg interceptor for msg %s", msg)
+            cont = await self.interceptors[index](msg.sender, msg, msg.serial_number)
+            if not cont:
+                self.logger.debug("Interceptor bypassed msg %s", msg)
+                return
+        await self.deck.on_message(in_msg)
         
     async def exit_cluster(self, callback=None, timeout=10.0):
         await self.deck.exit_cluster(callback, timeout)

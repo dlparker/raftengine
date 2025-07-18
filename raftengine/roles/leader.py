@@ -525,13 +525,15 @@ class Leader(BaseRole):
                                                error=None,
                                                redirect=None)
                         self.logger.warning("%s command timeout log index %d", self.my_uri(), log_rec.index)
+                    del self.active_commands[log_rec.index]
                     break
         return result
 
     async def report_command_result(self, log_rec, result, error_data):
-        rec =  self.active_commands[log_rec.index]
-        rec['result'] = result
-        rec['error_data'] = error_data
-        async with self.command_condition:
-            self.command_condition.notify_all()
+        rec =  self.active_commands.get(log_rec.index, None)
+        if rec is not None: # might have timed out and deleted the record
+            rec['result'] = result
+            rec['error_data'] = error_data
+            async with self.command_condition:
+                self.command_condition.notify_all()
         

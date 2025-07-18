@@ -50,6 +50,9 @@ class Deck:
         self.exit_waiter_handle = None
         self.stopped = False
         self.await_message = False
+        self.active_messages = {}
+        self.active_condition = asyncio.Condition()
+        self.message_serializer_timeout = 3.0
         
     # Part of DeckAPI
     async def start(self):
@@ -152,6 +155,28 @@ class Deck:
         return None
     
     async def inner_on_message(self, message):
+        timeout_msg = None
+        async with self.active_condition:
+            index = f"{message.sender}:{message.serial_number}"
+            self.active_messages[index] = message
+            sl = len(self.active_messages)
+            if len(self.active_messages) > 1:
+                remaining_wait = self.message_serializer_timeout
+                start_time = time.time()
+                while True:
+                    try:
+                        remaining_wait -= time.time()  - start_time 
+                        await asyncio.wait_for(self.active_condition.wait(), timeout=remaining_wait)
+                        keys = list(self.active_messages.keys())
+                        # order is guaranteed since 3.7!
+                        if keys[0] == index:
+                            break
+                    except asyncio.TimeoutError:
+                        timeout_msg = "attempt to process message timed out waiting for pending message"
+                        self.logger.error(timeout_msg)
+                        break
+        if timeout_msg:
+            raise Exception(timeout_msg)
         res = None
         error = None
         try:
@@ -164,6 +189,15 @@ class Deck:
             if EventType.error in self.event_control.active_events:
                 await self.event_control.emit_error(error)
             await self.record_message_problem(message, error)
+        async with self.active_condition:
+            # It is possible to call inner_on_message twice in a nested
+            # way for the same message, as when calling demote and handle.
+            # Therefore we want to handle the situation by ignoring
+            # the end of the outer call finding no record in self.active_messages
+            index = f"{message.sender}:{message.serial_number}"
+            if index in self.active_messages:
+                del self.active_messages[index]
+            self.active_condition.notify_all()
         return res
 
     # Part of DeckAPI

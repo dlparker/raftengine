@@ -15,10 +15,9 @@ from dev_tools.sequences import SNormalElection
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.log_control import setup_logging
 
-#extra_logging = [dict(name=__name__, level="debug"),]
-#setup_logging(extra_logging)
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+log_control.set_default_level('debug')
 
 async def test_slow_voter(cluster_maker):
     """
@@ -171,4 +170,102 @@ async def test_message_errors(cluster_maker):
     await ts_1.do_next_in_msg()
     hist = ts_1.get_message_problem_history(clear=True)
     assert len(hist) == 1
+
+async def test_message_serializer(cluster_maker):
+    """
+    There is code in the deck inner_on_message method which is called by
+    the on_message method that serializes message handling to FIFO order.
+    In the words of the Project Farm youtube channel, we're gonna test that!
+    """
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+    cluster.set_configs(config)
+    uri_1 = cluster.node_uris[0]
+    uri_2 = cluster.node_uris[1]
+    uri_3 = cluster.node_uris[2]
+
+    ts_1 = cluster.nodes[uri_1]
+    ts_2 = cluster.nodes[uri_2]
+    ts_3 = cluster.nodes[uri_3]
+
+    await cluster.test_trace.define_test("Testing message processing errors", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.start()
+    await ts_1.start_campaign()
+    sequence = SNormalElection(cluster, 1)
+    await cluster.run_sequence(sequence)
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_2.get_leader_uri() == uri_1
+    assert ts_3.get_leader_uri() == uri_1
+
+    # I need a message to get delayed in processing so that I can send another
+    # message while it is pending. We'll do that by making the pausing server
+    # route outgoing messages to an intercepter and having it hold up
+    # execution, then forcing another message.
+    # So we make all this happend by installing the interceptor in one of the
+    # followers, then running two commands. When the first command
+    # append_entries hits the intercepted follower, it holds, but the command
+    # completes because the other follower says yes. Then the
+    # second command runs, and the held follower gets the second append_entries.
+    # At that point we check to see that the interceptor does not fire again,
+    # and then we release the first message, then check to see that the
+    # intereceptor does fire again.
+
+    trapped_msg = None
+    release_msg = asyncio.Condition()
+    async def interceptor(other_node, msg, serial_number):
+        nonlocal trapped_msg
+        trapped_msg = msg
+        try:
+            async with release_msg:
+                await asyncio.wait_for(release_msg.wait(), timeout=1.0)
+                print('------------ Releasing intercepted message -----------------')
+                return True
+        except asyncio.exceptions.CancelledError:
+            pass
+    await ts_3.add_interceptor(interceptor, msg_op="out", msg_type="append_response")
+    voters = [uri_1, uri_2]
+    command_result = await cluster.run_command("add 1", timeout=2.0, voters=voters)
+    async def poker():
+        await ts_3.do_next_in_msg()
+    asyncio.create_task(poker())
+    await asyncio.sleep(0.0001)
+    assert trapped_msg is not None
+
+    command_result = await cluster.run_command("add 1", timeout=2.0, voters=voters)
+    trapped_msg = None
+    # intercepter should not hit because new message should
+    # pend on completion of old one
+    asyncio.create_task(poker())
+    await asyncio.sleep(0.0001)
+    assert trapped_msg is None
+    async with release_msg:
+        release_msg.notify_all()
+    # intercepter should  hit  now 
+    await asyncio.sleep(0.0001)
+    assert trapped_msg is not None
+    async with release_msg:
+        release_msg.notify_all()
+    await asyncio.sleep(0.0001)
+
+    # now make the message serialize timeout
+    command_result = await cluster.run_command("add 1", timeout=2.0, voters=voters)
+    trapped_msg = None
+
+    asyncio.create_task(poker())
+    await asyncio.sleep(0.0001)
+    assert trapped_msg is not None
+    hist = ts_3.get_message_problem_history(clear=True)
+
+    # now it is delaying, try to send it again directly so we can catch the
+    # timeout
+    emsg, serial = MessageCodec.encode_message(trapped_msg)
+    delay = 0.0001
+    ts_3.deck.message_serializer_timeout = delay/2
+    await ts_3.deck.on_message(emsg)
+    hist = ts_3.get_message_problem_history(clear=True)
+    assert len(hist) == 1
+    async with release_msg:
+        release_msg.notify_all()
+    await asyncio.sleep(0.01)
 
