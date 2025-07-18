@@ -85,11 +85,13 @@ class RaftServer:
         return await self.deck.start_campaign()
 
     async def stop_raft(self):
+        if self.pilot:
+            await self.pilot.stop_commanded()
         if self.deck:
-            await self.deck.start()
+            await self.deck.stop()
             logger.warning("Raft server operations stopped on command")
         self.stopped = True
-        self.timers_running = True
+        self.timers_running = False
     
     # local method reachable through local_command RPC
     async def stop_server(self):

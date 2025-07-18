@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+loop_count = None
 
 def extract_loop_count_from_data(data: Dict[str, Any]) -> Optional[int]:
     """Extract loop count from JSON metadata"""
@@ -91,12 +92,11 @@ def calculate_overhead(baseline: float, current: float) -> tuple:
 
 
 def load_data(directory):
-
+    global loop_count
     json_files = find_json_files(directory)
     
     # Load all measurement data
     datasets = {}
-    loop_count = None
     transports = ['astream', 'aiozmq', 'fastapi', 'grpc']
 
     metrics = {}
@@ -184,52 +184,53 @@ def build_ordered(metrics):
             
     return dict(methods=method_times, loops=dict(mean=loop_time_means, total=loop_time_totals))
 
-def print_report(ordered_metrics):
+def print_report(ordered_metrics, summary_only):
     od = ordered_metrics
     sample = od['methods']['deposit_mean']['remotes']
     if len(sample) > 1:
         multi_xport = True
     else:
         multi_xport = False
-    for name,specs in od['methods'].items():
-        m_name = "_".join(name.split('_')[:-1])
-        section = m_name
-        h_layer = "Layer"
-        h_value = "Mean"
-        h_d1 = "VS Teller"
-        h_d2 = "VS Last Layer"
-        print(f"{section:15s} {h_layer:<20s}  {h_value:>12s} {h_d1:^19s} {h_d2:^19s}")
-        section = ""
-        print(f"{section:15s}" + '-'*80)
-        for layer in ['teller', 'collector']:
-            mean = specs[layer]
-            if layer == "teller":
-                section = m_name
-                teller = mean
-                base_diff = ""
-            else:
-                section = ""
-                o_v_base,m_v_base = calculate_overhead(teller, mean)
-                collector = mean
-                base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
-            print(f"{section:15s} {layer.capitalize():20s}: {mean:12.8f} {base_diff}")
-        for xport,rspecs in specs['remotes'].items():
-            if multi_xport:
-                print(f"{section:15s}" + '-'*80)
-            for layer in ['rpc', 'raft']:
-                mean = rspecs[layer]
-                l_name = xport.upper() + "  " + layer.upper()
-                o_v_base,m_v_base = calculate_overhead(teller, mean)
-                if layer == "rpc":
-                    o_v_prev,m_v_prev = calculate_overhead(collector, mean)
-                    rpc = mean
+    if not summary_only:
+        for name,specs in od['methods'].items():
+            m_name = "_".join(name.split('_')[:-1])
+            section = m_name
+            h_layer = "Layer"
+            h_value = "Mean"
+            h_d1 = "VS Teller"
+            h_d2 = "VS Last Layer"
+            print(f"{section:15s} {h_layer:<20s}  {h_value:>12s} {h_d1:^19s} {h_d2:^19s}")
+            section = ""
+            print(f"{section:15s}" + '-'*80)
+            for layer in ['teller', 'collector']:
+                mean = specs[layer]
+                if layer == "teller":
+                    section = m_name
+                    teller = mean
+                    base_diff = ""
                 else:
-                    o_v_prev,m_v_prev = calculate_overhead(rpc, mean)
-                prev_diff = f"(+{o_v_prev:6.1f}% / {m_v_prev:5.2f}x)"
-                base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
-                print(f"{section:15s} {l_name:20s}: {mean:12.8f} {base_diff} {prev_diff}")
-                    
-        print('+'*95)
+                    section = ""
+                    o_v_base,m_v_base = calculate_overhead(teller, mean)
+                    collector = mean
+                    base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
+                print(f"{section:15s} {layer.capitalize():20s}: {mean:12.8f} {base_diff}")
+            for xport,rspecs in specs['remotes'].items():
+                if multi_xport:
+                    print(f"{section:15s}" + '-'*80)
+                for layer in ['rpc', 'raft']:
+                    mean = rspecs[layer]
+                    l_name = xport.upper() + "  " + layer.upper()
+                    o_v_base,m_v_base = calculate_overhead(teller, mean)
+                    if layer == "rpc":
+                        o_v_prev,m_v_prev = calculate_overhead(collector, mean)
+                        rpc = mean
+                    else:
+                        o_v_prev,m_v_prev = calculate_overhead(rpc, mean)
+                    prev_diff = f"(+{o_v_prev:6.1f}% / {m_v_prev:5.2f}x)"
+                    base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
+                    print(f"{section:15s} {l_name:20s}: {mean:12.8f} {base_diff} {prev_diff}")
+
+            print('+'*95)
 
     for ltype,lspecs in od['loops'].items():
         section = f"loops {ltype}"
@@ -270,6 +271,48 @@ def print_report(ordered_metrics):
                 print(f"{section:15s} {l_name:20s}: {total:12.8f} {base_diff} {prev_diff}")
         print('+'*95)
         
+        
+    global loop_count
+    loops = float(loop_count)
+    for ltype,lspecs in od['loops'].items():
+        
+        if 'mean' in ltype:
+            continue
+        section = f"loops {ltype}"
+        h_layer = "Layer"
+        h_value = "Loops/Second"
+        h_d1 = "VS Teller"
+        h_d2 = "VS Last Layer"
+        print(f"{section:15s} {h_layer:<20s}  {h_value:>12s} {h_d1:^19s} {h_d2:^19s}")
+        section = ""
+        print(f"{section:15s}" + '-'*80)
+        for layer in ['teller', 'collector']:
+            rate = loops/lspecs[layer]
+            if layer == "teller":
+                teller = rate
+                base_diff = ""
+            else:
+                collector = rate
+                o_v_base,m_v_base = calculate_overhead(teller, rate)
+                base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
+            print(f"{section:15s} {layer.capitalize():20s}: {rate:12.8f} {base_diff}")
+        for xport,rspecs in lspecs['remotes'].items():
+            if multi_xport:
+                print(f"{section:15s}" + '-'*80)
+            for layer in ['rpc', 'raft']:
+                rate = loops/rspecs[layer]
+                l_name = xport.upper() + "  " + layer.upper()
+                o_v_base,m_v_base = calculate_overhead(teller, rate)
+                if layer == "rpc":
+                    o_v_prev,m_v_prev = calculate_overhead(collector, rate)
+                    rpc = rate
+                else:
+                    o_v_prev,m_v_prev = calculate_overhead(rpc, rate)
+                prev_diff = f"(+{o_v_prev:6.1f}% / {m_v_prev:5.2f}x)"
+                base_diff = f"(+{o_v_base:6.1f}% / {m_v_base:5.2f}x)"
+                print(f"{section:15s} {l_name:20s}: {rate:12.8f} {base_diff} {prev_diff}")
+        print('+'*95)
+    
     
 def main():
     parser = argparse.ArgumentParser(
@@ -281,6 +324,9 @@ def main():
         default=".", 
         help="Directory containing JSON timing files (default: current directory)"
     )
+    parser.add_argument(
+        "-s", "--summary_only", action='store_true',
+        help="Produce only the summary data, the numbers for total loops")
     args = parser.parse_args()
     
     # Find JSON files in the specified directory
@@ -294,7 +340,7 @@ def main():
     #pprint(metrics)
     ordered = build_ordered(metrics)
     #pprint(ordered)
-    print_report(ordered)
+    print_report(ordered, args.summary_only)
 
 
 if __name__ == "__main__":

@@ -136,12 +136,14 @@ async def validate_teller(teller, loops=1, print_timing=True, json_output=None, 
     fake = Faker()
     timing_data = TimingData()
 
-    starting_customer_count = teller.get_customer_count()
-    starting_account_count = teller.get_account_count()
+    starting_customer_count = await teller.get_customer_count()
+    starting_account_count = await teller.get_account_count()
     
     for loop_num in range(loops):
         loop_start = time.time()
         await run_single_test(teller, fake, loop_num, timing_data, starting_account_count, starting_customer_count)
+        starting_customer_count += 1
+        starting_account_count += 2
         loop_end = time.time()
         timing_data.add_loop_timing(loop_end - loop_start)
         
@@ -183,6 +185,7 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
 
         offset = starting_customer_count
         customers = await timed_operation('list_customers', teller.list_customers(offset, 10))
+
         assert len(customers) == 1
 
         sav = Account(AccountType.SAVINGS, customer.cust_id, Decimal('0.00'))

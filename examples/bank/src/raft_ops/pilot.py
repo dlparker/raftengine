@@ -21,6 +21,7 @@ class Pilot(PilotAPI):
         self.msg_index = 0
         self.replies = {}
         self.deck = None
+        self.shutdown_flag = False
         
     def set_deck(self, deck):
         # this is not in the __init__ because the Deck __init__ needs a reference
@@ -44,26 +45,42 @@ class Pilot(PilotAPI):
 
     # PilotAPI
     async def send_message(self, target_uri: str, message:str, serial_number: int) -> None:
-        cli = await self.ensure_node_connection(target_uri)
+        # Don't try to send messages if we're shutting down
+        if self.shutdown_flag:
+            return None
+            
         try:
             msg = MessageCodec.decode_message(message)
             logger.info(f"pilot told to send message {msg.code} to {msg.receiver}")
+            
+            cli = await self.ensure_node_connection(target_uri)
             msgstr = message.decode()
             result = await cli.raft_message(msgstr)
         except Exception as e:
-            logger.error(traceback.format_exc())
+            # Only log errors if we're not shutting down
+            if not self.shutdown_flag:
+                logger.error(f"Failed to send message to {target_uri}: {e}")
+                logger.error(traceback.format_exc())
             # target server not reachable due to any error is a condition to tolerate
             return None
 
     # PilotAPI
     async def send_response(self, target_uri: str, orig_message:str, reply:str, orig_serial_number: int) -> None:
-        cli = await self.ensure_node_connection(target_uri)
+        # Don't try to send responses if we're shutting down
+        if self.shutdown_flag:
+            return None
+            
         try:
             msg = MessageCodec.decode_message(reply)
             logger.info(f"pilot told to reply {msg.code} to {msg.receiver}")
+            
+            cli = await self.ensure_node_connection(target_uri)
             result = await cli.raft_message(reply.decode())
         except Exception as e:
-            logger.error(traceback.format_exc())
+            # Only log errors if we're not shutting down
+            if not self.shutdown_flag:
+                logger.error(f"Failed to send response to {target_uri}: {e}")
+                logger.error(traceback.format_exc())
             # target server not reachable due to any error is a condition to tolerate
             return None
         
@@ -81,7 +98,17 @@ class Pilot(PilotAPI):
 
     # PilotAPI
     async def stop_commanded(self) -> None:
-        pass
+        logger.info("Pilot received stop command, setting shutdown flag and closing connections")
+        self.shutdown_flag = True
+        
+        # Close all client connections
+        for uri, client in list(self.other_node_clients.items()):
+            try:
+                await client.close()
+            except Exception as e:
+                logger.debug(f"Error closing connection to {uri}: {e}")
+        
+        self.other_node_clients.clear()
         
     async def ensure_node_connection(self, target_uri):
         if target_uri not in self.other_node_clients:
