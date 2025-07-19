@@ -4,6 +4,8 @@ from raftengine.deck.log_control import LogController
 
 def setup_logging():
 
+    if LogController.controller:
+        return LogController.controller
     test_loggers = [('ClusterOps', 'Cluster operations'),
                     ('PausingServer', 'Test server implementation'),
                     ('SimulatedNetwork', 'Network simulation'),

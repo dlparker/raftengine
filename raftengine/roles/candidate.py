@@ -42,7 +42,7 @@ class Candidate(BaseRole):
                 message = RequestVoteMessage(sender=self.deck.get_my_uri(),
                                              receiver=node_id,
                                              term=self.term,
-                                             prevLogTerm=await self.log.get_term(),
+                                             prevLogTerm=await self.log.get_last_term(),
                                              prevLogIndex=await self.log.get_last_index())
                 await self.deck.send_message(message)
         timeout = await self.cluster_ops.get_election_timeout()

@@ -22,7 +22,7 @@ from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
 log_control = setup_logging()
-#log_control.set_default_level('debug')
+log_control.set_default_level('debug')
 logger = logging.getLogger("test_code")
 
 
@@ -272,8 +272,14 @@ async def test_snapshot_3(cluster_maker):
     await cluster.stop_auto_comms()
     assert ts_1.deck.is_leader() is False
     new_leader = cluster.get_leader()
-    assert new_leader is not None
-    assert new_leader.uri != ts_1.uri
+    # sometimes the old leader does not get the new leader's uri instantly,
+    # there is a timing issue, if the new leader's TERM START hansing hit yet
+    start_time = time.time()
+    while new_leader is None and time.time() - start_time < 0.1:
+        await asyncio.sleep(0.0001)
+        await cluster.deliver_all_pending()
+        new_leader = cluster.get_leader()
+    assert ts_1.deck.leader_uri == new_leader.uri
     
     # log should now have only the term start record
     assert await ts_1.log.read(last_index) is None

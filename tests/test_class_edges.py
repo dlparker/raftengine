@@ -144,9 +144,15 @@ async def test_message_ops():
 async def test_log_controller_basic():
     """Test basic LogController functionality"""
     from raftengine.deck.log_control import LogController
-    
-    # Test initialization
+
+    saved_log_controller = LogController.controller
+    LogController.controller = None
+    with pytest.raises(Exception):
+        LogController.get_controller()
     controller = LogController()
+    assert LogController.controller is not None
+    assert LogController.get_controller() == controller
+    
     assert controller.default_level == "ERROR"
     assert controller.default_handlers == ["stdout"]
     assert len(controller.known_loggers) == 7  # Core Raft loggers
@@ -154,16 +160,20 @@ async def test_log_controller_basic():
     
     # Test with additional loggers
     additional_loggers = [("TestLogger", "Test logger description")]
+    LogController.controller = None
     controller2 = LogController(additional_loggers=additional_loggers)
     assert len(controller2.known_loggers) == 8  # Core + 1 additional
     assert "TestLogger" in controller2.known_loggers
     assert controller2.known_loggers["TestLogger"].description == "Test logger description"
-
+    LogController.controller = saved_log_controller 
+    
 async def test_log_controller_logger_levels():
     """Test logger level management"""
     from raftengine.deck.log_control import LogController
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test setting logger levels with strings
@@ -188,12 +198,15 @@ async def test_log_controller_logger_levels():
     controller.set_default_level("CRITICAL")
     assert controller.get_logger_level("Leader") == logging.DEBUG  # Still custom
     assert controller.get_logger_level("Deck") == logging.CRITICAL  # Changed to default
+    LogController.controller = saved_log_controller 
 
 async def test_log_controller_errors():
     """Test error handling in LogController"""
     from raftengine.deck.log_control import LogController
     import pytest
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test invalid logger name
@@ -209,12 +222,15 @@ async def test_log_controller_errors():
     
     with pytest.raises(ValueError, match="Invalid level"):
         controller.set_default_level("INVALID_LEVEL")
+    LogController.controller = saved_log_controller 
 
 async def test_log_controller_add_logger():
     """Test adding new loggers"""
     from raftengine.deck.log_control import LogController
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test adding logger with defaults
@@ -232,12 +248,15 @@ async def test_log_controller_add_logger():
     # Test adding logger with custom handlers
     controller.add_logger("CustomLogger3", "Third custom logger", handlers=["file"])
     assert controller.known_loggers["CustomLogger3"].handler_names == ["file"]
+    LogController.controller = saved_log_controller 
 
 async def test_log_controller_save_restore():
     """Test save and restore functionality"""
     from raftengine.deck.log_control import LogController
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set some custom levels
@@ -265,6 +284,7 @@ async def test_log_controller_save_restore():
     # Test error when restoring without saving
     with pytest.raises(RuntimeError, match="No saved levels to restore"):
         controller.restore_saved_levels()
+    LogController.controller = saved_log_controller 
 
 async def test_handler_def():
     """Test HandlerDef dataclass"""
@@ -331,6 +351,8 @@ async def test_handler_management():
     from raftengine.deck.log_control import LogController
     import pytest
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test listing handlers
@@ -384,11 +406,14 @@ async def test_handler_management():
     
     with pytest.raises(ValueError, match="Handler .* not found"):
         controller.remove_handler("nonexistent")
+    LogController.controller = saved_log_controller 
 
 async def test_handler_creation_utilities():
     """Test handler creation utility methods"""
     from raftengine.deck.log_control import LogController
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test create_stdout_handler
@@ -419,12 +444,15 @@ async def test_handler_creation_utilities():
     assert handler.level == "INFO"
     assert handler.description == "New custom handler"
     assert handler.extra_config["address"] == ("localhost", 514)
+    LogController.controller = saved_log_controller 
 
 async def test_logger_handler_association():
     """Test logger-handler association methods"""
     from raftengine.deck.log_control import LogController
     import pytest
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test getting logger handlers
@@ -466,12 +494,15 @@ async def test_logger_handler_association():
     
     with pytest.raises(ValueError, match="Logger .* not found"):
         controller.get_logger_handlers("NonExistentLogger")
+    LogController.controller = saved_log_controller 
 
 async def test_default_handlers():
     """Test default handler management"""
     from raftengine.deck.log_control import LogController
     import pytest
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test getting default handlers
@@ -491,23 +522,29 @@ async def test_default_handlers():
     # Test error with invalid handler
     with pytest.raises(ValueError, match="Handler .* not found"):
         controller.set_default_handlers(["NonExistentHandler"])
+    LogController.controller = saved_log_controller 
 
 async def test_add_logger_errors():
     """Test error cases when adding loggers"""
     from raftengine.deck.log_control import LogController
     import pytest
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Test adding logger with invalid handler
     with pytest.raises(ValueError, match="Handler .* not found"):
         controller.add_logger("TestLogger", "Test", handlers=["NonExistentHandler"])
+    LogController.controller = saved_log_controller 
 
 async def test_temporary_log_control():
     """Test TemporaryLogControl context manager"""
     from raftengine.deck.log_control import LogController, TemporaryLogControl
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set initial levels
@@ -558,11 +595,14 @@ async def test_temporary_log_control():
     assert controller.get_logger_level("Follower") == original_follower_level
     assert controller.get_logger_level("Candidate") == original_candidate_level
     assert controller.get_logger_handlers("Follower") == ["stdout"]
+    LogController.controller = saved_log_controller 
 
 async def test_temporary_handler_control():
     """Test TemporaryHandlerControl context manager"""
     from raftengine.deck.log_control import LogController, TemporaryHandlerControl
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set initial handlers
@@ -586,6 +626,7 @@ async def test_temporary_handler_control():
     # After context, handlers should be restored
     assert controller.get_logger_handlers("Leader") == original_leader_handlers
     assert controller.get_logger_handlers("Follower") == original_follower_handlers
+    LogController.controller = saved_log_controller 
 
 async def test_convenience_functions():
     """Test convenience functions for creating context managers"""
@@ -610,6 +651,8 @@ async def test_to_dict_config():
     """Test to_dict_config method"""
     from raftengine.deck.log_control import LogController
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set some custom levels
@@ -668,11 +711,14 @@ async def test_to_dict_config():
     candidate_logger = config["loggers"]["Candidate"]
     assert candidate_logger["level"] == "ERROR"  # Default level
     assert "custom_handler" in candidate_logger["handlers"]
+    LogController.controller = saved_log_controller 
 
 async def test_get_known_copies():
     """Test get_known_loggers and get_known_handlers return copies"""
     from raftengine.deck.log_control import LogController
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Get copies
@@ -690,12 +736,15 @@ async def test_get_known_copies():
     # Should be different objects
     assert loggers_copy is not controller.known_loggers
     assert handlers_copy is not controller.known_handlers
+    LogController.controller = saved_log_controller 
 
 async def test_apply_config():
     """Test apply_config method"""
     from raftengine.deck.log_control import LogController
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set a custom level
@@ -707,12 +756,15 @@ async def test_apply_config():
     # Check that the actual logging system is configured
     leader_logger = logging.getLogger("Leader")
     assert leader_logger.level == logging.DEBUG
+    LogController.controller = saved_log_controller 
 
 async def test_internal_set_logger_level_without_custom_flag():
     """Test internal _set_logger_level_without_custom_flag method"""
     from raftengine.deck.log_control import LogController
     import logging
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Set a custom level first
@@ -728,11 +780,14 @@ async def test_internal_set_logger_level_without_custom_flag():
     # Test with unknown logger
     with pytest.raises(ValueError, match="Unknown logger"):
         controller._set_logger_level_without_custom_flag("UnknownLogger", "INFO")
+    LogController.controller = saved_log_controller 
 
 async def test_remove_handler_removes_from_loggers():
     """Test that removing a handler removes it from all loggers"""
     from raftengine.deck.log_control import LogController
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Add a custom handler
@@ -753,11 +808,14 @@ async def test_remove_handler_removes_from_loggers():
     assert "test_handler" not in controller.get_logger_handlers("Leader")
     assert "test_handler" not in controller.get_logger_handlers("Follower")
     assert "test_handler" not in controller.list_handlers()
+    LogController.controller = saved_log_controller 
 
 async def test_handler_deduplication():
     """Test that handlers are not duplicated when assigned multiple times"""
     from raftengine.deck.log_control import LogController
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Assign same handler multiple times
@@ -768,13 +826,17 @@ async def test_handler_deduplication():
     # Should only appear once
     handlers = controller.get_logger_handlers("Leader")
     assert handlers.count("file") == 1
+    LogController.controller = saved_log_controller 
 
 async def test_temporary_log_control_with_nonexistent_logger():
     """Test TemporaryLogControl with nonexistent logger in temporary_handlers"""
     from raftengine.deck.log_control import LogController, TemporaryLogControl
     
+    saved_log_controller = LogController.controller
+    LogController.controller = None
     controller = LogController()
     
     # Should not crash with nonexistent logger
     with TemporaryLogControl(controller, temporary_handlers={"NonExistentLogger": ["stdout"]}):
         pass  # Should complete without error
+    LogController.controller = saved_log_controller 

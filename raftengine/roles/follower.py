@@ -187,14 +187,14 @@ class Follower(BaseRole):
             await self.send_vote_response_message(message, vote_yes=False)
             return
             
-        # Leadership claims have to be for max log commit index of
+        # Leadership claims have to be for max log index of
         # at least the same as our local copy
-        commit_index = await self.log.get_commit_index()
-        if commit_index > 0:
+        local_index = await self.log.get_last_index()
+        local_term = await self.log.get_last_term()
+        if local_index > 0:
             # If the messages claim for last committed log index or term are not at least as high
             # as our local values, then vote no.
-            rec = await self.log.read(commit_index)
-            if message.prevLogIndex < commit_index or message.prevLogTerm < rec.term:
+            if message.prevLogIndex < local_index or message.prevLogTerm < local_term:
                 self.logger.info("%s voting false on %s", self.my_uri(),
                                  message.sender)
                 vote = False

@@ -49,8 +49,10 @@ class LogController:
         if cls.controller is not None:
             raise Exception('you must call make_controller one time only, then call get_controller afterwards')
         cls.controller = cls(*args, **kwargs)
-    
-    def __init__(self, additional_loggers: Optional[List[tuple]] = None, default_level: str = "ERROR"):
+        return cls.controller
+
+    def __init__(self, additional_loggers: Optional[List[tuple]] = None, default_level: str = "ERROR",
+                 temporary=False):
         """
         Initialize the LogController with the known logger names from the system.
         Builds a dictionary of logger names as a class property during init.
@@ -58,8 +60,11 @@ class LogController:
         Args:
             additional_loggers: Optional list of tuples (name, description) to add to known loggers
         """
-        if self.controller is not None:
-            raise Exception('initializing LogController class twice causes issues')
+        if not temporary:
+            if LogController.controller is not None:
+                raise Exception('initializing LogController class twice causes issues')
+            else:
+                LogController.controller = self
         # Default level for all loggers
         self.default_level = default_level.upper()
         
@@ -695,7 +700,7 @@ def create_temporary_log_control(keep_active: Optional[List[str]] = None,
     Returns:
         TemporaryLogControl context manager
     """
-    log_controller = LogController()
+    log_controller = LogController(temporary=True)
     return TemporaryLogControl(log_controller, keep_active, silence_level, temporary_handlers)
 
 
@@ -746,5 +751,5 @@ def create_temporary_handler_control(handler_changes: Dict[str, List[str]]) -> T
     Returns:
         TemporaryHandlerControl context manager
     """
-    log_controller = LogController()
+    log_controller = LogController(temporary=True)
     return TemporaryHandlerControl(log_controller, handler_changes)

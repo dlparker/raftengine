@@ -12,10 +12,10 @@ from collections import defaultdict
 from raftengine.deck.deck import Deck
 from raftengine.api.deck_api import CommandResult
 from raftengine.deck.log_control import LogController
+from raftengine.dev_tools.sqlite_log import SqliteLog
 from base.operations import Teller
 from base.datatypes import Customer, Account, AccountType, CommandType
 from base.dispatcher import Dispatcher
-from raft_ops.sqlite_log import SqliteLog
 from raft_ops.pilot import Pilot
 from raft_ops.local_ops import LocalDispatcher
 
