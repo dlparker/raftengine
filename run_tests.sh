@@ -17,6 +17,7 @@ ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == "--debug" ]]; then
         CAPTURE_OPT="--show-capture=no"
+        export RAFT_DEBUG_LOGGING=1
     else
         ARGS+=("$arg")
     fi

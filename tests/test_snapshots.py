@@ -22,7 +22,6 @@ from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
 log_control = setup_logging()
-log_control.set_default_level('debug')
 logger = logging.getLogger("test_code")
 
 

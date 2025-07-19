@@ -20,7 +20,6 @@ from dev_tools.features import registry, FeatureRegistry
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
-#log_control.set_default_level('debug')
 registry = FeatureRegistry.get_registry()
 
 

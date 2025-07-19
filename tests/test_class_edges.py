@@ -152,6 +152,13 @@ async def test_log_controller_basic():
     controller = LogController()
     assert LogController.controller is not None
     assert LogController.get_controller() == controller
+    with pytest.raises(Exception):
+        LogController.make_controller()
+    with pytest.raises(Exception):
+        LogController()
+    LogController.controller = None
+    LogController.make_controller()
+    assert LogController.controller is not None
     
     assert controller.default_level == "ERROR"
     assert controller.default_handlers == ["stdout"]

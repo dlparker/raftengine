@@ -17,7 +17,6 @@ from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
-#log_control.set_default_level('debug')
 
 registry = FeatureRegistry.get_registry()
 
