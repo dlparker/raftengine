@@ -515,9 +515,7 @@ class Leader(BaseRole):
                 # response and decide whether a retry or redirect is needed
                 try:
                     # Wait for the future to resolve
-                    result_data = await asyncio.wait_for(
-                        command_rec['future'], timeout=remaining_wait
-                    )
+                    result_data = await asyncio.wait_for(command_rec['future'], timeout=remaining_wait)
                     async with self.active_commands_lock:
                         result = CommandResult(
                             command=log_rec.command,

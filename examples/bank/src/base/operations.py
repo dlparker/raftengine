@@ -142,11 +142,18 @@ class Teller:
     async def get_account_count(self) -> int:
         return self.db.get_account_count()
     
-    async def get_accounts(self, customer_id: int) -> List[int]:
+    async def get_accounts(self, customer_id: int) -> List[Account]:
         cust_rec = self.db.get_customer(customer_id)
         if not cust_rec:
             raise ValueError(f"Customer {customer_id} not found")
-        return cust_rec.accounts
+        
+        # Fetch full Account objects for each account ID
+        accounts = []
+        for account_id in cust_rec.accounts:
+            account = self.db.get_account(account_id)
+            if account:  # Handle case where account might not exist
+                accounts.append(account)
+        return accounts
     
     async def list_statements(self, account_id: int) -> List[date]:
         return self.db.get_statement_dates(account_id)

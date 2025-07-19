@@ -248,8 +248,10 @@ async def run_single_test(teller, fake, loop_num, timing_data, starting_account_
         customer_accounts = await timed_operation('get_accounts', 
                                                 teller.get_accounts(customer.cust_id))
         assert len(customer_accounts) == 2
-        assert checking.account_id in customer_accounts
-        assert savings.account_id in customer_accounts
+        # customer_accounts now contains Account objects, not just IDs
+        account_ids = [account.account_id for account in customer_accounts]
+        assert checking.account_id in account_ids
+        assert savings.account_id in account_ids
         
         # Test list_statements
         statements = await timed_operation('list_statements', 
