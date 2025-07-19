@@ -15,8 +15,10 @@ import traceback
 from operator import methodcaller
 import jsonpickle
 from enum import StrEnum, auto
-logger = logging.getLogger(__name__)
-
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger("rpc_ops.LocalOpsForRPCs",
+                          "Collector and Dispatcher for enabling 'local_ops' RPCs")
 
 class LocalCommandType(StrEnum):
     """Command types for the local_command function 
@@ -140,6 +142,8 @@ class LocalDispatcher:
             # Convert args to dictionary for method call
             if args is None or args == {}:
                 kwargs = {}
+            elif isinstance(args, dict):
+                kwargs = args
             else:
                 kwargs = args.__dict__
 

@@ -3,10 +3,13 @@ from typing import Any
 from operator import methodcaller
 import traceback
 import jsonpickle
+from raftengine.deck.log_control import LogController
 from base.datatypes import CommandType, Customer, Account, AccountType
 from base.collector import Command 
 
-logger = logging.getLogger(__name__)
+logger = LogController.get_controller().add_logger("base.Dispatcher",
+                                                 "The component that coverts serialized method calls"\
+                                                 " into actual calls to the he Teller object")
 
 class Dispatcher:
     def __init__(self, teller):

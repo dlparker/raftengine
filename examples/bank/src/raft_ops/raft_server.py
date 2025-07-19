@@ -12,15 +12,17 @@ from collections import defaultdict
 from raftengine.deck.deck import Deck
 from raftengine.api.deck_api import CommandResult
 from raftengine.deck.log_control import LogController
-from raftengine.dev_tools.sqlite_log import SqliteLog
 from base.operations import Teller
 from base.datatypes import Customer, Account, AccountType, CommandType
 from base.dispatcher import Dispatcher
 from raft_ops.pilot import Pilot
 from raft_ops.local_ops import LocalDispatcher
+from raft_ops.sqlite_log import SqliteLog
 
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger("rpc_ops.RaftServer",
+                                   "The application's implemention of the Raftengine PilotAPI")
 
-logger = logging.getLogger("RaftServer")
 
 class RaftServer:
 
@@ -134,11 +136,11 @@ class RaftServer:
 
     # local method reachable through local_command RPC
     async def get_logging_dict(self) -> dict:
-        return LogController().get_controller().to_dict_config()
+        return LogController.get_controller().to_dict_config()
 
     # local method reachable through local_command RPC
-    def set_logging_level(self, level:str, loggers:Optional[list[str]]) -> dict:
-        lc = LogController().get_controller()
+    async def set_logging_level(self, level:str, loggers:Optional[list[str]]) -> dict:
+        lc = LogController.get_controller()
         if loggers is None or len(loggers) == 0:
             lc.set_default_level(level)
             return

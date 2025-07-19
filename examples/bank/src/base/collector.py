@@ -5,8 +5,11 @@ from decimal import Decimal
 from base.datatypes import Customer, Account, AccountType, CommandType
 from base.proxy import TellerProxyAPI
 import jsonpickle
+from raftengine.deck.log_control import LogController
+logger = LogController.get_controller().add_logger("base.Collector",
+                                                 "The component that coverts method calls that the Teller"\
+                                                 " object expects into serialize commands for raft_command calls")
 
-logger = logging.getLogger(__name__)
 
 class Collector(TellerProxyAPI):
 

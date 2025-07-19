@@ -5,11 +5,14 @@ from operator import methodcaller
 from typing import Dict, Any
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogAPI
+from raftengine.deck.log_control import LogController
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 from raftengine.messages.message_codec import MessageCodec
 
-logger = logging.getLogger("Pilot")
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger("rpc_ops.Pilot",
+                                   "The application's implemention of the Raftengine PilotAPI")
 
 class Pilot(PilotAPI):
 

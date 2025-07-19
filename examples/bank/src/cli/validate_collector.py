@@ -11,6 +11,11 @@ for parent in this_dir.parents:
             break
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
+from raftengine.deck.log_control import LogController
+# setup LogControl before importing any modules that might initialize it first
+LogController.controller = None
+log_control = LogController.make_controller()
+
 from base.demo_teller import demo_teller
 from base.validate_teller import validate_teller
 from base.operations import Teller

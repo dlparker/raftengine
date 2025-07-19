@@ -7,8 +7,10 @@ import logging
 from typing import Dict, Optional, Any
 from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('transport.client.astream')
 
-logger = logging.getLogger('bank.transport.client.astream')
 
 class RPCClient(RPCAPI):
     """

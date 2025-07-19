@@ -296,6 +296,7 @@ class LogController:
         else:
             # Set the logger level to default if no level specified
             self.set_logger_level(logger_name, self.default_level)
+        return logging.getLogger(logger_name)
         
     def get_known_loggers(self) -> Dict[str, LoggerDef]:
         """

@@ -20,7 +20,13 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
-from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
+from raftengine.deck.log_control import LogController
+# setup LogControl before importing any modules that might initialize it first
+LogController.controller = None
+log_control = LogController.make_controller()
+
+from cli.raft_admin_ops import (TRANSPORT_CHOICES, nodes_and_helper, stop_server,
+                                tail_server_logs, tail_server_errors)
 from raft_ops.local_ops import LocalCollector 
 from cli.test_client_common import validate, add_common_arguments
 
@@ -46,8 +52,7 @@ async def server_admin(target_nodes, command, RPCHelper):
                 res = await server_local_commands.start_raft()
                 print(f'Sent start_raft to server {uri} ')
             elif command == 'stop':
-                res = await server_local_commands.stop_server()
-                print(f'Sent stop command to server {uri} {res}')
+                await stop_server(rpc_client, target_nodes)
             elif command == 'status':
                 try:
                     status = await server_local_commands.get_status()
@@ -64,11 +69,23 @@ async def server_admin(target_nodes, command, RPCHelper):
                 try:
                     config = await server_local_commands.get_logging_dict()
                     res = json.dumps(config, indent=4)
-                    print(config)
+                    print(res)
                 except:
                     traceback.print_exc()
                     running = False
                     print(f'Server {uri} not reachable, probably not running')
+            elif command == 'set_logging_level':
+                try:
+                    await server_local_commands.set_logging_level("debug", [])
+                    print("set to debug")
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
+            elif command == 'tail':
+                await tail_server_logs(rpc_client, target_nodes)
+            elif command == 'tail_errors':
+                await tail_server_errors(rpc_client, target_nodes)
             await rpc_client.close()
         except:
             traceback.print_exc()
@@ -78,7 +95,8 @@ async def main():
     parser = argparse.ArgumentParser(description="Raft Server admin client")
     
     parser.add_argument('command', choices=['getpid', 'start_raft', 'stop',
-                                            'status', 'take_power', 'get_log_config'],
+                                            'status', 'take_power', 'get_log_config',
+                                            "set_logging_level", "tail", "tail_errors"],
                         help='Command to execute')
     parser.add_argument('--transport', '-t', 
                         required=True,

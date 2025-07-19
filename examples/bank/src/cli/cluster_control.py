@@ -19,6 +19,11 @@ for parent in this_dir.parents:
 else:
     raise ImportError("Could not find 'src' directory in the path hierarchy")
 
+from raftengine.deck.log_control import LogController
+# setup LogControl before importing any modules that might initialize it first
+LogController.controller = None
+log_control = LogController.make_controller()
+
 from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
 from cli.raft_admin import server_admin
 from raft_ops.local_ops import LocalCollector 

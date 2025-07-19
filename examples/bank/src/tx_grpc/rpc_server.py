@@ -4,11 +4,12 @@ import traceback
 import json
 import grpc
 from concurrent import futures
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('transport.server.astream')
 
 # Import generated gRPC code using absolute imports
 from tx_grpc import banking_pb2, banking_pb2_grpc
-
-logger = logging.getLogger('bank.transport.server.grpc')
 
 class RPCServer(banking_pb2_grpc.BankingServiceServicer):
     """gRPC servicer implementing the banking service interface"""

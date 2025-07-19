@@ -3,6 +3,11 @@ import asyncio
 import argparse
 from pathlib import Path
 import sys
+from raftengine.deck.log_control import LogController
+# setup LogControl before importing any modules that might initialize it first
+LogController.controller = None
+log_control = LogController.make_controller()
+
 this_dir = Path(__file__).resolve().parent
 for parent in this_dir.parents:
     if parent.name == 'src':

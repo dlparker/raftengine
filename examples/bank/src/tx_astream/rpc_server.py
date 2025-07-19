@@ -2,10 +2,10 @@ import asyncio
 import traceback
 import json
 from typing import Set
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('transport.server.astream')
 
-import logging
-
-logger = logging.getLogger('bank.transport.server.astream')
 
 class RPCServer:
     """

@@ -7,8 +7,13 @@ from datetime import timedelta, date
 from decimal import Decimal
 from functools import wraps
 from raftengine.api.deck_api import CommandResult
+from raftengine.deck.log_control import LogController
 from base.datatypes import Customer, Account, AccountType
 from base.rpc_api import RPCAPI
+
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger("rpc_ops.RaftClient",
+                                   "Client layer that adds redirect and retry logic to RPC client")
 
 class RaftClient(RPCAPI):
     """

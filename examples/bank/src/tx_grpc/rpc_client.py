@@ -4,11 +4,12 @@ import traceback
 import grpc
 from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('transport.client.grpc')
 
 # Import generated gRPC code using absolute imports
 from tx_grpc import banking_pb2, banking_pb2_grpc
-
-logger = logging.getLogger('bank.transport.client.grpc')
 
 class RPCClient(RPCAPI):
     

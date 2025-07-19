@@ -5,8 +5,10 @@ import aiohttp
 import json
 from base.rpc_api import RPCAPI
 from raftengine.api.deck_api import CommandResult
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('transport.client.fastapi')
 
-logger = logging.getLogger('bank.transport.client.fastapi')
 
 class RPCClient(RPCAPI):
     
@@ -17,7 +19,7 @@ class RPCClient(RPCAPI):
         self.session = None
     
     def get_uri(self):
-        return f"fasapi://{self.host}:{self.port}"
+        return f"fastapi://{self.host}:{self.port}"
 
     async def connect(self):
         """Create HTTP session"""
