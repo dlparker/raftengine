@@ -6,6 +6,7 @@ Works with both stub servers and raft clusters using the same transport.
 import asyncio
 import argparse
 import traceback
+import json
 from pathlib import Path
 import sys
 from pprint import pprint
@@ -59,14 +60,25 @@ async def server_admin(target_nodes, command, RPCHelper):
             elif command == 'take_power':
                 res = await server_local_commands.start_campaign()
                 print(f'Server {uri} should now start a campaign')
+            elif command == 'get_log_config':
+                try:
+                    config = await server_local_commands.get_logging_dict()
+                    res = json.dumps(config, indent=4)
+                    print(config)
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
             await rpc_client.close()
         except:
             traceback.print_exc()
             print(f'could not complete command for {uri}')
+
 async def main():
     parser = argparse.ArgumentParser(description="Raft Server admin client")
     
-    parser.add_argument('command', choices=['getpid', 'start_raft', 'stop', 'status', 'take_power'],
+    parser.add_argument('command', choices=['getpid', 'start_raft', 'stop',
+                                            'status', 'take_power', 'get_log_config'],
                         help='Command to execute')
     parser.add_argument('--transport', '-t', 
                         required=True,

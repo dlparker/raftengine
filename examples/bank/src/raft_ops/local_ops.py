@@ -35,6 +35,12 @@ class LocalCommandType(StrEnum):
     # Will return some status about the server
     GET_STATUS = auto()
 
+    # Will return logging confic dict
+    GET_LOGGING_DICT = auto()
+
+    # Set the log level globally or specificially
+    SET_LOGGING_LEVEL = auto()
+
     # Will cause target server to try to take power.
     # Bad idea in production, useful in testing, running
     # demos, etc.
@@ -73,6 +79,15 @@ class LocalCollector:
 
     async def stop_server(self) -> int:
         command = LocalCommand(command_name=LocalCommandType.STOP_SERVER, args=None)
+        return await self.build_command(command)
+
+    async def get_logging_dict(self) -> int:
+        command = LocalCommand(command_name=LocalCommandType.GET_LOGGING_DICT, args=None)
+        return await self.build_command(command)
+
+    async def set_logging_level(self, level:str, loggers:list[str]) -> int:
+        command = LocalCommand(command_name=LocalCommandType.SET_LOGGING_LEVEL,
+                               args=dict(level=level, loggers=loggers))
         return await self.build_command(command)
 
     async def start_campaign(self) -> int:

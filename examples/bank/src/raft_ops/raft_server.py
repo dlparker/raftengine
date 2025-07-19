@@ -4,12 +4,14 @@ import asyncio
 import traceback
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import timedelta, date
 from decimal import Decimal
+from logging.config import dictConfig
 from collections import defaultdict
 from raftengine.deck.deck import Deck
 from raftengine.api.deck_api import CommandResult
+from raftengine.deck.log_control import LogController
 from base.operations import Teller
 from base.datatypes import Customer, Account, AccountType, CommandType
 from base.dispatcher import Dispatcher
@@ -40,6 +42,7 @@ class RaftServer:
         self.stopped = False
         self.rpc_server_stopper = None
         self.local_dispatcher = LocalDispatcher(self)
+        
 
     # RPC method
     async def run_command(self, command: str) -> CommandResult:
@@ -128,6 +131,27 @@ class RaftServer:
                    customer_count=await self.teller.get_customer_count(),
                    account_count=await self.teller.get_account_count())
         return res
+
+    # local method reachable through local_command RPC
+    async def get_logging_dict(self) -> dict:
+        return LogController().get_controller().to_dict_config()
+
+    # local method reachable through local_command RPC
+    def set_logging_level(self, level:str, loggers:Optional[list[str]]) -> dict:
+        lc = LogController().get_controller()
+        if loggers is None or len(loggers) == 0:
+            lc.set_default_level(level)
+            return
+        res = {}
+        for logger in loggers:
+            try:
+                lc.set_logger_level(logger, level)
+                res[logger] = "set to " + level
+            except ValueError:
+                res[logger] = "logger not registered with LogControl"
+        return res
+    
     # local only method
     def set_rpc_server_stopper(self, stopper):
         self.rpc_server_stopper = stopper
+

@@ -36,6 +36,19 @@ class LogController:
     This replaces the organic growth of logging_ops.py with a cleaner, more controlled
     approach to managing logger levels during testing and development.
     """
+    controller = None
+
+    @classmethod
+    def get_controller(cls):
+        if cls.controller is None:
+            raise Exception('you must call make controller first, or initialize it directly')
+        return cls.controller
+
+    @classmethod
+    def make_controller(cls, *args, **kwargs):
+        if cls.controller is not None:
+            raise Exception('you must call make_controller one time only, then call get_controller afterwards')
+        cls.controller = cls(*args, **kwargs)
     
     def __init__(self, additional_loggers: Optional[List[tuple]] = None, default_level: str = "ERROR"):
         """
@@ -45,6 +58,8 @@ class LogController:
         Args:
             additional_loggers: Optional list of tuples (name, description) to add to known loggers
         """
+        if self.controller is not None:
+            raise Exception('initializing LogController class twice causes issues')
         # Default level for all loggers
         self.default_level = default_level.upper()
         
