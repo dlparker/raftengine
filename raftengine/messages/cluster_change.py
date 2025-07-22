@@ -54,7 +54,8 @@ class MembershipChangeResponseMessage(BaseMessage):
         self.code = self.__class__.code
 
     def is_reply_to(self, other):
-        if (other.__class__ == MembershipChangeMessage
+        if (other.__class__ == MembershipChangeMessage 
+            and other.sender == self.receiver and other.receiver == self.sender
             and other.op == self.op
             and other.target_uri == self.target_uri):
             return True

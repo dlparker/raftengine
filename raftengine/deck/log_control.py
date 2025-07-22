@@ -321,7 +321,8 @@ class LogController:
         # Define formatters
         formatters = {
             "standard": {
-                "format": "[%(levelname)s] %(name)s: %(message)s"
+                "format": "[%(asctime)s.%(msecs)03d %(levelname)-7s] %(name)-15s: %(message)s",
+                'datefmt': "%M:%S"
             }
         }
         

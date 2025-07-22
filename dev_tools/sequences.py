@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 import time
 
 from dev_tools.triggers import WhenElectionDone, WhenHasAppliedIndex, \
@@ -221,22 +222,34 @@ class SPartialCommand(StdSequence):
         self.logger.debug("Setup partial command sequence, will run command at %s for nodes %s", node.uri, self.voters)
 
     async def runner_wrapper(self, node):
-        # wait until has commit index
-        await node.run_till_triggers(timeout=self.timeout + 0.1 * self.timeout)
-        if node == self.leader:
-            # also need to send heartbeats so others get the commit index update
-            self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
-            node.clear_triggers()
-            await node.deck.role.send_heartbeats()
-            self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
-            node.set_trigger(WhenCommitIndexSent(self.target_index))
-            # leader needs to send commit index to all other nodes, even
-            # if they are blocked or partitioned away
-            for i in  range(0, len(self.cluster.nodes) -1):
-                if node.uri not in self.voters:
-                    continue
-                await node.run_till_triggers()
-        self.done_count += 1
+        try:
+            # wait until has commit index
+            await node.run_till_triggers(timeout=self.timeout + 0.1 * self.timeout)
+            if node == self.leader:
+                # also need to send heartbeats so others get the commit index update
+                self.logger.debug("Leader %s commit to %d, triggering heartbeats", node.uri, self.target_index)
+                node.clear_triggers()
+                await node.deck.role.send_heartbeats()
+                self.logger.debug("Heartbeats send triggered, waiting for heartbeats send to followers")
+                node.set_trigger(WhenCommitIndexSent(self.target_index))
+                # leader needs to send commit index to all other nodes, even
+                # if they are blocked or partitioned away
+                for i in  range(0, len(self.cluster.nodes) -1):
+                    if node.uri not in self.voters:
+                        continue
+                    await node.run_till_triggers()
+            self.done_count += 1
+        except Exception as e:
+            msg = f'{node.uri} exceptiont waiting for triggers'
+            #msg += traceback.format_exc()
+            if node.trigger is not None:
+                msg  += ' ' + await node.trigger.dump_condition(node)
+            elif node.trigger_set is not None:
+                for trigger in node.trigger_set:
+                    msg  += ' ' + await trigger.dump_condition(node)
+            breakpoint()
+            raise Exception(msg)
+            
 
     async def command_wrapper(self, node, command, timeout=0.1):
         self.logger.debug("Running command %s at  %s", command, node.uri)

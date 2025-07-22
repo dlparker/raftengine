@@ -47,9 +47,9 @@ async def test_str_methods():
     assert "v=True" in str(RequestVoteResponseMessage('a','b', 0, 0, 0, True))
     assert "v=False" in str(RequestVoteResponseMessage('a','b', 0, 0, 0, False))
     assert "append_entries" in str(AppendEntriesMessage('a','b', 0, 0, 0, entries=[]))
-    assert "append_response" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, True, 'a'))
-    assert "s=True" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, True, 'a'))
-    assert "s=False" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, False, 'a'))
+    assert "append_response" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, True, 'a', 0))
+    assert "s=True" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, True, 'a', 0))
+    assert "s=False" in str(AppendResponseMessage('a','b', 0, 0, 0, 0, False, 'a', 0))
 
 async def test_enum_edges():
     
@@ -65,16 +65,19 @@ async def test_message_ops():
     from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
     from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
     from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
-    
+
     rec_1 = LogRec(index=1, term=1, command="add 1", leader_id='mcpy://1', committed=True, applied=True)
     ae_1 = AppendEntriesMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0,
                                entries = [rec_1], commitIndex=0)
-    re_1 = AppendResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, maxIndex=1, success=True, leaderId='mcpy://1')
-
+    # do the encode first so that it inserts a serial number
     jd1, sn1 = MessageCodec.encode_message(ae_1)
+    re_1 = AppendResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, maxIndex=1,
+                                 success=True, leaderId='mcpy://1', original_serial=ae_1.serial_number)
+
     jd2, sn2 = MessageCodec.encode_message(re_1)
     c_ae_1 = MessageCodec.decode_message(jd1)
     c_re_1 = MessageCodec.decode_message(jd2)
+    
     assert c_re_1.is_reply_to(ae_1)
     assert re_1.is_reply_to(c_ae_1)
     assert str(ae_1) == str(c_ae_1)
@@ -90,6 +93,8 @@ async def test_message_ops():
     assert str(mc_1) == str(c_mc_1)
     assert str(rmc_1) == str(c_rmc_1)
     assert c_rmc_1.is_reply_to(mc_1)
+    rmc_2 = MembershipChangeResponseMessage('mcpy://3', 'mcpy://4', op=ChangeOp.add, target_uri="mcpy://4", ok=True)
+    assert not  rmc_2.is_reply_to(mc_1)
 
 
     tpm_1 = TransferPowerMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0)
@@ -103,6 +108,8 @@ async def test_message_ops():
     assert tpr_1.is_reply_to(c_tpm_1)
     assert str(tpm_1) == str(c_tpm_1)
     assert str(tpr_1) == str(c_tpr_1)
+    tpr_2 = TransferPowerResponseMessage('mcpy://3', 'mcpy://4', term=1, prevLogIndex=0, prevLogTerm=0, success=True)
+    assert not tpr_2.is_reply_to(tpm_1)
 
  
     pvm_1 = PreVoteMessage('mcpy://1', 'mcpy://2', term=1, prevLogIndex=0, prevLogTerm=0)
@@ -683,10 +690,6 @@ async def test_to_dict_config():
     
     assert config["version"] == 1
     assert config["disable_existing_loggers"] == True
-    
-    # Check formatters
-    assert "standard" in config["formatters"]
-    assert config["formatters"]["standard"]["format"] == "[%(levelname)s] %(name)s: %(message)s"
     
     # Check handlers
     assert "stdout" in config["handlers"]

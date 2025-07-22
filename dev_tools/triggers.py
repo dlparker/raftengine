@@ -9,6 +9,9 @@ class PauseTrigger: # pragma: no cover
     async def is_tripped(self, server):
         return False
 
+    async def dump_condition(self, server):
+        return ""
+
 async def flush_one_out_message(server, message):
      new_list = None
      if not server.block_messages:
@@ -64,9 +67,10 @@ class WhenMessageOut(PauseTrigger):
 
 class WhenCommitIndexSent(WhenMessageOut):
 
-    def __init__(self, target_index, message_target=None):
+    def __init__(self, target_index, message_target=None, at_least=True):
         super().__init__(AppendEntriesMessage.get_code(), message_target, flush_when_done=True)
         self.target_index = target_index
+        self.at_least = True
         
     def __repr__(self):
         msg = super().__repr__()
@@ -76,8 +80,12 @@ class WhenCommitIndexSent(WhenMessageOut):
     async def is_tripped(self, server):
         done = False
         if await super().is_tripped(server):
-            if self.trigger_message.commitIndex == self.target_index:
-                done = True
+            if self.at_least:
+                if self.trigger_message.commitIndex >= self.target_index:
+                    done = True
+            else:
+                if self.trigger_message.commitIndex >= self.target_index:
+                    done = True
         return done
     
 class WhenMessageIn(PauseTrigger):
@@ -209,7 +217,12 @@ class WhenHasLogIndex(PauseTrigger):
         if await server.deck.log.get_last_index() >= self.index:
             return True
         return False
-    
+
+    async def dump_condition(self, server):
+        uri = server.uri
+        log_index = await server.deck.log.get_last_index()
+        return f'{uri} log index = {log_index} expected {self.index}'
+        
 class WhenHasCommitIndex(PauseTrigger):
     # When the server has committed record with provided index
     def __init__(self, index):
@@ -223,6 +236,11 @@ class WhenHasCommitIndex(PauseTrigger):
         if await server.deck.log.get_commit_index() >= self.index:
             return True
         return False
+
+    async def dump_condition(self, server):
+        uri = server.uri
+        log_index = await server.deck.log.get_last_index()
+        return f'{uri} log index = {log_index} expected {self.index}'
     
 class WhenHasAppliedIndex(PauseTrigger):
     # When the server has applied record with provided index
@@ -238,6 +256,11 @@ class WhenHasAppliedIndex(PauseTrigger):
         if await server.deck.log.get_applied_index() >= self.index:
             return True
         return False
+
+    async def dump_condition(self, server):
+        uri = server.uri
+        log_index = await server.deck.log.get_applied_index()
+        return f'{uri} log index = {log_index} expected {self.index}'
     
 class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the

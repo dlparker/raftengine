@@ -36,6 +36,9 @@ async def start_server(index, uri, transport, RPCHelper, slow_timeouts=True):
     if slow_timeouts:
         cmd.append('--slow_timeouts')
     work_dir = Path('/tmp', f"raft_server.{transport}.{index}")
+    if not work_dir.exists():
+        work_dir.mkdir()
+    
     stdout_file = Path(work_dir,'server.stdout')
     stderr_file = Path(work_dir,'server.stderr')
     try:
@@ -72,7 +75,7 @@ async def main():
     
     parser.add_argument('command', choices=['start', 'getpid', 'start_raft', 'stop', 'status', 'take_power'],
                         help='Command to execute')
-    parser.add_argument('--transport', '-t', 
+    parser.add_argument('-t', '--transport',  
                         required=True,
                         choices=TRANSPORT_CHOICES,
                         help='Transport mechanism to use')

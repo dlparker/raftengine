@@ -7,6 +7,8 @@ import json
 import logging
 from pathlib import Path
 
+logger = logging.getLogger("FeatureRegistry")
+logger.setLevel('WARNING')
 from dev_tools.feature_db import FeatureDB
 
 features_loaded = False
@@ -120,7 +122,7 @@ class FeatureRegistry:
     
     def __init__(self):
         self.features = dict()
-        self.logger = logging.getLogger("FeatureRegistry")
+        logger = logging.getLogger("FeatureRegistry")
         self.feature_db = FeatureDB()
         self.feature_db.reload_features_from_db(self)
 
@@ -221,7 +223,7 @@ class FeatureRegistry:
         self.features[name] = feat
         if not skip_db_op:
             self.feature_db.add_feature(feat)
-        self.logger.debug("created feature definition for %s", name)
+        logger.debug("created feature definition for %s", name)
         return feat
     
     def add_feature_branch(self, feature, branch_path, skip_db_op=False):
@@ -236,7 +238,7 @@ class FeatureRegistry:
         feature.branches[cur_id] = branch
         if not skip_db_op:
             self.feature_db.add_feature_branch(branch)
-        self.logger.debug("created feature branch definition for %s->%s", feature.name, branch_path)
+        logger.debug("created feature branch definition for %s->%s", feature.name, branch_path)
         return branch
     
     def build_feature_file(self, feature):

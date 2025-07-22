@@ -183,6 +183,7 @@ class BaseRole:
                                       maxIndex=await self.log.get_last_index(),
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
+                                      original_serial=message.serial_number,
                                       leaderId=leaderId)
         await self.deck.send_response(message, reply)
 

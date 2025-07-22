@@ -87,15 +87,16 @@ class LoggingAdminShell(aiocmd.PromptToolkitCmd):
         level = level.upper()
         
         # Handle special case for global logger
-        if logger_name == "(global)":
-            logger_name = ""
-        
+        if logger_name == "(global)" or logger_name == "":
+            logger_names = None
+        else:
+            logger_names = [logger_name,]
         if level not in self.valid_levels:
             print(f"Invalid level '{level}'. Valid levels: {', '.join(self.valid_levels)}")
             return
             
         try:
-            result = await self.server_local_commands.set_logging_level(level, [logger_name])
+            result = await self.server_local_commands.set_logging_level(level, logger_names)
             if isinstance(result, dict) and logger_name in result:
                 print(f"Result: {result[logger_name]}")
             else:

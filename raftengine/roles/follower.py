@@ -86,11 +86,12 @@ class Follower(BaseRole):
             return
         recs = []
         for log_rec in message.entries:
-            # ensure we don't copy the items that reflect local state
+            # ensure we don't copy the items that reflect local state at the leader
             log_rec.committed = log_rec.applied = False
             self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
-            recs.append(await self.log.append(log_rec))
+            new_rec = await self.log.append(log_rec)
+            recs.append(new_rec)
             # config changes are applied immediately
             if log_rec.code == RecordCode.cluster_config:
                 await self.cluster_ops.handle_membership_change_log_update(log_rec)
@@ -112,6 +113,7 @@ class Follower(BaseRole):
                                       maxIndex=await self.log.get_last_index(),
                                       prevLogTerm=message.prevLogTerm,
                                       prevLogIndex=message.prevLogIndex,
+                                      original_serial=message.serial_number,
                                       leaderId=self.leader_uri)
         await self.deck.send_response(message, reply)
         self.logger.info("%s out of sync with leader, sending %s",  self.my_uri(), reply)
@@ -257,6 +259,7 @@ class Follower(BaseRole):
                                                 maxIndex=await self.log.get_last_index(),
                                                 prevLogIndex=message.prevLogIndex,
                                                 prevLogTerm=message.prevLogTerm,
+                                                original_serial=message.serial_number,
                                                 leaderId=self.leader_uri)
         self.logger.debug("%s sending response %s", self.my_uri(), append_response)
         await self.deck.send_response(message, append_response)

@@ -41,13 +41,21 @@ class AppendResponseMessage(LogMessage):
     code = "append_response"
 
     def __init__(self, sender:str, receiver:str, term:int, prevLogIndex:int, prevLogTerm:int,  maxIndex: int,
-                 success: bool, leaderId: str, serial_number:int=None):
-        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm, reply_to_type=AppendEntriesMessage, serial_number=serial_number)
+                 success: bool, leaderId: str, original_serial: int, serial_number:int=None):
+        super().__init__(sender, receiver, term, prevLogIndex, prevLogTerm,
+                         reply_to_type=AppendEntriesMessage, serial_number=serial_number)
         self.leaderId = leaderId
         self.success = success
         self.maxIndex = maxIndex
+        self.original_serial = original_serial
         
     def __repr__(self):
         msg = super().__repr__()
-        msg += f" s={self.success} mi={self.maxIndex} li={self.leaderId}"
+        msg += f" s={self.success} mi={self.maxIndex} li={self.leaderId} orig={self.original_serial}"
         return msg
+
+    def is_reply_to(self, other):
+        if (other.get_code() == AppendEntriesMessage.get_code()
+            and other.serial_number == self.original_serial):
+            return True
+        return False

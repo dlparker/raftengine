@@ -9,6 +9,7 @@ from datetime import timedelta, date
 from decimal import Decimal
 from logging.config import dictConfig
 from collections import defaultdict
+import jsonpickle
 from raftengine.deck.deck import Deck
 from raftengine.api.deck_api import CommandResult
 from raftengine.deck.log_control import LogController
@@ -20,9 +21,8 @@ from raft_ops.local_ops import LocalDispatcher
 from raft_ops.sqlite_log import SqliteLog
 
 log_controller = LogController.get_controller()
-logger = log_controller.add_logger("rpc_ops.RaftServer",
+logger = log_controller.add_logger("raft_ops.RaftServer",
                                    "The application's implemention of the Raftengine PilotAPI")
-
 
 class RaftServer:
 

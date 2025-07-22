@@ -1,9 +1,15 @@
 * immediate
 
-1. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
+1. When sending a log rec to a single node, need to check to see if it is uncommitted.
+   If so, then need to setup a vote. Think about a 3 node cluster with one crashed
+   and one recovering and behind.
+2. What to do with a log record for a command that fails or times out? Need to document
+   the need for idempotent or session management.
+3. Need to delay new commands if less than quorum nodes are up to date, can
+   query node_tracker.nextIndex > await self.log.get_last_index()
+4. Check the quorum logic in Leader and make sure we have tests for it.
+5. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting info level for those loggers.
-2. update the command and log record handling to use a generated message serial, update the log record to include it,
-   then pass it to the process_command pilot method.
 
 #+BEGIN_SRC python
 import time

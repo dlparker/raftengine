@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-"""Common banking test functions used across all """
 import asyncio
 import random
 import time

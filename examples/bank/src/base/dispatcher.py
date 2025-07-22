@@ -18,6 +18,7 @@ class Dispatcher:
         jsonpickle.set_encoder_options('json', indent=2, sort_keys=True)
 
     async def run_command(self, request: str) -> str:
+        result = None
         try:
             # Deserialize jsonpickle-encoded command
             command = jsonpickle.decode(request)
@@ -27,6 +28,7 @@ class Dispatcher:
                 raise ValueError(msg)
 
             command_name = command.command_name.value  # Extract string value from CommandType
+            logger.debug('dispatching command %s', command_name)
             args = command.args
 
             # Validate method exists
@@ -44,10 +46,12 @@ class Dispatcher:
             # Call teller method
             callable_method = methodcaller(command_name, **kwargs)
             result = await callable_method(self.teller)
+            logger.debug("command %s result sending")
             serialized_result = jsonpickle.encode(result)
             return serialized_result
 
         except Exception as e:
-            command_result = traceback.format_exc()
-            serialized_result = jsonpickle.encode(command_result)
+            error = traceback.format_exc()
+            logger.error("error in command processing %s", error)
+            serialized_result = jsonpickle.encode(result)
             return serialized_result

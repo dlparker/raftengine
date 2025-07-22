@@ -116,6 +116,10 @@ class Records:
         cursor = self.db.cursor()
         params = []
         values = "("
+        if (entry.index is None and self.snapshot
+            and self.snapshot.index == self.max_index):
+            # first insert after snapshot, have to fix index
+            entry.index = self.max_index + 1
         if entry.index is not None:
             params.append(entry.index)
             sql = f"replace into records (rec_index, "
@@ -204,6 +208,7 @@ class Records:
         return self.read_entry(index)
 
     def add_entry(self, rec: LogRec) -> LogRec:
+        orig_index = rec.index
         rec.index = None
         rec = self.save_entry(rec)
         return rec
@@ -329,6 +334,8 @@ class Records:
         cursor.execute(sql, [snapshot.index,])
         cursor.close()
         self.db.commit()
+        if self.max_index < snapshot.index:
+            self.max_index = snapshot.index
         self.snapshot = snapshot
 
     def get_snapshot(self):

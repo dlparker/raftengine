@@ -38,8 +38,11 @@ class MemoryLog(LogAPI):
     def insert_entry(self, rec: LogRec) -> LogRec:
         if rec.index > self.last_index + 1:
             raise Exception('cannont insert past last index')
+        orig_index = rec.index
         if rec.index == 0 or rec.index is None:
             rec.index = self.last_index + 1
+        if orig_index == 18 and rec.index != orig_index:
+            breakpoint()
         self.entries[rec.index] = rec
         self.last_index = max(rec.index, self.last_index)
         self.last_term = max(rec.term, self.last_term)
