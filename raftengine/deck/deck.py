@@ -17,8 +17,7 @@ from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessag
 from raftengine.messages.message_codec import MessageCodec
 from raftengine.roles.follower import Follower
 from raftengine.roles.candidate import Candidate
-#from raftengine.roles.leader import Leader
-from raftengine.roles.new_leader import Leader
+from raftengine.roles.leader import Leader
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.deck_api import DeckAPI
 from raftengine.api.events import EventType

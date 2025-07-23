@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 
 from raftengine.messages.append_entries import AppendEntriesMessage
+from raftengine.api.log_api import RecordCode
 
 
 class PauseTrigger: # pragma: no cover
@@ -266,9 +267,10 @@ class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the
     # post election quiet period
 
-    def __init__(self, voters=None):
+    def __init__(self, voters=None, wait_for_term_start=False):
         self.announced = defaultdict(dict)
         self.voters = voters
+        self.wait_for_term_start = wait_for_term_start
         
     def __repr__(self):
         msg = f"{self.__class__.__name__}"
@@ -277,26 +279,48 @@ class WhenElectionDone(PauseTrigger):
     async def is_tripped(self, server):
         logger = logging.getLogger("Triggers")
         quiet = []
-        have_leader = False
+        have_leader = None
         if self.voters is None:
             self.voters = list(server.cluster.nodes.keys())
         for uri in self.voters:
             node = server.cluster.nodes[uri]
             if node.deck.get_role_name() == "LEADER":
-                have_leader = True
+                have_leader = node.uri
                 rec = self.announced[uri]
                 if "is_leader" not in rec:
                     rec['is_leader'] = True
                     logger.debug('%s is now leader', uri)
-            if len(node.in_messages) == 0 and len(node.out_messages) == 0:
-                quiet.append(uri)
-                rec = self.announced[uri]
-                if "is_quiet" not in rec:
-                    rec['is_quiet'] = True
-                    logger.debug('%s is now quiet, total quiet == %d', uri, len(quiet))
-        if have_leader and len(quiet) == len(self.voters):
+        if  have_leader is None:
+            return False
+        for uri in self.voters:
+            node = server.cluster.nodes[uri]
+            if node.deck.leader_uri != have_leader:
+                return False
+        if not self.wait_for_term_start:
+            for uri in self.voters:
+                node = server.cluster.nodes[uri]
+                if len(node.in_messages) != 0 or len(node.out_messages) != 0:
+                    return False
             return True
-        return False
+        for uri in self.voters:
+            node = server.cluster.nodes[uri]
+            last_log = await node.log.read(await node.log.get_last_index())
+            if last_log.code != RecordCode.term_start:
+                return False
+        return True
+    
+    async def dump_condition(self, server):
+        res = ""
+        leader = None
+        for uri in self.voters:
+            node = server.cluster.nodes[uri]
+            if node.deck.is_leader():
+                res += f"{uri} is leader\n"
+            else:
+                res += f"{uri} has leader_uri {node.deck.leader_uri}\n"
+            res += f"{uri} in={len(node.in_messages)} out={len(node.out_messages)}\n"
+        return res
+
     
 class TriggerSet:
 

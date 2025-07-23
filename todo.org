@@ -1,15 +1,24 @@
 * immediate
 
-1. When sending a log rec to a single node, need to check to see if it is uncommitted.
-   If so, then need to setup a vote. Think about a 3 node cluster with one crashed
-   and one recovering and behind.
-2. What to do with a log record for a command that fails or times out? Need to document
+1. What to do with a log record for a command that fails or times out? Need to document
    the need for idempotent or session management.
-3. Need to delay new commands if less than quorum nodes are up to date, can
+2. Need to delay new commands if less than quorum nodes are up to date, can
    query node_tracker.nextIndex > await self.log.get_last_index()
-4. Check the quorum logic in Leader and make sure we have tests for it.
-5. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
+3. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting info level for those loggers.
+   1. Leader
+      1. Timers should be separate`
+      2. Heartbeats should be separate
+      3. Commands should log only every X log_record
+      4. All membership change and snapshot and backdown and catchup should log
+4. Fix log_control to understand dotted notation on set_level
+	 
+	 
+	 
+
+   
+   
+   
 
 #+BEGIN_SRC python
 import time

@@ -341,8 +341,10 @@ async def test_partition_3_leader(cluster_maker):
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
+    await cluster.deliver_all_pending()
     await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ")
 
+    await cluster.start_auto_comms()
     await ts_1.enable_timers() # resets
     wait_time = (election_timeout_max + heartbeat_period) * 2.0
     start_time = time.time()

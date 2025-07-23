@@ -468,6 +468,8 @@ class ClusterOps:
             else:
                 config = ClusterConfig(**cdict['config'])
                 t_uri = list(config.nodes.keys())[0]
+                # we send the cluster config change log_record along to
+                # transfer_power so that it will exit once the transfer is complete
                 await self.deck.role.transfer_power(t_uri, log_record)
                 return
         elif op == "add_node":
@@ -491,9 +493,6 @@ class ClusterOps:
                                       matchIndex=0)
             self.follower_trackers[uri] = tracker
         return tracker
-
-    def get_all_follower_trackers(self):
-        return list(self.follower_trackers.values())
 
     def my_uri(self):
         return self.deck.get_my_uri()

@@ -162,7 +162,7 @@ async def test_event_handlers(cluster_maker):
     # but follower will say "no" to that one two, so leader will do the backdown op,
     # which will send the first missed command, which will get "yes", so then
     # the leader will catchup again
-    r_expecting = ['SENDING_CATCHUP', 'SENDING_BACKDOWN', 'SENDING_CATCHUP']
+    r_expecting = ['SENDING_BACKDOWN', 'SENDING_CATCHUP']
     for index, item in enumerate(r_expecting):
         assert item == resync_saves[index]
     assert resync_op_counter == len(r_expecting)

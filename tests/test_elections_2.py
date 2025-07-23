@@ -198,6 +198,7 @@ async def test_run_to_election_1(cluster_maker):
     ts_2.clear_triggers()
     ts_3.clear_triggers()
 
+    await cluster.deliver_all_pending()
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2

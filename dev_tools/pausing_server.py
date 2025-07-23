@@ -422,6 +422,8 @@ class PausingServer(PilotAPI):
                 if not msg and not omsg:
                     await asyncio.sleep(0.00001)
         if not done:
+            if self.trigger and hasattr(self.trigger, 'dump_condition'):
+                print(await self.trigger.dump_condition(self))
             breakpoint()
             raise Exception(f'{self.uri} timeout waiting for triggers')
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)

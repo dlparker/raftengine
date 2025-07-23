@@ -74,12 +74,16 @@ async def test_message_ops():
     re_1 = AppendResponseMessage('mcpy://2', 'mcpy://1', term=1, prevLogIndex=0, prevLogTerm=0, maxIndex=1,
                                  success=True, leaderId='mcpy://1', original_serial=ae_1.serial_number)
 
+    re_2 = AppendResponseMessage('mcpy://1', 'mcpy://3', term=1, prevLogIndex=0, prevLogTerm=0, maxIndex=1,
+                                 success=True, leaderId='mcpy://1', original_serial=ae_1.serial_number + 1)
+
     jd2, sn2 = MessageCodec.encode_message(re_1)
     c_ae_1 = MessageCodec.decode_message(jd1)
     c_re_1 = MessageCodec.decode_message(jd2)
     
     assert c_re_1.is_reply_to(ae_1)
     assert re_1.is_reply_to(c_ae_1)
+    assert not re_2.is_reply_to(c_ae_1)
     assert str(ae_1) == str(c_ae_1)
     assert str(re_1) == str(c_re_1)
 
