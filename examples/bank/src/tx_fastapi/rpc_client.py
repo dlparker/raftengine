@@ -39,14 +39,19 @@ class RPCClient(RPCAPI):
             async with self.session.post(url, json=data) as response:
                 if response.status == 200:
                     result = await response.json()
-                    cmd_result = CommandResult(**json.loads(result))
+                    if result is None:
+                        raise Exception('got none back from server')
+                    dres = json.loads(result)
+                    if dres is None:
+                        raise Exception('got something that decodes to none back from server')
+                    cmd_result = CommandResult(**dres)
                     return cmd_result
                 else:
                     error_text = await response.text()
                     logger.error(f"HTTP error {response.status}: {error_text}")
                     raise Exception(f"HTTP {response.status}: {error_text}")
         except Exception as e:
-            logger.error(f"Error running command via FastAPI: {e}")
+            logger.error(f"Error running command via FastAPI: {traceback.format_exc()}")
             logger.debug(traceback.format_exc())
             raise
     

@@ -24,7 +24,7 @@ from raftengine.api.events import EventType
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.cluster_ops import ClusterOps
 
-class Deck:
+class Deck(DeckAPI):
 
     # Part of DeckAPI
     def __init__(self, initial_cluster_config: ClusterInitConfig, local_config: LocalConfig, pilot: PilotAPI):
@@ -47,7 +47,7 @@ class Deck:
         self.join_waiter_handle = None
         self.exiting_cluster = False
         self.exit_result = None
-        self.exit_waiter_handle = None
+        self._exit_waiter_handle = None
         self.stopped = False
         self.await_message = False
         self.active_messages = {}
@@ -63,55 +63,18 @@ class Deck:
         if EventType.role_change in self.event_control.active_events:
             await self.event_control.emit_role_change(self.get_role_name())
 
-    def get_cluster_ops(self):
-        return self.cluster_ops
-
-    def get_role(self):
-        return self.role
-
     # Part of DeckAPI
     async def get_leader_uri(self):
         # just in case it has never been called
         await self.cluster_ops.get_cluster_config()
         return self.cluster_ops.leader_uri
-
+    
+    # Part of DeckAPI
     def is_leader(self):
         if self.role.role_name == "LEADER":
             return True
         return False
-        
-    async def note_join_done(self, success):
-        self.join_result = success
-        self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
-        
-    async def join_waiter(self, timeout, callback=None):
-        start_time = time.time()
-        while time.time() - start_time < timeout and self.join_result is None and self.joining_cluster:
-            await asyncio.sleep(0.00001)
 
-        if not self.joining_cluster:
-            self.join_waiter_handle = None
-            return
-        ok = self.join_result
-        self.join_result = None
-        if ok is None:
-            # timeout
-            ok = False
-            etime  = time.time() - start_time
-            self.logger.warning("%s attempt to join leader timedout after %f", self.get_my_uri(), etime)
-        if ok:
-            if EventType.membership_change_complete in self.event_control.active_events:
-                await self.event_control.emit_membership_change_complete(ChangeOp.add, self.get_my_uri())
-        else:
-            if EventType.membership_change_aborted in self.event_control.active_events:
-                await self.event_control.emit_membership_change_aborted(ChangeOp.add, self.get_my_uri())
-        if callback:
-            await callback(ok ,self.get_my_uri())
-        self.joining_cluster = False
-        if not ok:
-            await self.stop()
-        self.join_waiter_handle = None
-        
     # Part of DeckAPI
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
         config = await self.cluster_ops.get_cluster_config()
@@ -124,12 +87,12 @@ class Deck:
         loop = asyncio.get_event_loop()
         self.logger.info("%s trying to join cluster via leader %s, starting join_waiter", self.get_my_uri(), leader_uri)
         self.join_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
-                                                asyncio.create_task(self.join_waiter(timeout, callback)))
+                                                asyncio.create_task(self._join_waiter(timeout, callback)))
         
     # Part of DeckAPI
     def decode_message(self, in_message):
         return MessageCodec.decode_message(in_message)
-    
+
     # Part of DeckAPI
     async def on_message(self, in_message):
         try:
@@ -224,98 +187,6 @@ class Deck:
     async def remove_event_handler(self, handler):
         return self.event_control.remove_handler(handler)
     
-    # Called by Role
-    def get_log(self):
-        return self.log
-
-    # Called by Role
-    def get_role_name(self):
-        return self.role.role_name
-
-    # Called by Role
-    def get_my_uri(self):
-        return self.local_config.uri
-        
-    # Called by Role
-    def get_processor(self):
-        return self.pilot
-
-    @property
-    def leader_uri(self):
-        return self.cluster_ops.leader_uri
-    
-    # Called by Role
-    async def set_leader_uri(self, uri):
-        self.cluster_ops.leader_uri = uri
-        if EventType.leader_change in self.event_control.active_events:
-            await self.event_control.emit_leader_change(uri)
-    
-    # Called by Role and in API
-    async def get_term(self):
-        return await self.log.get_term()
-
-    # Called by Role and in API
-    async def set_term(self, term):
-        if EventType.term_change in self.event_control.active_events:
-            await self.event_control.emit_term_change(term)
-        return await self.log.set_term(term)
-
-    # Called by  API
-    async def get_cluster_config(self):
-        return await self.cluster_ops.get_cluster_config()
-    
-    # Called by Role and in API
-    def get_cluster_node_ids(self):
-        return self.cluster_ops.get_cluster_node_ids()
-
-    # Called by Role and in API
-    async def get_heartbeat_period(self):
-        return await self.cluster_ops.get_heartbeat_period()
-
-    # Called by Role and in API
-    async def get_election_timeout(self):
-        return await self.cluster_ops.get_election_timeout()
-
-    # Called by Role 
-    async def get_election_timeout_range(self):
-        return await self.cluster_ops.get_election_timeout_range()
-
-    # Called by Role
-    async def get_max_entries_per_message(self):
-        return await self.cluster_ops.get_max_entries_per_message()
-
-    async def note_exit_done(self, success):
-        self.exit_result = success
-        self.logger.warning("%s exit call to leader result is %s", self.get_my_uri(), self.exit_result)
-        
-    async def exit_waiter(self, timeout, callback=None):
-        start_time = time.time()
-        while time.time() - start_time < timeout and self.exit_result is None and self.exiting_cluster:
-            await asyncio.sleep(0.00001)
-        self.logger.debug("%s detected exit result %s", self.get_my_uri(), self.exit_result)
-        if not self.exiting_cluster:
-            self.exit_waiter_handle = None
-            return
-        ok = self.exit_result
-        self.exit_result = None
-        if ok is None:
-            # timeout
-            ok = False
-            etime  = time.time() - start_time
-            self.logger.warning("%s attempt to exit leader timedout after %f", self.get_my_uri(), etime)
-        if ok:
-            if EventType.membership_change_complete in self.event_control.active_events:
-                await self.event_control.emit_membership_change_complete(ChangeOp.remove, self.get_my_uri())
-        else:
-            if EventType.membership_change_aborted in self.event_control.active_events:
-                await self.event_control.emit_membership_change_aborted(ChangeOp.remove, self.get_my_uri())
-        if callback:
-            await callback(ok ,self.get_my_uri())
-        self.exiting_cluster = False
-        if ok:
-            self.exit_waiter_handle = None
-            await self.stop()
-
     # Part of DeckAPI
     async def take_snapshot(self, timeout=2.0) -> SnapShot:
         if self.role.role_name == "LEADER":
@@ -352,8 +223,8 @@ class Deck:
         loop = asyncio.get_event_loop()
         leader_uri = await self.get_leader_uri()
         self.logger.info("%s trying to exit cluster via leader %s, starting exit_waiter", self.get_my_uri(), leader_uri)
-        self.exit_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
-                                                asyncio.create_task(self.exit_waiter(timeout, callback)))
+        self._exit_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
+                                                asyncio.create_task(self._exit_waiter(timeout, callback)))
         await asyncio.sleep(0)
         
     # Part of DeckAPI 
@@ -368,7 +239,7 @@ class Deck:
         if clear:
             self.message_problem_history = []
         return res
-
+    
     # Part of DeckAPI
     async def stop(self):
         self.stopped = True
@@ -380,10 +251,144 @@ class Deck:
                 self.logger.debug("%s canceling join_waiter task", self.get_my_uri())
                 self.join_waiter_handle.cancel()
                 self.join_waiter_handle = None
-        if self.exit_waiter_handle:
+        if self._exit_waiter_handle:
             self.exiting_cluster = False
             await asyncio.sleep(0.00001)
-            self.exit_waiter_handle = None
+            self._exit_waiter_handle = None
+            
+    # Called by Role
+    def get_log(self):
+        return self.log
+
+    # Called by Role
+    def get_role_name(self):
+        return self.role.role_name
+
+    # Called by Role
+    def get_my_uri(self):
+        return self.local_config.uri
+        
+    # Called by Role
+    def get_processor(self):
+        return self.pilot
+
+    @property
+    def leader_uri(self):
+        return self.cluster_ops.leader_uri
+    
+    # Called by Role
+    async def set_leader_uri(self, uri):
+        self.cluster_ops.leader_uri = uri
+        if EventType.leader_change in self.event_control.active_events:
+            await self.event_control.emit_leader_change(uri)
+    
+    # Called by Role 
+    async def get_term(self):
+        return await self.log.get_term()
+
+    # Called by Role 
+    async def set_term(self, term):
+        if EventType.term_change in self.event_control.active_events:
+            await self.event_control.emit_term_change(term)
+        return await self.log.set_term(term)
+
+    # Called by Role
+    async def get_cluster_config(self):
+        return await self.cluster_ops.get_cluster_config()
+    
+    # Called by Role 
+    def get_cluster_node_ids(self):
+        return self.cluster_ops.get_cluster_node_ids()
+
+    # Called by Role 
+    async def get_heartbeat_period(self):
+        return await self.cluster_ops.get_heartbeat_period()
+
+    # Called by Role 
+    async def get_election_timeout(self):
+        return await self.cluster_ops.get_election_timeout()
+
+    # Called by Role 
+    async def get_election_timeout_range(self):
+        return await self.cluster_ops.get_election_timeout_range()
+
+    # Called by Role
+    async def get_max_entries_per_message(self):
+        return await self.cluster_ops.get_max_entries_per_message()
+
+    # called by Role
+    def get_cluster_ops(self):
+        return self.cluster_ops
+
+    # called by Role
+    def get_role(self):
+        return self.role
+
+    # called by Role
+    async def note_join_done(self, success):
+        self.join_result = success
+        self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
+        
+    async def _join_waiter(self, timeout, callback=None):
+        start_time = time.time()
+        while time.time() - start_time < timeout and self.join_result is None and self.joining_cluster:
+            await asyncio.sleep(0.00001)
+
+        if not self.joining_cluster:
+            self.join_waiter_handle = None
+            return
+        ok = self.join_result
+        self.join_result = None
+        if ok is None:
+            # timeout
+            ok = False
+            etime  = time.time() - start_time
+            self.logger.warning("%s attempt to join leader timedout after %f", self.get_my_uri(), etime)
+        if ok:
+            if EventType.membership_change_complete in self.event_control.active_events:
+                await self.event_control.emit_membership_change_complete(ChangeOp.add, self.get_my_uri())
+        else:
+            if EventType.membership_change_aborted in self.event_control.active_events:
+                await self.event_control.emit_membership_change_aborted(ChangeOp.add, self.get_my_uri())
+        if callback:
+            await callback(ok ,self.get_my_uri())
+        self.joining_cluster = False
+        if not ok:
+            await self.stop()
+        self.join_waiter_handle = None
+        
+    #called by Role
+    async def note_exit_done(self, success):
+        self.exit_result = success
+        self.logger.warning("%s exit call to leader result is %s", self.get_my_uri(), self.exit_result)
+        
+    async def _exit_waiter(self, timeout, callback=None):
+        start_time = time.time()
+        while time.time() - start_time < timeout and self.exit_result is None and self.exiting_cluster:
+            await asyncio.sleep(0.00001)
+        self.logger.debug("%s detected exit result %s", self.get_my_uri(), self.exit_result)
+        if not self.exiting_cluster:
+            self._exit_waiter_handle = None
+            return
+        ok = self.exit_result
+        self.exit_result = None
+        if ok is None:
+            # timeout
+            ok = False
+            etime  = time.time() - start_time
+            self.logger.warning("%s attempt to exit leader timedout after %f", self.get_my_uri(), etime)
+        if ok:
+            if EventType.membership_change_complete in self.event_control.active_events:
+                await self.event_control.emit_membership_change_complete(ChangeOp.remove, self.get_my_uri())
+        else:
+            if EventType.membership_change_aborted in self.event_control.active_events:
+                await self.event_control.emit_membership_change_aborted(ChangeOp.remove, self.get_my_uri())
+        if callback:
+            await callback(ok ,self.get_my_uri())
+        self.exiting_cluster = False
+        if ok:
+            self._exit_waiter_handle = None
+            await self.stop()
         
     async def stop_role(self):
         await self.role.stop()
@@ -391,7 +396,6 @@ class Deck:
             self.logger.debug("%s canceling scheduled task", self.get_my_uri())
             self.role_async_handle.cancel()
             self.role_async_handle = None
-
         
     # Called by Role
     async def record_message_problem(self, message, problem):
@@ -474,11 +478,11 @@ class Deck:
         self.role_run_after_target = target
         loop = asyncio.get_event_loop()
         self.role_async_handle = loop.call_later(delay,
-                                                  lambda target=target:
-                                                  asyncio.create_task(self.role_after_runner(target)))
+                                                 lambda target=target:
+                                                  asyncio.create_task(self._role_after_runner(target)))
 
     # see comments above in role_run_after
-    async def role_after_runner(self, target):
+    async def _role_after_runner(self, target):
         if self.role.stopped or self.joining_cluster:
             return
         await target()

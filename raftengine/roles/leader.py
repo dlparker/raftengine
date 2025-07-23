@@ -126,7 +126,7 @@ class Leader(BaseRole):
                           len(self.active_messages[uri]))
             bcast_tracker.followers[uri] = msg_tracker
             msg_tracker.broadcast_id = bcast_tracker.id
-            await self.deck.send_message(message)
+            asyncio.create_task(self.deck.send_message(message))
             msgs.append(message)
             asyncio.create_task(self.record_sent_message(message))
         
@@ -352,6 +352,12 @@ class Leader(BaseRole):
             await self.assess_log_vote(msg_tracker)
             local_last = await self.log.get_last_index()
             if message.maxIndex < local_last:
+                if len(self.active_messages[message.sender]) > 0:
+                    for pending in self.active_messages[message.sender].values():
+                        for entry in pending.message.entries:
+                            if entry.index > message.maxIndex:
+                                # other records already in flight, let them clean up
+                                return
                 await self.send_catchup(message)
                 self.logger.debug('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                   message.sender, node_tracker.nextIndex, node_tracker.matchIndex)

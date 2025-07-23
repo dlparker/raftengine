@@ -1,9 +1,5 @@
 * immediate
 
-1. What to do with a log record for a command that fails or times out? Need to document
-   the need for idempotent or session management.
-2. Need to delay new commands if less than quorum nodes are up to date, can
-   query node_tracker.nextIndex > await self.log.get_last_index()
 3. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting info level for those loggers.
    1. Leader
@@ -14,7 +10,19 @@
 4. Fix log_control to understand dotted notation on set_level
 	 
 	 
-	 
+Error Handling update:
+
+1. Need to add a log_api element for declaring node broken.
+2. Need to Update CommandResult class to have an error type with ['internal', 'command_failure', others?]
+3. Need to add error strategy setting to cluster config. Options are
+   1. Idempotent and Transactional - committed record will be retried until success
+   2. Primative - apply failure marks node broken, provide way to clear flag after offline repair
+
+   
+   
+   
+1. What to do with a log record for a command that fails or times out? Need to document
+   the need for idempotent or session management.
 
    
    

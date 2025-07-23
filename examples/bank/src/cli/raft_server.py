@@ -29,10 +29,10 @@ from raft_ops.raft_server import RaftServer
 from raft_ops.local_ops import LocalCollector
 from raft_ops.sqlite_log import SqliteLog
 
-log_control.set_logger_level("Leader", "DEBUG")
-log_control.set_logger_level("Follower", "DEBUG")
-log_control.set_logger_level("Deck", "DEBUG")
-log_control.set_logger_level("raft_ops.RaftServer", "DEBUG")
+#log_control.set_logger_level("Leader", "DEBUG")
+#log_control.set_logger_level("Follower", "DEBUG")
+#log_control.set_logger_level("Deck", "DEBUG")
+#log_control.set_logger_level("raft_ops.RaftServer", "DEBUG")
 
 async def server_main(index, uri, cluster_config, local_config, rpc_helper, start_paused=True):
     work_dir = Path(local_config.working_dir)
@@ -111,7 +111,6 @@ async def main():
         base_port = args.base_port + 100
     elif transport == "fastapi":
         from tx_fastapi.rpc_helper import RPCHelper
-        log_control.set_logger_level("transport.server.fastapi", "DEBUG")
         base_port = args.base_port + 200
     elif transport == "grpc":
         from tx_grpc.rpc_helper import RPCHelper

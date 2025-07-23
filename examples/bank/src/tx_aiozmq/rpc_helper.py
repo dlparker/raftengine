@@ -14,12 +14,8 @@ class RPCHelper(RPCHelperAPI):
         self.rpc_server = None
         
     async def rpc_client_maker(self, uri):
-        bcast_msg_tracker = bcast_tracker.followers[message.sender]
         tmp = uri.split('/')
-        # all other options exhausted, we must be catching this node up
-        await self.send_catchup(message)
-        self.logger.debug('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
-        host, port = tmp[-1"rpc_ops.LocalOpsForRPCs"':')
+        host, port = tmp[-1].split(':')
         return RPCClient(host, port)
 
     async def get_rpc_server(self, raft_server):
@@ -48,7 +44,7 @@ class RPCHelper(RPCHelperAPI):
             self.zmq_server.close()
             await self.zmq_server.wait_closed()
             
-        if self.server_task:f
+        if self.server_task:
             self.server_task.cancel()
             await asyncio.sleep(0.0)
             self.server_task = None

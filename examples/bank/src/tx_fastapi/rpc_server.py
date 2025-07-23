@@ -30,7 +30,7 @@ class RPCServer:
                 result = await self.raft_server.run_command(data["command"])
                 return json.dumps(result, default=lambda o:o.__dict__)
             except Exception as e:
-                logger.error(f"Error processing command: {e}")
+                logger.error(f"Error processing command: {traceback.format_exc()}")
                 logger.debug(traceback.format_exc())
                 raise
         

@@ -14,17 +14,17 @@ class RPCClient(RPCAPI):
         self.host = host
         self.port = port
         self.client = None
-        self.uri = f'tcp://{self.host}:{self.port}'
+        self.aiozmq_uri = f'tcp://{self.host}:{self.port}'
 
     def get_uri(self):
-        return self.uri
+        return f'aiozmq://{self.host}:{self.port}'
 
     async def connect(self):
-        logger.debug(f"Establishing ZeroMQ connection to {self.uri}")
+        logger.debug(f"Establishing ZeroMQ connection to {self.aiozmq_uri}")
         self.client = await aiozmq.rpc.connect_rpc(
-            connect=self.uri
+            connect=self.aiozmq_uri
         )
-        logger.info(f"Connected to ZeroMQ server at {self.uri}")
+        logger.info(f"Connected to ZeroMQ server at {self.aiozmq_uri}")
 
     async def run_command(self, command):
         if self.client is None:
@@ -33,7 +33,7 @@ class RPCClient(RPCAPI):
             result = await self.client.call.run_command(command)
             return CommandResult(**result)
         except Exception as e:
-            logger.error(f"Error running command: {e}")
+            logger.error(f"Error running command: {traceback.format_exc()}")
             logger.debug(traceback.format_exc())
             raise
 
@@ -50,7 +50,7 @@ class RPCClient(RPCAPI):
                 result = await self.client.call.raft_message(msg)
             except Exception as e:
                 # Raft messages are fire-and-forget, so don't propagate errors
-                logger.debug(f"Raft message send failed (expected): {e}")
+                logger.debug(f"Raft message send failed (expected): {traceback.format_exc()}")
         asyncio.create_task(message_sender(message))
         return None
     
@@ -60,16 +60,16 @@ class RPCClient(RPCAPI):
         try:
             return await self.client.call.local_command(command)
         except Exception as e:
-            logger.error(f"Error running local command: {e}")
+            logger.error(f"Error running local command: {traceback.format_exc()}")
             logger.debug(traceback.format_exc())
             raise
     
     async def close(self):
         """Close the client connection"""
         if self.client is not None:
-            logger.debug(f"Closing ZeroMQ connection to {self.uri}")
+            logger.debug(f"Closing ZeroMQ connection to {self.aiozmq_uri}")
             self.client.close()
             await self.client.wait_closed()
             self.client = None
-            logger.debug(f"ZeroMQ connection to {self.uri} closed")
+            logger.debug(f"ZeroMQ connection to {self.aiozmq_uri} closed")
     
