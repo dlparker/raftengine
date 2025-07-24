@@ -1,0 +1,14 @@
+
+1. Move cProfile stuff to a class in rpc_ops.rpc_server.py that turns on and off
+   by local_command, writes out to a file named from an argument to the command.
+
+2. Make a runner that starts the servers, runs the dist_perf for a number of
+   iterations to produce a table of results, 1, 2, 3, etc until the clients
+   begin to return errors. Get some output at each step so we can tell what is
+   happening, output to json. Build a tool like analyze_performance that
+   reads a single json and produces report, or multiple jsons and produces
+   a comparison report.
+
+3. Branch the raftengine code, try converting messages to msgspec. Maybe claude
+   can do this.
+   

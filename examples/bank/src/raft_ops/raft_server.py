@@ -3,6 +3,7 @@ import time
 import asyncio
 import traceback
 import logging
+import cProfile
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import timedelta, date
@@ -44,6 +45,8 @@ class RaftServer:
         self.stopped = False
         self.rpc_server_stopper = None
         self.local_dispatcher = LocalDispatcher(self)
+        self.profiler = cProfile.Profile()
+        self.profiler.enable()
         
 
     # RPC method
@@ -100,6 +103,8 @@ class RaftServer:
     
     # local method reachable through local_command RPC
     async def stop_server(self):
+        self.profiler.disable()
+        self.profiler.dump_stats(Path(self.working_dir, 'profile.prof'))
         async def stopper(delay):
             try:
                 await asyncio.sleep(delay)
