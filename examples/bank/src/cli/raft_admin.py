@@ -28,7 +28,7 @@ log_control = LogController.make_controller()
 from cli.raft_admin_ops import (TRANSPORT_CHOICES, nodes_and_helper, stop_server,
                                 tail_server_logs, tail_server_errors)
 from raft_ops.local_ops import LocalCollector 
-from cli.test_client_common import validate, add_common_arguments
+from cli.test_client_common import add_common_arguments
 
 async def server_admin(target_nodes, command, RPCHelper):
     

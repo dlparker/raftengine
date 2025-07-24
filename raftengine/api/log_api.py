@@ -80,11 +80,11 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def get_voted_for(self) -> int:  # pragma: no cover abstract
+    async def get_voted_for(self) -> str:  # pragma: no cover abstract
         raise NotImplementedError
     
     @abc.abstractmethod
-    async def set_voted_for(self, value: int):  # pragma: no cover abstract
+    async def set_voted_for(self, value: str):  # pragma: no cover abstract
         raise NotImplementedError
     
     @abc.abstractmethod

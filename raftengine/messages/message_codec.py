@@ -7,8 +7,11 @@ Raft message objects and bytes for network transmission.
 import json
 import time
 from datetime import datetime, timezone
-from typing import Union
+from typing import Union, Any, Type
+import msgspec
 
+from raftengine.messages.base_message import BaseMessage
+from raftengine.messages.log_msg import LogMessage
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
@@ -51,12 +54,21 @@ class SerialNumberGenerator:
         self.counter = (self.counter + 1) % 1000000
         return serial
 
+
 class MessageCodec:
     """
     Handles encoding and decoding of Raft messages to/from bytes.
     
     This class provides a centralized way to serialize Raft message objects
     to bytes for network transmission and deserialize bytes back to message objects.
+    I tried implementing this with msgspec but only saw a small and inconsistent
+    improvement in throughput in performace testing. Testing on a laptop running
+    a full desktop of stuff. With builtin json I got a maximum throughput of 548/s,
+    with msgspec I got 551/s. The test application I used is in examples/bank. When
+    I converted the Collector/Dispatcher code in that example from jsonpickle to
+    msgspec json I got a big improvement. With jsonpickle I was getting a max of
+    463/s, so 1.18x, pretty hefty. I think the moral of the story is that encoding
+    and decoding is a pretty small part of what this library is doing.
     """
     
     MESSAGE_TYPE_BY_CODE = {
@@ -92,7 +104,4 @@ class MessageCodec:
         message_dict = json.loads(json_str)
         message_type = cls.MESSAGE_TYPE_BY_CODE[message_dict['code']]
         return message_type.from_dict(message_dict)
-
-
-
 

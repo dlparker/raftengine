@@ -34,13 +34,16 @@ from raft_ops.sqlite_log import SqliteLog
 #log_control.set_logger_level("Deck", "DEBUG")
 #log_control.set_logger_level("raft_ops.RaftServer", "DEBUG")
 
-async def server_main(index, uri, cluster_config, local_config, rpc_helper, start_paused=True):
+async def server_main(index, uri, cluster_config, local_config, RPCHelper, start_paused=True):
     work_dir = Path(local_config.working_dir)
     if not work_dir.exists():
         work_dir.mkdir(parents=True)
     with open(Path(work_dir, 'server.pid'), 'w') as f:
         f.write(f"{os.getpid()}")
-    raft_server = RaftServer(cluster_config, local_config, rpc_helper.rpc_client_maker)
+    tmp = uri.split('/')
+    host, port = tmp[-1].split(':')
+    raft_server = RaftServer(cluster_config, local_config, RPCHelper)
+    rpc_helper = RPCHelper(port)
     rpc_server = await rpc_helper.get_rpc_server(raft_server)
     raft_server.set_rpc_server_stopper(rpc_helper.stop_server_task)
     await rpc_helper.start_server_task()
@@ -159,9 +162,8 @@ async def main():
 
     tmp = uri.split('/')
     host, port = tmp[-1].split(':')
-    rpc_helper = RPCHelper(port)
     print(f"cluster nodes: {nodes}, starting {uri} with workdir={work_dir}")
-    await server_main(args.index, uri, c_config,  local_config, rpc_helper)
+    await server_main(args.index, uri, c_config,  local_config, RPCHelper)
 
 args_epilog = """
 Examples:

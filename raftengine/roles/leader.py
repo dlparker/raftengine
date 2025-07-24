@@ -126,7 +126,7 @@ class Leader(BaseRole):
                           len(self.active_messages[uri]))
             bcast_tracker.followers[uri] = msg_tracker
             msg_tracker.broadcast_id = bcast_tracker.id
-            asyncio.create_task(self.deck.send_message(message))
+            await self.deck.send_message(message)
             msgs.append(message)
             asyncio.create_task(self.record_sent_message(message))
         
@@ -388,10 +388,11 @@ class Leader(BaseRole):
                 if vote_tracker.votes.get(uri, False):
                     ayes += 1
             if ayes >= win_count:
-                self.logger.debug('Reply from %s completes commit quorum, doing commit', reply.sender)
+                self.logger.debug('%s Reply from %s completes commit quorum on index %d, doing commit',
+                                  self.my_uri(), reply.sender, vote_tracker.log_index)
                 log_rec = await self.log.read(vote_tracker.log_index)
                 if not log_rec.committed or not log_rec.applied:
-                    await self.commit_and_apply_up_to(log_rec.index)                    
+                    await self.commit_and_apply_up_to(log_rec.index)
 
     async def commit_and_apply_up_to(self, log_index):
         last_commit = await self.log.get_commit_index()
@@ -399,18 +400,23 @@ class Leader(BaseRole):
             last_commit = 1
         if last_commit < log_index:
             for index in range(last_commit, log_index + 1):
-                await self.process_ready_log_record(index)
+                # might be at snapshot boundary
+                if index >= await self.log.get_first_index():
+                    await self.process_ready_log_record(index)
                 
         last_applied = await self.log.get_applied_index()
         if last_applied == 0:
             last_applied = 1
         if last_applied < log_index:
             for index in range(last_applied, log_index + 1):
-                await self.process_ready_log_record(index)
+                # might be at snapshot boundary
+                if index >= await self.log.get_first_index():
+                    await self.process_ready_log_record(index)
 
     async def process_ready_log_record(self, log_index):
         rec = await self.log.read(log_index)
         if not rec.committed:
+            self.logger.debug('%s committing log record %d', self.my_uri(), rec.index)
             rec.committed = True
             await self.log.replace(rec)
         if not rec.applied:
@@ -635,6 +641,7 @@ class Leader(BaseRole):
 
     async def on_membership_change_message(self, message):
         last = await self.log.get_last_index()
+        self.logger.info("%s got membership change message %s", self.my_uri(), message)
         await self.cluster_ops.do_node_inout(message.op, message.target_uri, self, message)
 
     async def do_node_exit(self, target_uri):

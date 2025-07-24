@@ -97,10 +97,10 @@ class MemoryLog(LogAPI):
         self.term += 1
         return self.term
 
-    async def get_voted_for(self) -> Union[int, None]:
+    async def get_voted_for(self) -> Union[str, None]:
         return self.voted_for
     
-    async def set_voted_for(self, value: int):
+    async def set_voted_for(self, value: str):
         self.voted_for = value
 
     async def get_last_index(self):

@@ -328,6 +328,10 @@ class Deck(DeckAPI):
     async def note_join_done(self, success):
         self.join_result = success
         self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
+        if not self.joining_cluster:
+            self.logger.error("%s join leader result is %s but no waiter for join!",
+                              self.get_my_uri(), self.join_result)
+            
         
     async def _join_waiter(self, timeout, callback=None):
         start_time = time.time()
@@ -337,6 +341,8 @@ class Deck(DeckAPI):
         if not self.joining_cluster:
             self.join_waiter_handle = None
             return
+        
+        self.logger.debug("%s join_waiter with leader result %s", self.get_my_uri(), self.join_result)
         ok = self.join_result
         self.join_result = None
         if ok is None:
@@ -346,9 +352,14 @@ class Deck(DeckAPI):
             self.logger.warning("%s attempt to join leader timedout after %f", self.get_my_uri(), etime)
         if ok:
             if EventType.membership_change_complete in self.event_control.active_events:
+                self.logger.debug("%s marking join complete", self.get_my_uri())
+                await self.cluster_ops.finish_node_add(self.get_my_uri())
+                cc = await self.cluster_ops.get_cluster_config()
                 await self.event_control.emit_membership_change_complete(ChangeOp.add, self.get_my_uri())
         else:
             if EventType.membership_change_aborted in self.event_control.active_events:
+                self.logger.debug("%s marking join aborted", self.get_my_uri())
+                await self.cluster_ops.abort_self_add()
                 await self.event_control.emit_membership_change_aborted(ChangeOp.add, self.get_my_uri())
         if callback:
             await callback(ok ,self.get_my_uri())
@@ -392,6 +403,7 @@ class Deck(DeckAPI):
         
     async def stop_role(self):
         await self.role.stop()
+        await self.log.set_voted_for(None) # in case we voted 
         if self.role_async_handle:
             self.logger.debug("%s canceling scheduled task", self.get_my_uri())
             self.role_async_handle.cancel()
@@ -451,13 +463,16 @@ class Deck(DeckAPI):
 
     # Called by Role
     async def send_message(self, message):
-        self.logger.debug("Sending message type %s to %s", message.get_code(), message.receiver)
+        self.logger.debug("%s Sending message type %s %d to %s", self.get_my_uri(),
+                          message.get_code(), message.serial_number, message.receiver)
         encoded, serial_number = MessageCodec.encode_message(message)
         await self.pilot.send_message(message.receiver, encoded, serial_number)
+        self.logger.debug('%s sent %s %d', self.get_my_uri(), message, message.serial_number)
 
     # Called by Role
     async def send_response(self, message, response):
-        self.logger.debug("Sending response type %s to %s", response.get_code(), response.receiver)
+        self.logger.debug("%s Sending response type %s to %s", self.get_my_uri(),
+                          response.get_code(), response.receiver)
         encoded, message_serial = MessageCodec.encode_message(message)
         encoded_reply, response_serial = MessageCodec.encode_message(response)
         await self.pilot.send_response(response.receiver, encoded, encoded_reply, message_serial)

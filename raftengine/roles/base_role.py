@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.messages.request_vote import RequestVoteMessage, RequestVoteResponseMessage
 from raftengine.messages.pre_vote import PreVoteMessage, PreVoteResponseMessage
@@ -73,6 +74,7 @@ class BaseRole:
     async def stop(self):
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().stop())
+        await self.log.set_voted_for(None) # in case we voted 
         self.stopped = True
 
     async def run_after(self, delay, target):
@@ -131,7 +133,11 @@ class BaseRole:
             return
         # if we are a follower, then we haven't timed out on leader contact,
         # so we should say no, we have a leader.
-        if self.role_name == "FOLLOWER" and self.leader_uri is not None and not message.authorized:
+        e_min, e_max = await self.cluster_ops.get_election_timeout_range()
+        if (self.role_name == "FOLLOWER"
+            and self.leader_uri is not None
+            and time.time() - self.last_leader_contact < e_max
+            and not message.authorized):
             self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(), message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
@@ -139,7 +145,7 @@ class BaseRole:
         commit_index = await self.log.get_commit_index()
         if message.term <= await self.log.get_term():
             vote = False
-            self.logger.info("%s pre voting false on %s on low term", self.my_uri(),
+            self.logger.info("%s pre voting false on %s on low term %d", self.my_uri(),
                              message.sender, message.term)
         elif commit_index == 0:
             # we don't have any committed entries, so anybody wins

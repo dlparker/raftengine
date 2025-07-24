@@ -19,12 +19,13 @@ class RaftClient(RPCAPI):
     """
     """
 
-    def __init__(self, rpc_client, client_maker):
+    def __init__(self, rpc_client, rpc_helper):
         uri = rpc_client.get_uri()
         self.current_leader = uri
         self.rpc_clients = dict(uri=rpc_client)
         self.rpc_client = rpc_client
-        self.client_maker = client_maker
+        self.rpc_helper = rpc_helper()
+        self.client_maker = rpc_helper.rpc_client_maker
         
     async def get_uri(self):
         return self.current_leader

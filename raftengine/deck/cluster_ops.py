@@ -125,6 +125,7 @@ class ClusterOps:
             encoded = json.dumps(command, default=lambda o:o.__dict__)
             rec = LogRec(code=RecordCode.cluster_config, command=encoded, term=await self.log.get_term())
             rec_to_send = await self.log.append(rec)
+            self.logger.info("%s broadcasting remove for node %s", self.my_uri(), target_uri)
             await leader.broadcast_log_record(rec_to_send)
             await self.start_node_remove(target_uri)
             if message:
@@ -138,6 +139,8 @@ class ClusterOps:
                                             first_round_max_index=await self.log.get_last_index(),
                                             change_message=message)
             tracker.add_loading = True
+            self.logger.info("%s sending heartbeat to node %s to start pre-add catchup",
+                             self.my_uri(), target_uri)
             await leader.send_heartbeats(target_only=message.target_uri)
         if target_uri == self.my_uri():
             leader.exit_in_progress = True
@@ -193,7 +196,8 @@ class ClusterOps:
                          target_uri, log_index, my_index, self.loading_data.round_count)
 
         if log_index == my_index:
-            self.logger.info("%s initial load to new server %s is complete, logging membership change and replicating", self.my_uri(),
+            self.logger.info("%s initial load to new server %s is complete," +
+                             " logging membership change and replicating", self.my_uri(),
                              target_uri)
             await self.stop_loading_round_timer()
             tracker = await self.tracker_for_follower(target_uri)
@@ -252,6 +256,11 @@ class ClusterOps:
         msg = self.loading_data.change_message
         if msg:
             await leader.send_membership_change_response_message(msg, ok=False)
+        
+    async def abort_self_add(self):
+        cc = await self.get_cluster_config()
+        if cc.pending_node and cc.pending_node.uri == self.my_uri():
+            cc.pending_node = None
         
     async def plan_add_node(self, node_uri):
         """
@@ -342,7 +351,7 @@ class ClusterOps:
         if cc.pending_node is not None and cc.pending_node.uri == node_uri:
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None
-            res =  await self.log.save_cluster_config(cc)
+            res = await self.log.save_cluster_config(cc)
             self.current_config = res
             return res
         raise Exception(f'node {node_uri} is not pending addition')
@@ -431,6 +440,12 @@ class ClusterOps:
         if op == "add_node":
             # leader committed record, means that the node is loaded and ready
             # to vote
+            if operand == self.my_uri():
+                # when a node adds itself, it gets a reply to the
+                # membership add node request, and on that reply
+                # it updates the cluster config. Trying to do
+                # it again will raise an error
+                return
             config = await self.finish_node_add(operand)
         elif op == "remove_node":
             config = await self.finish_node_remove(operand)

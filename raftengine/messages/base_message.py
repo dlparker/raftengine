@@ -16,10 +16,10 @@ class BaseMessage:
         self.sender = sender
         self.receiver = receiver
         self.code = self.__class__.code
-        # Serial numbers are not used internally by the raft library for message handling
-        # (there will be one exception in future changes), so they don't need to be set
-        # until the message is transmitted over the network
         self.serial_number = serial_number
+        if serial_number == None:
+            from raftengine.messages.message_codec import SerialNumberGenerator
+            self.serial_number = SerialNumberGenerator.get_generator().generate()
         if reply_to_type:
             pair_mapping[self.__class__] = reply_to_type
 

@@ -27,27 +27,31 @@ logger = log_controller.add_logger("raft_ops.RaftServer",
 
 class RaftServer:
 
-    def __init__(self, initial_cluster_config, local_config, client_maker):
+    def __init__(self, initial_cluster_config, local_config, rpc_helper):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
         self.working_dir = Path(local_config.working_dir)
-        self.client_maker = client_maker
         self.app_db_file = Path(self.working_dir, "bank.db")
         self.teller = Teller(self.app_db_file)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.log = SqliteLog(self.raft_log_file)
         self.log.start()
-        self.dispatcher = Dispatcher(self.teller)
-        self.pilot = Pilot(self.log, self.client_maker, self.dispatcher)
-        self.deck = Deck(self.initial_config, self.local_config, self.pilot)
-        self.pilot.set_deck(self.deck)
         self.timers_running = False
         self.stopped = False
         self.rpc_server_stopper = None
-        self.local_dispatcher = LocalDispatcher(self)
         self.profiler = cProfile.Profile()
         self.profiler.enable()
         
+        tmp = local_config.uri.split('/')
+        transport = tmp[0].split(':')[0]
+        host, port = tmp[-1].split(':')
+        self.rpc_helper = rpc_helper(port)
+        self.client_maker = self.rpc_helper.rpc_client_maker
+        self.dispatcher = Dispatcher(self.teller)
+        self.local_dispatcher = LocalDispatcher(self)
+        self.pilot = Pilot(self.log, self.client_maker, self.dispatcher)
+        self.deck = Deck(self.initial_config, self.local_config, self.pilot)
+        self.pilot.set_deck(self.deck)
 
     # RPC method
     async def run_command(self, command: str) -> CommandResult:

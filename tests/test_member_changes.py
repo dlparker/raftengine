@@ -190,9 +190,10 @@ async def test_remove_follower_1(cluster_maker):
     await ts_3.exit_cluster(callback=cb)
     await cluster.deliver_all_pending()
     await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-    await cluster.deliver_all_pending()
-    await asyncio.sleep(0.0)
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and removed is None:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
     assert removed is not None
     await asyncio.sleep(0.0)
     assert done_by_event is not None
@@ -731,7 +732,7 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     start_time = time.time()
     while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
         await cluster.deliver_all_pending()
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0.0001)
 
     # node 4 should have gotten callback and event to notify it that add failed
     assert done_by_callback is False
@@ -911,7 +912,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     start_time = time.time()
     while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
         await cluster.deliver_all_pending()
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0.0001)
 
     assert ts_4.operations.total != ts_1.operations.total
     # node 4 should have gotten callback and event to notify it that add failed
@@ -935,13 +936,19 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     start_time = time.time()
     while time.time() - start_time < 1 and (done_by_callback is None or done_by_event is None):
         await cluster.deliver_all_pending()
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0.0001)
 
     assert ts_4.operations.total == ts_1.operations.total
     assert done_by_callback is True
     assert done_by_event is True
 
-    cc = await ts_1.deck.cluster_ops.get_cluster_config()
+    start_time = time.time()
+    while time.time() - start_time < 1:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+        cc = await ts_1.deck.cluster_ops.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
     assert ts_4.uri in cc.nodes
     assert cc.pending_node is None
 
@@ -1035,11 +1042,16 @@ async def test_reverse_add_follower_1(cluster_maker):
     assert ts_1.in_messages[0].success
     assert ts_1.in_messages[0].maxIndex == 2
 
-    # next message from leader should be log record with membership change
+    # next message from leader should be log record with membership change, or it might
+    # be the response to the adding node
     await ts_1.do_next_in_msg()
-    assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
-    log_rec = ts_1.out_messages[0].entries[0]
-    assert log_rec.code == RecordCode.cluster_config
+    for index,msg in enumerate(ts_1.out_messages):
+        if msg.code == AppendEntriesMessage.get_code():
+            log_rec = msg.entries[0]
+            assert log_rec.code == RecordCode.cluster_config
+        if msg.code == MembershipChangeResponseMessage.get_code():
+            ts_4.in_messages.append(msg)
+            await ts_4.do_next_in_msg()
     # 
     assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
@@ -1111,6 +1123,8 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
     ts_3.clear_triggers()
     # next message from leader should be log record with membership change
     await ts_1.do_next_in_msg()
+    # messages are sent with create_task, so give it a chance to run
+    await asyncio.sleep(0.0)
     assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
     log_rec = ts_1.out_messages[0].entries[0]
     assert log_rec.code == RecordCode.cluster_config
@@ -1313,6 +1327,8 @@ async def test_reverse_remove_follower_3(cluster_maker):
     ts_5.clear_triggers()
     # next message from leader should be log record with membership change
     await ts_1.do_next_in_msg()
+    # messages are sent with create_task, so give it a chance to run
+    await asyncio.sleep(0.0)
     assert ts_1.out_messages[0].code == AppendEntriesMessage.get_code()
     log_rec = ts_1.out_messages[0].entries[0]
     assert log_rec.code == RecordCode.cluster_config

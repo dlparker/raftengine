@@ -240,6 +240,7 @@ class Follower(BaseRole):
         
     async def leader_lost(self):
         await self.deck.record_op_detail(OpDetail.leader_lost)
+        await self.log.set_voted_for(None) # in case we voted during the now expired term
         await self.deck.start_campaign()
         
     async def send_vote_response_message(self, message, vote_yes=True):

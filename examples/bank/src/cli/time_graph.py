@@ -1,0 +1,205 @@
+#!/usr/bin/env python
+"""
+Performance Graph Generator
+Reads JSON output from time_raft.py client scaling tests and generates matplotlib charts
+showing response time and throughput vs number of clients.
+"""
+import json
+import argparse
+import sys
+from pathlib import Path
+from typing import List, Dict, Any
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+
+def load_scaling_data(json_file: str) -> Dict[str, Any]:
+    """Load and validate scaling test data from JSON file."""
+    try:
+        with open(json_file, 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File '{json_file}' not found")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in '{json_file}': {e}")
+        sys.exit(1)
+    
+    # Validate data format
+    if not isinstance(data, dict):
+        print(f"Error: Expected JSON object, got {type(data).__name__}")
+        sys.exit(1)
+    
+    if data.get("test_type") != "client_scaling":
+        print("Error: JSON file must contain client scaling test results (test_type: 'client_scaling')")
+        sys.exit(1)
+    
+    if "results" not in data or not isinstance(data["results"], list):
+        print("Error: JSON file must contain 'results' array")
+        sys.exit(1)
+    
+    if len(data["results"]) == 0:
+        print("Error: Results array is empty")
+        sys.exit(1)
+    
+    return data
+
+def extract_chart_data(data: Dict[str, Any]) -> tuple:
+    """Extract client counts, response times, and throughput from scaling data."""
+    results = data["results"]
+    
+    client_counts = []
+    response_times = []
+    throughputs = []
+    
+    for result in results:
+        if not all(key in result for key in ["total_clients", "avg_latency_ms", "throughput_per_second"]):
+            print(f"Error: Missing required fields in result: {result}")
+            sys.exit(1)
+        
+        client_counts.append(result["total_clients"])
+        response_times.append(result["avg_latency_ms"])
+        throughputs.append(result["throughput_per_second"])
+    
+    return client_counts, response_times, throughputs
+
+def generate_matplotlib_chart(data: Dict[str, Any], output_file: str) -> None:
+    """Generate matplotlib chart showing response time and throughput vs client count."""
+    client_counts, response_times, throughputs = extract_chart_data(data)
+    
+    # Get metadata
+    transport = data["results"][0]["setup"]["transport"]
+    client_range = data.get("client_range", {})
+    min_clients = client_range.get("min", min(client_counts))
+    max_clients = client_range.get("max", max(client_counts))
+    
+    # Create figure and primary axis
+    fig, ax1 = plt.subplots(figsize=(12, 8))
+    
+    # Set up the figure title and styling
+    fig.suptitle(f'Performance Scaling: {transport.upper()} Transport\n({min_clients}-{max_clients} Clients)', 
+                 fontsize=16, fontweight='bold')
+    
+    # Primary y-axis (Response Time)
+    color1 = 'red'
+    ax1.set_xlabel('Number of Clients', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Response Time (ms)', color=color1, fontsize=12, fontweight='bold')
+    line1 = ax1.plot(client_counts, response_times, color=color1, marker='o', linewidth=2, 
+                     markersize=6, label='Response Time')
+    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.grid(True, alpha=0.3)
+    
+    # Secondary y-axis (Throughput)
+    ax2 = ax1.twinx()
+    color2 = 'blue'
+    ax2.set_ylabel('Throughput (requests/sec)', color=color2, fontsize=12, fontweight='bold')
+    line2 = ax2.plot(client_counts, throughputs, color=color2, marker='s', linewidth=2, 
+                     markersize=6, label='Throughput')
+    ax2.tick_params(axis='y', labelcolor=color2)
+    
+    # Set x-axis to show integer ticks only
+    ax1.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax1.set_xlim(min(client_counts) - 0.5, max(client_counts) + 0.5)
+    
+    # Add legend
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc='upper left', fontsize=10)
+    
+    # Calculate and display key statistics
+    avg_response_time = sum(response_times) / len(response_times)
+    avg_throughput = sum(throughputs) / len(throughputs)
+    max_throughput = max(throughputs)
+    max_throughput_clients = client_counts[throughputs.index(max_throughput)]
+    min_response_time = min(response_times)
+    min_response_time_clients = client_counts[response_times.index(min_response_time)]
+    
+    # Add annotations for peak values
+    # Peak throughput annotation
+    peak_idx = throughputs.index(max_throughput)
+    ax2.annotate(f'Peak: {max_throughput:.1f} req/sec\nat {max_throughput_clients} clients',
+                xy=(max_throughput_clients, max_throughput),
+                xytext=(max_throughput_clients + 0.5, max_throughput + 10),
+                arrowprops=dict(arrowstyle='->', color=color2, alpha=0.7),
+                fontsize=9, color=color2, fontweight='bold',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor='lightblue', alpha=0.7))
+    
+    # Best response time annotation
+    best_idx = response_times.index(min_response_time)
+    ax1.annotate(f'Best: {min_response_time:.1f}ms\nat {min_response_time_clients} clients',
+                xy=(min_response_time_clients, min_response_time),
+                xytext=(min_response_time_clients + 0.5, min_response_time + 2),
+                arrowprops=dict(arrowstyle='->', color=color1, alpha=0.7),
+                fontsize=9, color=color1, fontweight='bold',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor='lightcoral', alpha=0.7))
+    
+    # Add statistics text box
+    stats_text = f"""Performance Summary:
+Transport: {transport.upper()}
+Clients: {min_clients}-{max_clients}
+Avg Response Time: {avg_response_time:.2f} ms
+Avg Throughput: {avg_throughput:.1f} req/sec
+Peak Throughput: {max_throughput:.1f} req/sec at {max_throughput_clients} clients
+Best Response Time: {min_response_time:.2f} ms at {min_response_time_clients} clients"""
+    
+    # Position the text box in the lower right
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+    ax1.text(0.98, 0.02, stats_text, transform=ax1.transAxes, fontsize=9,
+            verticalalignment='bottom', horizontalalignment='right', bbox=props)
+    
+    # Adjust layout to prevent clipping
+    plt.tight_layout()
+    
+    # Save the figure
+    plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+    
+    print(f"Matplotlib chart generated: {output_file}")
+    print(f"Transport: {transport}")
+    print(f"Client range: {min_clients}-{max_clients}")
+    print(f"Peak throughput: {max_throughput:.2f} req/sec at {max_throughput_clients} clients")
+    print(f"Best response time: {min_response_time:.2f} ms at {min_response_time_clients} clients")
+    
+    plt.close()
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate matplotlib performance charts from time_raft.py scaling test results',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s scaling_results.json
+  %(prog)s one_to_ten.json --output performance_chart.png
+  %(prog)s results.json -o chart.pdf
+
+Input JSON Format:
+  The input file should be the JSON output from time_raft.py when run with
+  --min-clients and --max-clients options, containing client scaling test results.
+
+Output Formats:
+  Supported formats: PNG, PDF, SVG, JPG (determined by file extension)
+        """)
+    
+    parser.add_argument('input_file', 
+                        help='JSON file containing client scaling test results')
+    parser.add_argument('--output', '-o', 
+                        help='Output image file (default: input_file.png)')
+    
+    args = parser.parse_args()
+    
+    # Determine output filename
+    if args.output:
+        output_file = args.output
+    else:
+        input_path = Path(args.input_file)
+        output_file = str(input_path.with_suffix('.png'))
+    
+    # Load and process data
+    print(f"Loading scaling data from {args.input_file}...")
+    data = load_scaling_data(args.input_file)
+    
+    print(f"Found {len(data['results'])} test results")
+    
+    # Generate chart
+    generate_matplotlib_chart(data, output_file)
+
+if __name__ == "__main__":
+    main()

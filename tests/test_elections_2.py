@@ -117,7 +117,10 @@ async def test_stepwise_election_1(cluster_maker):
     spec = dict(used=[f_manual_election], tested=[f_term_start])
     await cluster.test_trace.start_subtest("Node 3 has been sent yes vote responses from both other nodes, sending TERM_START log record", features=spec)
     # Let all the messages fly until delivered
-    await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.01 and ts_1.get_leader_uri() != uri_3:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
@@ -282,6 +285,7 @@ async def test_election_timeout_1(cluster_maker):
     await leader.do_demote_and_handle(None)
     assert leader.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
+    leader =  cluster.get_leader()
     old_term = await f2.log.get_term()
     await f2.do_leader_lost()
 
@@ -299,22 +303,13 @@ async def test_election_timeout_1(cluster_maker):
     await ts_3.change_cluster_config(cfg)
 
 
-    # now it should just finish, everybody should know what to do
-    # with messages rendered irrelevant by restart
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
-        
-    await asyncio.gather(ts_1.run_till_triggers(),
-                         ts_2.run_till_triggers(),
-                         ts_3.run_till_triggers())
-    
-    ts_1.clear_triggers()
-    ts_2.clear_triggers()
-    ts_3.clear_triggers()
-
-    leader =  cluster.get_leader()
-    f1 = f2 = None
+    await cluster.start_auto_comms()
+    start_time = time.time()
+    while (time.time() - start_time < 0.1
+           and cluster.get_leader() == leader):
+        await asyncio.sleep(0.001)
+    assert cluster.get_leader() != leader
+    leader = cluster.get_leader()
     for ts in [ts_1, ts_2, ts_3]:
         if ts != leader:
             assert ts.get_leader_uri() == leader.uri

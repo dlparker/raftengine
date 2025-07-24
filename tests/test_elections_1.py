@@ -75,16 +75,25 @@ async def test_election_1(cluster_maker):
     
     # now let candidate process votes, should then promote itself
     await ts_1.do_next_in_msg()
-    await ts_1.do_next_in_msg()
     assert ts_1.get_role_name() == "LEADER"
+    await ts_1.do_next_in_msg()
 
     spec = dict(used=[f_term_start_entry], tested=[])
     await cluster.test_trace.start_subtest("Node 1 is now leader, so it should declare the new term with a TERM_START log record", features=spec)
 
     # leader should send append_entries to everyone else in cluster,
     # check for delivery pending
-    await ts_1.do_next_out_msg()
-    await ts_1.do_next_out_msg()
+    start_time = time.time()
+    while time.time() - start_time < 0.001 and len(ts_1.out_messages) == 0:
+        await asyncio.sleep(0.00001)
+    m1 = await ts_1.do_next_out_msg()
+    assert m1
+    assert m1.get_code() == AppendEntriesMessage.get_code()
+    assert m1.receiver in [uri_2, uri_3]
+    m2 = await ts_1.do_next_out_msg()
+    assert m2
+    assert m2.get_code() == AppendEntriesMessage.get_code()
+    assert m2.receiver in [uri_2, uri_3]
     assert len(ts_2.in_messages) == 1
     assert len(ts_3.in_messages) == 1
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
@@ -139,6 +148,10 @@ async def test_election_2(cluster_maker):
     await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit", features=spec)
     # append entries, then responses
     await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.01 and ts_2.get_leader_uri() != uri_1:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     assert ts_4.get_leader_uri() == uri_1
@@ -177,7 +190,10 @@ async def test_reelection_1(cluster_maker):
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "LEADER"
     # append entries, then responses
-    await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.001 and ts_2.get_leader_uri() != uri_1:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
@@ -226,7 +242,10 @@ async def test_reelection_2(cluster_maker):
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "LEADER"
     # append entries, then responses
-    await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.001 and ts_2.get_leader_uri() != uri_1:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     assert ts_4.get_leader_uri() == uri_1
@@ -240,7 +259,10 @@ async def test_reelection_2(cluster_maker):
     assert ts_1.get_role_name() == "FOLLOWER"
     # pretend timeout on heartbeat on only one followers, so it should win
     await ts_2.do_leader_lost()
-    await cluster.deliver_all_pending()
+    start_time = time.time()
+    while time.time() - start_time < 0.01 and ts_1.get_leader_uri() != uri_2:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_role_name() == "FOLLOWER"
     assert ts_3.get_role_name() == "FOLLOWER"
@@ -303,8 +325,8 @@ async def test_reelection_3(cluster_maker):
     # ensure that ts_3 wins first election
 
     cfg = ts_1.cluster_init_config
-    cfg.election_timeout_min = 0.90
-    cfg.election_timeout_max = 1.0
+    cfg.election_timeout_min = 10.0
+    cfg.election_timeout_max = 30.0
     await ts_1.change_cluster_config(cfg)
     await ts_2.change_cluster_config(cfg)
     # okay to do this, PausingServer makes a copy on change call
@@ -329,6 +351,10 @@ async def test_reelection_3(cluster_maker):
                 break
     # vote requests, then vote responses
     assert leader == ts_3
+    start_time = time.time()
+    while time.time() - start_time < 0.01 and ts_1.get_leader_uri() != uri_3:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
     spec = dict(used=[f_leader_demotion, f_split_vote_resolution, f_term_start_entry], tested=[])
@@ -371,6 +397,10 @@ async def test_reelection_3(cluster_maker):
             break
         await asyncio.sleep(0.0001)
         
+    start_time = time.time()
+    while time.time() - start_time < 0.01 and ts_1.get_leader_uri() != uri_2:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.00001)
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2
     assert ts_3.get_leader_uri() == uri_2
@@ -457,6 +487,12 @@ async def test_pre_election_1(cluster_maker):
     # check for delivery pending
     await ts_1.do_next_out_msg()
     await ts_1.do_next_out_msg()
+    start_time = time.time()
+    while time.time() - start_time < 0.02 and (len(ts_2.in_messages) == 0 or len(ts_3.in_messages) == 0):
+        await asyncio.sleep(0.00001)
+        if len(ts_1.out_messages) > 0:
+            await ts_1.do_next_out_msg()
+        
     assert len(ts_2.in_messages) == 1
     assert len(ts_3.in_messages) == 1
     assert ts_2.in_messages[0].get_code() == AppendEntriesMessage.get_code()
