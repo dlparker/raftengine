@@ -62,11 +62,6 @@ class Follower(BaseRole):
                 if len(message.entries) > 0 and await self.log.get_last_index() > message.prevLogIndex:
                     leader_rec = message.entries[0]
                     our_next_rec = await self.log.read(leader_rec.index)
-                    if our_next_rec.term == leader_rec.term:
-                        self.logger.warning("%s Leader resent same log record pi=%d, pt=%d, probably async out of order issue, ignoring",
-                                            self.my_uri(), message.prevLogIndex,  message.prevLogTerm)
-                        await self.send_append_entries_response(message)
-                        return
                     self.logger.warning("%s Leader says rewrite at record pi=%d",  self.my_uri(), leader_rec.index)
                     await self.delete_log_from(leader_rec.index)
                     # fall through to append logic

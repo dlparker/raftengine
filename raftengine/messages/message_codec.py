@@ -88,9 +88,6 @@ class MessageCodec:
     
     @classmethod
     def encode_message(cls, message) -> tuple[bytes, int]:
-        if not hasattr(message, 'serial_number') or message.serial_number is None or message.serial_number == 0:
-            message.serial_number = SerialNumberGenerator.get_generator().generate()
-            
         json_str = json.dumps(message, default=lambda o: o.__dict__)
         return json_str.encode('utf-8'), message.serial_number
     

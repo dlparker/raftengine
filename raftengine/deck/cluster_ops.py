@@ -257,11 +257,6 @@ class ClusterOps:
         if msg:
             await leader.send_membership_change_response_message(msg, ok=False)
         
-    async def abort_self_add(self):
-        cc = await self.get_cluster_config()
-        if cc.pending_node and cc.pending_node.uri == self.my_uri():
-            cc.pending_node = None
-        
     async def plan_add_node(self, node_uri):
         """
         Create a modified version of the cluster config that

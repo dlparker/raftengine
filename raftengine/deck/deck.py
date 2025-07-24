@@ -359,7 +359,6 @@ class Deck(DeckAPI):
         else:
             if EventType.membership_change_aborted in self.event_control.active_events:
                 self.logger.debug("%s marking join aborted", self.get_my_uri())
-                await self.cluster_ops.abort_self_add()
                 await self.event_control.emit_membership_change_aborted(ChangeOp.add, self.get_my_uri())
         if callback:
             await callback(ok ,self.get_my_uri())
