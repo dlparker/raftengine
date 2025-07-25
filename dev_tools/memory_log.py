@@ -22,6 +22,7 @@ class MemoryLog(LogAPI):
         self.nodes = None
         self.pending_node = None
         self.cluster_settings = None
+        self.broken = False
 
     def close(self):
         self.first_index = 0
@@ -87,6 +88,15 @@ class MemoryLog(LogAPI):
     def start(self):
         pass
 
+    async def get_broken(self) -> bool:
+        return self.broken
+    
+    async def set_broken(self) -> None:
+        self.broken = True
+    
+    async def set_fixed(self) -> None:
+        self.broken = False
+    
     async def get_term(self) -> Union[int, None]:
         return self.term
     

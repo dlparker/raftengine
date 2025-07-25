@@ -264,8 +264,9 @@ async def test_log_controller_add_logger():
     assert controller.known_loggers["CustomLogger2"].custom_level == "DEBUG"
     
     # Test adding logger with custom handlers
-    controller.add_logger("CustomLogger3", "Third custom logger", handlers=["file"])
-    assert controller.known_loggers["CustomLogger3"].handler_names == ["file"]
+    controller.add_logger("top_level.CustomLogger3", "Third custom logger", handlers=["file"])
+    assert controller.known_loggers["top_level.CustomLogger3"].handler_names == ["file"]
+    assert controller.known_loggers["top_level"].handler_names == ["stdout"]
     LogController.controller = saved_log_controller 
 
 async def test_log_controller_save_restore():

@@ -68,6 +68,18 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
+    async def set_broken(self) -> None:  # pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def set_fixed(self) -> None:  # pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def get_broken(self) -> bool:  # pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
     async def get_term(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
     

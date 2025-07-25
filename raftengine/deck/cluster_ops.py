@@ -79,7 +79,8 @@ class ClusterOps:
                                    max_entries_per_message=init.max_entries_per_message,
                                    use_pre_vote=init.use_pre_vote,
                                    use_check_quorum=init.use_check_quorum,
-                                   use_dynamic_config=init.use_dynamic_config)
+                                   use_dynamic_config=init.use_dynamic_config,
+                                   commands_idempotent=init.commands_idempotent)
         cc = ClusterConfig(nodes=nd, settings=settings)
         res = await self.log.save_cluster_config(cc)
         self.current_config = res

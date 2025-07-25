@@ -47,6 +47,7 @@ class PausingServer(PilotAPI):
         self.out_message_history = []
         self.save_message_history = False
         self.interceptors = {}
+        self.deck_stopped = False
 
     def __str__(self):
         return self.uri
@@ -211,6 +212,7 @@ class PausingServer(PilotAPI):
     # Part of PilotAPI
     async def stop_commanded(self) -> None:
         self.logger.debug('%s stop_commanded from deck', self.uri)
+        self.deck_stopped = True
         #await self.cluster.remove_node(self.uri)
         
     async def on_message(self, in_msg):

@@ -97,10 +97,33 @@ class ClusterSettings:
     use_pre_vote: bool = field(default = True)
     use_check_quorum: bool = field(default = True)
     use_dynamic_config: bool = field(default = True)
+    commands_idempotent: bool = field(default = False)
     
 @dataclass
 class ClusterConfig:
     nodes: dict[str,NodeRec] = field(default_factory=dict)
     pending_node: Optional[NodeRec] = field(default=None)
     settings: ClusterSettings = field(default_factory=lambda: ClusterSettings())
-    
+
+class CommandResult:
+    def __init__(self, command: str, result: Optional[str] = None,
+                 retry: bool = False,  redirect: Optional[str] = None,
+                 error: Optional[str] = None, timeout_expired: Optional[bool] = False):
+        self.command = command
+        self.result = result
+        self.retry = retry
+        self.redirect = redirect
+        self.error = error
+        self.timeout_expired = timeout_expired
+
+    def __str__(self):
+        res = "CommandResult "
+        if self.result:
+            res += " has result"
+        elif self.error:
+            res += " has error"
+        elif self.timeout_expired:
+            res += " timeout_expired"
+        elif self.retry:
+            res += " needs retry"
+        return res

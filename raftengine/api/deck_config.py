@@ -66,6 +66,16 @@ class ClusterInitConfig:
             Use the check quorum extension to make leaders proactively resign, defaults to True
         use_dynamic_config:
             Cluster config can change while running, stored in log with usual raft replication, defaults to True
+        commands_idempotent:
+            Controls server logic if an error occurs in the command_process call when trying to apply a command.
+            If this is set True, then the server will continue processing and will retry this command the next
+            time it is noticed, which may be very soon in an active cluster. You should set this only if
+            you have some strategy for detecting and fixing error condtions that cause errors.
+            If it is set to False (the default), then the server log will be marked bad and the server will
+            exit. If it restarts it will immediately exit again. You have to clear the error condition and
+            update the log "broken" state by calling await log.set_fixed(). There is no builtin support for
+            this operation so you'll have to build the tooling yourself.
+    
     """
     node_uris: list # addresses of other nodes in the cluster
     heartbeat_period: float
@@ -75,4 +85,5 @@ class ClusterInitConfig:
     use_pre_vote: bool = True
     use_check_quorum: bool = True
     use_dynamic_config: bool = True
+    commands_idempotent: bool = False
 

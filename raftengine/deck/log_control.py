@@ -101,12 +101,12 @@ class LogController:
             'Leader': LoggerDef('Leader', 'Leader role', handler_names=self.default_handlers.copy()),
             'Follower': LoggerDef('Follower', 'Follower role', handler_names=self.default_handlers.copy()),
             'Candidate': LoggerDef('Candidate', 'Candidate role',
-                                   handler_names=self.default_handlers.copy(), custom_level="INFO"),
+                                   handler_names=self.default_handlers.copy(), custom_level="ERROR"),
             'BaseRole': LoggerDef('BaseRole', 'Base role functionality',
-                                  handler_names=self.default_handlers.copy(), custom_level="INFO"),
+                                  handler_names=self.default_handlers.copy(), custom_level="ERROR"),
             'Deck': LoggerDef('Deck', 'Main Raft engine controller', handler_names=self.default_handlers.copy()),
             'Elections': LoggerDef('Elections', 'Events in election logic',
-                                   handler_names=self.default_handlers.copy(), custom_level="INFO"),
+                                   handler_names=self.default_handlers.copy(), custom_level="ERROR"),
         }
         
         if additional_loggers:
@@ -296,7 +296,12 @@ class LogController:
         for sub in logger_name.split('.'):
             dotted.append(sub)
             l_name = '.'.join(dotted)
-            self.known_loggers[l_name] = LoggerDef(l_name, '', handler_names=handler_names)
+            desc = ""
+            if l_name == logger_name:
+                desc = description
+                self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=handler_names)
+            else:
+                self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=self.default_handlers.copy())
             logging.getLogger(l_name)
         
             if l_name != logger_name:

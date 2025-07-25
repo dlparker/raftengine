@@ -4,7 +4,7 @@ import traceback
 import aiohttp
 import json
 from base.rpc_api import RPCAPI
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger('transport.client.fastapi')

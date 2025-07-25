@@ -6,7 +6,7 @@ import time
 from datetime import timedelta, date
 from decimal import Decimal
 from functools import wraps
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
 from base.datatypes import Customer, Account, AccountType
 from base.rpc_api import RPCAPI

@@ -4,6 +4,8 @@ import traceback
 import json
 import grpc
 from concurrent import futures
+
+import raftengine.api.types
 from raftengine.deck.log_control import LogController
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger('transport.server.astream')
@@ -22,7 +24,7 @@ class RPCServer(banking_pb2_grpc.BankingServiceServicer):
         try:
             logger.debug(f"Processing command via gRPC from {context.peer()}")
             result = await self.raft_server.run_command(request.command)
-            return banking_pb2.CommandResult(
+            return raftengine.api.types.CommandResult(
                 command=result.command,
                 error=result.error,
                 redirect=result.redirect,

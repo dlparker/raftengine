@@ -24,10 +24,13 @@ class Follower(BaseRole):
         self.logger = logging.getLogger("Follower")
         self.elec_logger = logging.getLogger("Elections")
         self.snapshot = None
+        self.commands_idempotent = False
         
     async def start(self):
         await super().start()
         self.last_leader_contact = time.time()
+        cc = await self.cluster_ops.get_cluster_config()
+        self.commands_idempotent = cc.settings.commands_idempotent
         await self.run_after(await self.cluster_ops.get_election_timeout(), self.contact_checker)
         
     async def on_append_entries(self, message):
@@ -173,6 +176,13 @@ class Follower(BaseRole):
             await self.log.update_and_apply(log_record)
             self.logger.debug("%s processor ran no error on log record %d", self.my_uri(), log_record.index)
         else:
+            if not self.commands_idempotent:
+                self.logger.error("%s running command produced error %s marking node broken and exiting",
+                                  self.my_uri(), error_data)
+                await self.log.replace(log_record)
+                await self.log.set_broken()
+                await self.deck.stop()
+                return
             await self.log.replace(log_record)
             self.logger.warning("processor ran but had an error %s", error_data)
             await self.deck.event_control.emit_error(error_data)

@@ -4,8 +4,7 @@ import logging
 import time
 from typing import Optional, Callable, Dict, Tuple
 
-from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import RoleName, OpDetail, ClusterSettings, ClusterConfig, CommandResult
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.event_control import EventControl
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
@@ -58,6 +57,8 @@ class Deck(DeckAPI):
     # Part of DeckAPI
     async def start(self):
         await self.cluster_ops.get_cluster_config()
+        if await self.log.get_broken():
+            raise Exception("Cannot start, raft log is marked broken")
         self.started = True
         self.logger.info("%s starting", self.get_my_uri())
         await self.role.start()
@@ -66,15 +67,17 @@ class Deck(DeckAPI):
 
     # Part of DeckAPI
     async def get_leader_uri(self):
-        # just in case it has never been called
-        await self.cluster_ops.get_cluster_config()
-        return self.cluster_ops.leader_uri
+        if not self.stopped:
+            # just in case it has never been called
+            await self.cluster_ops.get_cluster_config()
+            return self.cluster_ops.leader_uri
     
     # Part of DeckAPI
     def is_leader(self):
-        if self.role.role_name == "LEADER":
-            return True
-        return False
+        if not self.stopped:
+            if self.role.role_name == "LEADER":
+                return True
+            return False
 
     # Part of DeckAPI
     async def start_and_join(self, leader_uri, callback=False, timeout=10.0):
@@ -92,31 +95,33 @@ class Deck(DeckAPI):
         
     # Part of DeckAPI
     def decode_message(self, in_message):
-        return MessageCodec.decode_message(in_message)
+        if not self.stopped:
+            return MessageCodec.decode_message(in_message)
 
     # Part of DeckAPI
     async def on_message(self, in_message):
-        try:
-            message = self.decode_message(in_message)
-            if self.await_message:
-                # This branch is preserved only because there are so
-                # many integration tests that depend on knowing that
-                # the incomming message has been handled when this
-                # method returns. Never used in production unless
-                # somebody sets the await_message flag directly. There
-                # is no harm in it except performance. It means that
-                # the caller experiences the full time it takes to
-                # handle the message.
-                res = await self.inner_on_message(message)
-            else:
-                asyncio.create_task(self.inner_on_message(message))
-        except:
-            error = traceback.format_exc()
-            self.logger.error(error)
-            await self.record_message_problem(in_message, error)
-            if EventType.error in self.event_control.active_events:
-                await self.event_control.emit_error(error)
-        return None
+        if not self.stopped:
+            try:
+                message = self.decode_message(in_message)
+                if self.await_message:
+                    # This branch is preserved only because there are so
+                    # many integration tests that depend on knowing that
+                    # the incomming message has been handled when this
+                    # method returns. Never used in production unless
+                    # somebody sets the await_message flag directly. There
+                    # is no harm in it except performance. It means that
+                    # the caller experiences the full time it takes to
+                    # handle the message.
+                    res = await self.inner_on_message(message)
+                else:
+                    asyncio.create_task(self.inner_on_message(message))
+            except:
+                error = traceback.format_exc()
+                self.logger.error(error)
+                await self.record_message_problem(in_message, error)
+                if EventType.error in self.event_control.active_events:
+                    await self.event_control.emit_error(error)
+            return None
     
     async def inner_on_message(self, message):
         timeout_msg = None
@@ -166,88 +171,94 @@ class Deck(DeckAPI):
 
     # Part of DeckAPI
     async def run_command(self, command, timeout=1):
-        if self.role.role_name == RoleName.leader:
-            self.logger.debug("%s Got command request", self.get_my_uri())
-            result = await self.role.run_command(command, timeout=timeout)
-            # if leader gets demoted mid stream because there is already
-            # a new leader, then the role should have changed, reply redirect
-            if self.role.role_name != RoleName.leader:
-                self.logger.info("%s Got command no longer leader", self.get_my_uri())
-                new_leader = self.leader_uri
-                retry = new_leader is None
-                result = CommandResult(command, redirect=new_leader, retry=retry)
-        elif self.role.role_name == RoleName.follower and self.leader_uri is not None:
-            self.logger.info("%s Got command but not leader", self.get_my_uri())
-            result = CommandResult(command, redirect=self.leader_uri)
-        else:
-            self.logger.info("%s Got command but election in progress", self.get_my_uri())
-            result = CommandResult(command, retry=True)
-        return result
+        if not self.stopped:
+            if self.role.role_name == RoleName.leader:
+                self.logger.debug("%s Got command request", self.get_my_uri())
+                result = await self.role.run_command(command, timeout=timeout)
+                # if leader gets demoted mid stream because there is already
+                # a new leader, then the role should have changed, reply redirect
+                if self.role.role_name != RoleName.leader:
+                    self.logger.info("%s Got command no longer leader", self.get_my_uri())
+                    new_leader = self.leader_uri
+                    retry = new_leader is None
+                    result = CommandResult(command, redirect=new_leader, retry=retry)
+            elif self.role.role_name == RoleName.follower and self.leader_uri is not None:
+                self.logger.info("%s Got command but not leader", self.get_my_uri())
+                result = CommandResult(command, redirect=self.leader_uri)
+            else:
+                self.logger.info("%s Got command but election in progress", self.get_my_uri())
+                result = CommandResult(command, retry=True)
+            return result
 
     # Part of DeckAPI
     async def add_event_handler(self, handler):
-        return self.event_control.add_handler(handler)
+        if not self.stopped:
+            return self.event_control.add_handler(handler)
     
     # Part of DeckAPI
     async def remove_event_handler(self, handler):
-        return self.event_control.remove_handler(handler)
+        if not self.stopped:
+            return self.event_control.remove_handler(handler)
     
     # Part of DeckAPI
     async def take_snapshot(self, timeout=2.0) -> SnapShot:
-        if self.role.role_name == "LEADER":
-            nodes = self.cluster_ops.get_cluster_node_ids()
-            target = None
-            for uri in nodes:
-                if uri != self.get_my_uri():
-                    target = uri
-                    break
-            await self.role.transfer_power(target)
-            start_time = time.time()
-            while time.time() - start_time < timeout and self.role.role_name == "LEADER":
-                await asyncio.sleep(0.00001)
+        if not self.stopped:
             if self.role.role_name == "LEADER":
-                raise Exception("could not start snapshot, node is leader and transfer power failed")
-        await self.role.stop()
-        index = await self.log.get_applied_index()
-        rec = await self.log.read(index)
-        term = rec.term
-        snapshot = await self.pilot.create_snapshot(index, term)
-        await self.log.install_snapshot(snapshot)
-        self.role = Follower(self, self.cluster_ops)
-        await self.role.start()
-        return snapshot
+                nodes = self.cluster_ops.get_cluster_node_ids()
+                target = None
+                for uri in nodes:
+                    if uri != self.get_my_uri():
+                        target = uri
+                        break
+                await self.role.transfer_power(target)
+                start_time = time.time()
+                while time.time() - start_time < timeout and self.role.role_name == "LEADER":
+                    await asyncio.sleep(0.00001)
+                if self.role.role_name == "LEADER":
+                    raise Exception("could not start snapshot, node is leader and transfer power failed")
+            await self.role.stop()
+            index = await self.log.get_applied_index()
+            rec = await self.log.read(index)
+            term = rec.term
+            snapshot = await self.pilot.create_snapshot(index, term)
+            await self.log.install_snapshot(snapshot)
+            self.role = Follower(self, self.cluster_ops)
+            await self.role.start()
+            return snapshot
     
     # Part of DeckAPI 
     async def exit_cluster(self, callback=None, timeout=10.0):
-        self.exiting_cluster = True
-        self.exit_result = None
-        if self.role.role_name == "LEADER":
-            await self.role.do_node_exit(self.get_my_uri())
-        else:
-            await self.role.send_self_exit()
-        loop = asyncio.get_event_loop()
-        leader_uri = await self.get_leader_uri()
-        self.logger.info("%s trying to exit cluster via leader %s, starting exit_waiter", self.get_my_uri(), leader_uri)
-        self._exit_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
-                                                asyncio.create_task(self._exit_waiter(timeout, callback)))
-        await asyncio.sleep(0)
+        if not self.stopped:
+            self.exiting_cluster = True
+            self.exit_result = None
+            if self.role.role_name == "LEADER":
+                await self.role.do_node_exit(self.get_my_uri())
+            else:
+                await self.role.send_self_exit()
+            loop = asyncio.get_event_loop()
+            leader_uri = await self.get_leader_uri()
+            self.logger.info("%s trying to exit cluster via leader %s, starting exit_waiter", self.get_my_uri(), leader_uri)
+            self._exit_waiter_handle = loop.call_soon(lambda timeout=timeout, callback=callback:
+                                                    asyncio.create_task(self._exit_waiter(timeout, callback)))
+            await asyncio.sleep(0)
         
     # Part of DeckAPI 
     async def update_settings(self, settings):
-        if self.role.role_name != "LEADER":
-            raise Exception("must only call at leader")
-        await self.role.do_update_settings(settings)
+        if not self.stopped:
+            if self.role.role_name != "LEADER":
+                raise Exception("must only call at leader")
+            await self.role.do_update_settings(settings)
 
     # Part of DeckAPI
     def get_message_problem_history(self, clear=False):
-        res =  self.message_problem_history
-        if clear:
-            self.message_problem_history = []
-        return res
+        if not self.stopped:
+            res =  self.message_problem_history
+            if clear:
+                self.message_problem_history = []
+            return res
     
     # Part of DeckAPI
-    async def stop(self):
-        self.stopped = True
+    async def stop(self, internal=False):
         await self.stop_role()
         if self.join_waiter_handle:
             self.joining_cluster = None
@@ -260,6 +271,8 @@ class Deck(DeckAPI):
             self.exiting_cluster = False
             await asyncio.sleep(0.00001)
             self._exit_waiter_handle = None
+        if internal:
+            await self.pilot.stop_commanded()
             
     # Called by Role
     def get_log(self):

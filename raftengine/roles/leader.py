@@ -8,9 +8,8 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Dict, List, Any
 from enum import Enum
-from raftengine.api.types import RoleName, OpDetail, ClusterConfig
+from raftengine.api.types import RoleName, OpDetail, ClusterConfig, CommandResult
 from raftengine.api.log_api import LogRec, RecordCode
-from raftengine.api.deck_api import CommandResult
 from raftengine.messages.append_entries import AppendEntriesMessage,AppendResponseMessage
 from raftengine.messages.power import TransferPowerMessage, TransferPowerResponseMessage
 from raftengine.messages.snapshot import SnapShotMessage
@@ -75,7 +74,7 @@ class Leader(BaseRole):
         self.broadcast_id = 0
         self.broadcast_trackers = {} # indexed by self.broadcast_id, incr
         self.log_vote_trackers = {} # indexed by log id
-        self.command_error_strategy = "idempotent" # primitive, transactional, retryable
+        self.commands_idempotent = False
         self.command_counter = 0
 
     async def max_entries_per_message(self):
@@ -85,6 +84,8 @@ class Leader(BaseRole):
         await super().start()
         for uri in self.cluster_ops.get_cluster_node_ids():
             tracker = await self.cluster_ops.tracker_for_follower(uri)
+        cc = await self.cluster_ops.get_cluster_config()
+        self.commands_idempotent = cc.settings.commands_idempotent
         await self.run_after(await self.cluster_ops.get_heartbeat_period(), self.scheduled_send_heartbeats)
         start_record = LogRec(code=RecordCode.term_start,
                               term=await self.log.get_term(),
@@ -240,7 +241,7 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.active_messages[uri][serial_number] = MessageTracker(uri, message, log_rec_ids=rec_ids)
-        self.logger.inof("sending backdown %s, active for %s %d", message, uri,
+        self.logger.info("sending backdown %s, active for %s %d", message, uri,
                           len(self.active_messages[uri]))
         await self.deck.record_op_detail(OpDetail.sending_backdown)
         await self.record_sent_message(message)
@@ -461,12 +462,23 @@ class Leader(BaseRole):
         try:
             result,error_data = await processor.process_command(log_record.command, log_record.serial)
         except Exception as e:
-            error_data = traceback.format_exc()
+            run_error = traceback.format_exc()
+            if not self.commands_idempotent:
+                self.logger.error("%s running process_command raised marking node broken and exiting \n%s",
+                                  self.my_uri(), run_error)
+                log_record.error = run_error
+                await self.log.replace(log_record)
+                await self.log.set_broken()
+                await self.report_command_result(log_rec, result, run_error)
+                await self.deck.stop(internal=True)
+                return
+            # If commands are idempotent then we'll just try again when next we see this log
+            # record is not applied.
+            self.logger.debug("%s executing process_command raise exception %s", self.my_uri(), run_error)
+            await self.report_command_result(log_rec, result, run_error)
+            return
         if error_data:
             self.logger.debug("%s running command produced error %s", self.my_uri(), error_data)
-            if self.command_error_strategy != "idempotent":
-                log_rec.applied = True
-                await self.log.replace(log_rec)
         else:
             self.logger.debug("%s running command produced no error, apply_index is now %s",
                               self.my_uri(), await self.log.get_applied_index())

@@ -4,6 +4,7 @@ import logging
 import time
 import traceback
 import os
+import pytest
 from raftengine.messages.append_entries import AppendResponseMessage
 from raftengine.api.log_api import LogRec
 from dev_tools.features import registry
@@ -118,6 +119,8 @@ async def test_command_1(cluster_maker):
     assert ts_1.get_role_name() == "CANDIDATE"
     command_result = await ts_1.run_command("add 1")
     assert command_result.retry is not None
+    assert "retry" in str(command_result)
+    assert "result" not in str(command_result)
     logger.debug('------------------------ Correct retry (candidate) done')
     # get the leader to send it a heartbeat while it is a candidate
     await cluster.test_trace.start_subtest("Pushing Leader to send heartbeats, after forcing candidate's term back down")
@@ -630,7 +633,7 @@ async def inner_command_after_heal(cluster, use_pre_vote):
     # meaning that candidate reply did its thing
     assert await ts_1.log.get_term() == last_term
     
-async def test_follower_explodes_in_command(cluster_maker):
+async def test_follower_explodes_in_command_1(cluster_maker):
     """
     This tests that operations are correct in the case where the state machine operation at a single
     follower experiences an error during command execution, one that does not crash the node.
@@ -648,19 +651,20 @@ async def test_follower_explodes_in_command(cluster_maker):
     then be technically a "state machine", but anything more complex than storing a value (like
     etcd) is likely to have the possibilty of this kind of failure.
 
-    Rather than try to develop some general mechanism for dealing with this, I throw up my
-    hands and just promise to let you know if it fails at the leader. If that happens then
-    the log record is not committed, so your job is to figure out how to clear the problem condition
-    and retry.
+    This library supports two strategies for dealing with errors, depending on whether
+    the commands are idempotent. If they are, then a failure will just be ignored and the
+    command will be retried at some point, nearly immediately in a busy system. This is likely
+    to be pathological but it is conceivable that the application might have some way to detect
+    and clear the error.
 
-    If it happens at a single follower then that may be okay, if there was more than a quorum, since enough
-    other nodes applied it successfully that the cluster can move on even if the follower continues to
-    fail to apply. There is not yet a mechanism for reporting the error at a follower, but when there is
-    will be local to the follower, and some external action will need to be taken to allow that follower
-    to finish the commit and move on. If the follower was part of a minimum quorum, your whole cluster
-    will be blocked until you fix it.
+    If the commands are not idempontent, the default behavior, then the node is marked "broken"
+    in the log and it will not restart until action is taken to fix the problem and reset
+    the broken state by calling await log.set_fixed()
 
-    This test fixed the simulated problem so that the first retry succeeds.
+    This test sets the commands_idempotent flag to True and therefore expects the broken command
+    to be retried.
+
+    This test clears the error condition so that sending heartbeats should trigger a successful retry.
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
@@ -672,7 +676,9 @@ async def test_follower_explodes_in_command(cluster_maker):
     f_partial_failure_tolerance = registry.get_raft_feature("log_replication", "partial_failure_tolerance")
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config()
+    config.commands_idempotent = True
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -722,8 +728,113 @@ async def test_follower_explodes_in_command(cluster_maker):
     await cluster.deliver_all_pending()
     assert ts_3.operations.total == 2
 
+async def test_follower_explodes_in_command_2(cluster_maker):
+    """
+    This tests that operations are correct in the case where the state machine operation at a single
+    follower experiences an error during command execution, one that does not crash the node.
 
-async def test_leader_explodes_in_command(cluster_maker):
+    The items that are tested are that
+    1. The command succeeds because the leader and one follower agree
+    2. That the follower that has the error marks itself "broken", shuts down and refuses
+       to restart until the broken flag is cleared.
+    3. Clears the broken flag, restarts the node, and checks to see that it retries the command
+
+    There is no discussion in the Raft paper about the possibility that the state machine command
+    processing could experience an error that does not crash the node, but also does not
+    allow the command to be processed. I guess they were thinking about compliled languages
+    that are more likely to crash the process on some serious bug than to detect the bug and try
+    to continue, but this is python which might well have such behavior. I guess it might not
+    then be technically a "state machine", but anything more complex than storing a value (like
+    etcd) is likely to have the possibilty of this kind of failure.
+
+    This library supports two strategies for dealing with errors, depending on whether
+    the commands are idempotent. If they are, then a failure will just be ignored and the
+    command will be retried at some point, nearly immediately in a busy system. This is likely
+    to be pathological but it is conceivable that the application might have some way to detect
+    and clear the error.
+
+    If the commands are not idempontent, the default behavior, then the node is marked "broken"
+    in the log and it will not restart until action is taken to fix the problem and reset
+    the broken state by calling await log.set_fixed()
+
+    In this test the commands_idempotent flag the default false, so the follower will exit.
+
+    This test verifies that the node will not restart. Then it clears the error condition so that
+    it will not recur, clears the broken condition in the log, and restarts the follower.
+
+    Finally it issues heartbeats from the leader and checks to see that the command does complete.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_follower_error_disabled = registry.get_raft_feature("state_machine_command", "follower_disabled_on_error")
+    f_partial_failure_tolerance = registry.get_raft_feature("log_replication", "partial_failure_tolerance")
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+    config.commands_idempotent = False
+    cluster.set_configs(config)
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger("test_code")
+
+    await cluster.test_trace.define_test("Testing follower error during command execution")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
+    await cluster.start()
+    await ts_1.start_campaign()
+
+    await cluster.run_election()
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_1
+    assert ts_2.get_leader_uri() == uri_1
+    logger.info('------------------------ Election done')
+
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    logger.debug('------------------------ Correct command done')
+    
+    spec = dict(used=[], tested=[f_partial_failure_tolerance])
+    await cluster.test_trace.start_subtest("Node 1 is leader, one command completed and all nodes in sync, rigging node 3 to explode processing next command", features=spec)
+
+    # The node 3 follower will blow up trying to apply command, so
+    # we use the test control sequence that allows us to specify
+    # which nodes need to make it all the way to committing the
+    # command.
+    ts_3.operations.explode = True
+    sequence = SPartialCommand(cluster, "add 1", voters=[uri_1, uri_2])
+    command_result = await cluster.run_sequence(sequence)
+    await cluster.deliver_all_pending()
+
+    # make sure the command worked, at the leader and node 2
+    assert command_result.result == 2
+    assert ts_1.operations.total == 2
+    assert ts_2.operations.total == 2
+    assert ts_3.operations.total == 1
+
+    spec = dict(used=[], tested=[f_follower_error_disabled])
+    await cluster.test_trace.start_subtest("Second command succeed, but not at node3. "
+                                            + "Checking that node state is broken and that it won't restart ",
+                                            features=spec)
+    assert await ts_3.log.get_broken() == True
+    with pytest.raises(Exception) as e:
+        await ts_3.recover_from_crash(save_log=True, save_ops=True)
+    # clear the trigger and run heartbeats, node 3 should rerun command and succeed
+    ts_3.operations.explode = False
+    await ts_3.log.set_fixed()
+    await ts_3.recover_from_crash(save_log=True, save_ops=True)
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    assert ts_3.operations.total == 2
+
+
+async def test_leader_explodes_in_command_1(cluster_maker):
     """
     This tests that operations are correct in the case where the state machine operation at 
     the leader experiences an error during command execution, one that does not crash the node.
@@ -732,10 +843,19 @@ async def test_leader_explodes_in_command(cluster_maker):
     processing could experience an error that does not crash the node, but also does not
     allow the command to be processed. 
 
-    Rather than try to develop some general mechanism for dealing with this, I throw up my
-    hands and just promise to let you know if it fails at the leader. If that happens then
-    the log record is not committed, so your job is to figure out how to clear the problem condition
-    and retry.
+
+    This library supports two strategies for dealing with errors, depending on whether
+    the commands are idempotent. If they are, then a failure will just be ignored and the
+    command will be retried at some point, nearly immediately in a busy system. This is likely
+    to be pathological but it is conceivable that the application might have some way to detect
+    and clear the error.
+
+    If the commands are not idempontent, the default behavior, then the node is marked "broken"
+    in the log and it will not restart until action is taken to fix the problem and reset
+    the broken state by calling await log.set_fixed()
+
+    This test sets the commands_idempotent flag to True and therefore expects the broken command
+    to be retried. 
 
     This test clears the error condition so that sending heartbeats should trigger a successful retry.
 
@@ -747,7 +867,9 @@ async def test_leader_explodes_in_command(cluster_maker):
     f_leader_error_recovery = registry.get_raft_feature("state_machine_command", "leader_error_recovery")
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config()
+    config.commands_idempotent = True
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -766,6 +888,9 @@ async def test_leader_explodes_in_command(cluster_maker):
     logger.info('------------------------ Election done')
 
     command_result = await cluster.run_command("add 1", 1)
+    assert "result" in str(command_result)
+    assert "error" not in str(command_result)
+    assert "timeout" not in str(command_result)
     
     assert ts_1.operations.total == 1
     assert ts_2.operations.total == 1
@@ -779,7 +904,9 @@ async def test_leader_explodes_in_command(cluster_maker):
     ts_1.operations.explode = True
     command_result = await cluster.run_command("add 1", timeout=0.01)
     assert command_result is not None
+    assert "result" not in str(command_result)
     assert command_result.error is not None
+    assert "error" in str(command_result)
     
     await cluster.test_trace.start_subtest("Leader node 1 returned an error from command request, clearing trigger")
     ts_1.operations.explode = False
@@ -799,6 +926,105 @@ async def test_leader_explodes_in_command(cluster_maker):
     assert ts_1.operations.total == 3
     assert ts_3.operations.total == 3
     assert ts_2.operations.total == 3
+    
+async def test_leader_explodes_in_command_2(cluster_maker):
+    """
+    This tests that operations are correct in the case where the state machine operation at 
+    the leader experiences an error during command execution, one that does not crash the node.
+
+    There is no discussion in the Raft paper about the possibility that the state machine command
+    processing could experience an error that does not crash the node, but also does not
+    allow the command to be processed. 
+
+
+    This library supports two strategies for dealing with errors, depending on whether
+    the commands are idempotent. If they are, then a failure will just be ignored and the
+    command will be retried at some point, nearly immediately in a busy system. This is likely
+    to be pathological but it is conceivable that the application might have some way to detect
+    and clear the error.
+
+    If the commands are not idempontent, the default behavior, then the node is marked "broken"
+    in the log and it will not restart until action is taken to fix the problem and reset
+    the broken state by calling await log.set_fixed()
+
+    This test sets the commands_idempotent flag to False and therefore expects the leader to
+    exit and refuse to restart.
+
+    It checks that these conditions are True, then clears the error at the old leader and restarts it, 
+    then runs a new election to get a new leader and finally checks that the old leader successfully
+    applied the command on retry.
+
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    # Feature definitions for this test
+    f_election_with_prevote = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_all_sync = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_leader_error_recovery = registry.get_raft_feature("state_machine_command", "leader_error_recovery")
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config()
+    config.commands_idempotent = False
+    cluster.set_configs(config)
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    logger = logging.getLogger("test_code")
+
+    await cluster.test_trace.define_test("Testing leader error during command execution")
+    
+    spec = dict(used=[f_election_with_prevote, f_command_all_sync], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
+    await cluster.start()
+    await ts_1.start_campaign()
+
+    await cluster.run_election()
+    assert ts_1.get_role_name() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_1
+    assert ts_2.get_leader_uri() == uri_1
+    logger.info('------------------------ Election done')
+
+    command_result = await cluster.run_command("add 1", 1)
+    assert "result" in str(command_result)
+    assert "error" not in str(command_result)
+    assert "timeout" not in str(command_result)
+    
+    assert ts_1.operations.total == 1
+    assert ts_2.operations.total == 1
+    assert ts_3.operations.total == 1
+    logger.debug('------------------------ Correct command done')
+
+    spec = dict(used=[], tested=[f_leader_error_recovery])
+    await cluster.test_trace.start_subtest("Node 1 is leader, rigging it to explode on command and runnning command", features=spec)
+
+    # now arrange for leader to blow up.
+    ts_1.operations.explode = True
+    command_result = await cluster.run_command("add 1", timeout=0.01)
+    assert command_result is not None
+    assert "result" not in str(command_result)
+    assert command_result.error is not None
+    assert "error" in str(command_result)
+    
+    await cluster.test_trace.start_subtest("Leader node 1 returned an error from command request, clearing trigger")
+    assert ts_1.operations.total == 1
+    assert ts_1.deck_stopped
+    assert await ts_1.log.get_broken()
+    with pytest.raises(Exception) as e:
+        await ts_1.recover_from_crash(save_log=True, save_ops=True)
+    ts_1.operations.explode = False
+    await ts_1.log.set_fixed()
+    await ts_1.recover_from_crash(save_log=True, save_ops=True)
+
+    await ts_2.start_campaign()
+    await cluster.run_election()
+    assert ts_2.get_role_name() == "LEADER"
+    assert ts_1.get_leader_uri() == uri_2
+    assert ts_3.get_leader_uri() == uri_2
+    await ts_2.send_heartbeats()
+    await cluster.deliver_all_pending()
+    # followers should receive commit signal and succeed 
+    assert ts_3.operations.total == 2
+    assert ts_2.operations.total == 2
+    assert ts_1.operations.total == 2
+
     
 async def test_long_catchup(cluster_maker):
     """
@@ -972,7 +1198,9 @@ async def test_follower_run_error(cluster_maker):
     f_error_handling = registry.get_raft_feature("state_machine_command", "error_handling")
     
     cluster = cluster_maker(3)
-    cluster.set_configs()
+    config = cluster.build_cluster_config()
+    config.commands_idempotent = True # tell follower to allow retry
+    cluster.set_configs(config)
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger("test_code")
@@ -1084,6 +1312,8 @@ async def test_follower_rewrite_1(cluster_maker):
     logger.info('---------!!!!!!! Sending blocked leader two "sub 1" commands')
     command_result = await ts_1.run_command("sub 1", timeout=0.01)
     assert command_result.timeout_expired
+    assert "timeout_expired" in str(command_result)
+    assert "result" not in str(command_result)
     command_result = await ts_1.run_command("sub 1", timeout=0.01)
     assert command_result.timeout_expired
     assert await ts_1.log.get_last_index() == last_index + 2

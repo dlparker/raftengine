@@ -4,7 +4,7 @@ import traceback
 import json
 from fastapi import FastAPI, Request
 import uvicorn
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger('transport.server.fastapi')

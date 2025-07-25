@@ -1,37 +1,12 @@
-from typing import Protocol, runtime_checkable, List, Any, Optional, Callable
-from enum import Enum
-from dataclasses import dataclass
-from raftengine.api.log_api import LogAPI, LogRec
+from typing import Protocol, runtime_checkable, Optional, Callable
 from raftengine.api.events import EventHandler
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
-from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
-from raftengine.api.types import ClusterSettings, ClusterConfig
+from raftengine.api.snapshot_api import SnapShot
+from raftengine.api.types import ClusterSettings, ClusterConfig, CommandResult
 
 
 # done as a regular class for easier serialization
-class CommandResult:
-    def __init__(self, command: str, result: Optional[str] = None,
-                 retry: bool = False,  redirect: Optional[str] = None,
-                 error: Optional[str] = None, timeout_expired: Optional[bool] = False):
-        self.command = command
-        self.result = result
-        self.retry = retry
-        self.redirect = redirect
-        self.error = error
-        self.timeout_expired = timeout_expired
-
-    def __str__(self):
-        res = "CommandResult "
-        if self.result:
-            res += " has result"
-        elif self.error:
-            res += " has error"
-        elif self.timeout_expired:
-            res += " timeout_expired"
-        elif self.retry:
-            res += " needs retry"
-        return res
 
 @runtime_checkable
 class DeckAPI(Protocol): # pragma: no cover

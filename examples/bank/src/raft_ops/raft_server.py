@@ -12,7 +12,7 @@ from logging.config import dictConfig
 from collections import defaultdict
 import jsonpickle
 from raftengine.deck.deck import Deck
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
 from base.operations import Teller
 from base.datatypes import Customer, Account, AccountType, CommandType

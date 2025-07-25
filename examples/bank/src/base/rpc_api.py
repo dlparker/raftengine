@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 
-class RPCAPI(ABC): 
+
+class RPCAPI(ABC):
     """Abstract base class defining the RPC interface for banking implementations"""
     
     @abstractmethod

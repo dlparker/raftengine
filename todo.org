@@ -15,7 +15,7 @@ What to do with a log record for a command that fails or times out? Need to docu
 the need for idempotent or session management.
 
 1. Need to add a log_api element for declaring node broken.
-2. Need to Update CommandResult class to have an error type with ['internal', 'command_failure', others?]
+2. NOPE!! Need to Update CommandResult class to have an error type with ['internal', 'command_failure', others?]
 3. Need to add error strategy setting to cluster config. Options are
    1. Idempotent and Transactional - committed record will be retried until success
    2. Primative - apply failure marks node broken, provide way to clear flag after offline repair
@@ -23,7 +23,7 @@ the need for idempotent or session management.
    
  
 
-   
+Test with regular timeings   
    
    
 

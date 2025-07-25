@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from raftengine.api.deck_api import CommandResult
+from raftengine.api.types import CommandResult
 from base.operations import Teller
 from base.proxy import TellerProxyAPI
 from base.dispatcher import Dispatcher
