@@ -76,6 +76,7 @@ class Leader(BaseRole):
         self.broadcast_trackers = {} # indexed by self.broadcast_id, incr
         self.log_vote_trackers = {} # indexed by log id
         self.command_error_strategy = "idempotent" # primitive, transactional, retryable
+        self.command_counter = 0
 
     async def max_entries_per_message(self):
         return await self.cluster_ops.get_max_entries_per_message()
@@ -90,7 +91,7 @@ class Leader(BaseRole):
                               command=await self.cluster_ops.get_cluster_config_json_string(),
                               leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
-        self.elec_logger.info("New Leader %s senting term start record index %d %d %d", self.my_uri(),
+        self.elec_logger.info("New Leader %s sending term start record index %d %d %d", self.my_uri(),
                          the_record.index, await self.log.get_last_index(), await self.log.get_last_term())
         await self.broadcast_log_record(the_record)
 
@@ -454,7 +455,7 @@ class Leader(BaseRole):
             return
         result = None
         error_data = None
-        self.logger.info("%s applying command committed at index %d", self.my_uri(),
+        self.logger.debug("%s applying command committed at index %d", self.my_uri(),
                          await self.log.get_last_index())
         processor = self.deck.get_processor()
         try:
@@ -565,6 +566,7 @@ class Leader(BaseRole):
         raw_rec = LogRec(command=command, term=await self.log.get_term(),
                          leader_id=self.my_uri(), serial=serial)
         log_rec = await self.log.append(raw_rec)
+            
         self.logger.debug("%s saved command serial %d log record at index %d", self.my_uri(),
                           serial, log_rec.index)
         async with self.active_commands_lock:
@@ -577,7 +579,13 @@ class Leader(BaseRole):
                                                        future=asyncio.Future())
         self.logger.debug("%s waiting for completion of pending command %d", self.my_uri(), serial)
         command_result = await self.send_and_await_command(log_rec, timeout)
+
+        if self.command_counter % 1000 == 0:
+            # at maximum speed, this is about once every two seconds on my laptop
+            self.logger.info("%s command #%d sn=%d done,  result %s",
+                             self.my_uri(), self.command_counter, serial, str(command_result))
         
+        self.command_counter += 1
         self.logger.debug("%s command result sn=%d %s", self.my_uri(),
                           log_rec.serial,
                           f"(result_not_none={command_result.result is not None}" +

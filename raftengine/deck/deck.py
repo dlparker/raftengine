@@ -36,6 +36,7 @@ class Deck(DeckAPI):
         self.log = pilot.get_log()
         self.logger = logging.getLogger("Deck")
         self.elec_logger = logging.getLogger("Elections")
+        self.timer_logger = logging.getLogger("Timers")
         self.role_async_handle = None
         self.role_run_after_target = None
         self.message_problem_history = []
@@ -495,10 +496,10 @@ class Deck(DeckAPI):
     async def role_run_after(self, delay, target):
         delay += 0.0
         if self.role_async_handle:
-            self.logger.debug('%s cancelling after target to %s', self.local_config.uri,
+            self.timer_logger.debug('%s cancelling after target to %s', self.local_config.uri,
                         self.role_run_after_target)
             self.role_async_handle.cancel()
-        self.logger.debug('%s setting run after target to %s after %0.8f', self.local_config.uri, target, delay)
+        self.timer_logger.debug('%s setting run after target to %s after %0.8f', self.local_config.uri, target, delay)
         self.role_run_after_target = target
         loop = asyncio.get_event_loop()
         self.role_async_handle = loop.call_later(delay,

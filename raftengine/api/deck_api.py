@@ -21,6 +21,18 @@ class CommandResult:
         self.error = error
         self.timeout_expired = timeout_expired
 
+    def __str__(self):
+        res = "CommandResult "
+        if self.result:
+            res += " has result"
+        elif self.error:
+            res += " has error"
+        elif self.timeout_expired:
+            res += " timeout_expired"
+        elif self.retry:
+            res += " needs retry"
+        return res
+
 @runtime_checkable
 class DeckAPI(Protocol): # pragma: no cover
     """
