@@ -12,7 +12,7 @@ from base.datatypes import Customer, Account, AccountType
 from base.rpc_api import RPCAPI
 
 log_controller = LogController.get_controller()
-logger = log_controller.add_logger("rpc_ops.RaftClient",
+logger = log_controller.add_logger("raft_ops.RaftClient",
                                    "Client layer that adds redirect and retry logic to RPC client")
 
 class RaftClient(RPCAPI):
@@ -25,7 +25,7 @@ class RaftClient(RPCAPI):
         self.rpc_clients = dict(uri=rpc_client)
         self.rpc_client = rpc_client
         self.rpc_helper = rpc_helper()
-        self.client_maker = rpc_helper.rpc_client_maker
+        self.client_maker = self.rpc_helper.rpc_client_maker
         
     async def get_uri(self):
         return self.current_leader
@@ -38,6 +38,8 @@ class RaftClient(RPCAPI):
             self.rpc_clients[uri] = await self.client_maker(uri)
             self.current_leader = uri
             self.rpc_client = self.rpc_clients[uri]
+            logger.info("setting new leader %s", uri)
+            print("")
         return self.rpc_clients[uri]
 
     # called by Collector

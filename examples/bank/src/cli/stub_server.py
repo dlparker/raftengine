@@ -3,25 +3,6 @@
 Unified stub server supporting multiple transports.
 Works with both stub clients and raft clusters using the same transport.
 """
-import asyncio
-import argparse
-from pathlib import Path
-import sys
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from raft_stubs.stubs import DeckStub, RaftServerStub
 
 async def run_aiozmq_server(host, port, delete_db):
     """Run aiozmq stub server"""
@@ -168,4 +149,23 @@ Available transports:
         raise ValueError(f"Unsupported transport: {args.transport}")
 
 if __name__ == "__main__":
+    import asyncio
+    import argparse
+    from pathlib import Path
+    import sys
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    from raft_stubs.stubs import DeckStub, RaftServerStub
     asyncio.run(main())

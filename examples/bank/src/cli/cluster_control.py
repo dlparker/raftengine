@@ -3,31 +3,6 @@
 Unified test client supporting multiple transports.
 Works with both stub servers and raft clusters using the same transport.
 """
-import asyncio
-import argparse
-import traceback
-import subprocess
-from pathlib import Path
-import sys
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-
-from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
-from cli.raft_admin import server_admin
-from raft_ops.local_ops import LocalCollector 
-from cli.test_client_common import validate, add_common_arguments
 
 async def start_server(index, uri, transport, RPCHelper, slow_timeouts=True):
     raft_server_path = Path(Path(__file__).parent, 'raft_server.py')
@@ -103,4 +78,28 @@ async def main():
         
 
 if __name__ == "__main__":
+    import asyncio
+    import argparse
+    import traceback
+    import subprocess
+    from pathlib import Path
+    import sys
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+
+    from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper, server_admin
+    from raft_ops.local_ops import LocalCollector 
+    from cli.test_client_common import validate, add_common_arguments
     asyncio.run(main())

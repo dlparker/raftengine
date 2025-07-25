@@ -7,7 +7,7 @@
       2. Heartbeats should be separate
       3. Commands should log only every X log_record
       4. All membership change and snapshot and backdown and catchup should log
-4. Fix log_control to understand dotted notation on set_level
+#4. Fix log_control to understand dotted notation on set_level
 	 
 	 
 Error Handling update:

@@ -1,38 +1,4 @@
 #!/usr/bin/env python
-import asyncio
-import argparse
-import os
-import sys
-import shutil
-import logging
-from pathlib import Path
-from raftengine.api.types import NodeRec
-from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
-
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-log_control.set_default_level("warning")
-logger = log_control.add_logger('server_main', 'The infrastructure elements of running a server processs')
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from raft_ops.raft_server import RaftServer
-from raft_ops.local_ops import LocalCollector
-from raft_ops.sqlite_log import SqliteLog
-
-#log_control.set_logger_level("Leader", "DEBUG")
-#log_control.set_logger_level("Follower", "DEBUG")
-#log_control.set_logger_level("Deck", "DEBUG")
-#log_control.set_logger_level("raft_ops.RaftServer", "DEBUG")
 
 async def server_main(index, uri, cluster_config, local_config, RPCHelper, start_paused=True):
     work_dir = Path(local_config.working_dir)
@@ -177,5 +143,38 @@ Available transports:
 
 if __name__ == "__main__":
     import asyncio
+    import argparse
+    import os
+    import sys
+    import shutil
+    import logging
+    from pathlib import Path
+    from raftengine.api.types import NodeRec
+    from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
+
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+    log_control.set_default_level("warning")
+    logger = log_control.add_logger('server_main', 'The infrastructure elements of running a server processs')
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    from raft_ops.raft_server import RaftServer
+    from raft_ops.local_ops import LocalCollector
+    from raft_ops.sqlite_log import SqliteLog
+
+    #log_control.set_logger_level("Leader", "DEBUG")
+    #log_control.set_logger_level("Follower", "DEBUG")
+    #log_control.set_logger_level("Deck", "DEBUG")
+    #log_control.set_logger_level("raft_ops.RaftServer", "DEBUG")
     asyncio.run(main())
 

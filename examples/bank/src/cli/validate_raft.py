@@ -3,30 +3,6 @@
 Raft Cluster Validation Tool
 Manages a 3-node Raft cluster, runs validation tests against the leader (node 0), and cleans up.
 """
-import asyncio
-import argparse
-import sys
-import traceback
-from pathlib import Path
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from raft_ops.local_ops import LocalCollector 
-from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
-from cli.raft_admin import server_admin
-# Import existing functionality to reuse
-from cli.test_client_common import validate, add_common_arguments
 
 class ClusterManager:
     """Manages a 3-node Raft cluster lifecycle"""
@@ -171,6 +147,26 @@ class ClusterManager:
                 status[index] = {'error': str(e), 'running': False}
         return status
     
+    async def is_cluster_running(self) -> bool:
+        """Check if the cluster is already running by testing connectivity to all nodes"""
+        running_count = 0
+        for index in range(3):
+            try:
+                node_uri = self.cluster_nodes[index]
+                rpc_client = await self.RPCHelper().rpc_client_maker(node_uri)
+                server_local_commands = LocalCollector(rpc_client)
+                
+                # Try to get PID - if this succeeds, server is running
+                await server_local_commands.get_pid()
+                await rpc_client.close()
+                running_count += 1
+            except Exception:
+                # Server not reachable, probably not running
+                pass
+        
+        # Consider cluster running if all 3 nodes are reachable
+        return running_count == 3
+    
     def get_leader_uri(self):
         """Get URI for the leader (node 0)"""
         return self.cluster_nodes[0]
@@ -206,87 +202,137 @@ Available transports:
     # Create cluster manager
     cluster = ClusterManager(args.transport, args.base_port, slow_timeouts=True)
     
-    try:
-        # Start the cluster
+    # Check if cluster is already running
+    leader_uri = cluster.cluster_nodes[0]
+    cluster_was_running = await cluster.is_cluster_running()
+    if cluster_was_running:
+        print(f"Cluster is already running on {args.transport} transport (base port {args.base_port})")
+        cluster_started = True
+    else:
+        print(f"Starting {args.transport} cluster...")
         cluster_started = await cluster.start_cluster()
         if not cluster_started:
             print("Failed to start cluster")
             sys.exit(1)
-        
-        # Wait for cluster formation
-        print(f"Waiting {args.cluster_startup_delay}s for cluster formation...")
-        await asyncio.sleep(args.cluster_startup_delay)
-        
-        # Start Raft operations on all servers
-        print("Starting Raft operations on all servers...")
-        for index in range(3):
-            try:
-                node_uri = cluster.cluster_nodes[index]
-                rpc_client = await cluster.RPCHelper().rpc_client_maker(node_uri)
-                server_local_commands = LocalCollector(rpc_client)
-                await server_local_commands.start_raft()
-                await rpc_client.close()
-                print(f"  Started Raft on node {index}")
-            except Exception as e:
-                print(f"  Warning: Failed to start Raft on node {index}: {e}")
-        
-        # Wait a moment for Raft to initialize
-        await asyncio.sleep(0.5)
-        
-        # Trigger leader election since we're using slow timeouts
-        print("Triggering leader election on node 0...")
-        try:
-            leader_uri = cluster.cluster_nodes[0]
-            rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
-            server_local_commands = LocalCollector(rpc_client)
-            await server_local_commands.start_campaign()
-            await rpc_client.close()
-            print("Election triggered successfully")
-            
-            # Wait a moment for election to complete
-            await asyncio.sleep(1.0)
-        except Exception as e:
-            print(f"Warning: Failed to trigger election: {e}")
-        
-        # Check cluster status
-        print("Checking cluster status...")
-        cluster_status = await cluster.get_cluster_status()
-        for index, status in cluster_status.items():
-            if status.get('running'):
-                role = "Leader" if status.get('is_leader') else "Follower"
-                term = status.get('term', 'unknown')
-                print(f"  Node {index}: {role} (term {term})")
-            else:
-                print(f"  Node {index}: Not running - {status.get('error', 'unknown error')}")
-        
-        # Get leader URI (node 0)
-        leader_uri = cluster.get_leader_uri()
-        print(f"Connecting to leader at {leader_uri}")
-        
-        # Create client connection to leader
-        rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
-        try:
-            # Run validation against the leader
-            await validate(rpc_client, 
-                          mode=args.mode,
-                          loops=args.loops,
-                          use_random_data=args.random,
-                          print_timing=not args.no_timing,
-                          json_output=args.json_output,
-                          rpc_helper=cluster.RPCHelper)
-            
-            print(f"Successfully completed {args.transport} cluster validation")
-            
-        finally:
-            await rpc_client.close()
-            await asyncio.sleep(0.2)
     
+        try:
+
+            # Wait for cluster formation
+            print(f"Waiting {args.cluster_startup_delay}s for cluster formation...")
+            await asyncio.sleep(args.cluster_startup_delay)
+
+            # Start Raft operations on all servers
+            print("Starting Raft operations on all servers...")
+            for index in range(3):
+                try:
+                    node_uri = cluster.cluster_nodes[index]
+                    rpc_client = await cluster.RPCHelper().rpc_client_maker(node_uri)
+                    server_local_commands = LocalCollector(rpc_client)
+                    await server_local_commands.start_raft()
+                    await rpc_client.close()
+                    print(f"  Started Raft on node {index}")
+                except Exception as e:
+                    print(f"  Warning: Failed to start Raft on node {index}: {e}")
+
+            # Wait a moment for Raft to initialize
+            await asyncio.sleep(0.5)
+
+            # Trigger leader election since we're using slow timeouts
+            print("Triggering leader election on node 0...")
+            try:
+                leader_uri = cluster.cluster_nodes[0]
+                rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
+                server_local_commands = LocalCollector(rpc_client)
+                await server_local_commands.start_campaign()
+                await rpc_client.close()
+                print("Election triggered successfully")
+
+                # Wait a moment for election to complete
+                await asyncio.sleep(1.0)
+            except Exception as e:
+                print(f"Warning: Failed to trigger election: {e}")
+
+            # Check cluster status
+            print("Checking cluster status...")
+            cluster_status = await cluster.get_cluster_status()
+            for index, status in cluster_status.items():
+                if status.get('running'):
+                    role = "Leader" if status.get('is_leader') else "Follower"
+                    term = status.get('term', 'unknown')
+                    print(f"  Node {index}: {role} (term {term})")
+                else:
+                    print(f"  Node {index}: Not running - {status.get('error', 'unknown error')}")
+
+            # Get leader URI (node 0)
+            leader_uri = cluster.get_leader_uri()
+            print(f"Connecting to leader at {leader_uri}")
+
+        except Exception as e:
+            print(f"Error during cluster setup: {traceback.format_exc()}")
+            sys.exit(1)
+        finally:
+            print("Stopping cluster...")
+            await cluster.stop_cluster()
+
+    # Create client connection to leader
+    logger = logging.getLogger('raft_ops.RaftClient')
+    logger.debug('starting with client of %s', leader_uri)
+    logger2 = logging.getLogger('Deck')
+    logger2.debug('starting with client of %s', leader_uri)
+    rpc_client = await cluster.RPCHelper().rpc_client_maker(leader_uri)
+    logger.debug('starting with client of %s', leader_uri)
+    await asyncio.sleep(0.1)
+    try:
+        # Run validation against the leader
+        await validate(rpc_client, 
+                       mode=args.mode,
+                       loops=args.loops,
+                       use_random_data=args.random,
+                       print_timing=not args.no_timing,
+                       json_output=args.json_output,
+                       rpc_helper=cluster.RPCHelper)
+
+        print(f"Successfully completed {args.transport} cluster validation")
+        exit_value = 0
     except Exception as e:
-        print(f"Error during cluster validation: {e}")
-        sys.exit(1)
+        print(f"Error during cluster validation: {traceback.format_exc()}")
+        exit_value = 1
     finally:
-        # Always stop the cluster
-        await cluster.stop_cluster()
+        await rpc_client.close()
+        await asyncio.sleep(0.2)
+        # Only stop the cluster if we started it
+        if not cluster_was_running:
+            print("Stopping cluster...")
+            await cluster.stop_cluster()
+        else:
+            print("Leaving cluster running (was already running when we started)")
+    raise SystemExit(exit_value)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+    import argparse
+    import sys
+    import traceback
+    import logging
+    from pathlib import Path
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+    log_control.set_default_level('DEBUG')
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    from raft_ops.local_ops import LocalCollector 
+    from raft_ops.raft_client import RaftClient # this is just to get the logger registered
+    from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper, server_admin
+    # Import existing functionality to reuse
+    from cli.test_client_common import validate, add_common_arguments
+    asyncio.run(main(), debug=True)

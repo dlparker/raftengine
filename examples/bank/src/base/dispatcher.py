@@ -79,7 +79,7 @@ class Dispatcher:
         result = None
         try:
             # First parse as JSON to handle custom types manually
-            request_data = json.loads(request)
+            request_data = msgspec.json.decode(request)
             decoded_data = decode_request_data(request_data)
             
             # Reconstruct Command object manually since msgspec.json.decode doesn't work well with custom hooks

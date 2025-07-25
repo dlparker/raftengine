@@ -1,7 +1,9 @@
 import os
 import time
 import subprocess
+import traceback
 from pathlib import Path
+from pprint import pprint
 from raft_ops.local_ops import LocalCollector
 
 TRANSPORT_CHOICES = ['astream', 'aiozmq', 'fastapi', 'grpc']
@@ -131,3 +133,65 @@ async def tail_server_errors(rpc_client, all_uris, lines: int = 10):
     except Exception as e:
         print(f"Error tailing server {index} error logs: {e}")
         return False
+
+async def server_admin(target_nodes, command, RPCHelper):
+    
+    for uri in target_nodes:
+        try:
+            try:
+                rpc_client = await RPCHelper().rpc_client_maker(uri)
+                server_local_commands = LocalCollector(rpc_client)
+                res = await server_local_commands.get_pid()
+            except Exception as e:
+                print(f'Server {uri} not reachable, probably not running "{e}"')
+                try:
+                    await rpc_client.close()
+                except:
+                    pass
+                continue
+            if command == 'getpid':
+                pid = await server_local_commands.get_pid()
+                print(f'Server {uri} pid = {pid}')
+            elif command == 'start_raft':
+                res = await server_local_commands.start_raft()
+                print(f'Sent start_raft to server {uri} ')
+            elif command == 'stop':
+                await stop_server(rpc_client, target_nodes)
+            elif command == 'status':
+                try:
+                    status = await server_local_commands.get_status()
+                    print(f'Server {uri}')
+                    pprint(status)
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
+            elif command == 'take_power':
+                res = await server_local_commands.start_campaign()
+                print(f'Server {uri} should now start a campaign')
+            elif command == 'get_log_config':
+                try:
+                    config = await server_local_commands.get_logging_dict()
+                    res = json.dumps(config, indent=4)
+                    print(res)
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
+            elif command == 'set_logging_level':
+                try:
+                    await server_local_commands.set_logging_level("debug", [])
+                    print("set to debug")
+                except:
+                    traceback.print_exc()
+                    running = False
+                    print(f'Server {uri} not reachable, probably not running')
+            elif command == 'tail':
+                await tail_server_logs(rpc_client, target_nodes)
+            elif command == 'tail_errors':
+                await tail_server_errors(rpc_client, target_nodes)
+            await rpc_client.close()
+        except:
+            traceback.print_exc()
+            print(f'could not complete command for {uri}')
+    

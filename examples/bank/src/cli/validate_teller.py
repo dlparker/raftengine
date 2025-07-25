@@ -1,25 +1,4 @@
 #!/usr/bin/env python
-import asyncio
-import argparse
-from pathlib import Path
-import sys
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-from base.demo_teller import demo_teller
-from base.validate_teller import validate_teller
-from base.operations import Teller
-
 
 async def main():
     parser = argparse.ArgumentParser(description='Run teller validation tests')
@@ -66,4 +45,25 @@ async def main():
             print("✓ Test passed successfully!")
 
 if __name__=="__main__":
+    import asyncio
+    import argparse
+    from pathlib import Path
+    import sys
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+    from base.demo_teller import demo_teller
+    from base.validate_teller import validate_teller
+    from base.operations import Teller
+
     asyncio.run(main())

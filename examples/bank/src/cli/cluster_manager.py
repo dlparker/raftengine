@@ -6,47 +6,6 @@ This script provides a textual-based terminal interface for starting, stopping, 
 a 3-node Raft banking cluster with real-time log aggregation and node status tracking.
 """
 
-import asyncio
-import argparse
-import sys
-import time
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-# Textual UI components
-from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, DataTable, Input, Static, RichLog
-from textual.reactive import reactive
-from textual.message import Message
-from textual.binding import Binding
-from textual import on
-
-# Rich components for markup
-from rich.text import Text
-
-# Add the banking demo directory to the path
-# Import control_server functions
-from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper
-from cli.raft_admin import server_admin
-from raft_ops.local_ops import LocalCollector
-
 
 class NodeState(Enum):
     """Enumeration of possible node states"""
@@ -906,4 +865,44 @@ def main():
 
 
 if __name__ == "__main__":
+    import asyncio
+    import argparse
+    import sys
+    import time
+    from pathlib import Path
+    from datetime import datetime
+    from typing import Dict, List, Optional, Tuple
+    from dataclasses import dataclass
+    from enum import Enum
+    from pathlib import Path
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    # Textual UI components
+    from textual.app import App, ComposeResult
+    from textual.containers import Container, Horizontal, Vertical
+    from textual.widgets import Header, Footer, DataTable, Input, Static, RichLog
+    from textual.reactive import reactive
+    from textual.message import Message
+    from textual.binding import Binding
+    from textual import on
+
+    # Rich components for markup
+    from rich.text import Text
+
+    # Add the banking demo directory to the path
+    # Import control_server functions
+    from cli.raft_admin_ops import TRANSPORT_CHOICES, nodes_and_helper, server_admin
+    from raft_ops.local_ops import LocalCollector
+
     main()

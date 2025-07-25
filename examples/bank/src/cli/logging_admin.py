@@ -3,14 +3,6 @@
 Interactive logging administration tool for Raft servers using aiocmd.
 Allows setting logger levels with autocompletion and discovery.
 """
-import asyncio
-import argparse
-import traceback
-import json
-import sys
-from pathlib import Path
-from pprint import pprint
-
 # Check if aiocmd is available
 try:
     from aiocmd import aiocmd
@@ -19,23 +11,6 @@ except ImportError:
     AIOCMD_AVAILABLE = False
     print("aiocmd not available. Please install with: pip install aiocmd")
     sys.exit(1)
-
-this_dir = Path(__file__).resolve().parent
-for parent in this_dir.parents:
-    if parent.name == 'src':
-        if parent not in sys.path:
-            sys.path.insert(0, str(parent))
-            break
-else:
-    raise ImportError("Could not find 'src' directory in the path hierarchy")
-
-from raftengine.deck.log_control import LogController
-# setup LogControl before importing any modules that might initialize it first
-LogController.controller = None
-log_control = LogController.make_controller()
-
-from cli.raft_admin_ops import (TRANSPORT_CHOICES, nodes_and_helper)
-from raft_ops.local_ops import LocalCollector 
 
 class LoggingAdminShell(aiocmd.PromptToolkitCmd):
     intro = 'Logging Administration Tool (aiocmd version). Type help or ? to list commands.\n'
@@ -218,6 +193,31 @@ async def main():
     await run_logging_admin(target_node, RPCHelper)
 
 if __name__ == "__main__":
+    import asyncio
+    import argparse
+    import traceback
+    import json
+    import sys
+    from pathlib import Path
+    from pprint import pprint
+
+
+    this_dir = Path(__file__).resolve().parent
+    for parent in this_dir.parents:
+        if parent.name == 'src':
+            if parent not in sys.path:
+                sys.path.insert(0, str(parent))
+                break
+    else:
+        raise ImportError("Could not find 'src' directory in the path hierarchy")
+
+    from raftengine.deck.log_control import LogController
+    # setup LogControl before importing any modules that might initialize it first
+    LogController.controller = None
+    log_control = LogController.make_controller()
+
+    from cli.raft_admin_ops import (TRANSPORT_CHOICES, nodes_and_helper)
+    from raft_ops.local_ops import LocalCollector 
     if not AIOCMD_AVAILABLE:
         print("This tool requires aiocmd. Please install with: pip install aiocmd")
         sys.exit(1)
