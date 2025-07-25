@@ -288,14 +288,18 @@ class LogController:
         for handler_name in handler_names:
             if handler_name not in self.known_handlers:
                 raise ValueError(f"Handler '{handler_name}' not found")
+
+        dotted = []
+        for sub in logger_name.split('.'):
+            dotted.append(sub)
+            l_name = '.'.join(dotted)
+            self.known_loggers[l_name] = LoggerDef(l_name, description, handler_names=handler_names)
         
-        self.known_loggers[logger_name] = LoggerDef(logger_name, description, handler_names=handler_names)
-        
-        if level is not None:
-            self.set_logger_level(logger_name, level)
-        else:
-            # Set the logger level to default if no level specified
-            self.set_logger_level(logger_name, self.default_level)
+            if level is not None:
+                self.set_logger_level(l_name, level)
+            else:
+                # Set the logger level to default if no level specified
+                self.set_logger_level(l_name, self.default_level)
         return logging.getLogger(logger_name)
         
     def get_known_loggers(self) -> Dict[str, LoggerDef]:

@@ -88,11 +88,11 @@ class BaseRole:
             if message.code not in (MembershipChangeMessage.get_code(), MembershipChangeResponseMessage.get_code()):
                 if (message.term > await self.log.get_term()
                     and message.code not in (PreVoteMessage.get_code(), PreVoteResponseMessage.get_code())):
-                    self.logger.debug('%s received message from higher term, calling self.term_expired',
+                    self.logger.info('%s received message from higher term, calling self.term_expired',
                                       self.my_uri())
                     res = await self.term_expired(message)
                     if not res:
-                        self.logger.debug('%s self.term_expired said no further processing required',
+                        self.logger.info('%s self.term_expired said no further processing required',
                                           self.my_uri())
                         # no additional handling of message needed
                         return None
