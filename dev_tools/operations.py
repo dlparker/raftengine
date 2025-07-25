@@ -101,7 +101,6 @@ class SimpleOps: # pragma: no cover
             raise Exception('boom!')
         if self.return_error:
             self.reported_error = True
-            breakpoint()
             return None, "inserted error"
         if op not in ['add', 'sub']:
             error = "invalid command"

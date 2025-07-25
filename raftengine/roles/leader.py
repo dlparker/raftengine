@@ -477,11 +477,10 @@ class Leader(BaseRole):
             self.logger.debug("%s executing process_command raise exception %s", self.my_uri(), run_error)
             await self.report_command_result(log_rec, result, run_error)
             return
-        if error_data:
-            self.logger.debug("%s running command produced error %s", self.my_uri(), error_data)
         else:
             self.logger.debug("%s running command produced no error, apply_index is now %s",
                               self.my_uri(), await self.log.get_applied_index())
+            log_rec.error = error_data
             log_rec.applied = True
             await self.log.replace(log_rec)
         await self.report_command_result(log_rec, result, error_data)

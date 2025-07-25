@@ -1182,7 +1182,7 @@ async def test_full_catchup(cluster_maker):
     assert ts_3.operations.total == ts_1.operations.total
     logger.info('------------------------ All caught up')
 
-async def test_follower_run_error(cluster_maker):
+async def test_op_command_returns_error(cluster_maker):
     """
     This test part of an incomplete error reporting mechanism that allows state machine commands to catch
     errors and return an indication that an error happened when executed in a follower. The follower code

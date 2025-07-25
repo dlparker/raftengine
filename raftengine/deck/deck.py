@@ -356,10 +356,6 @@ class Deck(DeckAPI):
         while time.time() - start_time < timeout and self.join_result is None and self.joining_cluster:
             await asyncio.sleep(0.00001)
 
-        if not self.joining_cluster:
-            self.join_waiter_handle = None
-            return
-        
         self.logger.debug("%s join_waiter with leader result %s", self.get_my_uri(), self.join_result)
         ok = self.join_result
         self.join_result = None
