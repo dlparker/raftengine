@@ -1,13 +1,13 @@
 * immediate
 
-3. Work over log levels used in leader, candidate, follower, deck so that a clean but useful
+1. [X]  Work over log levels used in leader, candidate, follower, deck so that a clean but useful
    log output is made when selecting info level for those loggers.
-   1. Leader
-      1. Timers should be separate`
-      2. Heartbeats should be separate
-      3. Commands should log only every X log_record
-      4. All membership change and snapshot and backdown and catchup should log
-#4. Fix log_control to understand dotted notation on set_level
+   1. [X] Leader
+      1. [X] Timers should be separate`
+      2. [X] Heartbeats should be separate
+      3. [X] Commands should log only every X log_record
+      4. [X] All membership change and snapshot and backdown and catchup should log at info
+2. [X] Fix log_control to understand dotted notation on set_level
 	 
 	 
 Error Handling update:

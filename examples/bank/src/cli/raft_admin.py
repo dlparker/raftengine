@@ -5,7 +5,8 @@ async def main():
     
     parser.add_argument('command', choices=['getpid', 'start_raft', 'stop',
                                             'status', 'take_power', 'get_log_config',
-                                            "set_logging_level", "tail", "tail_errors"],
+                                            "set_logging_debug", "set_logging_info",
+                                            "set_logging_warning", "tail", "tail_errors"],
                         help='Command to execute')
     parser.add_argument('--transport', '-t', 
                         required=True,

@@ -178,10 +178,16 @@ async def server_admin(target_nodes, command, RPCHelper):
                     traceback.print_exc()
                     running = False
                     print(f'Server {uri} not reachable, probably not running')
-            elif command == 'set_logging_level':
+            elif command in ['set_logging_debug', 'set_logging_info', 'set_logging_warning']:
                 try:
-                    await server_local_commands.set_logging_level("debug", [])
-                    print("set to debug")
+                    if "debug" in command:
+                        level = 'debug'
+                    elif "info" in command:
+                        level = 'info'
+                    if "warning" in command:
+                        level = 'warning'
+                    await server_local_commands.set_logging_level(level, [])
+                    print(f"set to {level}")
                 except:
                     traceback.print_exc()
                     running = False
