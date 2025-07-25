@@ -22,6 +22,7 @@ class Follower(BaseRole):
         # Pretend we just got a call, that gives possible actual leader time to ping us
         self.last_leader_contact = time.time()
         self.logger = logging.getLogger("Follower")
+        self.elec_logger = logging.getLogger("Elections")
         self.snapshot = None
         
     async def start(self):
@@ -31,7 +32,8 @@ class Follower(BaseRole):
         
     async def on_append_entries(self, message):
         self.last_leader_contact = time.time()
-        self.logger.debug("%s append term=%d local_term=%d prev_index=%d local_index=%d, prev_term=%d, local_prev_term=%d, entry_count=%d",
+        self.logger.debug("%s append term=%d local_term=%d prev_index=%d local_index=%d, "
+                          + "prev_term=%d, local_prev_term=%d, entry_count=%d",
                           self.my_uri(),
                           message.term,  await self.log.get_term(),
                           message.prevLogIndex, await self.log.get_last_index(),
@@ -40,7 +42,7 @@ class Follower(BaseRole):
 
         if message.term == await self.log.get_term() and self.leader_uri != message.sender:
             await self.deck.set_leader_uri(message.sender)
-            self.logger.info("%s accepting new leader %s", self.my_uri(),
+            self.elec_logger.info("%s accepting new leader %s", self.my_uri(),
                              self.leader_uri)
             await self.deck.record_op_detail(OpDetail.joined_leader)
         # special case, unfortunately. If leader says 0/0, then we have to empty the log
@@ -111,7 +113,7 @@ class Follower(BaseRole):
                                       original_serial=message.serial_number,
                                       leaderId=self.leader_uri)
         await self.deck.send_response(message, reply)
-        self.logger.info("%s out of sync with leader, sending %s",  self.my_uri(), reply)
+        self.logger.warning("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
         commit = await self.log.get_commit_index()
@@ -179,7 +181,7 @@ class Follower(BaseRole):
         last_vote = await self.log.get_voted_for()
         if last_vote is not None:
             # we only vote once per term, unlike some dead people I know
-            self.logger.info("%s voting false on %s, already voted for %s", self.my_uri(),
+            self.elec_logger.info("%s voting false on %s, already voted for %s", self.my_uri(),
                              message.sender, last_vote)
             await self.send_vote_response_message(message, vote_yes=False)
             return
@@ -192,16 +194,16 @@ class Follower(BaseRole):
             # If the messages claim for last committed log index or term are not at least as high
             # as our local values, then vote no.
             if message.prevLogIndex < local_index or message.prevLogTerm < local_term:
-                self.logger.info("%s voting false on %s", self.my_uri(),
+                self.elec_logger.info("%s voting false on %s", self.my_uri(),
                                  message.sender)
                 vote = False
             else: # both term and index proposals are acceptable, so vote yes
                 await self.log.set_voted_for(message.sender)
-                self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
+                self.elec_logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
                 vote = True
         else: # we don't have any entries, so everybody else wins
             await self.log.set_voted_for(message.sender)
-            self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
+            self.elec_logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         await self.send_vote_response_message(message, vote_yes=vote)
 
@@ -234,6 +236,7 @@ class Follower(BaseRole):
         return message
         
     async def leader_lost(self):
+        self.elec_logger.info("%s Lost contact with leader, starting election", self.my_uri())
         await self.deck.record_op_detail(OpDetail.leader_lost)
         await self.log.set_voted_for(None) # in case we voted during the now expired term
         await self.deck.start_campaign()
@@ -264,7 +267,7 @@ class Follower(BaseRole):
         max_time = await self.cluster_ops.get_election_timeout()
         e_time = time.time() - self.last_leader_contact
         if e_time > max_time:
-            self.logger.debug("%s lost leader after %f", self.my_uri(), e_time)
+            self.elec_logger.info("%s lost leader after %f", self.my_uri(), e_time)
             await self.leader_lost()
             return
         # reschedule
@@ -273,15 +276,15 @@ class Follower(BaseRole):
     async def on_snapshot_message(self, message):
         if message.term == await self.log.get_term():
             if self.snapshot is None:
-                self.logger.debug("%s starting snapshot import %s", self.my_uri(), message)
+                self.logger.info("%s starting snapshot import %s", self.my_uri(), message)
                 self.snapshot =  SnapShot(message.prevLogIndex, message.prevLogTerm)
                 self.snapshot_tool = await self.deck.pilot.begin_snapshot_import(self.snapshot)
                 config = message.clusterConfig
                 await self.cluster_ops.update_cluster_config_from_json_string(config)
-            self.logger.debug("%s importing snapshot chunk %s", self.my_uri(), message)
+            self.logger.info("%s importing snapshot chunk %s", self.my_uri(), message)
             await self.snapshot_tool.load_snapshot_chunk(message.data)
             if message.done:
-                self.logger.debug("%s applying imported snapshot %s", self.my_uri(), message)
+                self.logger.info("%s applying imported snapshot %s", self.my_uri(), message)
                 await self.snapshot_tool.apply_snapshot()
                 self.snapshot = None
                 self.snapshot_tool = None

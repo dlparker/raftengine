@@ -100,10 +100,13 @@ class LogController:
             '': LoggerDef('', 'root logger', handler_names=self.default_handlers.copy()),
             'Leader': LoggerDef('Leader', 'Leader role', handler_names=self.default_handlers.copy()),
             'Follower': LoggerDef('Follower', 'Follower role', handler_names=self.default_handlers.copy()),
-            'Candidate': LoggerDef('Candidate', 'Candidate role', handler_names=self.default_handlers.copy()),
-            'BaseRole': LoggerDef('BaseRole', 'Base role functionality', handler_names=self.default_handlers.copy()),
+            'Candidate': LoggerDef('Candidate', 'Candidate role',
+                                   handler_names=self.default_handlers.copy(), custom_level="INFO"),
+            'BaseRole': LoggerDef('BaseRole', 'Base role functionality',
+                                  handler_names=self.default_handlers.copy(), custom_level="INFO"),
             'Deck': LoggerDef('Deck', 'Main Raft engine controller', handler_names=self.default_handlers.copy()),
-            'Substates': LoggerDef('Substates', 'Role substates', handler_names=self.default_handlers.copy()),
+            'Elections': LoggerDef('Elections', 'Events in election logic',
+                                   handler_names=self.default_handlers.copy(), custom_level="INFO"),
         }
         
         if additional_loggers:
@@ -293,13 +296,16 @@ class LogController:
         for sub in logger_name.split('.'):
             dotted.append(sub)
             l_name = '.'.join(dotted)
-            self.known_loggers[l_name] = LoggerDef(l_name, description, handler_names=handler_names)
+            self.known_loggers[l_name] = LoggerDef(l_name, '', handler_names=handler_names)
+            logging.getLogger(l_name)
         
-            if level is not None:
-                self.set_logger_level(l_name, level)
-            else:
-                # Set the logger level to default if no level specified
+            if l_name != logger_name:
+                # only set the actual leaf to the requested level
                 self.set_logger_level(l_name, self.default_level)
+            else:
+                if level is None:
+                    level = self.default_level
+                self.set_logger_level(l_name, level)
         return logging.getLogger(logger_name)
         
     def get_known_loggers(self) -> Dict[str, LoggerDef]:

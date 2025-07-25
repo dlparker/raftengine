@@ -35,10 +35,10 @@ class Deck(DeckAPI):
         self.started = False
         self.log = pilot.get_log()
         self.logger = logging.getLogger("Deck")
+        self.elec_logger = logging.getLogger("Elections")
         self.role_async_handle = None
         self.role_run_after_target = None
         self.message_problem_history = []
-        self.log_substates = logging.getLogger("Substates")
         self.event_control = EventControl()
         self.cluster_ops = ClusterOps(self, initial_cluster_config, self.log)
         self.role = Follower(self, self.cluster_ops)
@@ -166,16 +166,20 @@ class Deck(DeckAPI):
     # Part of DeckAPI
     async def run_command(self, command, timeout=1):
         if self.role.role_name == RoleName.leader:
+            self.logger.debug("%s Got command request", self.get_my_uri())
             result = await self.role.run_command(command, timeout=timeout)
             # if leader gets demoted mid stream because there is already
             # a new leader, then the role should have changed, reply redirect
             if self.role.role_name != RoleName.leader:
+                self.logger.info("%s Got command no longer leader", self.get_my_uri())
                 new_leader = self.leader_uri
                 retry = new_leader is None
                 result = CommandResult(command, redirect=new_leader, retry=retry)
         elif self.role.role_name == RoleName.follower and self.leader_uri is not None:
+            self.logger.info("%s Got command but not leader", self.get_my_uri())
             result = CommandResult(command, redirect=self.leader_uri)
         else:
+            self.logger.info("%s Got command but election in progress", self.get_my_uri())
             result = CommandResult(command, retry=True)
         return result
 
@@ -401,6 +405,7 @@ class Deck(DeckAPI):
             await self.stop()
         
     async def stop_role(self):
+        self.logger.warning("%s stop_role called", self.get_my_uri())
         await self.role.stop()
         await self.log.set_voted_for(None) # in case we voted 
         if self.role_async_handle:
@@ -423,6 +428,8 @@ class Deck(DeckAPI):
 
     # Called by Role
     async def start_campaign(self, authorized=False):
+        self.logger.warning("%s start_campaign called", self.get_my_uri())
+        self.elec_logger.info("%s start_campaign called", self.get_my_uri())
         await self.stop_role()
         config = await self.cluster_ops.get_cluster_config()
         self.role = Candidate(self, self.cluster_ops, use_pre_vote=config.settings.use_pre_vote, authorized=authorized)
@@ -431,9 +438,12 @@ class Deck(DeckAPI):
             await self.event_control.emit_role_change(self.get_role_name())
         self.logger.warning("%s started campaign term = %s pre_vote=%s", self.get_my_uri(),
                             await self.log.get_term(), config.settings.use_pre_vote)
+        self.elec_logger.info("%s started campaign term = %s pre_vote=%s", self.get_my_uri(),
+                              await self.log.get_term(), config.settings.use_pre_vote)
 
     # Called by Role
     async def win_vote(self, new_term):
+        self.elec_logger.info("%s vote won, becoming leader at term %d", self.get_my_uri(), new_term)
         await self.stop_role()
         config = await self.cluster_ops.get_cluster_config()
         self.role = Leader(self, self.cluster_ops, new_term, config.settings.use_check_quorum)

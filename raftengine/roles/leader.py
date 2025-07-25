@@ -62,6 +62,8 @@ class Leader(BaseRole):
         super().__init__(deck, RoleName.leader, cluster_ops)
         self.last_broadcast_time = 0
         self.logger = logging.getLogger("Leader")
+        self.elec_logger = logging.getLogger("Elections")
+        self.hb_logger = logging.getLogger("Heartbeats")
         self.active_commands = {}
         self.command_condition = asyncio.Condition()
         self.active_commands_lock = asyncio.Lock() 
@@ -88,7 +90,7 @@ class Leader(BaseRole):
                               command=await self.cluster_ops.get_cluster_config_json_string(),
                               leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
-        self.logger.info("New Leader %s senting term start record index %d %d %d", self.my_uri(),
+        self.elec_logger.info("New Leader %s senting term start record index %d %d %d", self.my_uri(),
                          the_record.index, await self.log.get_last_index(), await self.log.get_last_term())
         await self.broadcast_log_record(the_record)
 
@@ -170,7 +172,7 @@ class Leader(BaseRole):
                 self.logger.debug("sending append_entries to %s, active for %s %d", message, uri,
                                   len(self.active_messages[uri]))
             else:
-                self.logger.debug("sending heartbeat %s, active for %s %d", message, uri,
+                self.hb_logger.debug("sending heartbeat %s, active for %s %d", message, uri,
                                   len(self.active_messages[uri]))
                 bcast_tracker.followers[uri] = msg_tracker
                 msg_tracker.broadcast_id = bcast_tracker.id
@@ -237,7 +239,7 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.active_messages[uri][serial_number] = MessageTracker(uri, message, log_rec_ids=rec_ids)
-        self.logger.debug("sending backdown %s, active for %s %d", message, uri,
+        self.logger.inof("sending backdown %s, active for %s %d", message, uri,
                           len(self.active_messages[uri]))
         await self.deck.record_op_detail(OpDetail.sending_backdown)
         await self.record_sent_message(message)
@@ -273,7 +275,7 @@ class Leader(BaseRole):
                                        prevLogIndex=prevLogIndex,
                                        commitIndex=await self.log.get_commit_index())
         self.active_messages[uri][serial_number] = MessageTracker(uri, message, log_rec_ids=ids)
-        self.logger.debug("sending catchup %s, active for %s %d", message, uri,
+        self.logger.info("sending catchup %s, active for %s %d", message, uri,
                           len(self.active_messages[uri]))
         await self.deck.record_op_detail(OpDetail.sending_catchup)
         await self.record_sent_message(message)
@@ -297,7 +299,7 @@ class Leader(BaseRole):
         if node_tracker.matchIndex == node_tracker.nextIndex:
             node_tracker.nextIndex += 1
         if node_tracker.add_loading:
-            self.logger.debug("%s node %s pre cluster join load progress at %d", self.my_uri(),
+            self.logger.info("%s node %s pre cluster join load progress at %d", self.my_uri(),
                               message.sender, message.maxIndex)
             if not await self.cluster_ops.note_loading_progress(message.sender, message.maxIndex, self):
                 # false result means loading was aborted, done process this message any further
@@ -319,18 +321,18 @@ class Leader(BaseRole):
                     # see if follower caught up
                     local_last = await self.log.get_last_index()
                     if message.maxIndex == local_last:
-                        self.logger.debug('Follower %s  caught up: node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                        self.logger.info('Follower %s  caught up: node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                       message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
                         return
                     # not caught up, try some more log records
                     await self.send_catchup(message)
-                    self.logger.debug('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                    self.logger.info('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                       message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
                     return
                 else:
                     # follower said no log match, needs backdown
                     await self.send_backdown(message)
-                    self.logger.debug('After backdown to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                    self.logger.info('After backdown to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                       message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
                     return
             # Message was part of a broadcast, so see what needs to be done
@@ -341,10 +343,10 @@ class Leader(BaseRole):
                 self.logger.debug("Broadcast reply from %s last expected", message.sender)
                 del self.broadcast_trackers[msg_tracker.broadcast_id]
             if len(msg_tracker.log_rec_ids) == 0:
-                self.logger.debug("Heartbeat response from %s", message.sender)
+                self.hb_logger.debug("Heartbeat response from %s", message.sender)
                 if not message.success:
                     # follower said heartbeat no good, needs backdown
-                    self.logger.debug("Heartbeat response from %s no joy, needs backdown", message.sender)
+                    self.logger.info("Heartbeat response from %s no joy, needs backdown", message.sender)
                     await self.send_backdown(message)
                     self.logger.debug('After backdown to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                       message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
@@ -359,7 +361,7 @@ class Leader(BaseRole):
                                 # other records already in flight, let them clean up
                                 return
                 await self.send_catchup(message)
-                self.logger.debug('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                self.logger.info('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                   message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
             return
 
@@ -424,7 +426,7 @@ class Leader(BaseRole):
                 self.logger.debug('Doing command apply')
                 asyncio.create_task(self.run_command_locally(rec))
             elif rec.code == RecordCode.cluster_config:
-                self.logger.debug('Doing cluster ops config change vote passed logic')
+                self.logger.info('Doing cluster ops config change vote passed logic')
                 await self.cluster_ops.cluster_config_vote_passed(rec, self)
             
     async def check_quorum(self):
@@ -438,6 +440,7 @@ class Leader(BaseRole):
             quorum = math.ceil(node_count/2)
             if bcast_tracker.reply_count + 1 < quorum and time.time() - bcast_tracker.sent_time > et_max:
                 self.logger.warning("%s failed quorum check on slow reply, resigning", self.my_uri())
+                self.elec_logger.info("%s failed quorum check on slow reply, resigning", self.my_uri())
                 await self.notify_pending_commands_on_demotion()
                 await self.deck.demote_and_handle()
                 return False
@@ -516,7 +519,7 @@ class Leader(BaseRole):
                                        term=term,
                                        prevLogTerm=prevLogTerm,
                                        prevLogIndex=prevLogIndex)
-        self.logger.info("%s sending transfer power to %s", self.my_uri(), target_uri)
+        self.elec_logger.info("%s sending transfer power to %s", self.my_uri(), target_uri)
         await self.deck.send_message(message)
         if log_record:
             # the fact that we got a log record means that we are supposed
@@ -525,7 +528,7 @@ class Leader(BaseRole):
                 asyncio.get_event_loop().call_later(0.01, lambda log_record=log_record:
                                          asyncio.create_task(self.delayed_exit(log_record)))
                 return
-        self.logger.info("%s demoting and expecting %s as new leader", self.my_uri(), target_uri)
+        self.elec_logger.info("%s demoting and expecting %s as new leader", self.my_uri(), target_uri)
         await self.deck.demote_and_handle()
         return
 
@@ -552,7 +555,7 @@ class Leader(BaseRole):
         await self.cluster_ops.finish_node_remove(self.my_uri())
         log_record.applied = True
         await self.log.replace(log_record)
-        self.logger.info("%s leader exiting cluster", self.my_uri())
+        self.elec_logger.info("%s leader exiting cluster", self.my_uri())
         await self.deck.note_exit_done(success=True)
         
     async def run_command(self, command, timeout=1.0):
@@ -572,7 +575,7 @@ class Leader(BaseRole):
                                                        yes_votes=0,
                                                        no_votes=0,
                                                        future=asyncio.Future())
-        self.logger.info("%s waiting for completion of pending command %d", self.my_uri(), serial)
+        self.logger.debug("%s waiting for completion of pending command %d", self.my_uri(), serial)
         command_result = await self.send_and_await_command(log_rec, timeout)
         
         self.logger.debug("%s command result sn=%d %s", self.my_uri(),
