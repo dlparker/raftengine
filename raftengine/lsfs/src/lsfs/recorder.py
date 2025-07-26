@@ -1,5 +1,5 @@
 import struct
-from block_writer import BlockWriter
+from lsfs.block_writer import BlockWriter
 
 class Recorder:
     def __init__(self, block_writer, cache_size=100):
@@ -45,3 +45,4 @@ class Recorder:
             if entry['record_index'] == record_index:
                 return entry['data_bytes'], entry['record_type_code']
         return None, None
+    

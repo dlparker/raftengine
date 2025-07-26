@@ -1,5 +1,5 @@
 import struct
-from block_writer import BlockWriter
+from lsfs.block_writer import BlockWriter
 
 class BlockReader:
     def __init__(self, filename):

@@ -21,6 +21,7 @@ from raft_ops.pilot import Pilot
 from raft_ops.local_ops import LocalDispatcher
 from raft_ops.sqlite_log import SqliteLog
 from raft_ops.memory_log import MemoryLog
+from raft_ops.lsfs_raft_log import LSFSRaftLog
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft_ops.RaftServer",
@@ -35,7 +36,8 @@ class RaftServer:
         self.app_db_file = Path(self.working_dir, "bank.db")
         self.teller = Teller(self.app_db_file)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
-        self.log = SqliteLog(self.raft_log_file)
+        self.log = LSFSRaftLog(self.working_dir)
+        #self.log = SqliteLog(self.raft_log_file)
         #self.log = MemoryLog()
         self.log.start()
         self.timers_running = False

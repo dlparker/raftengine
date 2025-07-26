@@ -5,19 +5,18 @@ import os
 import asyncio
 import json
 from typing import Union, List, Optional
+# Add src to path for imports
 
 # Add src to path for imports
-src_path = os.path.join(os.path.dirname(__file__), '..', '..', 'src')
-sys.path.insert(0, src_path)
-
-from block_writer import BlockWriter
-from recorder import Recorder
-from block_reader import BlockReader
+from lsfs.block_writer import BlockWriter
+from lsfs.recorder import Recorder
+from lsfs.block_reader import BlockReader
+from lsfs.final_data import FinalData
 
 # Import the API definitions
-from log_api import LogAPI, LogRec, RecordCode
-from raft_types import ClusterConfig
-from snapshot_api import SnapShot
+from raftengine.api.log_api import LogAPI, LogRec, RecordCode
+from raftengine.api.types import ClusterConfig
+from raftengine.api.snapshot_api import SnapShot
 
 class LSFSRaftLog(LogAPI):
     # Record type codes for LSFS storage
@@ -29,11 +28,11 @@ class LSFSRaftLog(LogAPI):
     def __init__(self):
         self.working_directory = None
         self.log_file = None
-        self.metadata_file = None
         self.recorder = None
         self.reader = None
-        self.metadata_recorder = None
-        self.metadata_reader = None
+        
+        # Use FinalData for metadata storage
+        self.final_data = None
         
         # In-memory state
         self.current_term = 0
@@ -54,17 +53,18 @@ class LSFSRaftLog(LogAPI):
         os.makedirs(working_directory, exist_ok=True)
         
         self.log_file = os.path.join(working_directory, "raft.log")
-        self.metadata_file = os.path.join(working_directory, "raft.meta")
         
-        # Initialize readers to load existing data
+        # Initialize FinalData for metadata
+        metadata_path = os.path.join(working_directory, "raft_metadata")
+        self.final_data = FinalData(metadata_path, max_blocks_per_file=100)
+        await self.final_data.open()
+        
+        # Load existing data
         await self._load_existing_data()
         
     async def _load_existing_data(self):
-        # Load metadata if exists
-        if os.path.exists(self.metadata_file):
-            self.metadata_reader = BlockReader(self.metadata_file)
-            await self.metadata_reader.open()
-            await self._load_metadata()
+        # Load metadata from FinalData
+        await self._load_metadata_from_final_data()
             
         # Load log records if exists
         if os.path.exists(self.log_file):
@@ -72,29 +72,41 @@ class LSFSRaftLog(LogAPI):
             await self.reader.open()
             await self._load_log_records()
             
-    async def _load_metadata(self):
-        if not self.metadata_reader:
-            return
+    async def _load_metadata_from_final_data(self):
+        # Load all metadata states from FinalData
+        all_states = await self.final_data.read_all_states()
+        
+        # Update in-memory state from loaded values
+        if 'term' in all_states:
+            self.current_term = all_states['term']
+            print(f"Loaded term: {self.current_term}")
             
-        # Load various metadata records
-        for i in range(self.metadata_reader.first_record_index or 0, 
-                      (self.metadata_reader.last_record_index or -1) + 1):
-            data_bytes, record_type = await self.metadata_reader.get_record(i)
-            if data_bytes:
-                metadata = json.loads(data_bytes.decode('utf-8'))
-                
-                if metadata['type'] == 'term':
-                    self.current_term = metadata['value']
-                elif metadata['type'] == 'voted_for':
-                    self.voted_for = metadata['value']
-                elif metadata['type'] == 'commit_index':
-                    self.commit_index = metadata['value']
-                elif metadata['type'] == 'applied_index':
-                    self.applied_index = metadata['value']
-                elif metadata['type'] == 'cluster_config':
-                    self.cluster_config = ClusterConfig(**metadata['value'])
-                elif metadata['type'] == 'snapshot':
-                    self.snapshot = SnapShot(**metadata['value'])
+        if 'voted_for' in all_states:
+            self.voted_for = all_states['voted_for']
+            print(f"Loaded voted_for: {self.voted_for}")
+            
+        if 'commit_index' in all_states:
+            self.commit_index = all_states['commit_index']
+            print(f"Loaded commit_index: {self.commit_index}")
+            
+        if 'applied_index' in all_states:
+            self.applied_index = all_states['applied_index']
+            print(f"Loaded applied_index: {self.applied_index}")
+            
+        if 'cluster_config' in all_states:
+            config_data = all_states['cluster_config']
+            # Reconstruct ClusterConfig from dict
+            from raft_types import NodeRec, ClusterSettings
+            nodes = {k: NodeRec(**v) for k, v in config_data['nodes'].items()}
+            pending_node = NodeRec(**config_data['pending_node']) if config_data['pending_node'] else None
+            settings = ClusterSettings(**config_data['settings'])
+            self.cluster_config = ClusterConfig(nodes=nodes, pending_node=pending_node, settings=settings)
+            print(f"Loaded cluster_config: {len(self.cluster_config.nodes)} nodes")
+            
+        if 'snapshot' in all_states:
+            snapshot_data = all_states['snapshot']
+            self.snapshot = SnapShot(**snapshot_data)
+            print(f"Loaded snapshot: index={self.snapshot.index}, term={self.snapshot.term}")
                     
     async def _load_log_records(self):
         if not self.reader:
@@ -113,18 +125,8 @@ class LSFSRaftLog(LogAPI):
                     log_rec = LogRec.from_dict(record_data)
                     self.log_records[log_rec.index] = log_rec
                     
-    async def _save_metadata(self, metadata_type: str, value):
-        if not self.metadata_recorder:
-            block_writer = BlockWriter(self.metadata_file)
-            self.metadata_recorder = Recorder(block_writer)
-            
-        metadata = {
-            'type': metadata_type,
-            'value': value
-        }
-        
-        data_bytes = json.dumps(metadata).encode('utf-8')
-        await self.metadata_recorder.record(data_bytes, self.METADATA_TYPE)
+    async def _save_metadata(self, key: str, value, type_code):
+        await self.final_data.write_state(key, value, type_code)
         
     async def set_broken(self) -> None:
         self.broken = True
@@ -140,11 +142,11 @@ class LSFSRaftLog(LogAPI):
         
     async def set_term(self, value: int):
         self.current_term = value
-        await self._save_metadata('term', value)
+        await self._save_metadata('term', value, FinalData.TERM_TYPE)
         
     async def incr_term(self) -> int:
         self.current_term += 1
-        await self._save_metadata('term', self.current_term)
+        await self._save_metadata('term', self.current_term, FinalData.TERM_TYPE)
         return self.current_term
         
     async def get_voted_for(self) -> str:
@@ -152,7 +154,7 @@ class LSFSRaftLog(LogAPI):
         
     async def set_voted_for(self, value: str):
         self.voted_for = value
-        await self._save_metadata('voted_for', value)
+        await self._save_metadata('voted_for', value, FinalData.VOTED_FOR_TYPE)
         
     async def get_last_index(self) -> int:
         return self.last_index
@@ -267,7 +269,7 @@ class LSFSRaftLog(LogAPI):
                 'commands_idempotent': config.settings.commands_idempotent
             }
         }
-        await self._save_metadata('cluster_config', config_data)
+        await self._save_metadata('cluster_config', config_data, FinalData.CONFIG_TYPE)
         
     async def get_cluster_config(self) -> Optional[ClusterConfig]:
         return self.cluster_config
@@ -278,7 +280,7 @@ class LSFSRaftLog(LogAPI):
             'index': snapshot.index,
             'term': snapshot.term
         }
-        await self._save_metadata('snapshot', snapshot_data)
+        await self._save_metadata('snapshot', snapshot_data, FinalData.SNAPSHOT_TYPE)
         
     async def get_snapshot(self) -> Optional[SnapShot]:
         return self.snapshot
@@ -288,56 +290,6 @@ class LSFSRaftLog(LogAPI):
             await self.recorder.block_writer.close()
         if self.reader:
             await self.reader.close()
-        if self.metadata_recorder:
-            await self.metadata_recorder.block_writer.close()
-        if self.metadata_reader:
-            await self.metadata_reader.close()
+        if self.final_data:
+            await self.final_data.close()
 
-async def demo():
-    print("LSFS Raft Log API Demo")
-    print("=" * 40)
-    
-    # Create temp directory for demo
-    working_dir = "/tmp/raft_demo"
-    if os.path.exists(working_dir):
-        import shutil
-        shutil.rmtree(working_dir)
-    
-    raft_log = LSFSRaftLog()
-    await raft_log.start(working_dir)
-    
-    print(f"Started log in: {working_dir}")
-    print(f"Initial term: {await raft_log.get_term()}")
-    print(f"Initial last index: {await raft_log.get_last_index()}")
-    
-    # Set term and voted_for
-    await raft_log.set_term(1)
-    await raft_log.set_voted_for("server1")
-    
-    # Append some log entries
-    print("\nAppending log entries...")
-    
-    entry1 = LogRec(term=1, command="SET x=10", code=RecordCode.client_command)
-    await raft_log.append(entry1)
-    
-    entry2 = LogRec(term=1, command="SET y=20", code=RecordCode.client_command)
-    await raft_log.append(entry2)
-    
-    entry3 = LogRec(term=2, command="DELETE x", code=RecordCode.client_command)
-    await raft_log.append(entry3)
-    
-    print(f"Last index after appends: {await raft_log.get_last_index()}")
-    print(f"Last term: {await raft_log.get_last_term()}")
-    
-    # Read back entries
-    print("\nReading entries:")
-    for i in range(await raft_log.get_first_index(), await raft_log.get_last_index() + 1):
-        entry = await raft_log.read(i)
-        if entry:
-            print(f"  Index {i}: term={entry.term}, command='{entry.command}', code={entry.code}")
-    
-    await raft_log.close()
-    print(f"\nDemo complete. Files in: {working_dir}")
-
-if __name__ == "__main__":
-    asyncio.run(demo())

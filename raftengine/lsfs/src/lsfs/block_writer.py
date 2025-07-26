@@ -114,3 +114,5 @@ class BlockWriter:
         if self.file:
             self.file.close()
             self.file = None
+
+            
