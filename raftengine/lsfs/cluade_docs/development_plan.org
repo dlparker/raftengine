@@ -1,0 +1,47 @@
+
+This development process is going to be iterative. I need to write and generate
+code to explore ideas about how to structure the final design, so the development
+should proceed with these general rules in mind.
+
+1. This is explority code, so:
+   1. no logging should be used, just prints where needed
+   2. Little or no error checking, let the code blow up if there is a problem, especially checking
+      method arguments for validity.
+   3. Little or no exception handling, and any time it is absolutely needed traceback.print_exc should
+      be used instead of just printing the string value of the exception.
+   4. All libary usages should be limited to python builtins except where I direct otherwise.
+   5. Do not write docstrings for modules, classes or methods. They will be out of date quickly
+      and just distract and irritate me.
+2. Rules to help me think about the design questions
+   1. Unless otherwise directed, use classes and methods instead of functions to establish clear
+      domains of concern.
+   2. Unless needed for access outside the event loop, make all methods async so I can think about
+      the implications of each method's responsiblity in that context.
+3. Proceedural rules
+   1. If I ask for a change in one area of functionality, and you conclude other areas need to change
+      in order to complete the task, and you are not already in plan mode, switch to plan mode and
+      present the plan to me for approval or modification.
+   2. When I declare "Start an experiment . . ." and give you a name or a description, save that
+      fact in a file called "experiments.md", give it a unique number and begin to apply these rules:
+      1. If a method in a class needs to change then do not change the method, write a new one. So
+         the "do_foo" method becomes "do_foo_exp_1" where "1" is the unique number of the current experiment.
+      2. If more than one method in a class needs to change, or if the __init__ method needs to change,
+	 the make a child class of the original if possible. If the change makes that too complicated,
+	 say I ask you to change from in memory storage to Sqlite storage, the make a new class but
+	 leave the old one unchanged. Use the nameing scheme "class Foo" is copied to "class Foo_exp_1" and
+	 modified.
+      3. If the uses of the class being changed requires more modification that just renaming the class
+	 or method, then surround the chaged usage in a test for whether the experiment is active. The
+	 idea is that I want to be able to switch from the experimental version to the previous version
+	 with just a flag change.
+      4. Ensure that any other code or comment changes you make during this time are marked in some way
+	 such that you can find them all without confusion.
+      5. I will terminate the experiment with a command such as "adopt experiment 3 changes" or
+	 "discard experiment 4 changes". 
+
+   
+   
+
+
+      
+   
