@@ -43,9 +43,11 @@ async def test_dict_ops():
 
         async def process_command(self, command, serial):
             last_index = await self.log.get_last_index()
-            rec = LogRec(index=last_index + 1, term=1, command=command, committed=True, applied=True)
+            rec = LogRec(index=last_index + 1, term=1, command=command)
             await self.log.append(rec)
+            await self.log.mark_committed(rec.index)
             await self.ops.process_command(command, serial)
+            await self.log.mark_applied(rec.index)
 
     
     for logc in [MemoryLog, SqliteLog]:

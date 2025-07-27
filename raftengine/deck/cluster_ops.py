@@ -463,12 +463,10 @@ class ClusterOps:
         cdict = json.loads(log_record.command)
         op = cdict['op']
         operand = cdict['operand']
+        await self.log.mark_applied(log_record.index)
         if op == "remove_node":
             if operand != self.my_uri():
                 await self.finish_node_remove(operand)
-                log_record.committed = True
-                log_record.applied = True
-                await self.log.replace(log_record)
                 # notify the target node directly
                 await self.deck.role.send_heartbeats(target_only=operand)
                 # notify everone else
@@ -486,9 +484,6 @@ class ClusterOps:
         elif op == "add_node":
             # we need to start the catchup for this node
             await self.finish_node_add(operand)
-            log_record.committed = True
-            log_record.applied = True
-            await self.log.replace(log_record)
         elif op == "update_settings":
             stored_config = await self.log.get_cluster_config()
             stored_config.settings = ClusterSettings(stored_config.settings.__dict__)

@@ -42,7 +42,7 @@ class BroadcastTracker: # broadcasts never have more than one log record
     
 @dataclass
 class LogVoteTracker:
-    log_index: int
+    log_rec: LogRec
     voters: list[str] = field(default_factory=list)
     votes: dict[str, bool] = field(default_factory=dict)
     
@@ -112,7 +112,7 @@ class Leader(BaseRole):
         self.broadcast_id += 1
         node_uris = self.cluster_ops.get_cluster_node_ids()
         votes = {self.my_uri() :True}
-        lvt = LogVoteTracker(log_record.index, voters=node_uris, votes=votes)
+        lvt = LogVoteTracker(log_record, voters=node_uris, votes=votes)
         self.log_vote_trackers[log_record.index] = lvt
         if log_record.code == RecordCode.term_start:
             await self.deck.record_op_detail(OpDetail.broadcasting_term_start)
@@ -192,7 +192,7 @@ class Leader(BaseRole):
         node_uris = self.cluster_ops.get_cluster_node_ids()
         node_uris = self.cluster_ops.get_cluster_node_ids()
         votes = {self.my_uri() :True}
-        vote_tracker = LogVoteTracker(log_record.index, voters=node_uris, votes=votes)
+        vote_tracker = LogVoteTracker(log_record, voters=node_uris, votes=votes)
         for uri in node_uris:
             if uri != self.my_uri():
                 node_tracker = await self.cluster_ops.tracker_for_follower(uri)
@@ -229,7 +229,7 @@ class Leader(BaseRole):
         rec = await self.log.read(send_index)
         entries = [rec,]
         rec_ids = [rec.index,]
-        if not rec.committed:
+        if rec.index < await self.log.get_commit_index():
             await self.ensure_log_tracker(rec)
         serial_number = SerialNumberGenerator.get_generator().generate()
         message = AppendEntriesMessage(sender=self.my_uri(),
@@ -393,44 +393,30 @@ class Leader(BaseRole):
                     ayes += 1
             if ayes >= win_count:
                 self.logger.debug('%s Reply from %s completes commit quorum on index %d, doing commit',
-                                  self.my_uri(), reply.sender, vote_tracker.log_index)
-                log_rec = await self.log.read(vote_tracker.log_index)
-                if not log_rec.committed or not log_rec.applied:
-                    await self.commit_and_apply_up_to(log_rec.index)
+                                  self.my_uri(), reply.sender, vote_tracker.log_rec.index)
+                await self.process_ready_log_record(vote_tracker.log_rec)
 
-    async def commit_and_apply_up_to(self, log_index):
-        last_commit = await self.log.get_commit_index()
-        if last_commit == 0:
-            last_commit = 1
-        if last_commit < log_index:
-            for index in range(last_commit, log_index + 1):
-                # might be at snapshot boundary
-                if index >= await self.log.get_first_index():
-                    await self.process_ready_log_record(index)
+    async def process_ready_log_record(self, log_rec):
+        if log_rec.index > await self.log.get_commit_index():
+            self.logger.debug('%s committing log record %d', self.my_uri(), log_rec.index)
+            await self.log.mark_committed(log_rec.index)
+        if log_rec.index > await self.log.get_applied_index():
+            # it is possible to have more than one unapplied record in the log,
+            # so check for that
+            cur_index = await self.log.get_applied_index() + 1
+            while cur_index <= log_rec.index:
+                if cur_index == log_rec.index:
+                    t_rec = log_rec
+                else:
+                    t_rec = await self.log.read(cur_index)
+                if t_rec.code == RecordCode.client_command:
+                    self.logger.debug('%s Doing command apply on %d', self.my_uri(), cur_index)
+                    await self.run_command_locally(t_rec)
+                elif t_rec.code == RecordCode.cluster_config:
+                    self.logger.info('%s Doing cluster ops config change vote passed logic %d', self.my_uri(), cur_index)
+                    await self.cluster_ops.cluster_config_vote_passed(t_rec, self)
+                cur_index += 1
                 
-        last_applied = await self.log.get_applied_index()
-        if last_applied == 0:
-            last_applied = 1
-        if last_applied < log_index:
-            for index in range(last_applied, log_index + 1):
-                # might be at snapshot boundary
-                if index >= await self.log.get_first_index():
-                    await self.process_ready_log_record(index)
-
-    async def process_ready_log_record(self, log_index):
-        rec = await self.log.read(log_index)
-        if not rec.committed:
-            self.logger.debug('%s committing log record %d', self.my_uri(), rec.index)
-            rec.committed = True
-            await self.log.replace(rec)
-        if not rec.applied:
-            if rec.code == RecordCode.client_command:
-                self.logger.debug('Doing command apply')
-                asyncio.create_task(self.run_command_locally(rec))
-            elif rec.code == RecordCode.cluster_config:
-                self.logger.info('Doing cluster ops config change vote passed logic')
-                await self.cluster_ops.cluster_config_vote_passed(rec, self)
-            
     async def check_quorum(self):
         et_min, et_max = await self.cluster_ops.get_election_timeout_range()
         b_ids = list(self.broadcast_trackers.keys())
@@ -450,40 +436,37 @@ class Leader(BaseRole):
         return True
     
     async def run_command_locally(self, log_record):
-        # make a last check to ensure it is not already done
-        log_rec = await self.log.read(log_record.index)
-        if log_rec.applied:
-            return
-        result = None
-        error_data = None
-        self.logger.debug("%s applying command committed at index %d", self.my_uri(),
-                         await self.log.get_last_index())
-        processor = self.deck.get_processor()
+        # this gets run as a background task, so let's catch and log
         try:
-            result,error_data = await processor.process_command(log_record.command, log_record.serial)
-        except Exception as e:
-            run_error = traceback.format_exc()
-            if not self.commands_idempotent:
-                self.logger.error("%s running process_command raised marking node broken and exiting \n%s",
-                                  self.my_uri(), run_error)
-                log_record.error = run_error
-                await self.log.replace(log_record)
-                await self.log.set_broken()
-                await self.report_command_result(log_rec, result, run_error)
-                await self.deck.stop(internal=True)
+            result = None
+            error_data = None
+            self.logger.debug("%s applying command committed at index %d", self.my_uri(),
+                             await self.log.get_last_index())
+            processor = self.deck.get_processor()
+            try:
+                result,error_data = await processor.process_command(log_record.command, log_record.serial)
+            except Exception as e:
+                run_error = traceback.format_exc()
+                if not self.commands_idempotent:
+                    self.logger.error("%s running process_command raised marking node broken and exiting \n%s",
+                                      self.my_uri(), run_error)
+                    await self.log.set_broken()
+                    await self.report_command_result(log_record, result, run_error)
+                    await self.deck.stop(internal=True)
+                    return
+                # If commands are idempotent then we'll just try again when next we see this log
+                # record is not applied.
+                self.logger.debug("%s executing process_command raised exception %s, not marking applied", self.my_uri(), run_error)
+                await self.report_command_result(log_record, result, run_error)
                 return
-            # If commands are idempotent then we'll just try again when next we see this log
-            # record is not applied.
-            self.logger.debug("%s executing process_command raise exception %s", self.my_uri(), run_error)
-            await self.report_command_result(log_rec, result, run_error)
-            return
-        else:
-            self.logger.debug("%s running command produced no error, apply_index is now %s",
-                              self.my_uri(), await self.log.get_applied_index())
-            log_rec.error = error_data
-            log_rec.applied = True
-            await self.log.replace(log_rec)
-        await self.report_command_result(log_rec, result, error_data)
+            else:
+                self.logger.debug("%s running command produced no error, apply_index is now %s",
+                                  self.my_uri(), await self.log.get_applied_index())
+                await self.log.mark_applied(log_record.index)
+            await self.report_command_result(log_record, result, error_data)
+        except: # pragma: no cover  Hard to make this happen and it has little effect except during dev
+            self.logger.error(traceback.format_exc())
+            raise
         return
 
     async def transfer_power(self, target_uri, log_record=None):
@@ -720,13 +703,15 @@ class Leader(BaseRole):
                     self.my_uri(), log_rec.index
                 )
                 return
-            rec['result'] = result
-            rec['error_data'] = error_data
-            rec['future'].set_result(True)
-            self.logger.debug(
-                "%s reported command result for log index %d, error: %s",
-                self.my_uri(), log_rec.index, error_data
-            )
+            if not rec['future'].done():
+                rec['result'] = result
+                rec['error_data'] = error_data
+                rec['future'].set_result(True)
+                self.logger.debug(
+                    "%s reported command result for log index %d, error: %s",
+                    self.my_uri(), log_rec.index, error_data
+                )
+                
 
     async def notify_pending_commands_on_demotion(self):
         async with self.active_commands_lock:

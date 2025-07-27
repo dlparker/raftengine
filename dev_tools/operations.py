@@ -114,5 +114,5 @@ class SimpleOps: # pragma: no cover
         elif op == "sub":
             self.total -= int(operand)
         result = self.total
-        logger.debug("command %s returning %s no error", command, result)
+        logger.debug("%s command %s returning %s no error", self.server.uri, command, result)
         return result, None

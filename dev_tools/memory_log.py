@@ -23,6 +23,8 @@ class MemoryLog(LogAPI):
         self.pending_node = None
         self.cluster_settings = None
         self.broken = False
+        self.max_commit = 0
+        self.max_apply = 0
 
     async def close(self):
         self.first_index = 0
@@ -124,27 +126,11 @@ class MemoryLog(LogAPI):
         return self.last_term
     
     async def get_commit_index(self):
-        keys = list(self.entries.keys())
-        keys.sort()
-        for rindex in keys[::-1]:
-            entry = self.entries[rindex]
-            if entry.committed:
-                return entry.index
-        if self.snapshot:
-            return self.snapshot.index
-        return 0
+        return self.max_commit
 
     async def get_applied_index(self):
-        keys = list(self.entries.keys())
-        keys.sort()
-        for rindex in keys[::-1]:
-            entry = self.entries[rindex]
-            if entry.applied:
-                return entry.index
-        if self.snapshot:
-            return self.snapshot.index
-        return 0
-    
+        return self.max_apply
+
     async def append(self, record: LogRec) -> None:
         save_rec = LogRec.from_dict(record.__dict__)
         self.insert_entry(save_rec)
@@ -161,13 +147,11 @@ class MemoryLog(LogAPI):
         self.insert_entry(save_rec)
         return LogRec.from_dict(save_rec.__dict__)
 
-    async def mark_committed(self, entry:LogRec) -> LogRec:
-        entry.committed = True
-        return await self.replace(entry)
+    async def mark_committed(self, index:int) -> None:
+        self.max_commit = max(index, self.max_commit)
 
-    async def mark_applied(self, entry:LogRec) -> LogRec:
-        entry.applied = True
-        return await self.replace(entry)
+    async def mark_applied(self, index:int) -> None:
+        self.max_apply = max(index, self.max_apply)
     
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
@@ -184,6 +168,10 @@ class MemoryLog(LogAPI):
             rec = self.get_entry_at(index)
         if rec is None:
             return None
+        if rec.index <= self.max_commit:
+            rec.committed = True
+        if rec.index <= self.max_apply:
+            rec.applied = True
         return LogRec(**rec.__dict__)
     
     async def delete_all_from(self, index: int):

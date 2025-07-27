@@ -80,9 +80,7 @@ class Records:
         schema += "(rec_index INTEGER PRIMARY KEY AUTOINCREMENT, " 
         schema += "code TEXT, " 
         schema += "command TEXT, " 
-        schema += "result TEXT, "
         schema += "term int, "
-        schema += "error BOOLEAN, " 
         schema += "leader_id TEXT, "
         schema += "serial TEXT)"
         cursor.execute(schema)
@@ -139,13 +137,11 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, result, error, term, serial, leader_id) values "
-        values += "?,?,?,?,?,?,?)"
+        sql += "code, command, term, serial, leader_id) values "
+        values += "?,?,?,?,?)"
         sql += values
         params.append(entry.code)
         params.append(entry.command)
-        params.append(entry.result)
-        params.append(entry.error)
         params.append(entry.term)
         if entry.serial:
             params.append(str(entry.serial))
@@ -458,11 +454,11 @@ class SqliteLog(LogAPI):
             return 0
         return rec.term
 
-    async def mark_committed(self, entry:LogRec) -> LogRec:
-        self.records.set_commit_index(entry.index)
+    async def mark_committed(self, index:int) -> None:
+        self.records.set_commit_index(index)
     
-    async def mark_applied(self, entry:LogRec) -> LogRec:
-        self.records.set_apply_index(entry.index)
+    async def mark_applied(self, index:int) -> None:
+        self.records.set_apply_index(index)
     
     async def get_commit_index(self):
         return self.records.max_commit

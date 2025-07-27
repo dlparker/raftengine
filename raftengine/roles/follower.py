@@ -86,8 +86,6 @@ class Follower(BaseRole):
             return
         recs = []
         for log_rec in message.entries:
-            # ensure we don't copy the items that reflect local state at the leader
-            log_rec.committed = log_rec.applied = False
             self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
             new_rec = await self.log.append(log_rec)
@@ -119,39 +117,30 @@ class Follower(BaseRole):
         self.logger.warning("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
-        commit = await self.log.get_commit_index()
-        commit = min(commit, await self.log.get_applied_index())
-        if commit == 0:
-            min_index = 1
-        else:
-            min_index = commit + 1
 
-        last_index = await self.log.get_last_index()
-        max_index = min(leader_commit_index + 1, last_index + 1)
-        self.logger.info("%s Leader commit index %d higher than ours %d, committing and applying from %d through %d ",
-                            self.my_uri(), leader_commit_index, commit, min_index, max_index-1)
+        our_commit = await self.log.get_commit_index()
+        our_apply =  await self.log.get_applied_index()
+        our_last_index = await self.log.get_last_index()
+        min_index = our_commit + 1
+        max_index = min(leader_commit_index + 1, our_last_index + 1)
+        self.logger.info("%s Leader commit index %d higher than ours %d, committing from %d through %d ",
+                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index-1)
         for index in range(min_index, max_index):
-            log_rec = await self.log.read(index)
-            if not log_rec.committed:
-                await self.log.mark_committed(log_rec)
-                self.logger.debug("%s committing %d ", self.my_uri(), log_rec.index)
+            await self.log.mark_committed(index)
+            self.logger.debug("%s committing %d ", self.my_uri(), index)
+        min_index = our_apply + 1 # it might be lower than out_commit, max is the same for both
+        self.logger.info("%s Applying from %d through %d ",
+                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index-1)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if log_rec.code == RecordCode.client_command:
-                if not log_rec.applied:
-                    self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
-                    await self.process_command_record(log_rec)
+                self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
+                await self.process_command_record(log_rec)
             if log_rec.code == RecordCode.cluster_config:
-                if not log_rec.applied:
-                    self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
-                    await self.process_cluster_ops(log_rec)
-                
-    async def process_cluster_ops(self, log_record):
-        if not log_record.applied:
-            await self.cluster_ops.handle_membership_change_log_commit(log_record)
-            log_record.applied = True
-            await self.log.replace(log_record)
-
+                self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
+                await self.cluster_ops.handle_membership_change_log_commit(log_rec)
+                await self.log.mark_applied(log_rec.index)
+                    
     async def process_command_record(self, log_record):
         result = None
         error_data = None
@@ -170,21 +159,17 @@ class Follower(BaseRole):
             error_flag = True
         else:
             error_flag = False
-        log_record.result = result
-        log_record.error = error_flag
         if not error_flag:
-            await self.log.mark_applied(log_record)
+            await self.log.mark_applied(log_record.index)
             self.logger.debug("%s processor ran no error on log record %d", self.my_uri(), log_record.index)
         else:
             if not self.commands_idempotent:
                 self.logger.error("%s running command produced error %s marking node broken and exiting",
                                   self.my_uri(), error_data)
-                await self.log.replace(log_record)
                 await self.log.set_broken()
                 await self.deck.stop()
                 return
-            await self.log.replace(log_record)
-            self.logger.warning("processor ran but had an error %s", error_data)
+            self.logger.warning("processor ran but had an error %s, not marking applied", error_data)
             await self.deck.event_control.emit_error(error_data)
     
     async def on_vote_request(self, message):

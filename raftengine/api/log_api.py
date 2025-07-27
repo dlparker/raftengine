@@ -31,8 +31,6 @@ class LogRec:
     index: int = field(default = 0)
     term: int = field(default = 0)
     command: str = field(default = None, repr=False)
-    result: str = field(default = None, repr=False)
-    error: bool = field(default = False)
     code: RecordCode = field(default=RecordCode.client_command)
     serial: int = field(default = None, repr=False)
     leader_id: str = field(default = None, repr=False)
@@ -124,8 +122,8 @@ class LogAPI(abc.ABC):
     - `delete_all_from(index)`: Removes all entries with index ≥ specified index
     
     ### State Updates
-    - `update_and_commit(entry)`: Marks entry as committed, updates commit_index tracking
-    - `update_and_apply(entry)`: Marks entry as applied, updates applied_index tracking
+    - `mark_committed(entry)`: Marks entry as committed, updates commit_index tracking
+    - `mark_applied(entry)`: Marks entry as applied, updates applied_index tracking
     - `set_term(term)`: Sets current term, clears voted_for (new election)
     - `incr_term()`: Increments and returns new term, clears voted_for
     
@@ -221,11 +219,11 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def mark_committed(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+    def mark_committed(self, index) -> None: # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod
-    def mark_applied(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+    def mark_applied(self, index) -> None:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -249,20 +249,24 @@ class PausingServer(PilotAPI):
     
     async def fake_command(self, op, value):
         last_index = await self.log.get_last_index()
-        rec = LogRec(index=last_index + 1, term=1, command=f"{op} {value}", committed=True, applied=True)
+        rec = LogRec(index=last_index + 1, term=1, command=f"{op} {value}")
         await self.log.append(rec)
+        await self.log.mark_committed(rec.index)
         if op == "add":
             self.operations.total += value
         elif op == "sub":
             self.operations.total -= value
         else:
             raise Exception(f'unexpected op "{op}"')
+        await self.log.mark_applied(rec.index)
 
     async def fake_command2(self, command):
         last_index = await self.log.get_last_index()
         res,error = await self.operations.process_command(command, last_index + 1)
-        rec = LogRec(index=last_index + 1, term=1, command=command, result=res, committed=True, applied=True)
+        rec = LogRec(index=last_index + 1, term=1, command=command)
+        await self.log.mark_committed(rec.index)
         await self.log.append(rec)
+        await self.log.mark_applied(rec.index)
         return rec
 
     async def replace_log(self, new_log=None):
