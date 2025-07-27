@@ -193,7 +193,9 @@ async def setup_ops(teller, c_index: int) -> None:
         last_name = fake.last_name()
         address = fake.address().replace('\n', ', ')
         customer = await teller.create_customer(first_name, last_name, address)
-        await teller.create_account(customer.cust_id, AccountType.CHECKING)
+    accounts = await teller.get_accounts(c_index + 1)
+    if not accounts:
+        await teller.create_account(c_index + 1, AccountType.CHECKING)
 
 async def time_ops(c_index: int, uri: str, RPCHelper, loops: int, prep_only) -> dict:
     """Run deposit/withdrawal operations and collect timings."""

@@ -36,10 +36,9 @@ class RaftServer:
         self.app_db_file = Path(self.working_dir, "bank.db")
         self.teller = Teller(self.app_db_file)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
-        self.log = LSFSRaftLog(self.working_dir)
-        #self.log = SqliteLog(self.raft_log_file)
+        #self.log = LSFSRaftLog(self.working_dir)
+        self.log = SqliteLog(self.raft_log_file)
         #self.log = MemoryLog()
-        self.log.start()
         self.timers_running = False
         self.stopped = False
         self.rpc_server_stopper = None
@@ -87,6 +86,7 @@ class RaftServer:
     async def start(self):
         if not self.timers_running:
             logger.info("calling deck start")
+            await self.log.start()
             await self.deck.start()
             self.stopped = False
             self.timers_running = True

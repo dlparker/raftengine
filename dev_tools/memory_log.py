@@ -145,16 +145,6 @@ class MemoryLog(LogAPI):
             return self.snapshot.index
         return 0
     
-    async def append_multi(self, entries: List[LogRec]) -> None:
-        # make copies for in memory list, and copy
-        # the inserted ones to return to the caller
-        # so they can see the index and can't break
-        # our saved copy
-        return_recs = []
-        for entry in entries:
-            return_recs.append(await self.append(entry))
-        return return_recs
-    
     async def append(self, record: LogRec) -> None:
         save_rec = LogRec.from_dict(record.__dict__)
         self.insert_entry(save_rec)

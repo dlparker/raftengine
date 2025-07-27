@@ -24,6 +24,8 @@ class Records:
         self.broken = None
         self.voted_for = None
         self.max_index = None
+        self.max_commit = None
+        self.max_apply = None
         self.snapshot = None
         # Don't call open from here, we may be in the wrong thread,
         # at least in testing. Maybe in real server if threading is used.
@@ -48,14 +50,18 @@ class Records:
             self.term = row['term']
             self.voted_for = row['voted_for']
             self.broken = row['broken']
+            self.max_commit = row['max_commit']
+            self.max_apply = row['max_apply']
         else:
             self.max_index = 0
             self.term = 0
             self.voted_for = None
             self.broken = False
-            sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
-                " values (?,?,?,?,?)"
-            cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
+            self.max_commit = 0
+            self.max_apply = 0
+            sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply)" \
+                " values (?,?,?,?,?,?,?)"
+            cursor.execute(sql, [1, 0, 0, None, False, 0, 0])
         sql = "select * from snapshot where snap_id == 1"
         cursor.execute(sql)
         row = cursor.fetchone()
@@ -87,6 +93,8 @@ class Records:
             "(dummy INTERGER primary key, max_index INTEGER,"\
             " term INTEGER, " \
             " voted_for TEXT, "\
+            " max_commit INTEGER," \
+            " max_apply INTEGER," \
             " broken BOOLEAN)"
         cursor.execute(schema)
 
@@ -136,11 +144,6 @@ class Records:
         sql += "code, command, result, error, term, serial, leader_id, committed, applied) values "
         values += "?,?,?,?,?,?,?,?,?)"
         sql += values
-        # at one time I thought this was necessary, now I don't know why
-        #if isinstance(entry, RecordCode):
-        #    params.append(entry.code.value)
-        #else:
-        #    params.append(entry.code)
         params.append(entry.code)
         params.append(entry.command)
         params.append(entry.result)
@@ -155,10 +158,14 @@ class Records:
         params.append(entry.applied)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
-        if cursor.lastrowid > self.max_index:
-            self.max_index = cursor.lastrowid
-        sql = "replace into stats (dummy, max_index, term, voted_for, broken) values (?,?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
+        if entry.index > self.max_index:
+            self.max_index = entry.index
+        if entry.index > self.max_commit and entry.committed:
+            self.max_commit = entry.index
+        if entry.index > self.max_apply and entry.applied:
+            self.max_apply = entry.index
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply) values (?,?,?,?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken, self.max_commit, self.max_apply])
         self.db.commit()
         cursor.close()
         return self.read_entry(entry.index)
@@ -207,9 +214,9 @@ class Records:
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
         cursor = self.db.cursor()
-        sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
-            " values (?,?,?,?, ?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply)" \
+            " values (?,?,?,?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken, self.max_commit, self.max_apply])
         self.db.commit()
         cursor.close()
     
@@ -274,9 +281,13 @@ class Records:
         cursor = self.db.cursor()
         cursor.execute("delete from records where rec_index >= ?", [index,])
         self.max_index = index - 1
-        sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
-            " values (?,?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
+        # If we are deleting committed records that violates raft rules,
+        # but this is not the place to enforce that
+        self.max_commit = min(self.max_index, self.max_commit)
+        self.max_apply = min(self.max_index, self.max_apply)
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply)" \
+            " values (?,?,?,?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken, self.max_commit, self.max_apply])
         self.db.commit()
         cursor.close()
     
@@ -416,13 +427,6 @@ class SqliteLog(LogAPI):
         self.logger.debug("new log record %s", return_rec.index)
         return return_rec
 
-    async def append_multi(self, entries: List[LogRec]) -> None:
-        # make copies
-        return_recs = []
-        for entry in entries:
-            return_recs.append(await self.append(entry))
-        return return_recs
-
     async def replace(self, entry:LogRec) -> LogRec:
         if entry.index is None:
             raise Exception("api usage error, call append for new record")
@@ -471,10 +475,10 @@ class SqliteLog(LogAPI):
         return save_rec
     
     async def get_commit_index(self):
-        return self.records.get_commit_index()
+        return self.records.max_commit
 
     async def get_applied_index(self):
-        return self.records.get_applied_index()
+        return self.records.max_apply
 
     async def delete_all_from(self, index: int):
         return self.records.delete_all_from(index)

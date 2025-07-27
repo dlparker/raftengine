@@ -1,6 +1,15 @@
-   
-1. [] Test example/bank with regular timings   
-   
+
+
+1. [] Make sqlite log fill in commit and apply elments of record from
+   stats values so that we can stop writing the record to set these
+   flags
+2. [] Study command cycle usage of log records, make sure that the
+   minimum number of reads and writes happen, can do things like
+   asking the log for max apply instead of re-reading the record
+3. [] Test example/bank with regular timings   
+
+
+
    
    
 	 
