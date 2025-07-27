@@ -351,6 +351,7 @@ Available transports:
     client_group.add_argument("--clients", type=int, help="Number of client processes (default: 5)")
     client_group.add_argument("--min-clients", type=int, help="Minimum number of clients for range testing")
     parser.add_argument("--max-clients", type=int, help="Maximum number of clients for range testing (requires --min-clients)")
+    parser.add_argument("--step-clients", type=int, help="Increase in client count per step (requires --min-clients and requires --max-clients)", default=1)
     parser.add_argument("--loops", type=int, default=1, help="Number of loops for each client")
     parser.add_argument("--prep_only", action="store_true", help="Set up the conditions, but don't run test")
     parser.add_argument("--json-output", type=str, help="Export results to JSON file (incompatible with --prep_only)")
@@ -375,7 +376,7 @@ Available transports:
     
     # Determine client counts to test
     if args.min_clients is not None and args.max_clients is not None:
-        client_counts = list(range(args.min_clients, args.max_clients + 1))
+        client_counts = list(range(args.min_clients, args.max_clients + 1, args.step_clients))
     else:
         # Use default of 5 if --clients not specified
         client_counts = [args.clients if args.clients is not None else 5]
