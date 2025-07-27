@@ -1,0 +1,179 @@
+{
+  "test_type": "client_scaling",
+  "client_range": {
+    "min": 5,
+    "max": 50
+  },
+  "results": [
+    {
+      "total_clients": 5,
+      "total_requests": 500,
+      "success_rate": 1.0,
+      "avg_latency_ms": 6.647516727447511,
+      "std_latency_ms": 0.03867952894496388,
+      "total_duration_s": 0.7255744934082031,
+      "throughput_per_second": 689.1091191083304,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 5,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 10,
+      "total_requests": 1000,
+      "success_rate": 1.0,
+      "avg_latency_ms": 12.453154563903809,
+      "std_latency_ms": 0.03842830957416203,
+      "total_duration_s": 1.33390212059021,
+      "throughput_per_second": 749.680193594363,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 10,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 15,
+      "total_requests": 1500,
+      "success_rate": 1.0,
+      "avg_latency_ms": 18.176885445912678,
+      "std_latency_ms": 0.06938253957421242,
+      "total_duration_s": 1.9515159130096436,
+      "throughput_per_second": 768.6332404467499,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 15,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 20,
+      "total_requests": 2000,
+      "success_rate": 1.0,
+      "avg_latency_ms": 24.23838901519775,
+      "std_latency_ms": 0.07111107826939662,
+      "total_duration_s": 2.58799147605896,
+      "throughput_per_second": 772.8000723733588,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 20,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 25,
+      "total_requests": 2500,
+      "success_rate": 1.0,
+      "avg_latency_ms": 29.82255039215088,
+      "std_latency_ms": 0.0728419438973795,
+      "total_duration_s": 3.182305335998535,
+      "throughput_per_second": 785.5940068728687,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 25,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 30,
+      "total_requests": 3000,
+      "success_rate": 1.0,
+      "avg_latency_ms": 36.05303716659546,
+      "std_latency_ms": 0.14490577021298282,
+      "total_duration_s": 3.8406059741973877,
+      "throughput_per_second": 781.1267336860668,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 30,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 35,
+      "total_requests": 3500,
+      "success_rate": 1.0,
+      "avg_latency_ms": 42.05578490665981,
+      "std_latency_ms": 0.13472942484057407,
+      "total_duration_s": 4.484306812286377,
+      "throughput_per_second": 780.4996728614748,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 35,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 40,
+      "total_requests": 4000,
+      "success_rate": 1.0,
+      "avg_latency_ms": 48.18908369541168,
+      "std_latency_ms": 0.16642186162119119,
+      "total_duration_s": 5.13248872756958,
+      "throughput_per_second": 779.3490083112458,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 40,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 45,
+      "total_requests": 4500,
+      "success_rate": 1.0,
+      "avg_latency_ms": 53.99573538038466,
+      "std_latency_ms": 0.10424632528133992,
+      "total_duration_s": 5.754218339920044,
+      "throughput_per_second": 782.0349757639764,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 45,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    },
+    {
+      "total_clients": 50,
+      "total_requests": 5000,
+      "success_rate": 1.0,
+      "avg_latency_ms": 59.47632255554199,
+      "std_latency_ms": 0.15588832666893157,
+      "total_duration_s": 6.34475564956665,
+      "throughput_per_second": 788.0524130730712,
+      "errors": [],
+      "setup": {
+        "transport": "astream",
+        "num_clients": 50,
+        "num_loops": 100,
+        "base_port": 50050,
+        "cluster_startup_delay": 1.0
+      }
+    }
+  ]
+}
