@@ -93,7 +93,7 @@ class Leader(BaseRole):
                               leader_id=self.my_uri())
         the_record = await self.log.append(start_record)
         self.elec_logger.info("New Leader %s sending term start record index %d %d %d", self.my_uri(),
-                         the_record.index, await self.log.get_last_index(), await self.log.get_last_term())
+                              the_record.index, await self.log.get_last_index(), await self.log.get_last_term())
         await self.broadcast_log_record(the_record)
 
     async def broadcast_log_record(self, log_record):

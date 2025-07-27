@@ -21,7 +21,7 @@ async def test_log_stuff():
     if path.exists():
         path.unlink()
     s_log = SqliteLog(path)
-    s_log.start()
+    await s_log.start()
 
     rec1 = LogRec(term=1, command="add 1")
     rec2 = LogRec(term=1, command="add 2")
@@ -95,12 +95,12 @@ async def test_log_stuff():
         with pytest.raises(Exception):
             await log.replace(bad_rec)
 
-    m_log.close()
+    await m_log.stop()
 
     
-    s_log.close()
+    await s_log.stop()
     new_s_log = SqliteLog(path)
-    new_s_log.start()
+    await new_s_log.start()
     loc_c = await new_s_log.get_commit_index()
     assert loc_c == 2
     rec = await new_s_log.read(2)

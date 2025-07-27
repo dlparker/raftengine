@@ -373,12 +373,14 @@ class SqliteLog(LogAPI):
         self.filepath = filepath
         self.logger = logging.getLogger(__name__)
 
-    def start(self):
+    async def start(self):
         # this indirection helps deal with the need to restrict
         # access to a single thread
         self.records = Records(self.filepath)
+        if not self.records.is_open(): # pragma: no cover
+            self.records.open() # pragma: no cover
         
-    async def close(self):
+    async def stop(self):
         self.records.close()
         
     async def get_broken(self):
@@ -396,37 +398,25 @@ class SqliteLog(LogAPI):
         return self.records.term
     
     async def set_term(self, value: int):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         self.records.set_term(value)
 
     async def get_voted_for(self) -> Union[int, None]:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.voted_for
     
     async def set_voted_for(self, value: str):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         self.records.set_voted_for(value)
         
     async def incr_term(self):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         self.records.set_term(self.records.term + 1)
         return self.records.term
 
     async def append(self, entry: LogRec) -> None:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         save_rec = LogRec.from_dict(entry.__dict__)
         return_rec = self.records.add_entry(save_rec)
         self.logger.debug("new log record %s", return_rec.index)
         return return_rec
 
     async def append_multi(self, entries: List[LogRec]) -> None:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         # make copies
         return_recs = []
         for entry in entries:
@@ -434,8 +424,6 @@ class SqliteLog(LogAPI):
         return return_recs
 
     async def replace(self, entry:LogRec) -> LogRec:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         if entry.index is None:
             raise Exception("api usage error, call append for new record")
         if entry.index < 1:
@@ -448,8 +436,6 @@ class SqliteLog(LogAPI):
         return LogRec.from_dict(save_rec.__dict__)
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         if index is None:
             index = self.records.max_index
         else:
@@ -463,13 +449,9 @@ class SqliteLog(LogAPI):
         return LogRec.from_dict(rec.__dict__)
 
     async def get_last_index(self):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_last_index()
 
     async def get_last_term(self):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         rec = self.records.read_entry()
         if rec is None:
             snap = self.records.get_snapshot()
@@ -489,42 +471,26 @@ class SqliteLog(LogAPI):
         return save_rec
     
     async def get_commit_index(self):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_commit_index()
 
     async def get_applied_index(self):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_applied_index()
 
     async def delete_all_from(self, index: int):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.delete_all_from(index)
 
     async def save_cluster_config(self, config: ClusterConfig) -> None:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.save_cluster_config(config)
     
     async def get_cluster_config(self) -> Optional[ClusterConfig]:  
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_cluster_config()
     
     async def get_first_index(self) -> int:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_first_index()
 
     async def install_snapshot(self, snapshot:SnapShot):
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return await self.records.install_snapshot(snapshot)
 
     async def get_snapshot(self) -> Optional[SnapShot]: 
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.get_snapshot()
 

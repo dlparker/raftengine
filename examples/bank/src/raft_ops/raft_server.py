@@ -21,7 +21,7 @@ from raft_ops.pilot import Pilot
 from raft_ops.local_ops import LocalDispatcher
 from raft_ops.sqlite_log import SqliteLog
 from raft_ops.memory_log import MemoryLog
-from raft_ops.lsfs_raft_log import LSFSRaftLog
+from raftengine.lsfs.lsfs_raft_log import LSFSRaftLog
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft_ops.RaftServer",
@@ -90,7 +90,6 @@ class RaftServer:
             await self.deck.start()
             self.stopped = False
             self.timers_running = True
-            
     
     # local method reachable through local_command RPC
     async def start_raft(self):
@@ -105,6 +104,7 @@ class RaftServer:
             await self.pilot.stop_commanded()
         if self.deck:
             await self.deck.stop()
+            await self.log.sto()
             logger.warning("Raft server operations stopped on command")
         self.stopped = True
         self.timers_running = False

@@ -24,7 +24,7 @@ class MemoryLog(LogAPI):
         self.cluster_settings = None
         self.broken = False
 
-    def close(self):
+    async def close(self):
         self.first_index = 0
         self.last_index = 0
         self.last_term = 0
@@ -42,8 +42,6 @@ class MemoryLog(LogAPI):
         orig_index = rec.index
         if rec.index == 0 or rec.index is None:
             rec.index = self.last_index + 1
-        if orig_index == 18 and rec.index != orig_index:
-            breakpoint()
         self.entries[rec.index] = rec
         self.last_index = max(rec.index, self.last_index)
         self.last_term = max(rec.term, self.last_term)
@@ -85,7 +83,10 @@ class MemoryLog(LogAPI):
             self.first_index = index + 1
 
     # BEGIN API METHODS
-    def start(self):
+    async def start(self):
+        pass
+
+    async def stop(self):
         pass
 
     async def get_broken(self) -> bool:

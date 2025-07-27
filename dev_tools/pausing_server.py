@@ -5,17 +5,17 @@ import time
 from copy import deepcopy
 from pathlib import Path
 
-from dev_tools.memory_log import MemoryLog
-from dev_tools.triggers import TriggerSet
-from dev_tools.sqlite_log import SqliteLog
-from dev_tools.operations import SimpleOps
 from raftengine.api.deck_config import ClusterInitConfig
 from raftengine.api.log_api import LogRec
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.types import ClusterSettings
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
-
+from dev_tools.triggers import TriggerSet
+from dev_tools.operations import SimpleOps
+from dev_tools.memory_log import MemoryLog
+from dev_tools.sqlite_log import SqliteLog
+from raftengine.lsfs.lsfs_raft_log import LSFSRaftLog
 
 class PausingServer(PilotAPI):
 
@@ -30,10 +30,7 @@ class PausingServer(PilotAPI):
         self.lost_out_messages = []
         self.logger = logging.getLogger("PausingServer")
         self.use_log = use_log
-        if use_log == MemoryLog:
-            self.log = MemoryLog()
-        elif use_log == SqliteLog:
-            self.log = setup_sqlite_log(uri)
+        self.log = setup_log(self, use_log)
         self.trigger_set = None
         self.trigger = None
         self.break_on_message_code = None
@@ -70,9 +67,7 @@ class PausingServer(PilotAPI):
 
     async def simulate_crash(self):
         await self.deck.stop()
-        
-        if self.use_log == SqliteLog:
-            self.log.close()
+        await self.log.stop()
         self.am_crashed = True
         self.network.isolate_server(self)
         self.in_messages = []
@@ -83,11 +78,9 @@ class PausingServer(PilotAPI):
 
     async def recover_from_crash(self, deliver=False, save_log=True, save_ops=True):
         if not save_log:
-            self.log.close()
-            if self.use_log == MemoryLog:
-                self.log = MemoryLog()
-            else:
-                self.log = setup_sqlite_log(self.uri)
+            await self.log.stop()
+            self.log = setup_log(self, self.use_log)
+            await self.log.start()
         if not save_ops:
             self.operations = self.ops_class(self)
         self.am_crashed = False
@@ -232,10 +225,12 @@ class PausingServer(PilotAPI):
         await self.deck.exit_cluster(callback, timeout)
 
     async def start(self):
+        await self.log.start()
         await self.deck.start()
 
     async def stop(self):
         await self.deck.stop()
+        await self.log.stop()
 
     async def start_and_join(self, leader_uri, callback=None, timeout=10.0):
         await self.deck.start_and_join(leader_uri, callback, timeout)
@@ -270,14 +265,11 @@ class PausingServer(PilotAPI):
         await self.log.append(rec)
         return rec
 
-    def replace_log(self, new_log=None):
-        if self.use_log == SqliteLog:
-            self.log.close()
+    async def replace_log(self, new_log=None):
+        await self.log.stop()
         if new_log is None:
-            if self.use_log == MemoryLog:
-                self.log = MemoryLog()
-            elif self.use_log == SqliteLog:
-                self.log = setup_sqlite_log(self.uri)
+            self.log = setup_log(self, self.use_log)
+            await self.log.start()
         else:
             self.log = new_log
         self.deck.log = self.log
@@ -374,7 +366,7 @@ class PausingServer(PilotAPI):
         if deck:
             self.deck = None
             del deck
-        self.log.close()
+        await self.log.stop()
         self.logger.debug('cleanup done on %s', self.uri)
 
     def clear_triggers(self):
@@ -462,15 +454,6 @@ class PausingServer(PilotAPI):
         return stats
 
 
-def setup_sqlite_log(uri):
-    number = uri.split('/')[-1]
-    path = Path('/tmp', f"pserver_{number}.sqlite")
-    if path.exists():
-        path.unlink()
-    log = SqliteLog(path)
-    log.start()
-    return log
-
 
 class Testdeck(Deck):
 
@@ -538,3 +521,23 @@ class Testdeck(Deck):
         self.timers_disabled = False
 
 
+def setup_log(server, use_log_class=MemoryLog):
+    number = server.uri.split('/')[-1]
+    path_root = Path('/tmp', f"pserver_{number}")
+    if use_log_class == MemoryLog:
+        log = MemoryLog()
+        return log
+    elif use_log_class == SqliteLog:
+        path = Path(str(path_root) +'db')
+        if path.exists():
+            path.unlink()
+        log = SqliteLog(path)
+    elif use_log_class == LSFSRaftLog:
+        path = Path(path_root, "log.lsfs")
+        if path.exists():
+            for p in path.glob("*"):
+                p.unlink()
+        log = LSFSRaftLog(path)
+    else:
+        raise Exception(f"don't know log type {self.use_log}")
+    return log

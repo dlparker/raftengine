@@ -92,17 +92,28 @@ class TestTrace:
         ns = self.node_states[node.uri] = await self.create_node_state(node)
 
     async def create_node_state(self, node):
+        try:
+            # at beginning of test log might not be started yet
+            rec = await node.log.read()
+            commit_index = await node.log.get_commit_index()
+            term = await node.log.get_term(),
+            voted_for = await node.log.get_voted_for()
+        except:
+            rec = None
+            commit_index = 0
+            term = 0
+            voted_for = None
         ns = NodeState(save_event=SaveEvent.started,
                        uri=node.uri,
-                       log_rec=await node.log.read(),
-                       term=await node.log.get_term(),
-                       commit_index=await node.log.get_commit_index(),
+                       log_rec=rec,
+                       term=term,
+                       commit_index=commit_index,
                        role_name=node.get_role_name(),
                        on_quorum_net=node.is_on_quorum_net(),
                        is_paused=node.am_paused,
                        is_crashed=node.am_crashed,
                        leader_id=node.get_leader_id(),
-                       voted_for=await node.log.get_voted_for())
+                       voted_for=None)
         return ns
 
     async def update_node_state(self, node, ns):

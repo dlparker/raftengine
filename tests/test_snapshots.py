@@ -17,7 +17,8 @@ from dev_tools.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
-from dev_tools.pausing_server import setup_sqlite_log
+from dev_tools.pausing_server import setup_log
+from dev_tools.sqlite_log import SqliteLog
 from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
@@ -35,7 +36,7 @@ async def test_dict_ops():
             self.index = index
             self.uri = "fake://index"
             if logc == "SqliteLog":
-                self.log = setup_sqlite_log(self.uri)
+                self.log = setup_log(self.uri, use_log_class=SqliteLog)
             else:
                 self.log = MemoryLog()
             self.ops = DictTotalsOps(self)

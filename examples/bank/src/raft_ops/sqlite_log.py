@@ -21,6 +21,7 @@ class Records:
         self.entries = []
         self.db = None
         self.term = -1
+        self.broken = None
         self.voted_for = None
         self.max_index = None
         self.snapshot = None
@@ -46,13 +47,15 @@ class Records:
             self.max_index = row['max_index']
             self.term = row['term']
             self.voted_for = row['voted_for']
+            self.broken = row['broken']
         else:
             self.max_index = 0
             self.term = 0
             self.voted_for = None
-            sql = "replace into stats (dummy, max_index, term, voted_for)" \
-                " values (?,?,?,?)"
-            cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+            self.broken = False
+            sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
+                " values (?,?,?,?,?)"
+            cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
         sql = "select * from snapshot where snap_id == 1"
         cursor.execute(sql)
         row = cursor.fetchone()
@@ -82,7 +85,9 @@ class Records:
 
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER,"\
-            " term INTEGER, voted_for TEXT)"
+            " term INTEGER, " \
+            " voted_for TEXT, "\
+            " broken BOOLEAN)"
         cursor.execute(schema)
 
         schema =  "CREATE TABLE if not exists nodes " 
@@ -99,7 +104,8 @@ class Records:
         schema += "max_entries_per_message int, "
         schema += "use_pre_vote BOOLEAN, "
         schema += "use_check_quorum BOOLEAN, "
-        schema += "use_dynamic_config BOOLEAN) "
+        schema += "use_dynamic_config BOOLEAN, "
+        schema += "commands_idempotent BOOLEAN) "
         cursor.execute(schema)
 
         schema = f"CREATE TABLE if not exists snapshot " \
@@ -116,6 +122,10 @@ class Records:
         cursor = self.db.cursor()
         params = []
         values = "("
+        if (entry.index is None and self.snapshot
+            and self.snapshot.index == self.max_index):
+            # first insert after snapshot, have to fix index
+            entry.index = self.max_index + 1
         if entry.index is not None:
             params.append(entry.index)
             sql = f"replace into records (rec_index, "
@@ -147,8 +157,8 @@ class Records:
         entry.index = cursor.lastrowid
         if cursor.lastrowid > self.max_index:
             self.max_index = cursor.lastrowid
-        sql = "replace into stats (dummy, max_index, term, voted_for) values (?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken) values (?,?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
         self.db.commit()
         cursor.close()
         return self.read_entry(entry.index)
@@ -176,27 +186,42 @@ class Records:
         cursor.close()
         return log_rec
     
-    def set_term(self, value):
+    def get_broken(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        return self.broken
+    
+    def set_broken(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        self.broken = True
+        self.save_stats()
+
+    def set_fixed(self):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        self.broken = False
+        self.save_stats()
+
+    def save_stats(self):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
         cursor = self.db.cursor()
-        self.term = value
-        sql = "replace into stats (dummy, max_index, term, voted_for)" \
-            " values (?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
+            " values (?,?,?,?, ?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
         self.db.commit()
         cursor.close()
+    
+    def set_term(self, value):
+        self.term = value
+        self.save_stats()
     
     def set_voted_for(self, value):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
-        cursor = self.db.cursor()
         self.voted_for = value
-        sql = "replace into stats (dummy, max_index, term, voted_for)" \
-            " values (?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
-        self.db.commit()
-        cursor.close()
+        self.save_stats()
     
     def get_entry_at(self, index):
         if index < 1:
@@ -204,6 +229,7 @@ class Records:
         return self.read_entry(index)
 
     def add_entry(self, rec: LogRec) -> LogRec:
+        orig_index = rec.index
         rec.index = None
         rec = self.save_entry(rec)
         return rec
@@ -248,9 +274,9 @@ class Records:
         cursor = self.db.cursor()
         cursor.execute("delete from records where rec_index >= ?", [index,])
         self.max_index = index - 1
-        sql = "replace into stats (dummy, max_index, term, voted_for)" \
-            " values (?,?,?,?)"
-        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for])
+        sql = "replace into stats (dummy, max_index, term, voted_for, broken)" \
+            " values (?,?,?,?,?)"
+        cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken])
         self.db.commit()
         cursor.close()
     
@@ -263,11 +289,13 @@ class Records:
             sql += " values (?,?,?)"
             cursor.execute(sql, [node.uri, node.is_adding, node.is_removing])
         sql = "insert or replace into settings (the_index, heartbeat_period, election_timeout_min,"
-        sql += "election_timeout_max, max_entries_per_message, use_pre_vote, use_check_quorum, use_dynamic_config)"
-        sql += " values (?,?,?,?,?,?,?,?)"
+        sql += "election_timeout_max, max_entries_per_message, use_pre_vote, "
+        sql += " use_check_quorum, use_dynamic_config, commands_idempotent)"
+        sql += " values (?,?,?,?,?,?,?,?,?)"
         cs = config.settings
         cursor.execute(sql, [1, cs.heartbeat_period, cs.election_timeout_min, cs.election_timeout_max,
-                             cs.max_entries_per_message, cs.use_pre_vote, cs.use_check_quorum, cs.use_dynamic_config])
+                             cs.max_entries_per_message, cs.use_pre_vote, cs.use_check_quorum,
+                             cs.use_dynamic_config, cs.commands_idempotent])
         self.db.commit()
         cursor.close()
     
@@ -286,8 +314,8 @@ class Records:
                                    max_entries_per_message=row['max_entries_per_message'],
                                    use_pre_vote=row['use_pre_vote'],
                                    use_check_quorum=row['use_check_quorum'],
-                                   use_dynamic_config=row['use_dynamic_config'])
-
+                                   use_dynamic_config=row['use_dynamic_config'],
+                                   commands_idempotent=row['commands_idempotent'])
         nodes = {}
         sql = "select * from nodes"
         cursor.execute(sql)
@@ -329,6 +357,8 @@ class Records:
         cursor.execute(sql, [snapshot.index,])
         cursor.close()
         self.db.commit()
+        if self.max_index < snapshot.index:
+            self.max_index = snapshot.index
         self.snapshot = snapshot
 
     def get_snapshot(self):
@@ -341,16 +371,25 @@ class SqliteLog(LogAPI):
     def __init__(self, filepath: os.PathLike):
         self.records = None
         self.filepath = filepath
-        self.logger = logging.getLogger("SqliteLog")
+        self.logger = logging.getLogger(__name__)
 
     def start(self):
         # this indirection helps deal with the need to restrict
         # access to a single thread
         self.records = Records(self.filepath)
         
-    def close(self):
+    async def close(self):
         self.records.close()
         
+    async def get_broken(self):
+        return self.records.get_broken()
+    
+    async def set_broken(self):
+        return self.records.set_broken()
+
+    async def set_fixed(self):
+        return self.records.set_fixed()
+
     async def get_term(self) -> Union[int, None]:
         if not self.records.is_open(): # pragma: no cover
             self.records.open() # pragma: no cover
