@@ -161,11 +161,11 @@ class MemoryLog(LogAPI):
         self.insert_entry(save_rec)
         return LogRec.from_dict(save_rec.__dict__)
 
-    async def update_and_commit(self, entry:LogRec) -> LogRec:
+    async def mark_committed(self, entry:LogRec) -> LogRec:
         entry.committed = True
         return await self.replace(entry)
 
-    async def update_and_apply(self, entry:LogRec) -> LogRec:
+    async def mark_applied(self, entry:LogRec) -> LogRec:
         entry.applied = True
         return await self.replace(entry)
     

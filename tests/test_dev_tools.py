@@ -58,7 +58,7 @@ async def test_log_stuff():
         await log.replace(rec_1)
         loc_c = await log.get_commit_index()
         assert loc_c == 1
-        await log.update_and_commit(rec_2)
+        await log.mark_committed(rec_2)
         loc_c = await log.get_commit_index()
         assert loc_c == 2
 
@@ -145,9 +145,9 @@ async def test_sqlite_log():
     assert rec_2b.index == 2
     assert rec_2b.command == 'add 2'
     
-    await log.update_and_commit(res_rec_2)
+    await log.mark_committed(res_rec_2)
     assert await log.get_commit_index() == 2
-    await log.update_and_apply(res_rec_1)
+    await log.mark_applied(res_rec_1)
     assert await log.get_applied_index() == 1
     
     await log.incr_term()
@@ -229,10 +229,10 @@ async def test_sqlite_log():
             read_rec = await log.read(save_rec.index)
             read_end = time.perf_counter()
             commit_start = time.perf_counter()
-            await log.update_and_commit(read_rec)
+            await log.mark_committed(read_rec)
             commit_end = time.perf_counter()
             apply_start = time.perf_counter()
-            await log.update_and_apply(read_rec)
+            await log.mark_applied(read_rec)
             apply_end = time.perf_counter()
             assert await log.get_commit_index() == read_rec.index
             assert await log.get_applied_index() == read_rec.index

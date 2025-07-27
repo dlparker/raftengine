@@ -133,7 +133,7 @@ class Follower(BaseRole):
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if not log_rec.committed:
-                await self.log.update_and_commit(log_rec)
+                await self.log.mark_committed(log_rec)
                 self.logger.debug("%s committing %d ", self.my_uri(), log_rec.index)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
@@ -173,7 +173,7 @@ class Follower(BaseRole):
         log_record.result = result
         log_record.error = error_flag
         if not error_flag:
-            await self.log.update_and_apply(log_record)
+            await self.log.mark_applied(log_record)
             self.logger.debug("%s processor ran no error on log record %d", self.my_uri(), log_record.index)
         else:
             if not self.commands_idempotent:

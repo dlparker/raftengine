@@ -221,11 +221,11 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update_and_commit(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+    def mark_committed(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update_and_apply(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+    def mark_applied(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

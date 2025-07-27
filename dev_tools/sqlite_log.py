@@ -84,9 +84,7 @@ class Records:
         schema += "term int, "
         schema += "error BOOLEAN, " 
         schema += "leader_id TEXT, "
-        schema += "serial TEXT, "
-        schema += "committed BOOLEAN," 
-        schema += "applied BOOLEAN)" 
+        schema += "serial TEXT)"
         cursor.execute(schema)
 
         schema = f"CREATE TABLE if not exists stats " \
@@ -141,8 +139,8 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, result, error, term, serial, leader_id, committed, applied) values "
-        values += "?,?,?,?,?,?,?,?,?)"
+        sql += "code, command, result, error, term, serial, leader_id) values "
+        values += "?,?,?,?,?,?,?)"
         sql += values
         params.append(entry.code)
         params.append(entry.command)
@@ -154,8 +152,6 @@ class Records:
         else:
             params.append(entry.serial)
         params.append(entry.leader_id)
-        params.append(entry.committed)
-        params.append(entry.applied)
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if entry.index > self.max_index:
@@ -191,6 +187,10 @@ class Records:
             conv['serial'] = int(rec_data['serial'])
         log_rec = LogRec.from_dict(conv)
         cursor.close()
+        if self.max_commit >= log_rec.index:
+            log_rec.committed = True
+        if self.max_apply >= log_rec.index:
+            log_rec.applied = True
         return log_rec
     
     def get_broken(self):
@@ -248,32 +248,26 @@ class Records:
     def get_commit_index(self):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
-        cursor = self.db.cursor()
-        sql = "select rec_index from records where committed = 1 order by rec_index desc"
-        cursor.execute(sql)
-        rec_data = cursor.fetchone()
-        if rec_data is None:
-            cursor.close()
-            if self.snapshot:
-                return self.snapshot.index
-            return 0
-        cursor.close()
-        return rec_data['rec_index']
+        return self.commit_index
 
     def get_applied_index(self):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
-        cursor = self.db.cursor()
-        sql = "select rec_index from records where applied = 1 order by rec_index desc"
-        cursor.execute(sql)
-        rec_data = cursor.fetchone()
-        if rec_data is None:
-            cursor.close()
-            if self.snapshot:
-                return self.snapshot.index
-            return 0
-        cursor.close()
-        return rec_data['rec_index']
+        return self.apply_index
+
+    def set_commit_index(self, index):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if index > self.max_commit:
+            self.max_commit = index
+            self.save_stats()
+
+    def set_apply_index(self, index):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if index > self.max_apply:
+            self.max_apply = index
+            self.save_stats()
 
     def delete_all_from(self, index: int):
         if self.db is None: # pragma: no cover
@@ -464,15 +458,11 @@ class SqliteLog(LogAPI):
             return 0
         return rec.term
 
-    async def update_and_commit(self, entry:LogRec) -> LogRec:
-        entry.committed = True
-        save_rec = self.records.insert_entry(entry)
-        return save_rec
+    async def mark_committed(self, entry:LogRec) -> LogRec:
+        self.records.set_commit_index(entry.index)
     
-    async def update_and_apply(self, entry:LogRec) -> LogRec:
-        entry.applied = True
-        save_rec = self.records.insert_entry(entry)
-        return save_rec
+    async def mark_applied(self, entry:LogRec) -> LogRec:
+        self.records.set_apply_index(entry.index)
     
     async def get_commit_index(self):
         return self.records.max_commit
