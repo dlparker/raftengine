@@ -6,11 +6,12 @@ from raft_stubs.raft_client import RaftClient
 class RunTools:
 
     @staticmethod
-    async def make_server(reload=False):
-        server = RaftServerStub(50045, clear=not reload)
+    async def make_server(reload=False, port=50045):
+        server = RaftServerStub(port, clear=not reload)
         await server.start()
+        return server
 
     @staticmethod
-    async def make_client():
-        client = RaftClient(f"aiozmq://localhost:50045")
-        return Collector(client)
+    async def make_client(port=50045):
+        client = RaftClient(f"aiozmq://localhost:{port}")
+        return Collector(client),client

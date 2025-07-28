@@ -1,6 +1,6 @@
 import json
 from raftengine.api.types import CommandResult
-from rpc.rpc_helper import RPCHelper
+from raft_stubs.rpc_helper import RPCHelper
         
 class RaftClient:
 

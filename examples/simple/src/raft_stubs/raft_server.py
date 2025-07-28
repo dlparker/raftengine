@@ -3,7 +3,7 @@ from pathlib import Path
 from raftengine.api.types import CommandResult
 from base.counters import Counters
 from split_base.dispatcher import Dispatcher
-from rpc.rpc_helper import RPCHelper
+from raft_stubs.rpc_helper import RPCHelper
 
 class RaftServerStub:
     """
@@ -34,7 +34,7 @@ class RaftServerStub:
     # local only method
     async def start(self):
         await self.deck.start()
-        self.rpc_server = await self.helper.get_rpc_server(self.port, self.deck)
+        self.rpc_server = await self.helper.get_rpc_server(self.port, self)
         await self.helper.start_server_task()
         self.stopped = False
     
@@ -53,7 +53,9 @@ class RaftServerStub:
         # vote from the cluster. The indirection here is just to practice
         # getting the wiring right.
         raw_result = await self.deck.run_command(command)
-        return json.dumps(raw_result.__dict__)
+        wrapped = json.dumps(CommandResult(command=command, result=raw_result).__dict__)
+        #print(f"returning {json.loads(wrapped)}")
+        return wrapped
 
     # RPC method
     async def raft_message(self, message):
@@ -80,7 +82,6 @@ class PilotStub:
         # to construct the CommandResult here.
         return await self.dispatcher.run_command(command)
     
-    
 class DeckStub:
     """
     In a real Raft server setup this class is provided by Raftengine, so
@@ -99,6 +100,9 @@ class DeckStub:
     async def start(self):
         pass
     
+    async def stop(self):
+        pass
+    
     async def run_command(self, command):
         # In real mode this goes to the "role" class, and if it
         # is a Leader role it will, if successful, eventually
@@ -106,10 +110,7 @@ class DeckStub:
         # shortcut and go straight to the pilot. In real mode
         # the Leader will wrap up the result in a CommandResult
         # instance.
-        res =  await self.pilot.process_command(command, serial=1)
-        wrapped = json.dumps(CommandResult(command=command, result=res).__dict__)
-        #print(f"returning {json.loads(wrapped)}")
-        return wrapped
+        return  await self.pilot.process_command(command, serial=1)
 
 
     async def on_message(self, message):

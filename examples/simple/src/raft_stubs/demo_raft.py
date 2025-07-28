@@ -3,9 +3,22 @@
 
 async def main(RunTools):
     server = await RunTools.make_server()
-    client = await RunTools.make_client()
-    ct = Demo(client)
+    collector,client = await RunTools.make_client()
+    ct = Demo(collector)
     res = await ct.do_fresh_demo()
+    ping_1 = "ping_1"
+    ping_1_res = await client.raft_message("ping_1")
+    print(f"ping_1 message got {ping_1_res} result")
+    await client.close()
+    await server.stop()
+
+    server2 = await RunTools.make_server(reload=True, port=50046)
+    collector2,client2 = await RunTools.make_client(port=50046)
+    ct2 = Demo(collector2)
+    res = await ct2.do_reload_demo(res)
+    await client2.close()
+    await server2.stop()
+
     
     
 if __name__=="__main__":
