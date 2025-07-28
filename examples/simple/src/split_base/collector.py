@@ -26,13 +26,13 @@ class Collector:
     async def counter_add(self, name, value):
         package = dict(command_name="counter_add", args={'name': name, 'value': value})
         pstring = json.dumps(package)
-        res = await self.pipe.run_command(pstring)
+        res = await self.pipe.issue_command(pstring)
         return json.loads(res)
 
     async def get_counters(self):
         package = dict(command_name="get_counters", args={})
         pstring = json.dumps(package)
-        res = await self.pipe.run_command(pstring)
+        res = await self.pipe.issue_command(pstring)
         return json.loads(res)
 
 

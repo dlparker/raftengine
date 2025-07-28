@@ -5,23 +5,55 @@ class RPCClient:
     def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.client = None
+        self.aiozmq_conn = None
         self.aiozmq_uri = f'tcp://{self.host}:{self.port}'
+        print(f"new rpc client {self} at {self.aiozmq_uri}")
         
     async def connect(self):
-        self.client = await aiozmq.rpc.connect_rpc(
-            connect=self.aiozmq_uri
-        )
-        
-    async def run_command(self, command):
-        if self.client is None:
-            await self.connect()
-        return await self.client.call.run_command(command)
+        print(f"rpc client {self} connecting")
+        self.aiozmq_conn = await aiozmq.rpc.connect_rpc(connect=self.aiozmq_uri)
 
+    async def issue_command(self, command):
+        """
+        This is the client side method that will take the command and send
+        it to the server side. When it gets there, it will make its way
+        through whatever wiring exists until it reaches the Dispatcher's
+        route_command method, and then the result of that method will be
+        returned through all the wiring and the RPC pipe. This is
+        required for Raft support.
+        """
+        if self.aiozmq_conn is None:
+            await self.connect()
+        print(f'in issue command with {self.aiozmq_conn}')
+        return await self.aiozmq_conn.call.issue_command(command)
+
+    async def raft_message(self, message):
+        """
+        This is the client side method of the RPC mechanism that Raftengine
+        enabled servers use to sent Raft protocol messages. This call should
+        never be used by the use client code. This is required for Raft support.
+        """
+        if self.aiozmq_conn is None:
+            await self.connect()
+        return await self.aiozmq_conn.call.raft_message(message)
+
+    async def direct_server_command(self, message):
+        """
+        This is an optional RPC that allows user clients to perform operations
+        on the server that answers the RPC interface. These operations will
+        not be routed through Raftengine, so any effect that they have is
+        strickly on the target server. Although optional, something like this
+        is almost required for any reasonable level of monitoring and control
+        of server processes.
+        """
+        if self.aiozmq_conn is None:
+            await self.connect()
+        return await self.aiozmq_conn.call.direct_server_command(message)
 
     async def close(self):
         """Close the client connection"""
-        if self.client is not None:
-            self.client.close()
-            await self.client.wait_closed()
-            self.client = None
+        if self.aiozmq_conn is not None:
+            print(f"closing client {self}")
+            self.aiozmq_conn.close()
+            await self.aiozmq_conn.wait_closed()
+            self.aiozmq_conn = None

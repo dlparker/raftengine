@@ -80,7 +80,7 @@ class PilotStub:
         # nor do they deliver it anywhere, so what you return
         # in that case. In this stub setup it is convienient
         # to construct the CommandResult here.
-        return await self.dispatcher.run_command(command)
+        return await self.dispatcher.route_command(command)
     
 class DeckStub:
     """
