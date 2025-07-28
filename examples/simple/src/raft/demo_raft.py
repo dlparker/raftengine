@@ -28,22 +28,10 @@ async def main(cluster):
     print(f"Call to server 0 direct_server_command('take_power') got '{res}' in reply")
     ct = Demo(collector)
     res = await ct.do_fresh_demo()
-
-    if False:
-        # check the raft_message function
-        reply = await client.raft_message('foo')
-        print(f"Call to raft_message('foo') got '{reply}' in reply")
-        
-        pid = await client.direct_server_command("getpid")
-        print(f"Call to direct_server_command('getpid') got {pid} in reply")
-    
-        ping_res = await client.direct_server_command("ping")
-        print(f"Call to direct_server_command('ping') got '{ping_res}' in reply")
-        
-        shut_res = await client.direct_server_command("shutdown")
-        print(f"shutdown request got {shut_res}")
-        await client.close()
     await cluster.stop_servers()
+    await client_0.close()
+    await client_1.close()
+    await client_2.close()
     
 if __name__=="__main__":
     asyncio.run(main(Cluster(clear=True)))

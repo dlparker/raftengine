@@ -28,9 +28,10 @@ from raft.sqlite_log import SqliteLog
 
 class RaftServer:
 
-    def __init__(self, initial_cluster_config, local_config):
+    def __init__(self, initial_cluster_config, local_config, start_paused=False):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
+        self.start_paused = start_paused
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
@@ -45,15 +46,22 @@ class RaftServer:
 
     # local only method
     async def start(self):
+        self.start_paused = self.start_paused
         if not self.timers_running:
             logger.info("calling deck start")
             await self.log.start()
-            await self.deck.start()
+            if not self.start_paused:
+                await self.deck.start()
             port = self.uri.split(':')[-1]
             await self.rpc_server.start(port)
             self.stopped = False
             self.timers_running = True
 
+    # local method reachable through local_command RPC
+    async def start_raft(self):
+        if not self.deck.started:
+            await self.deck.start()
+        
     # local method reachable through local_command RPC
     async def stop(self):
         self.profiler.disable()
@@ -134,8 +142,15 @@ class RaftServer:
             # can probe and debug the server without Raft timeouts
             # happening, in which case you'll need to call this
             # to get the inital election done.
+            await self.start_raft()
             await self.deck.start_campaign()
             return "started campaign"
+        elif command == "start_raft":
+            # you can start the server in a paused state, meaning
+            # that it won't do any raft operations until you run 
+            # this command or the 'take_power' command
+            await self.start_raft()
+            return "started raft ops"
         elif command == "stop_raft":
             # If you want to do some server administration with 
             # All raft activity disabled, here's how to do it
@@ -148,7 +163,7 @@ class RaftServer:
             self.stopped = True
             self.timers_running = False
             return "stopped raft"
-        elif command == "get_status":
+        elif command == "status":
             res = dict(pid=os.getpid(),
                        working_dir=str(self.working_dir),
                        raft_log_file=str(self.raft_log_file),

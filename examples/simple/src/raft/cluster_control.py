@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+import asyncio
+import argparse
+from pathlib import Path
+import sys
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
+from raftengine.deck.log_control import LogController
+log_controller = LogController.make_controller()
+from run_tools import Cluster
+from split_base.collector import Collector
+from base.demo import Demo
+
+async def main():
+    parser = argparse.ArgumentParser(description="Counters Raft Server Cluster Control")
+
+    
+    parser.add_argument('command', choices=['start', 'shutdown', 'status', 'getpid',
+                                            'start_paused', 'start_raft', 'take_power',
+                                            'get_logging_dict', 'set_debug_logging',
+                                            'set_info_logging', 'set_warning_logging', 'set_error_logging'],
+                        help='Command to execute')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--index', '-i', type=int,
+                        help='Cluster node index to target') 
+    group.add_argument('--all', '-a', action='store_true',
+                        help='Do operation on all nodes')
+    parser.add_argument('-b', '--base_port', type=int, default=50090,
+                        help='Port number for first node in cluster')
+    parser.add_argument('-f', '--full-start', action='store_true',
+                        help='Start raft everywhere and tell server 0 to take power. Only valid with --all and "start"')
+    args = parser.parse_args()
+
+    cluster = Cluster(base_port=args.base_port)
+    cluster.setup_servers()
+    nodes = cluster.node_uris
+    if args.all:
+        target_nodes = nodes
+        if args.command == 'take_power':
+            parser.error("Cowardly refusing to run take_power on all nodes")
+    else:
+        target_nodes = [nodes[args.index],]
+
+    start_paused = False
+    if args.command == "start_paused":
+        start_paused = True 
+    if args.command == "start" or args.command == "start_paused":
+        await cluster.start_servers(targets=target_nodes, start_paused=start_paused)
+    if args.command == "start" and args.full_start and args.all:
+        for uri in nodes:
+            await cluster.direct_command(uri, "start_raft")
+        u0  = nodes[0]
+        await asyncio.sleep(0.01)
+        await cluster.direct_command(uri, "take_power")
+    if args.command in ['shutdown', 'status','getpid', 'start_raft', 'take_power', 'get_logging_dict']:
+        for uri in target_nodes:
+            print(await cluster.direct_command(uri, args.command))
+    elif args.command == 'set_debug_logging':
+        for uri in target_nodes:
+            print(await cluster.direct_command(uri, "set_logging_level", 'debug'))
+    elif args.command == 'set_info_logging':
+        for uri in target_nodes:
+            print(await cluster.direct_command(uri, "set_logging_level", 'info'))
+    elif args.command == 'set_warning_logging':
+        for uri in target_nodes:
+            print(await cluster.direct_command(uri, "set_logging_level", 'warning'))
+    elif args.command == 'set_error_logging':
+        for uri in target_nodes:
+            print(await cluster.direct_command(uri, "set_logging_level", 'error'))
+
+if __name__=="__main__":
+    asyncio.run(main())

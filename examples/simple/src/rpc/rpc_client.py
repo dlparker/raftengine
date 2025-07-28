@@ -9,7 +9,9 @@ class RPCClient:
         self.aiozmq_uri = f'tcp://{self.host}:{self.port}'
         
     async def connect(self):
-        self.aiozmq_conn = await aiozmq.rpc.connect_rpc(connect=self.aiozmq_uri)
+        raw_client = await aiozmq.rpc.connect_rpc(connect=self.aiozmq_uri)
+        with raw_client.with_timeout(1.0) as new_client:
+            self.aiozmq_conn = new_client
 
     async def issue_command(self, command):
         """

@@ -17,7 +17,6 @@ class Cluster:
         for port in range(base_port, base_port + 3):
             uri = f"aiozmq://localhost:{port}"
             self.node_uris.append(uri)
-            print(f"setup node uri {uri}")
             
     def setup_servers(self):
         heartbeat_period=10000
@@ -41,29 +40,36 @@ class Cluster:
                 work_dir.mkdir()
             
             self.servers[index] = {
+                'uri': uri,
                 'initial_cluster_config': self.initial_cluster_config,
                 'local_config': LocalConfig(uri=uri, working_dir=work_dir),
                 'server': None,
-                'server_proc': None
+                'server_proc': None,
+                'client': None
             }
 
 
     def get_client(self, index=0):
-        uri = self.node_uris[index]
-        return RaftClient(uri)
+        spec = self.servers[index]
+        if spec['client'] is not None:
+            return spec['client']
+        uri = spec['uri']
+        spec['client'] = RaftClient(uri)
+        return spec['client'] 
     
-    async def start_servers(self, in_process=False):
-        for index,server in self.servers.items():
-            sdict = self.servers[index] 
+    async def start_servers(self, targets=None, in_process=False, start_paused=False):
+        for index,spec in self.servers.items():
+            if targets and spec['uri'] not in targets:
+                continue
             if in_process:
-                server = RaftServer(sdict['initial_cluster_config'], sdict['local_config'])
+                server = RaftServer(spec['initial_cluster_config'], spec['local_config'], start_paused)
                 await server.start()
-                sdict['server'] = server
+                spec['server'] = server
             else:
                 this_dir = Path(__file__).parent
                 sfile = Path(this_dir, 'run_server.py')
                 cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}"]
-                work_dir = sdict['local_config'].working_dir
+                work_dir = spec['local_config'].working_dir
                 stdout_file = Path(work_dir,'server.stdout')
                 stderr_file = Path(work_dir,'server.stderr')
                 with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
@@ -74,7 +80,7 @@ class Cluster:
                     print(f"Server {index} started successfully")
                     print(f"  stdout: {stdout_file}")
                     print(f"  stderr: {stderr_file}")
-                    sdict['server_proc'] = process
+                    spec['server_proc'] = process
                 else:
                     print(f"Server {index} failed to start")
                     # Read the error logs
@@ -95,4 +101,20 @@ class Cluster:
             if server['server'] is not None and False:
                 await server['server_proc'].stop()
                 
-            
+    async def direct_command(self, uri, command, *args):
+        full_string = None
+        if command in ["ping", "getpid", "shutdown", "take_power",
+                       "start_raft", "stop_raft", "status", "get_logging_dict"]:
+            full_string = command
+        elif command == "set_logging_level":
+            full_string = command
+            for arg in args:
+                full_string += " {arg}"
+        else:
+            raise Exception(f'command {command} unknown')
+        for index,spec in self.servers.items():
+            if spec['uri'] == uri:
+                client = self.get_client(index)
+                res = await client.direct_server_command(full_string)
+                return res
+        raise Exception(f'could not find server with uri {uri}')

@@ -51,7 +51,6 @@ if __name__=="__main__":
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')
 
-    tx_choices =  ["astream", "aiozmq", "fastapi", "grpc"]
     parser.add_argument('-b', '--base_port', type=int, default=50050,
                         help='Port number for first node in cluster')
     parser.add_argument('-i', '--index', type=int, required=True,
