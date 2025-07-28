@@ -46,7 +46,7 @@ class RaftServerStub:
             self.stopped = True
 
     # RPC method
-    async def run_command(self, command):
+    async def issue_command(self, command):
         # RPC server calls this, we call the deck it calls the dispatcher.
         # This indirection has meaning in real raft setup as the run_command
         # is executed by the cluster leader only after it gets a majority

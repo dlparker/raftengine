@@ -7,10 +7,8 @@ class RPCClient:
         self.port = port
         self.aiozmq_conn = None
         self.aiozmq_uri = f'tcp://{self.host}:{self.port}'
-        print(f"new rpc client {self} at {self.aiozmq_uri}")
         
     async def connect(self):
-        print(f"rpc client {self} connecting")
         self.aiozmq_conn = await aiozmq.rpc.connect_rpc(connect=self.aiozmq_uri)
 
     async def issue_command(self, command):
@@ -24,7 +22,6 @@ class RPCClient:
         """
         if self.aiozmq_conn is None:
             await self.connect()
-        print(f'in issue command with {self.aiozmq_conn}')
         return await self.aiozmq_conn.call.issue_command(command)
 
     async def raft_message(self, message):
@@ -53,7 +50,6 @@ class RPCClient:
     async def close(self):
         """Close the client connection"""
         if self.aiozmq_conn is not None:
-            print(f"closing client {self}")
             self.aiozmq_conn.close()
             await self.aiozmq_conn.wait_closed()
             self.aiozmq_conn = None

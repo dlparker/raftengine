@@ -1,20 +1,5 @@
 #!/usr/bin/env python
 
-async def make_server(helper, reload=False):
-    storage_dir = "/tmp"
-    file_path = Path(storage_dir, 'counters.pickle')
-    if file_path.exists() and not reload:
-        file_path.unlink()
-    counters = Counters(storage_dir)
-    dispatcher = Dispatcher(counters)
-    server = await helper.get_rpc_server(50040, dispatcher)
-    await helper.start_server_task()
-    return server
-
-async def make_client(helper):
-    rpc_client = await helper.rpc_client_maker('localhost', 50040)
-    collector = Collector(rpc_client)
-    return collector
 
 async def main(RunTools):
     server = await RunTools.make_server()

@@ -339,20 +339,21 @@ class Leader(BaseRole):
                     return
             # Message was part of a broadcast, so see what needs to be done
             # with that
-            bcast_tracker = self.broadcast_trackers[msg_tracker.broadcast_id]
-            bcast_tracker.reply_count += 1
-            if bcast_tracker.reply_count == len(bcast_tracker.followers):
-                self.logger.debug("Broadcast reply from %s last expected", message.sender)
-                del self.broadcast_trackers[msg_tracker.broadcast_id]
-            if len(msg_tracker.log_rec_ids) == 0:
-                self.hb_logger.debug("Heartbeat response from %s", message.sender)
-                if not message.success:
-                    # follower said heartbeat no good, needs backdown
-                    self.logger.info("Heartbeat response from %s no joy, needs backdown", message.sender)
-                    await self.send_backdown(message)
-                    self.logger.debug('After backdown to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
-                                      message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
-                return
+            bcast_tracker = self.broadcast_trackers.get(msg_tracker.broadcast_id, None)
+            if bcast_tracker:
+                bcast_tracker.reply_count += 1
+                if bcast_tracker.reply_count == len(bcast_tracker.followers):
+                    self.logger.debug("Broadcast reply from %s last expected", message.sender)
+                    del self.broadcast_trackers[msg_tracker.broadcast_id]
+                if len(msg_tracker.log_rec_ids) == 0:
+                    self.hb_logger.debug("Heartbeat response from %s", message.sender)
+                    if not message.success:
+                        # follower said heartbeat no good, needs backdown
+                        self.logger.info("Heartbeat response from %s no joy, needs backdown", message.sender)
+                        await self.send_backdown(message)
+                        self.logger.debug('After backdown to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                                          message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
+                    return
             await self.assess_log_vote(msg_tracker)
             local_last = await self.log.get_last_index()
             if message.maxIndex < local_last:

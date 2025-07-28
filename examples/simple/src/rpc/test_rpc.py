@@ -1,21 +1,22 @@
 #!/usr/bin/env python
 async def main(RunTools):
 
-    helper = RPCHelper()
-    server = await RunTools.make_server(helper)
-    collector = await RunTools.make_client(helper)
+    server = await RunTools.make_server()
+    collector,client = await RunTools.make_client()
+    async def shutdown_cb(server):
+        print(f'got callback, server on port {server.port} shutting down')
+    await server.start(shutdown_cb)
     vt = Validator(collector)
     expected = await vt.do_test()
     await collector.pipe.close()
-    await helper.stop_server_task()
-    
-    helper2 = RPCHelper()
-    server2 = await RunTools.make_server(helper2, reload=True)
-    collector2 = await RunTools.make_client(helper2)
+    await server.stop()
+    server2 = await RunTools.make_server(reload=True)
+    await server2.start(shutdown_cb)
+    collector2,client2 = await RunTools.make_client()
     vt2 = Validator(collector2)
-    await vt.do_test(expected)
-    await collector.pipe.close()
-    await helper2.stop_server_task()
+    await vt2.do_test(expected)
+    await collector2.pipe.close()
+    await server2.stop()
     
     
 if __name__=="__main__":
@@ -28,6 +29,5 @@ if __name__=="__main__":
     from base.validator import Validator
     from split_base.collector import Collector
     from split_base.dispatcher import Dispatcher
-    from rpc.rpc_helper import RPCHelper
     from run_tools import RunTools
     asyncio.run(main(RunTools))
