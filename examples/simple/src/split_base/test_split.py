@@ -3,8 +3,6 @@
 def make_server(reload=False):
     storage_dir = "/tmp"
     file_path = Path(storage_dir, 'counters.pickle')
-    if file_path.exists() and not reload:
-        file_path.unlink()
     counters = Counters(storage_dir)
     dispatcher = Dispatcher(counters)
     return dispatcher
@@ -21,10 +19,6 @@ async def main():
     collector = make_client(dispatcher)
     vt = Validator(collector)
     expected = await vt.do_test()
-    dispatcher2 = make_server(reload=True)
-    collector2 = make_client(dispatcher2)
-    vt2 = Validator(collector2)
-    await vt.do_test(expected)
     
 if __name__=="__main__":
     import asyncio

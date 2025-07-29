@@ -2,14 +2,14 @@ import asyncio
 import time
 import json
 from raftengine.api.types import CommandResult
-from rpc.rpc_client import RPCClient
         
 class RaftClient:
 
-    def __init__(self, server_uri, timeout=1.0):
+    def __init__(self, server_uri, rpc_client_class, timeout=1.0):
         self.leader_uri = server_uri
-        self.rpc_client = None
+        self.rpc_client_class = rpc_client_class
         self.timeout = timeout
+        self.rpc_client = None
         
     def get_uri(self):
         return self.leader_uri
@@ -25,18 +25,21 @@ class RaftClient:
         port = int(port)
         host = host.lstrip('/')
         self.leader_uri = uri
-        self.rpc_client = RPCClient(host, port, self.timeout)
+        self.rpc_client = self.rpc_client_class(host, port, self.timeout)
 
     async def close(self):
         if self.rpc_client is not None:
             await self.rpc_client.close()
         self.rpc_client = None
         
-    async def issue_command(self, command:str) -> CommandResult:
+    async def issue_command(self, command:str, max_retries=50, retry_count=0) -> CommandResult:
         if self.rpc_client is None:
             await self.connect()
         raw_result = await self.rpc_client.issue_command(command)
-        result = CommandResult(**json.loads(raw_result))
+        try:
+            result = CommandResult(**raw_result)
+        except:
+            raise Exception(f'cannot convert issue_command rpc result to CommandResult {raw_result}')
         if result.result:
             return result.result
         elif result.error:
@@ -48,13 +51,14 @@ class RaftClient:
             return await self.issue_command(command)
         elif not result.retry:
             raise Exception(f"Command result does not make sense {result.__dict__}")
-        start_time = time.time()
-        while result.retry and time.time() - start_time < 1.0:
-            await asyncio.sleep(0.0001)
-            raw_result = await self.rpc_client.issue_command(command)
-            result = CommandResult(**json.loads(raw_result))
-        if result.retry:
-            raise Exception('could not process message at server, cluster not available')
+
+        # we got a retry, see if we can
+        if retry_count < max_retries:
+            retry_count += 1
+            await asyncio.sleep(0.1)
+            return await self.issue_command(command, max_retries=max_retries, retry_count=retry_count)
+        else:
+            raise Exception('could not process message at server, cluster not available, too many retries')
         
     async def raft_message(self, message:str) -> None:
         if self.rpc_client is None:

@@ -1,6 +1,6 @@
 import os
 import asyncio
-from rpc.rpc_server import RPCServer
+import traceback
 
 class RaftServerStub():
     """
@@ -8,10 +8,10 @@ class RaftServerStub():
     process. It gathers together and initializes the components need to
     run a Raftengine enabled server.
     """
-    def __init__(self, dispatcher, port):
+    def __init__(self, rpc_server_class, dispatcher, port):
         self.dispatcher = dispatcher
         self.port = port
-        self.rpc_server = RPCServer(self)
+        self.rpc_server = rpc_server_class(self)
 
     async def start(self, shutdown_callback=None):
         self.shutdown_callback = shutdown_callback
@@ -43,9 +43,16 @@ class RaftServerStub():
         if command == "getpid":
             return os.getpid()
         if command == "shutdown":
-            loop = asyncio.get_event_loop()
-            loop.call_later(0.001, self.stop)
-            print(f'server on port {self.port} shutting down')
+            async def stopper(delay):
+                await asyncio.sleep(delay)
+                try:
+                    await self.stop()
+                except asyncio.CancelledError:
+                    pass
+                except:
+                    traceback.print_exc()
+            delay = 0.1
+            asyncio.create_task(stopper(delay))
             return "shutting down"
         return command
 

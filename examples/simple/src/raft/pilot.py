@@ -9,7 +9,6 @@ from raftengine.deck.log_control import LogController
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 from raftengine.messages.message_codec import MessageCodec
-from rpc.rpc_client import RPCClient
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.Pilot",
@@ -17,9 +16,10 @@ logger = log_controller.add_logger("raft.Pilot",
 
 class Pilot(PilotAPI):
 
-    def __init__(self, log, dispatcher):
-        self.dispatcher = dispatcher
+    def __init__(self, log, dispatcher, rpc_client_class):
         self.log = log
+        self.dispatcher = dispatcher
+        self.rpc_client_class = rpc_client_class
         self.other_node_clients = {}
         self.msg_index = 0
         self.replies = {}
@@ -109,7 +109,7 @@ class Pilot(PilotAPI):
             host, port = target_uri.split(':')[1:]
             port = int(port)
             host = host.lstrip('/')
-            rpc_client = RPCClient(host, port)
+            rpc_client = self.rpc_client_class(host, port)
             self.other_node_clients[target_uri] = rpc_client
         return self.other_node_clients[target_uri]
 

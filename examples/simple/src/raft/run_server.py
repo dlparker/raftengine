@@ -11,12 +11,13 @@ import sys
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer
+from rpc.run_tools import RunTools as RPCRunTools
 
 
 async def main(args):
     nodes = []
     for pnum in range(args.base_port, args.base_port + 3):
-        nodes.append(f"aiozmq://127.0.0.1:{pnum}")
+        nodes.append(f"{args.transport}://127.0.0.1:{pnum}")
 
     heartbeat_period=10000
     election_timeout_min=20000
@@ -31,7 +32,7 @@ async def main(args):
                                                max_entries_per_message=10,
                                                use_dynamic_config=False)
 
-    work_dir = Path('/tmp', f"counters_raft_server.{args.index}")
+    work_dir = Path('/tmp', f"counters_raft_server.{args.transport}.{args.index}")
     if args.clear_data:
         # already checked for --tell-me-twice above
         if work_dir.exists():
@@ -41,8 +42,12 @@ async def main(args):
         work_dir.mkdir()
     uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
+    rpc_run_tools = RPCRunTools(args.transport)
+    print(rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class())
     server = RaftServer(initial_cluster_config,
-                        LocalConfig(uri=uri, working_dir=work_dir))
+                        LocalConfig(uri=uri, working_dir=work_dir),
+                        rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class()
+                        )
     await server.start()
     while not server.stopped:
         await asyncio.sleep(0.01)
@@ -51,7 +56,7 @@ if __name__=="__main__":
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')
 
-    parser.add_argument('-b', '--base_port', type=int, default=50050,
+    parser.add_argument('-b', '--base_port', type=int, default=50090,
                         help='Port number for first node in cluster')
     parser.add_argument('-i', '--index', type=int, required=True,
                         help='Index of this server node in cluster node list')
@@ -60,6 +65,10 @@ if __name__=="__main__":
     parser.add_argument('--tell-me-twice', action='store_true',
                         help='Really do the dangerous thing requested')
 
+    parser.add_argument('--transport', '-t', 
+                        choices=['astream', 'aiozmq', 'fastapi',],
+                        default='aiozmq',
+                        help='Transport mechanism to use')
     # Parse arguments
     args = parser.parse_args()
 

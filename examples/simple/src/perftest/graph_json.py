@@ -95,6 +95,18 @@ def generate_matplotlib_chart(data: Dict[str, Any], output_file: str) -> None:
                      markersize=6, label='Throughput')
     ax2.tick_params(axis='y', labelcolor=color2)
     
+    # Set reasonable y-axis limits for throughput to avoid misleading visual scaling
+    min_throughput = min(throughputs)
+    max_throughput = max(throughputs)
+    throughput_range = max_throughput - min_throughput
+    # Use either 20% padding or start from 0 if the minimum is close to 0
+    if min_throughput < throughput_range * 0.5:
+        y_min = 0
+    else:
+        y_min = max(0, min_throughput - throughput_range * 0.2)
+    y_max = max_throughput + throughput_range * 0.1
+    ax2.set_ylim(y_min, y_max)
+    
     # Set x-axis to show integer ticks only
     ax1.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     ax1.set_xlim(min(client_counts) - 0.5, max(client_counts) + 0.5)

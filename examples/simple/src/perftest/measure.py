@@ -17,13 +17,11 @@ from raft.run_tools import Cluster
 from split_base.collector import Collector
 from raft.raft_client import RaftClient
 
-async def client_looper(c_index, uri, loops, result_queue, barrier):
-    client = RaftClient(uri)
+async def client_looper(c_index, uri, loops, result_queue, barrier, rpc_client_class):
+    client = RaftClient(uri, rpc_client_class)
     collector = Collector(client)
     # do one to make sure the connection is established
     res = await collector.counter_add('a', 0)
-    if res != 0:
-        raise Exception(f"counter 'a' should have returned 0, not {res}")
     timings = []
     errors = []
     successes = 0
@@ -64,8 +62,8 @@ async def client_looper(c_index, uri, loops, result_queue, barrier):
         print(f"Client {c_index} process failed: {e}")
         result_queue.put({"client_id": c_index, "error": str(e), "successes": 0, "failures": loops})
 
-def client_process(c_index, uri, loops, result_queue, barrier):
-    return asyncio.run(client_looper(c_index, uri, loops, result_queue, barrier))
+def client_process(c_index, uri, loops, result_queue, barrier, rpc_client_class):
+    return asyncio.run(client_looper(c_index, uri, loops, result_queue, barrier, rpc_client_class))
 
 async def one_timing_pass(cluster, num_clients, loops):
 
@@ -80,7 +78,7 @@ async def one_timing_pass(cluster, num_clients, loops):
         for i in range(num_clients):
             p = mp.Process(
                 target=client_process,
-                args=(i, uri, loops, result_queue, barrier)
+                args=(i, uri, loops, result_queue, barrier, cluster.rpc_tools.get_client_class())
             )
             processes.append(p)
             
@@ -132,6 +130,13 @@ async def main():
     parser.add_argument("--step-clients", type=int, help="Increase in client count per step (requires --min-clients and requires --max-clients)", default=1)
     parser.add_argument("-l", "--loops", type=int, default=1, help="Number of loops for each client")
     parser.add_argument("--json-output", type=str, help="Export results to JSON file (incompatible with --prep_only)")
+    parser.add_argument('--transport', '-t', 
+                        choices=['astream', 'aiozmq', 'fastapi',],
+                        default='aiozmq',
+                        help='Transport mechanism to use')
+    parser.add_argument('-b', '--base_port', type=int, default=55555,
+                        help='Port number for first node in cluster')
+    parser.add_argument("-p", "--pause", type=int, default=1000, help="Milliseconds to pause between sets")
     
     args = parser.parse_args()
 
@@ -153,20 +158,24 @@ async def main():
         client_counts = [args.clients if args.clients is not None else 5]
 
     
-    cluster = Cluster(base_port=55555, clear=True)
-    cluster.setup_servers()
+    cluster = Cluster(transport=args.transport, base_port=args.base_port)
     client_0 = cluster.get_client(index=0)
     try:
         pid = await client_0.direct_server_command("getpid")
+        print(f"Call to server 0 direct_server_command('getpid') got '{pid}' in reply")
         pre_started = True
-    except TimeoutError:
+    except (TimeoutError, OSError):
         pre_started = False
+        print("starting servers")
         await cluster.start_servers()
+        if args.transport == 'fastapi':
+            # starts slow
+            await asyncio.sleep(0.25)
         res = await client_0.direct_server_command("take_power")
         print(f"Call to server 0 direct_server_command('take_power') got '{res}' in reply")
     all_results = []
     try:
-        for num_clients in client_counts:
+        for index,num_clients in enumerate(client_counts):
             summary = await one_timing_pass(cluster, num_clients, args.loops)
             # Print summary for this client count
             print(f"\nResults for {num_clients} clients:")
@@ -179,7 +188,10 @@ async def main():
             if summary["errors"]:
                 print(f"  Errors: {summary['errors']}")
             all_results.append(summary)
-            
+            ptime = args.pause/1000.0
+            if index < len(client_counts) - 1:
+                print(f"pausing {ptime:.4f}")
+                await asyncio.sleep(ptime)
         if args.json_output:
             if len(client_counts) > 1:
                 # Multiple runs - export as array
@@ -198,6 +210,9 @@ async def main():
         traceback.print_exc()
     if not pre_started:
         await cluster.stop_servers()
+        if args.transport == 'fastapi':
+            #  give it time to process client session closes
+            await asyncio.sleep(0.25)
     
     
 if __name__=="__main__":

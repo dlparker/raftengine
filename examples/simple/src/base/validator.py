@@ -1,3 +1,4 @@
+import string
 from base.counters import Counters
 
 class Validator:
@@ -5,20 +6,19 @@ class Validator:
     def __init__(self, counters):
         self.counters = counters
 
-    async def do_test(self, expected=None):
-        if not expected:
-            assert await self.counters.counter_add('a', 0) == 0
-            assert await self.counters.counter_add('a', 1) == 1
-            assert await self.counters.counter_add('a', -1) == 0
-            assert await self.counters.counter_add('b', 10) == 10
-            res = await self.counters.get_counters()
-            assert len(res) == 2
-            assert res['a'] == 0
-            assert res['b'] == 10
-            return res
-        else:
-            for key in expected:
-                res = await self.counters.counter_add(key, 0)
-                assert res == expected[key]
-            return None
-        
+    async def do_test(self):
+        orig = {}
+        mod = {}
+        for key in string.ascii_letters:
+            orig[key] = await self.counters.counter_add(key, 0)
+
+        res = await self.counters.get_counters()
+        for key in string.ascii_letters:
+            assert key in res
+            assert res[key] == orig[key]
+            mod[key] = await self.counters.counter_add(key, 1)
+            assert mod[key] == orig[key] + 1
+        mod_res = await self.counters.get_counters()
+        for key in string.ascii_letters:
+            assert mod_res[key] == mod[key] 
+        print

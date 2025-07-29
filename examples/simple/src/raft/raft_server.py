@@ -14,8 +14,6 @@ from raftengine.deck.log_control import LogController
 
 from base.counters import Counters
 from split_base.dispatcher import Dispatcher
-from rpc.rpc_server import RPCServer
-from rpc.rpc_client import RPCClient
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.RaftServer",
@@ -28,19 +26,21 @@ from raft.sqlite_log import SqliteLog
 
 class RaftServer:
 
-    def __init__(self, initial_cluster_config, local_config, start_paused=False):
+    def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, start_paused=False):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
         self.start_paused = start_paused
+        self.rpc_server_class = rpc_server_class
+        self.rpc_client_class = rpc_client_class
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.log = SqliteLog(self.raft_log_file)
         self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
-        self.pilot = Pilot(self.log, self.dispatcher)
+        self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)
         self.deck = Deck(self.initial_config, self.local_config, self.pilot)
-        self.rpc_server = RPCServer(self)
+        self.rpc_server = self.rpc_server_class(self)
         self.timers_running = False
         self.stopped = False
 
@@ -64,8 +64,6 @@ class RaftServer:
         
     # local method reachable through local_command RPC
     async def stop(self):
-        self.profiler.disable()
-        self.profiler.dump_stats(Path(self.working_dir, 'profile.prof'))
         async def stopper(delay):
             try:
                 await asyncio.sleep(delay)
@@ -84,9 +82,10 @@ class RaftServer:
         reply = None
         try:
             result = await self.deck.run_command(command, 1.0)
-            # this is a CommandResult, convert it to a dict and serialize
-            reply = json.dumps(result, default=lambda o:o.__dict__)
-            print(reply)
+            # this is a CommandResult, convert it to a dict for serialization
+            logger.debug(result)
+            reply = result.__dict__
+            logger.debug(reply)
         except Exception as e:
             logger.error(traceback.format_exc())
             # target server not reachable due to any error is a condition to tolerate

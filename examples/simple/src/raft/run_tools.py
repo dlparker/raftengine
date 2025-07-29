@@ -4,21 +4,22 @@ import shutil
 from pathlib import Path
 from subprocess import Popen
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
+from rpc.run_tools import RunTools as RPCRunTools
 from raft.raft_server import RaftServer
 from raft.raft_client import RaftClient
 
 class Cluster:
 
-    def __init__(self, base_port=59050, clear=False):
+    def __init__(self, transport, base_port=59050):
+        self.transport = transport
         self.base_port = base_port
+        self.rpc_tools = RPCRunTools(transport)
         self.node_uris = []
         self.servers = {}
-        self.clear_on_start = clear
         for port in range(base_port, base_port + 3):
-            uri = f"aiozmq://localhost:{port}"
+            uri = f"{transport}://localhost:{port}"
             self.node_uris.append(uri)
             
-    def setup_servers(self):
         heartbeat_period=10000
         election_timeout_min=20000
         election_timeout_max=20001
@@ -31,12 +32,8 @@ class Cluster:
                                                         max_entries_per_message=10,
                                                         use_dynamic_config=False)
         for index,uri in enumerate(self.node_uris):
-            work_dir = Path('/tmp', f"counters_raft_server.{index}")
-            if self.clear_on_start:
-                if work_dir.exists():
-                    shutil.rmtree(work_dir)
-                work_dir.mkdir()
-            elif not work_dir.exists():
+            work_dir = Path('/tmp', f"counters_raft_server.{self.transport}.{index}")
+            if not work_dir.exists():
                 work_dir.mkdir()
             
             self.servers[index] = {
@@ -48,27 +45,31 @@ class Cluster:
                 'client': None
             }
 
-
     def get_client(self, index=0):
-        spec = self.servers[index]
-        if spec['client'] is not None:
-            return spec['client']
-        uri = spec['uri']
-        spec['client'] = RaftClient(uri, timeout=0.1)
-        return spec['client'] 
+        if index in self.servers:
+            spec = self.servers[index]
+            if spec['client'] is not None:
+                return spec['client']
+        uri = self.node_uris[index]
+        client = RaftClient(uri, self.rpc_tools.get_client_class(), timeout=0.1)
+        if index in self.servers:
+            spec['client'] = client
+        return client
     
     async def start_servers(self, targets=None, in_process=False, start_paused=False):
         for index,spec in self.servers.items():
             if targets and spec['uri'] not in targets:
                 continue
             if in_process:
-                server = RaftServer(spec['initial_cluster_config'], spec['local_config'], start_paused)
+                server = RaftServer(spec['initial_cluster_config'], spec['local_config'],
+                                    self.rpc_tool.get_server_class(), self.rpc_tool.get_client_class(),
+                                    start_paused)
                 await server.start()
                 spec['server'] = server
             else:
                 this_dir = Path(__file__).parent
                 sfile = Path(this_dir, 'run_server.py')
-                cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}"]
+                cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}", '-t', self.transport]
                 work_dir = spec['local_config'].working_dir
                 stdout_file = Path(work_dir,'server.stdout')
                 stderr_file = Path(work_dir,'server.stderr')
@@ -77,10 +78,11 @@ class Cluster:
                 # Wait a moment to see if process starts successfully
                 await asyncio.sleep(0.1)
                 if process.poll() is None:  # Process is still running
-                    print(f"Server {index} started successfully")
-                    print(f"  stdout: {stdout_file}")
-                    print(f"  stderr: {stderr_file}")
-                    spec['server_proc'] = process
+                    if False:
+                        print(f"Server {index} started successfully")
+                        print(f"  stdout: {stdout_file}")
+                        print(f"  stderr: {stderr_file}")
+                        spec['server_proc'] = process
                 else:
                     print(f"Server {index} failed to start")
                     # Read the error logs

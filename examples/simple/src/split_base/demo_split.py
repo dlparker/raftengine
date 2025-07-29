@@ -20,7 +20,7 @@ async def main():
     dispatcher = make_server()
     collector = make_client(dispatcher)
     ct = Demo(collector)
-    res = await ct.do_fresh_demo()
+    res = await ct.do_unknown_state_demo()
 
     dispatcher2 = make_server(reload=True)
     collector2 = make_client(dispatcher2)

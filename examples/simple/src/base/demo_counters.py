@@ -3,11 +3,9 @@
 async def main():
     storage_dir = "/tmp"
     file_path = Path(storage_dir, 'counters.pickle')
-    if file_path.exists():
-        file_path.unlink()
     counters = Counters(storage_dir)
     ct = Demo(counters)
-    res = await ct.do_fresh_demo()
+    res = await ct.do_unknown_state_demo()
     counters2 = Counters(storage_dir)
     ct2 = Demo(counters2)
     await ct2.do_reload_demo(res)

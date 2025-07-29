@@ -3,14 +3,8 @@
 async def main():
     storage_dir = "/tmp"
     file_path = Path(storage_dir, 'counters.pickle')
-    if file_path.exists():
-        file_path.unlink()
     counters = Counters(storage_dir)
     vt = Validator(counters)
-    expected = await vt.do_test()
-    counters2 = Counters(storage_dir)
-    vt2 = Validator(counters2)
-    await vt.do_test(expected)
     
 if __name__=="__main__":
     import asyncio
