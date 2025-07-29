@@ -45,6 +45,13 @@ class Cluster:
                 'client': None
             }
 
+    def clear_server_files(self):
+        for index, spec in self.servers.items():
+            work_dir = Path(spec['local_config'].working_dir)
+            if work_dir.exists():
+                shutil.rmtree(work_dir)
+            work_dir.mkdir()
+            
     def get_client(self, index=0):
         if index in self.servers:
             spec = self.servers[index]
