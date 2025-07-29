@@ -6,9 +6,10 @@ from rpc.rpc_client import RPCClient
         
 class RaftClient:
 
-    def __init__(self, server_uri):
+    def __init__(self, server_uri, timeout=1.0):
         self.leader_uri = server_uri
         self.rpc_client = None
+        self.timeout = timeout
         
     def get_uri(self):
         return self.leader_uri
@@ -24,7 +25,7 @@ class RaftClient:
         port = int(port)
         host = host.lstrip('/')
         self.leader_uri = uri
-        self.rpc_client = RPCClient(host, port)
+        self.rpc_client = RPCClient(host, port, self.timeout)
 
     async def close(self):
         if self.rpc_client is not None:

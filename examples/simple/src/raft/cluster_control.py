@@ -15,7 +15,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Counters Raft Server Cluster Control")
 
     
-    parser.add_argument('command', choices=['start', 'shutdown', 'status', 'getpid',
+    parser.add_argument('command', choices=['start', 'stop', 'status', 'getpid',
                                             'start_paused', 'start_raft', 'take_power',
                                             'get_logging_dict', 'set_debug_logging',
                                             'set_info_logging', 'set_warning_logging', 'set_error_logging'],
@@ -46,27 +46,35 @@ async def main():
         start_paused = True 
     if args.command == "start" or args.command == "start_paused":
         await cluster.start_servers(targets=target_nodes, start_paused=start_paused)
+
+    async def direct_command(uri, *args):
+        try:
+            res = await cluster.direct_command(uri, *args)
+        except TimeoutError:
+            res = f"Direct command to {uri} timed out, target probably not running"
+        return res
+    
     if args.command == "start" and args.full_start and args.all:
         for uri in nodes:
             await cluster.direct_command(uri, "start_raft")
         u0  = nodes[0]
         await asyncio.sleep(0.01)
-        await cluster.direct_command(uri, "take_power")
-    if args.command in ['shutdown', 'status','getpid', 'start_raft', 'take_power', 'get_logging_dict']:
+        await direct_command(uri, "take_power")
+    if args.command in ['stop', 'status', 'getpid', 'start_raft', 'take_power', 'get_logging_dict']:
         for uri in target_nodes:
-            print(await cluster.direct_command(uri, args.command))
+            print(await direct_command(uri, args.command))
     elif args.command == 'set_debug_logging':
         for uri in target_nodes:
-            print(await cluster.direct_command(uri, "set_logging_level", 'debug'))
+            print(await direct_command(uri, "set_logging_level", 'debug'))
     elif args.command == 'set_info_logging':
         for uri in target_nodes:
-            print(await cluster.direct_command(uri, "set_logging_level", 'info'))
+            print(await direct_command(uri, "set_logging_level", 'info'))
     elif args.command == 'set_warning_logging':
         for uri in target_nodes:
-            print(await cluster.direct_command(uri, "set_logging_level", 'warning'))
+            print(await direct_command(uri, "set_logging_level", 'warning'))
     elif args.command == 'set_error_logging':
         for uri in target_nodes:
-            print(await cluster.direct_command(uri, "set_logging_level", 'error'))
+            print(await direct_command(uri, "set_logging_level", 'error'))
 
 if __name__=="__main__":
     asyncio.run(main())

@@ -54,7 +54,7 @@ class Cluster:
         if spec['client'] is not None:
             return spec['client']
         uri = spec['uri']
-        spec['client'] = RaftClient(uri)
+        spec['client'] = RaftClient(uri, timeout=0.1)
         return spec['client'] 
     
     async def start_servers(self, targets=None, in_process=False, start_paused=False):
@@ -95,7 +95,7 @@ class Cluster:
     async def stop_servers(self):
         for index,server in self.servers.items():
             client = self.get_client(index)
-            shut_res = await client.direct_server_command("shutdown")
+            shut_res = await client.direct_server_command("stop")
             print(f"shutdown request for server {index} got {shut_res}")
             await client.close()
             if server['server'] is not None and False:
@@ -103,7 +103,7 @@ class Cluster:
                 
     async def direct_command(self, uri, command, *args):
         full_string = None
-        if command in ["ping", "getpid", "shutdown", "take_power",
+        if command in ["ping", "getpid", "stop", "take_power",
                        "start_raft", "stop_raft", "status", "get_logging_dict"]:
             full_string = command
         elif command == "set_logging_level":

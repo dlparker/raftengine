@@ -117,7 +117,7 @@ class RaftServer:
             return "pong"
         elif command == "getpid":
             return os.getpid()
-        elif command == "shutdown":
+        elif command == "stop":
             async def shutter():
                 await asyncio.sleep(0.001)
                 logger.warning("Got signal to shutdown, stopping RaftServer")
