@@ -156,14 +156,13 @@ class Cluster:
         status_recs = {}
         for index,server in self.servers.items():
             client = self.get_client(index)
-            try:
-                status = await client.direct_server_command("status")
-                status_recs[index] = status
-                if status['is_leader']:
-                    leader_index = index
-                    leader_spec = server
-            except Exception as e:
-                return False, f"server {index} {server['uri']} status check got error {e}"
+            status = await client.direct_server_command("status")
+            if not isinstance(status, dict):
+                import ipdb; ipdb.set_trace()
+            status_recs[index] = status
+            if status['is_leader']:
+                leader_index = index
+                leader_spec = server
         if leader_index is None:
             return False, f"No server reports that it is leader, probably need to issue take_power command"
         for index,status in status_recs.items():

@@ -49,12 +49,20 @@ async def main(args):
                         rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class()
                         )
     await server.start()
-    while not server.stopped:
-        await asyncio.sleep(0.01)
-
+    try:
+        while not server.stopped:
+            await asyncio.sleep(0.01)
+    except KeyboardInterrupt:
+        await server.stop()
+        start_time = time.time() 
+        while not server.stopped and time.time() - start_time < 2.0:
+            await asyncio.sleep(0.01)
+        if not server.stopped:
+            raise Exception('could not stop server in two seconds')
+        
 if __name__=="__main__":
     import uvloop;
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    #asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')

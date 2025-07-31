@@ -49,8 +49,13 @@ class RaftServer:
         self.rpc_server = self.rpc_server_class(self)
         self.timers_running = False
         self.stopped = False
+        self.stopping = False
+        self.stop_reply_sent = False
         with open(Path(self.working_dir, 'server.pid'), 'w') as f:
             f.write(f"{os.getpid()}")
+        print(f"Raft server on {self.uri} created\n")
+        print(f"   working_dir={self.working_dir}")
+        print(f"   nodes = {self.initial_config.node_uris}")
             
 
     # local only method
@@ -61,6 +66,9 @@ class RaftServer:
             await self.log.start()
             if not self.start_paused:
                 await self.deck.start()
+            print(f"Raft server on {self.uri} started\n")
+            config = await self.deck.cluster_ops.get_cluster_config()
+            print(f"   config = {json.dumps(config, indent=4, default=lambda o:o.__dict__)}")
             port = self.uri.split(':')[-1]
             await self.rpc_server.start(port)
             self.stopped = False
@@ -73,20 +81,31 @@ class RaftServer:
         
     # local method reachable through local_command RPC
     async def stop(self):
-        async def stopper(delay):
+        async def stopper():
+            start_time = time.time()
+            while time.time() - start_time  < 2.0 and not self.stop_reply_sent:
+                asyncio.sleep(0.01)
+            if not self.stop_reply_sent:
+                logger.error(f"Never saw sent flag on stopping")
             try:
-                await asyncio.sleep(delay)
-                await self.stop_raft()
+                logger.warning("TEMP DEBUG: calling rpc_server.stop()")
                 await self.rpc_server.stop()
+                logger.warning("TEMP DEBUG: calling stop_raft()")
+                await self.stop_raft()
+                logger.warning("TEMP DEBUG: rpc_server.stop() completed")
                 logger.warning("Raft server operations stopped on stop_server local command RPC")
                 pidfile = Path(self.working_dir, 'server.pid')
                 if pidfile.exists():
                     pidfile.unlink()
-            except:
+                logger.warning("TEMP DEBUG: stopper() completed successfully")
+            except Exception as e:
+                logger.error(f"TEMP DEBUG: Exception in stopper: {e}")
                 traceback.print_exc()
-        delay = 0.05
-        asyncio.create_task(stopper(delay))
-        return delay
+        if self.stopping:
+            return
+        self.stopping = True
+        asyncio.create_task(stopper())
+
     
         
     # RPC method
@@ -132,14 +151,26 @@ class RaftServer:
             return os.getpid()
         elif command == "stop":
             async def shutter():
+                logger.warning("TEMP DEBUG: shutter() starting")
                 await asyncio.sleep(0.001)
                 logger.warning("Got signal to shutdown, stopping RaftServer")
                 try:
-                    await self.stop()
-                except:
+                    logger.warning("TEMP DEBUG: shutter calling self.stop()")
+                    # Wait for the stopper task to complete instead of just creating it
+                    stopper_delay = await self.stop()
+                    logger.warning(f"TEMP DEBUG: self.stop() returned delay {stopper_delay}")
+                    
+                    # Wait for the stopper task to actually complete
+                    await asyncio.sleep(stopper_delay + 0.5)  # Extra time for gRPC cleanup
+                    logger.warning("TEMP DEBUG: shutter waited for stopper completion")
+                    
+                except Exception as e:
+                    logger.error(f"TEMP DEBUG: Exception in shutter self.stop(): {e}")
                     traceback.print_exc()
-                await asyncio.sleep(0.01)
+                logger.warning("TEMP DEBUG: shutter waiting before exit")
+                await asyncio.sleep(0.1)  # Additional safety margin
                 logger.warning("Got signal to shutdown, exiting")
+                logger.warning("TEMP DEBUG: shutter raising SystemExit")
                 raise SystemExit(0)
             asyncio.create_task(shutter())
             print(f'server {self.uri} shutting down')

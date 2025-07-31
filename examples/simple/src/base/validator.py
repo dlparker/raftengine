@@ -21,4 +21,4 @@ class Validator:
         mod_res = await self.counters.get_counters()
         for key in string.ascii_letters:
             assert mod_res[key] == mod[key] 
-        print
+        return mod_res

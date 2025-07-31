@@ -14,32 +14,52 @@ from split_base.collector import Collector
 from base.validator import Validator
 
 async def main(args):
+
     cluster = Cluster(transport=args.transport, base_port=args.base_port)
     started_servers = False
-    try:
-        client_0 = cluster.get_client(index=0)
-        pid = await client_0.direct_server_command("getpid")
-        print(f"Call to server 0 direct_server_command('getpid') got {pid} in reply, not starting servers")
-    except:
-        traceback.format_exc()
+    cluster_ready = False
+    ready, reason = await cluster.check_cluster_ready()
+    if ready:
+        print(f"Cluster reports ready {reason}", flush=True)
+        cluster_ready = True
+    else:
+        print(f"Cluster reports not ready {reason}", flush=True)
+        if "take_power" in reason:
+            await cluster.elect_leader(0)
+            ready, reason = await cluster.check_cluster_ready()
+            if not ready:
+                raise Exception('cluster running but did not elect a leader')
+            cluster_ready = True
+        else:
+            print("will start cluster")
+
+    if not cluster_ready:
         cluster.clear_server_files()
         await cluster.start_servers()
         started_servers = True
         start_time = time.time()
+        ready = False
         while time.time() - start_time < 3.0:
             await asyncio.sleep(0.1)
-            try:
-                client_0 = cluster.get_client(index=0)
-                pid = await client_0.direct_server_command("getpid")
+            ready, reason = await cluster.check_cluster_ready()
+            if ready:
                 break
-            except:
-                pass
-        res = await client_0.direct_server_command("take_power")
-        print(f"Call to server 0 direct_server_command('take_power') got '{res}' in reply")
+            if 'take_power' in reason:
+                print('cluster running, election needed')
+                await cluster.elect_leader(0)
+        if not ready:
+            raise Exception('could not start cluster and run election in 3 seconds')
+
+    # we get a client to node 0, which may not be the leader,
+    # trusting in redirect logic to send us to the right node
+    client_0 = cluster.get_client(0)
     collector = Collector(client_0)
+
     vt = Validator(collector)
     expected = await vt.do_test()
-    await cluster.stop_servers()
+    print(f'test complete, returned {expected}')
+    if started_servers:
+        await cluster.stop_servers()
     
     
 if __name__=="__main__":
