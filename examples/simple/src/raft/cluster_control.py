@@ -8,7 +8,7 @@ src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raftengine.deck.log_control import LogController
 log_controller = LogController.make_controller()
-from run_tools import Cluster
+from cluster import Cluster
 from split_base.collector import Collector
 from base.demo import Demo
 from rpc.run_tools import RunTools
@@ -26,7 +26,7 @@ async def main():
     
     
     parser.add_argument('command', choices=['start', 'stop', 'status', 'getpid', 'dump_status',
-                                            'start_paused', 'start_raft', 'take_power',
+                                            'start_paused', 'start_raft', 'take_power', 'get_leader',
                                             'get_logging_dict', 'set_debug_logging',
                                             'set_info_logging', 'set_warning_logging', 'set_error_logging'],
                         help='Command to execute')
@@ -89,16 +89,29 @@ async def main():
     if args.command == "start" and args.full_start and args.all:
         for uri in nodes:
             await cluster.direct_command(uri, "start_raft")
-        u0  = nodes[0]
+        uri_0  = nodes[0]
         await asyncio.sleep(0.01)
-        await direct_command(uri, "take_power")
-    if args.command in ['stop', 'status', 'getpid', f'dump_status', 'start_raft', 'take_power', 'get_logging_dict']:
+        await direct_command(uri_0, "take_power")
+    if args.command in ['stop', 'status', 'getpid', f'dump_status', 'start_raft', 'take_power',
+                        'get_logging_dict']:
         for uri in target_nodes:
             result = await direct_command(uri, args.command)
             if args.command in ("status", "dump_status"):
                 print(json.dumps(result, indent=2))
             else:
                 print(result)
+    elif args.command == "get_leader":
+        uri_0  = nodes[0]
+        status = await direct_command(uri_0, 'status')
+        if not isinstance(status, dict):
+            print(f"error: {status}")
+        else:
+            leader = None
+            if status['leader_uri']:
+                print(status['leader_uri'])
+            else:
+                print('error: no leader')
+            
     elif args.command == 'set_debug_logging':
         for uri in target_nodes:
             print(await direct_command(uri, "set_logging_level", 'debug'))

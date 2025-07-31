@@ -20,7 +20,9 @@ class RaftClient:
         elif uri == self.leader_uri and self.rpc_client is not None:
             return
         if self.rpc_client is not None:
-            asyncio.create_task(self.rpc_client.stop())
+            c = self.rpc_client
+            self.rpc_client = None
+            asyncio.create_task(c.close())
         host, port = uri.split(':')[1:]
         port = int(port)
         host = host.lstrip('/')

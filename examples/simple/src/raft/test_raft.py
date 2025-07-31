@@ -9,7 +9,7 @@ src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raftengine.deck.log_control import LogController
 log_controller = LogController.make_controller()
-from run_tools import Cluster
+from cluster import Cluster
 from split_base.collector import Collector
 from base.validator import Validator
 
