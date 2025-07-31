@@ -44,11 +44,6 @@ async def setup_and_validate_cluster(cluster):
 
 async def stop_cluster(cluster):
     await cluster.stop_servers()
-    try:
-        client = self.get_client(0)
-        pid = await client.direct_server_command("getpid")
-    except:
-        pass
 
 async def run_client_test(client_count, loops_per_client, warmup, transport, base_port, temp_json_file):
     """Run a single client test and return the results"""
@@ -142,6 +137,7 @@ async def main():
         
         temp_json_file = Path(f"/tmp/client_runner_temp_{int(time.time())}.json")
         
+        cluster_running = False
         for client_count in range(args.min_clients, args.max_clients + 1, args.clients_step):
             test_start = time.time()
             print(f"\n=== Testing with {client_count} clients ===")
@@ -149,7 +145,7 @@ async def main():
             try:
                 # Setup cluster for this test
                 await setup_and_validate_cluster(cluster)
-                
+                cluster_running = True
                 # Calculate loops per client
                 loops_per_client = max(1, args.loops // client_count)
                 
@@ -170,6 +166,7 @@ async def main():
                 print(f"✓ Test with {client_count} clients completed successfully")
 
                 await stop_cluster(cluster)
+                cluster_running = False
                 await asyncio.sleep(0.1)
             except Exception as e:
                 print(f"✗ Test with {client_count} clients failed: {e}")
@@ -191,12 +188,12 @@ async def main():
         traceback.print_exc()
     
     finally:
-        # Stop cluster
-        try:
-            print("\nStopping cluster...")
-            await cluster.stop_servers()
-        except Exception as e:
-            print(f"Error stopping cluster: {e}")
+        if cluster_running:
+            try:
+                print("\nStopping cluster...")
+                await cluster.stop_servers()
+            except Exception as e:
+                print(f"Error stopping cluster: {e}")
         
         # Finalize output
         test_end_time = datetime.now()

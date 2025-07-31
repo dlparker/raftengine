@@ -115,8 +115,11 @@ class Cluster:
     async def stop_servers(self):
         for index,server in self.servers.items():
             client = self.get_client(index)
-            shut_res = await client.direct_server_command("stop")
-            print(f"shutdown request for server {index} got {shut_res}")
+            try:
+                shut_res = await client.direct_server_command("stop")
+                print(f"shutdown request for server {index} got {shut_res}")
+            except Exception as e:
+                print(f"shutdown request for server {index} got exception {e}")
             await client.close()
             if server['server'] is not None and False:
                 await server['server_proc'].stop()
@@ -184,6 +187,9 @@ class Cluster:
         for index,spec in self.servers.items():
             if spec['uri'] == uri:
                 client = self.get_client(index)
-                res = await client.direct_server_command(full_string)
+                try:
+                    res = await client.direct_server_command(full_string)
+                except Exception as e:
+                    raise Exception("Error: sending command to {uri} failed, may not be running")
                 return res
         raise Exception(f'could not find server with uri {uri}')

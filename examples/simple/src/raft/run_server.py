@@ -48,11 +48,18 @@ async def main(args):
                         LocalConfig(uri=uri, working_dir=work_dir),
                         rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class()
                         )
-    await server.start()
     try:
+        await server.start()
         while not server.stopped:
-            await asyncio.sleep(0.01)
+            try:
+                await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                await server.stop()
+                break
+                
+                
     except KeyboardInterrupt:
+        print("Cntl-c, trying to stop server", flush=True)
         await server.stop()
         start_time = time.time() 
         while not server.stopped and time.time() - start_time < 2.0:
