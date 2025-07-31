@@ -15,7 +15,6 @@ from dev_tools.triggers import TriggerSet
 from dev_tools.operations import SimpleOps
 from dev_tools.memory_log import MemoryLog
 from dev_tools.sqlite_log import SqliteLog
-from raftengine.lsfs.lsfs_raft_log import LSFSRaftLog
 
 class PausingServer(PilotAPI):
 
@@ -536,12 +535,6 @@ def setup_log(server, use_log_class=MemoryLog):
         if path.exists():
             path.unlink()
         log = SqliteLog(path)
-    elif use_log_class == LSFSRaftLog:
-        path = Path(path_root, "log.lsfs")
-        if path.exists():
-            for p in path.glob("*"):
-                p.unlink()
-        log = LSFSRaftLog(path)
     else:
         raise Exception(f"don't know log type {self.use_log}")
     return log

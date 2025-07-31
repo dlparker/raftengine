@@ -138,6 +138,7 @@ async def setup_cluster(args):
         sys.exit(1)  # Panic/exit as per your instructions
     except (TimeoutError, OSError):
         print("No existing servers detected. Starting servers...")
+        cluster.clear_server_files()
         await cluster.start_servers()
         if args.transport == 'fastapi':
             # starts slow

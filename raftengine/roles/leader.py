@@ -328,7 +328,7 @@ class Leader(BaseRole):
                         return
                     # not caught up, try some more log records
                     await self.send_catchup(message)
-                    self.logger.info('After catchup to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
+                    self.logger.info('After non-broadcast to %s node_tracker.nextIndex = %d node_tracker.matchIndex = %d',
                                       message.sender, node_tracker.nextIndex, node_tracker.matchIndex)
                     return
                 else:
@@ -371,6 +371,7 @@ class Leader(BaseRole):
     async def assess_log_vote(self, msg_tracker):
         reply = msg_tracker.reply
         trackers = []
+            
         for entry in msg_tracker.message.entries:
             # there will be no vote tracker if the log record has already
             # been committed, means we are just getting node caught up, not voting
@@ -393,8 +394,6 @@ class Leader(BaseRole):
                 if vote_tracker.votes.get(uri, False):
                     ayes += 1
             if ayes >= win_count:
-                self.logger.debug('%s Reply from %s completes commit quorum on index %d, doing commit',
-                                  self.my_uri(), reply.sender, vote_tracker.log_rec.index)
                 await self.process_ready_log_record(vote_tracker.log_rec)
 
     async def process_ready_log_record(self, log_rec):
@@ -442,7 +441,7 @@ class Leader(BaseRole):
             result = None
             error_data = None
             self.logger.debug("%s applying command committed at index %d", self.my_uri(),
-                             await self.log.get_last_index())
+                              log_record.index)
             processor = self.deck.get_processor()
             try:
                 result,error_data = await processor.process_command(log_record.command, log_record.serial)
@@ -461,9 +460,9 @@ class Leader(BaseRole):
                 await self.report_command_result(log_record, result, run_error)
                 return
             else:
+                await self.log.mark_applied(log_record.index)
                 self.logger.debug("%s running command produced no error, apply_index is now %s",
                                   self.my_uri(), await self.log.get_applied_index())
-                await self.log.mark_applied(log_record.index)
             await self.report_command_result(log_record, result, error_data)
         except: # pragma: no cover  Hard to make this happen and it has little effect except during dev
             self.logger.error(traceback.format_exc())
@@ -680,20 +679,22 @@ class Leader(BaseRole):
                 self.logger.debug("%s command result ready for serial %d for log index %d", self.my_uri(),
                          command_rec['serial'], log_rec.index)
                 return result
-            except asyncio.TimeoutError:
+            except (asyncio.TimeoutError, asyncio.exceptions.CancelledError):
                 remaining_wait = timeout - (time.time() - start_time)
-                if remaining_wait <= 0:
-                    self.logger.warning("%s command timeout for log index %d", self.my_uri(), log_rec.index)
-                    async with self.active_commands_lock:
-                        if log_rec.index in self.active_commands:
-                            del self.active_commands[log_rec.index]
-                    return CommandResult(
-                        command=log_rec.command,
-                        timeout_expired=True,
-                        result=None,
-                        error=None,
-                        redirect=None
-                    )
+                retry =  [True if remaining_wait > 0 else False ]
+                timeout = [True if remaining_wait <= 0 else False ]
+                self.logger.warning("%s command timeout for log index %d", self.my_uri(), log_rec.index)
+                async with self.active_commands_lock:
+                    if log_rec.index in self.active_commands:
+                        del self.active_commands[log_rec.index]
+                return CommandResult(
+                    command=log_rec.command,
+                    timeout_expired=timeout,
+                    retry=retry,
+                    result=None,
+                    error=None,
+                    redirect=None
+                )
 
     async def report_command_result(self, log_rec, result, error_data):
         async with self.active_commands_lock:

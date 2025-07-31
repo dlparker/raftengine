@@ -140,7 +140,6 @@ class ClientFollower:
             
             if mtype == "command":
                 result = await self.issue_command(message)
-                print(f'issue_command result is {result}')
             elif mtype == "direct_server_command":
                 result = await self.direct_server_command(message)
             elif mtype == "raft_message":

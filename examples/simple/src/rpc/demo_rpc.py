@@ -54,7 +54,7 @@ if __name__=="__main__":
     from split_base.dispatcher import Dispatcher
     parser = argparse.ArgumentParser(description='RPC simple test tool')
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi',],
+                        choices=['astream', 'aiozmq', 'fastapi', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     args = parser.parse_args()

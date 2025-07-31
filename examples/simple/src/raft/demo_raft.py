@@ -2,6 +2,7 @@
 import asyncio
 from pathlib import Path
 import sys
+import time
 import argparse
 import traceback
 src_dir = Path(__file__).parent.parent
@@ -15,18 +16,41 @@ from base.demo import Demo
 async def main(args):
     cluster = Cluster(transport=args.transport, base_port=args.base_port)
     started_servers = False
-    try:
-        client_0 = cluster.get_client(index=0)
-        pid = await client_0.direct_server_command("getpid")
-        print(f"Call to server 0 direct_server_command('getpid') got {pid} in reply, not starting servers")
-    except:
-        traceback.format_exc()
+    cluster_ready = False
+    ready, reason = await cluster.check_cluster_ready()
+    if ready:
+        print(f"Cluster reports ready {reason}", flush=True)
+        cluster_ready = True
+    else:
+        print(f"Cluster reports not ready {reason}", flush=True)
+        if "take_power" in reason:
+            await cluster.elect_leader(0)
+            ready, reason = await cluster.check_cluster_ready()
+            if not ready:
+                raise Exception('cluster running but did not elect a leader')
+        else:
+            print("will start cluster")
+
+    if not cluster_ready:
+        cluster.clear_server_files()
         await cluster.start_servers()
         started_servers = True
-        await asyncio.sleep(0.2)
-        client_0 = cluster.get_client(index=0)
-        res = await client_0.direct_server_command("take_power")
-        print(f"Call to server 0 direct_server_command('take_power') got '{res}' in reply")
+        start_time = time.time()
+        ready = False
+        while time.time() - start_time < 3.0:
+            await asyncio.sleep(0.1)
+            ready, reason = await cluster.check_cluster_ready()
+            if ready:
+                break
+            if 'take_power' in reason:
+                print('cluster running, election needed')
+                await cluster.elect_leader(0)
+        if not ready:
+            raise Exception('could not start cluster and run election in 3 seconds')
+
+    # we get a client to node 0, which may not be the leader,
+    # trusting in redirect logic to send us to the right node
+    client_0 = cluster.get_client(0)
     collector = Collector(client_0)
     ct = Demo(collector)
     res = await ct.do_unknown_state_demo()
@@ -39,7 +63,7 @@ if __name__=="__main__":
     parser.add_argument('-b', '--base_port', type=int, default=59090,
                         help='Port number for first node in cluster')
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi',],
+                        choices=['astream', 'aiozmq', 'fastapi','grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     args = parser.parse_args()

@@ -2,6 +2,7 @@
 import asyncio
 import shutil
 from pathlib import Path
+import time
 from subprocess import Popen
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from rpc.run_tools import RunTools as RPCRunTools
@@ -17,7 +18,7 @@ class Cluster:
         self.node_uris = []
         self.servers = {}
         for port in range(base_port, base_port + 3):
-            uri = f"{transport}://localhost:{port}"
+            uri = f"{transport}://127.0.0.1:{port}"
             self.node_uris.append(uri)
             
         heartbeat_period=10000
@@ -63,7 +64,7 @@ class Cluster:
             spec['client'] = client
         return client
     
-    async def start_servers(self, targets=None, in_process=False, start_paused=False):
+    async def start_servers(self, targets=None, in_process=False, start_paused=False, default_logging_level='error'):
         for index,spec in self.servers.items():
             if targets and spec['uri'] not in targets:
                 continue
@@ -77,6 +78,16 @@ class Cluster:
                 this_dir = Path(__file__).parent
                 sfile = Path(this_dir, 'run_server.py')
                 cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}", '-t', self.transport]
+                if default_logging_level == "error":
+                    cmd.append("-E")
+                elif default_logging_level == "warning":
+                    cmd.append("-W")
+                elif default_logging_level == "info":
+                    cmd.append("-I")
+                elif default_logging_level == "debug":
+                    cmd.append("-D")
+                else:
+                    raise Exception(f'invalid default logging level "{default_logging_level}"')
                 work_dir = spec['local_config'].working_dir
                 stdout_file = Path(work_dir,'server.stdout')
                 stderr_file = Path(work_dir,'server.stderr')
@@ -109,18 +120,68 @@ class Cluster:
             await client.close()
             if server['server'] is not None and False:
                 await server['server_proc'].stop()
+
+    async def elect_leader(self, index):
+        running = await self.check_server_ready(index, require_leader=False)
+        if not running:
+            raise Exception(f'bad state, server {index} {self.servers[index]["uri"]} not running')
+        client = self.get_client(index)
+        await client.direct_server_command("take_power")
+        start_time = time.time()
+        time_limit = 0.5
+        while time.time() - start_time < time_limit:
+            status = await client.direct_server_command("status")
+            if status['is_leader']:
+                break
+        if status['is_leader']:
+            return
+        raise Exception(f"server {index} {self.servers[index]['uri']} failed to win election in {time_limit}")
+
+    async def check_server_ready(self, index, require_leader=True):
+        #import ipdb; ipdb.set_trace()
+        server  =  self.servers[index]
+        client = self.get_client(index)
+        try:
+            status = await client.direct_server_command("status")
+        except Exception as e:
+            return False
+        if not require_leader:
+            return  True
+        if status['is_leader'] is False and status['leader_uri'] is None:
+            return False
                 
+    async def check_cluster_ready(self):
+        leader_index = None
+        leader_spec = None
+        status_recs = {}
+        for index,server in self.servers.items():
+            client = self.get_client(index)
+            try:
+                status = await client.direct_server_command("status")
+                status_recs[index] = status
+                if status['is_leader']:
+                    leader_index = index
+                    leader_spec = server
+            except Exception as e:
+                return False, f"server {index} {server['uri']} status check got error {e}"
+        if leader_index is None:
+            return False, f"No server reports that it is leader, probably need to issue take_power command"
+        for index,status in status_recs.items():
+            if status['leader_uri'] != leader_spec['uri']:
+                return False, f"Server {index} {status['uri']} says leader is {status['leader_uri']} but leader is" \
+                    f" {leader_spec['uri']}"
+        return True, f"leader is {leader_spec['uri']}"
+            
     async def direct_command(self, uri, command, *args):
         full_string = None
-        if command in ["ping", "getpid", "stop", "take_power",
-                       "start_raft", "stop_raft", "status", "get_logging_dict"]:
-            full_string = command
-        elif command == "set_logging_level":
+        if command not in RaftServer.direct_commands:
+            raise Exception(f'command {command} unknown, should be in RaftServer.direct_commands {RaftServer.direct_commands}')
+        if command == "set_logging_level":
             full_string = command
             for arg in args:
                 full_string += " {arg}"
         else:
-            raise Exception(f'command {command} unknown')
+            full_string = command
         for index,spec in self.servers.items():
             if spec['uri'] == uri:
                 client = self.get_client(index)

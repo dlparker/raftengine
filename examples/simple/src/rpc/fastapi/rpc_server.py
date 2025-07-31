@@ -21,8 +21,17 @@ class RPCServer:
         if self.uvicorn_server:
             return
         self.port = port
-        config = uvicorn.Config(self.app, host='localhost',
-                                port=self.port, log_level="error")
+        config = uvicorn.Config(
+            self.app, 
+            host='localhost',
+            port=self.port, 
+            log_level="error",
+            # Optimize for high concurrency multi-client scenarios
+            backlog=2048,  # Increase connection backlog
+            limit_concurrency=1000,  # Allow more concurrent requests
+            limit_max_requests=10000,  # Increase max requests per worker
+            timeout_keep_alive=30,  # Keep connections alive longer
+        )
         self.uvicorn_server = uvicorn.Server(config)
         async def serve():
             try:

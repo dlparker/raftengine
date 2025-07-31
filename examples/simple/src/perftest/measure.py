@@ -17,7 +17,10 @@ from raft.run_tools import Cluster
 from split_base.collector import Collector
 from raft.raft_client import RaftClient
 
-async def client_looper(c_index, uri, loops, result_queue, barrier, rpc_client_class):
+async def client_looper(c_index, uri, loops, result_queue, barrier, transport, base_port):
+    # Create Cluster instance in this process to get fresh client class
+    cluster = Cluster(transport=transport, base_port=base_port)
+    rpc_client_class = cluster.rpc_tools.get_client_class()
     client = RaftClient(uri, rpc_client_class)
     collector = Collector(client)
     # do one to make sure the connection is established
@@ -62,8 +65,8 @@ async def client_looper(c_index, uri, loops, result_queue, barrier, rpc_client_c
         print(f"Client {c_index} process failed: {e}")
         result_queue.put({"client_id": c_index, "error": str(e), "successes": 0, "failures": loops})
 
-def client_process(c_index, uri, loops, result_queue, barrier, rpc_client_class):
-    return asyncio.run(client_looper(c_index, uri, loops, result_queue, barrier, rpc_client_class))
+def client_process(c_index, uri, loops, result_queue, barrier, transport, base_port):
+    return asyncio.run(client_looper(c_index, uri, loops, result_queue, barrier, transport, base_port))
 
 async def one_timing_pass(cluster, num_clients, loops):
 
@@ -78,7 +81,7 @@ async def one_timing_pass(cluster, num_clients, loops):
         for i in range(num_clients):
             p = mp.Process(
                 target=client_process,
-                args=(i, uri, loops, result_queue, barrier, cluster.rpc_tools.get_client_class())
+                args=(i, uri, loops, result_queue, barrier, cluster.transport, cluster.base_port)
             )
             processes.append(p)
             
@@ -131,7 +134,7 @@ async def main():
     parser.add_argument("-l", "--loops", type=int, default=1, help="Number of loops for each client")
     parser.add_argument("--json-output", type=str, help="Export results to JSON file (incompatible with --prep_only)")
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi',],
+                        choices=['astream', 'aiozmq', 'fastapi', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     parser.add_argument('-b', '--base_port', type=int, default=55555,
@@ -164,13 +167,20 @@ async def main():
         pid = await client_0.direct_server_command("getpid")
         print(f"Call to server 0 direct_server_command('getpid') got '{pid}' in reply")
         pre_started = True
-    except (TimeoutError, OSError):
+    except (TimeoutError, OSError, Exception):
         pre_started = False
         print("starting servers")
+        cluster.clear_server_files()
         await cluster.start_servers()
-        if args.transport == 'fastapi':
-            # starts slow
-            await asyncio.sleep(0.25)
+        start_time = time.time()
+        while time.time() - start_time < 3.0:
+            await asyncio.sleep(0.1)
+            try:
+                client_0 = cluster.get_client(index=0)
+                pid = await client_0.direct_server_command("getpid")
+                break
+            except:
+                pass
         res = await client_0.direct_server_command("take_power")
         print(f"Call to server 0 direct_server_command('take_power') got '{res}' in reply")
     all_results = []

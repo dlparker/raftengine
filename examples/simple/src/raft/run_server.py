@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import asyncio
 import argparse
+import shutil
 from pathlib import Path
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
 log_controller = LogController.make_controller()
-log_controller.set_default_level('debug')
+log_controller.set_default_level('error')
 
 import sys
 src_dir = Path(__file__).parent.parent
@@ -43,7 +44,6 @@ async def main(args):
     uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
     rpc_run_tools = RPCRunTools(args.transport)
-    print(rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class())
     server = RaftServer(initial_cluster_config,
                         LocalConfig(uri=uri, working_dir=work_dir),
                         rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class()
@@ -53,6 +53,9 @@ async def main(args):
         await asyncio.sleep(0.01)
 
 if __name__=="__main__":
+    import uvloop;
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')
 
@@ -64,12 +67,25 @@ if __name__=="__main__":
                         help='Clear Raft log and bank db, must be used with --tell-me-twice')
     parser.add_argument('--tell-me-twice', action='store_true',
                         help='Really do the dangerous thing requested')
-
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi',],
+                        choices=['astream', 'aiozmq', 'fastapi', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('-D', '--debug', action='store_true',
+                       help="Set global logging level to debug")
+    group.add_argument('-I', '--info', action='store_true',
+                       help="Set global logging level to info")
+    group.add_argument('-W', '--warning', action='store_true',
+                       help="Set global logging level to warning")
+    group.add_argument('-E', '--error', action='store_true',
+                       help="Set global logging level to error, which is the default")
     # Parse arguments
     args = parser.parse_args()
-
+    if args.warning:
+        log_controller.set_default_level('warning')
+    elif args.info:
+        log_controller.set_default_level('info')
+    if args.debug:
+        log_controller.set_default_level('debug')
     asyncio.run(main(args))

@@ -45,16 +45,19 @@ This is a Python implementation of a Raft consensus algorithm library designed t
 ```
 
 
-```bash
 # Run tests with coverage only of dev_tools sources, to identify dead code in dev_tools
 ./test_tools.sh
+
+# Run tests with debug logging enabled
+./run_tests.sh --debug
+```
 
 ### Building Documentation
 
 ```bash
 # Build all documentation from test traces
 python dev_tools/build_docs.py
-
+```
 
 ### Working with Test Traces
 

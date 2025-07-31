@@ -8,7 +8,6 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Union, Any, Type
-import msgspec
 
 from raftengine.messages.base_message import BaseMessage
 from raftengine.messages.log_msg import LogMessage

@@ -20,8 +20,27 @@ class RPCClient:
 
     async def connect(self):
         logger.debug(f"Creating HTTP session for {self.base_url}")
-        self.session = aiohttp.ClientSession()
-        logger.info(f"Connected to FastAPI server at {self.base_url}")
+        # Configure connection pooling and keep-alive
+        connector = aiohttp.TCPConnector(
+            limit=10,  # Smaller total connection pool size
+            limit_per_host=5,  # Fewer max connections per host
+            keepalive_timeout=5,  # Shorter keep-alive timeout
+            enable_cleanup_closed=True,  # Clean up closed connections
+            ttl_dns_cache=300,  # DNS cache TTL
+        )
+        
+        timeout = aiohttp.ClientTimeout(
+            total=self.timeout * 10,  # Much longer total timeout for multi-client scenarios
+            connect=self.timeout * 5,  # Longer connection timeout
+            sock_read=self.timeout * 10  # Much longer socket read timeout
+        )
+        
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers={'Connection': 'keep-alive'}  # Explicitly request keep-alive
+        )
+        logger.info(f"Connected to FastAPI server at {self.base_url} with connection pooling")
     
     async def issue_command(self, command):
         if self.session is None:
@@ -100,6 +119,8 @@ class RPCClient:
         if self.session is not None:
             logger.debug(f"Closing HTTP session to {self.base_url}")
             await self.session.close()
+            # Give time for connections to close gracefully
+            await asyncio.sleep(0.1)
             self.session = None
             logger.debug(f"HTTP session to {self.base_url} closed")
             

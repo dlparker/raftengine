@@ -4,6 +4,8 @@ import time
 import asyncio
 import traceback
 import logging
+import datetime
+from pprint import pprint
 from pathlib import Path
 from typing import Dict, Any, Optional
 from logging.config import dictConfig
@@ -22,10 +24,13 @@ logger = log_controller.add_logger("raft.RaftServer",
 
 from raft.pilot import Pilot
 from raft.sqlite_log import SqliteLog
+from raft.memory_log import MemoryLog
 
 
 class RaftServer:
 
+    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft',
+                       'take_power', 'get_logging_dict', 'set_logging_level']
     def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, start_paused=False):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
@@ -36,6 +41,7 @@ class RaftServer:
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.log = SqliteLog(self.raft_log_file)
+        #self.log = MemoryLog()
         self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)
@@ -43,6 +49,9 @@ class RaftServer:
         self.rpc_server = self.rpc_server_class(self)
         self.timers_running = False
         self.stopped = False
+        with open(Path(self.working_dir, 'server.pid'), 'w') as f:
+            f.write(f"{os.getpid()}")
+            
 
     # local only method
     async def start(self):
@@ -70,6 +79,9 @@ class RaftServer:
                 await self.stop_raft()
                 await self.rpc_server.stop()
                 logger.warning("Raft server operations stopped on stop_server local command RPC")
+                pidfile = Path(self.working_dir, 'server.pid')
+                if pidfile.exists():
+                    pidfile.unlink()
             except:
                 traceback.print_exc()
         delay = 0.05
@@ -81,7 +93,7 @@ class RaftServer:
     async def issue_command(self, command: str) -> CommandResult:
         reply = None
         try:
-            result = await self.deck.run_command(command, 1.0)
+            result = await self.deck.run_command(command, 5.0)
             # this is a CommandResult, convert it to a dict for serialization
             logger.debug(result)
             reply = result.__dict__
@@ -111,7 +123,9 @@ class RaftServer:
         # validate that a server is alive when it
         # seems to have trouble processing actual
         # work, and getpid can help with process monitoring
-        # and forced shutdown. 
+        # and forced shutdown.
+        if command not in self.direct_commands:
+            return f"Error, command {command} unknown, should be one of {self.direct_commands}"
         if command == "ping":
             return "pong"
         elif command == "getpid":
@@ -162,8 +176,9 @@ class RaftServer:
             self.stopped = True
             self.timers_running = False
             return "stopped raft"
-        elif command == "status":
+        elif command == "status" or command == "dump_status":
             res = dict(pid=os.getpid(),
+                       datetime=datetime.datetime.now().isoformat(),
                        working_dir=str(self.working_dir),
                        raft_log_file=str(self.raft_log_file),
                        timers_running=self.timers_running,
@@ -172,7 +187,15 @@ class RaftServer:
                        is_leader=self.deck.is_leader(),
                        last_log_index=await self.deck.log.get_last_index(),
                        last_log_term=await self.deck.log.get_last_term(),
+                       log_commit_index=await self.deck.log.get_commit_index(),
+                       log_apply_index=await self.deck.log.get_applied_index(),
                        term=await self.deck.log.get_term())
+            if command == "dump_status":
+                # write it to standard out
+                print("\n\n-------------- STATUS DUMP BEGINS --------------\n")
+                for key in res: # get them in the order written
+                    print(f"{key:20s}: {res[key]}")
+                print("\n\n-------------- STATUS DUMP ENDS --------------\n", flush=True)
             return res
         elif command == "get_logging_dict":
             return LogController.get_controller().to_dict_config()
@@ -190,6 +213,7 @@ class RaftServer:
             lc.set_logger_level(logger, evel)
             res = f"logging for name '{name}' set to {level}"
             return res
+
         return f"unrecognized command '{command}'"
         
 
