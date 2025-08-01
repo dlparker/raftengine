@@ -99,19 +99,24 @@ async def main():
                         choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
+    parser.add_argument('--log-type', 
+                        choices=['memory', 'sqlite', 'lmdb'],
+                        default='memory',
+                        help='Log storage type to use')
     parser.add_argument('-b', '--base_port', type=int, default=55555,
                         help='Port number for first node in cluster')
     
     args = parser.parse_args()
     
     # Initialize cluster
-    cluster = Cluster(transport=args.transport, base_port=args.base_port)
+    cluster = Cluster(transport=args.transport, base_port=args.base_port, log_type=args.log_type)
     
     # Prepare output structure
     test_start_time = datetime.now()
     output_data = {
         "test_specification": {
             "transport": args.transport,
+            "log_type": args.log_type,
             "client_range": {"min": args.min_clients, "max": args.max_clients, "step": args.clients_step},
             "loops_total": args.loops,
             "warmup_loops": args.warmup,
@@ -130,6 +135,7 @@ async def main():
     try:
         print(f"Starting performance test sequence:")
         print(f"  Transport: {args.transport}")
+        print(f"  Log type: {args.log_type}")
         print(f"  Client range: {args.min_clients} to {args.max_clients} (step {args.clients_step})")
         print(f"  Total loops per test: {args.loops}")
         print(f"  Warmup loops per client: {args.warmup}")

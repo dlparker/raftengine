@@ -25,13 +25,15 @@ logger = log_controller.add_logger("raft.RaftServer",
 from raft.pilot import Pilot
 from raft.sqlite_log import SqliteLog
 from raft.memory_log import MemoryLog
+from raft.lmdb_log import LmdbLog
 
 
 class RaftServer:
 
     direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft',
                        'take_power', 'get_logging_dict', 'set_logging_level']
-    def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, start_paused=False):
+    def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, 
+                 start_paused=False, log_type='memory'):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
         self.start_paused = start_paused
@@ -40,8 +42,17 @@ class RaftServer:
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
-        #self.log = SqliteLog(self.raft_log_file)
-        self.log = MemoryLog()
+        self.lmdb_log_file = Path(self.working_dir, "raftlog.lmdb")
+        
+        # Initialize log based on type
+        if log_type == 'sqlite':
+            self.log = SqliteLog(self.raft_log_file)
+        elif log_type == 'lmdb':
+            self.log = LmdbLog(self.lmdb_log_file)
+        elif log_type == 'memory':
+            self.log = MemoryLog()
+        else:
+            raise ValueError(f"Unknown log type: {log_type}. Valid types: memory, sqlite, lmdb")
         self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)

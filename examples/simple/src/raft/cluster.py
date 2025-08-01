@@ -11,9 +11,10 @@ from raft.raft_client import RaftClient
 
 class Cluster:
 
-    def __init__(self, transport, base_port=59050):
+    def __init__(self, transport, base_port=59050, log_type='memory'):
         self.transport = transport
         self.base_port = base_port
+        self.log_type = log_type
         self.rpc_tools = RPCRunTools(transport)
         self.node_uris = []
         self.servers = {}
@@ -70,14 +71,14 @@ class Cluster:
                 continue
             if in_process:
                 server = RaftServer(spec['initial_cluster_config'], spec['local_config'],
-                                    self.rpc_tool.get_server_class(), self.rpc_tool.get_client_class(),
-                                    start_paused)
+                                    self.rpc_tools.get_server_class(), self.rpc_tools.get_client_class(),
+                                    start_paused, log_type=self.log_type)
                 await server.start()
                 spec['server'] = server
             else:
                 this_dir = Path(__file__).parent
                 sfile = Path(this_dir, 'run_server.py')
-                cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}", '-t', self.transport]
+                cmd = [str(sfile), "-b",  f"{self.base_port}", "-i",  f"{index}", '-t', self.transport, '-l', self.log_type]
                 if default_logging_level == "error":
                     cmd.append("-E")
                 elif default_logging_level == "warning":

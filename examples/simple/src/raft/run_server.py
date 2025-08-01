@@ -46,7 +46,8 @@ async def main(args):
     rpc_run_tools = RPCRunTools(args.transport)
     server = RaftServer(initial_cluster_config,
                         LocalConfig(uri=uri, working_dir=work_dir),
-                        rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class()
+                        rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class(),
+                        log_type=args.log_type
                         )
     try:
         await server.start()
@@ -86,6 +87,10 @@ if __name__=="__main__":
                         choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
+    parser.add_argument('--log-type', '-l',
+                        choices=['memory', 'sqlite', 'lmdb'],
+                        default='memory',
+                        help='Log storage type to use')
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-D', '--debug', action='store_true',
                        help="Set global logging level to debug")

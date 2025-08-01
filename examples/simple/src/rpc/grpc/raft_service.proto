@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package raft_service;
+
+// Service definition for Raft-enabled RPC operations
+service RaftService {
+    // Issue a command that goes through Raft consensus
+    rpc IssueCommand(CommandRequest) returns (CommandResponse);
+    
+    // Send a Raft protocol message (fire-and-forget)
+    rpc RaftMessage(MessageRequest) returns (MessageResponse);
+    
+    // Execute a direct server command (bypasses Raft)
+    rpc DirectServerCommand(CommandRequest) returns (CommandResponse);
+}
+
+// Request message for commands
+message CommandRequest {
+    string command = 1;
+}
+
+// Response message for commands
+message CommandResponse {
+    string result = 1;
+}
+
+// Request message for Raft messages
+message MessageRequest {
+    string message = 1;
+}
+
+// Response message for Raft messages
+message MessageResponse {
+    string result = 1;
+}
