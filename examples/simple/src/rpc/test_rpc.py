@@ -10,10 +10,15 @@ async def main(RunTools, args):
         print(f'got callback, server on port {server.port} shutting down')
     await server.start(shutdown_cb)
     await asyncio.sleep(0.001)
+
     vt = Validator(collector)
     expected = await vt.do_test()
-    await collector.pipe.close()
-    await server.stop()
+    
+    # Shutdown server gracefully using the same pattern as demo_rpc.py
+    shut_res = await client.direct_server_command("shutdown")
+    print(f"shutdown request got {shut_res}")
+    
+    await client.close()
     
     
 if __name__=="__main__":

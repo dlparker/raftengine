@@ -42,19 +42,15 @@ class RPCServer:
                     self.sock_server.close()
                     try:
                         await self.sock_server.wait_closed()
+                        self.sock_server = None
                     except asyncio.CancelledError:
                         pass
+                    finally:
+                        self.sock_server = None
                 self.server_task = None
         self.server_task = asyncio.create_task(serve())
                 
     async def stop(self):
-        if self.sock_server:
-            self.sock_server.close()
-            try:
-                await self.sock_server.wait_closed()
-            except asyncio.CancelledError:
-                pass
-            self.sock_server = None
         if self.server_task:
             self.server_task.cancel()
             try:
@@ -62,6 +58,13 @@ class RPCServer:
             except asyncio.CancelledError:
                 pass
             self.server_task = None
+        if self.sock_server:
+            self.sock_server.close()
+            try:
+                await self.sock_server.wait_closed()
+            except asyncio.CancelledError:
+                pass
+            self.sock_server = None
     
     async def handle_client(self, reader, writer):
         """Handle a new client connection"""
