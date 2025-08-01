@@ -64,7 +64,7 @@ if __name__=="__main__":
     parser.add_argument('-b', '--base_port', type=int, default=59090,
                         help='Port number for first node in cluster')
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi','grpc'],
+                        choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     args = parser.parse_args()

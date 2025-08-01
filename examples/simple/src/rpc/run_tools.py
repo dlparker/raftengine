@@ -9,7 +9,7 @@ from rpc.raft_stub import RaftServerStub
 class RunTools:
 
     def __init__(self, transport):
-        if transport not in ['aiozmq','astream','fastapi','grpc']:
+        if transport not in ['aiozmq','astream','grpc']:
             raise Exception(f'Unknown transport {transport}')
         self.transport = transport
         if transport == 'aiozmq':
@@ -20,11 +20,6 @@ class RunTools:
         elif transport == 'astream':
             from rpc.astream.rpc_client import RPCClient
             from rpc.astream.rpc_server import RPCServer
-            self.client_class = RPCClient
-            self.server_class = RPCServer
-        elif transport == 'fastapi':
-            from rpc.fastapi.rpc_client import RPCClient
-            from rpc.fastapi.rpc_server import RPCServer
             self.client_class = RPCClient
             self.server_class = RPCServer
         elif transport == 'grpc':

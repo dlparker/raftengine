@@ -40,7 +40,7 @@ async def main():
     parser.add_argument('-f', '--full-start', action='store_true',
                         help='Start raft everywhere and tell server 0 to take power. Only valid with --all and "start"')
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi','grpc'],
+                        choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     group = parser.add_mutually_exclusive_group(required=False)

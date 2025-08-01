@@ -96,7 +96,7 @@ async def main():
     parser.add_argument("-w", "--warmup", type=int, default=10, help="Number of warmup loops per client (default: 10)")
     parser.add_argument("-j", "--json-output", type=str, help="Export results to JSON file", required=True)
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi','grpc'],
+                        choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     parser.add_argument('-b', '--base_port', type=int, default=55555,

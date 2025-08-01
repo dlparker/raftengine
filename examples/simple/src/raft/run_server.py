@@ -83,7 +83,7 @@ if __name__=="__main__":
     parser.add_argument('--tell-me-twice', action='store_true',
                         help='Really do the dangerous thing requested')
     parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'fastapi', 'grpc'],
+                        choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
     group = parser.add_mutually_exclusive_group(required=False)

@@ -111,7 +111,6 @@ class Cluster:
                                 print(f"stderr: {stderr_content}")
                     raise Exception(f"Server {index} failed to start")
                 
-            
     async def stop_servers(self):
         for index,server in self.servers.items():
             client = self.get_client(index)
@@ -159,7 +158,10 @@ class Cluster:
         status_recs = {}
         for index,server in self.servers.items():
             client = self.get_client(index)
-            status = await client.direct_server_command("status")
+            try:
+                status = await client.direct_server_command("status")
+            except Exception as e:
+                return False, f"Server {index} {server['uri']} raised exception {e}"
             if not isinstance(status, dict):
                 import ipdb; ipdb.set_trace()
             status_recs[index] = status
