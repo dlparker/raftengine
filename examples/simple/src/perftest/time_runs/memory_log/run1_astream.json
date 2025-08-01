@@ -1,0 +1,502 @@
+{
+  "test_specification": {
+    "transport": "astream",
+    "client_range": {
+      "min": 1,
+      "max": 20,
+      "step": 1
+    },
+    "loops_total": 20000,
+    "warmup_loops": 10,
+    "base_port": 55555,
+    "test_timestamp": "2025-08-01T11:47:43.677817"
+  },
+  "individual_test_results": [
+    {
+      "client_count": 1,
+      "loops_per_client": 20000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 1,
+          "max": 1
+        },
+        "results": [
+          {
+            "total_clients": 1,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 0.44041555933999915,
+            "std_latency_ms": 0,
+            "total_duration_s": 8.919018507003784,
+            "throughput_per_second": 2242.399203936478,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 10.446931838989258
+    },
+    {
+      "client_count": 2,
+      "loops_per_client": 10000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 2,
+          "max": 2
+        },
+        "results": [
+          {
+            "total_clients": 2,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 0.5597664456066923,
+            "std_latency_ms": 0.00039343491192311803,
+            "total_duration_s": 5.7154247760772705,
+            "throughput_per_second": 3499.3024636966384,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 7.252136707305908
+    },
+    {
+      "client_count": 3,
+      "loops_per_client": 6666,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 3,
+          "max": 3
+        },
+        "results": [
+          {
+            "total_clients": 3,
+            "total_requests": 19998,
+            "success_rate": 1.0,
+            "avg_latency_ms": 0.80143550346829,
+            "std_latency_ms": 0.0002508294764364143,
+            "total_duration_s": 5.415768623352051,
+            "throughput_per_second": 3692.5506591569238,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.950575590133667
+    },
+    {
+      "client_count": 4,
+      "loops_per_client": 5000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 4,
+          "max": 4
+        },
+        "results": [
+          {
+            "total_clients": 4,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 1.0300586102810485,
+            "std_latency_ms": 0.0023498100226070993,
+            "total_duration_s": 5.21604585647583,
+            "throughput_per_second": 3834.322118769255,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.749161958694458
+    },
+    {
+      "client_count": 5,
+      "loops_per_client": 4000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 5,
+          "max": 5
+        },
+        "results": [
+          {
+            "total_clients": 5,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 1.2377041668412858,
+            "std_latency_ms": 0.0016501948820947566,
+            "total_duration_s": 5.0171730518341064,
+            "throughput_per_second": 3986.308583214742,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.553549528121948
+    },
+    {
+      "client_count": 6,
+      "loops_per_client": 3333,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 6,
+          "max": 6
+        },
+        "results": [
+          {
+            "total_clients": 6,
+            "total_requests": 19998,
+            "success_rate": 1.0,
+            "avg_latency_ms": 1.452130345132129,
+            "std_latency_ms": 0.0019330146032514783,
+            "total_duration_s": 4.916741371154785,
+            "throughput_per_second": 4067.3280309846987,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.451570510864258
+    },
+    {
+      "client_count": 7,
+      "loops_per_client": 2857,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 7,
+          "max": 7
+        },
+        "results": [
+          {
+            "total_clients": 7,
+            "total_requests": 19999,
+            "success_rate": 1.0,
+            "avg_latency_ms": 1.6451630994032431,
+            "std_latency_ms": 0.001580203894910811,
+            "total_duration_s": 4.819568872451782,
+            "throughput_per_second": 4149.541282481192,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.355142593383789
+    },
+    {
+      "client_count": 8,
+      "loops_per_client": 2500,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 8,
+          "max": 8
+        },
+        "results": [
+          {
+            "total_clients": 8,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 1.8888429608403385,
+            "std_latency_ms": 0.002433508794778233,
+            "total_duration_s": 4.818691730499268,
+            "throughput_per_second": 4150.504144810232,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.3533501625061035
+    },
+    {
+      "client_count": 9,
+      "loops_per_client": 2222,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 9,
+          "max": 9
+        },
+        "results": [
+          {
+            "total_clients": 9,
+            "total_requests": 19998,
+            "success_rate": 1.0,
+            "avg_latency_ms": 2.024796773051444,
+            "std_latency_ms": 0.0023502839821947894,
+            "total_duration_s": 4.620822429656982,
+            "throughput_per_second": 4327.801014739385,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.162605285644531
+    },
+    {
+      "client_count": 10,
+      "loops_per_client": 2000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 10,
+          "max": 10
+        },
+        "results": [
+          {
+            "total_clients": 10,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 2.1918914538195167,
+            "std_latency_ms": 0.0029206507135310215,
+            "total_duration_s": 4.521791934967041,
+            "throughput_per_second": 4423.025271317748,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.0580103397369385
+    },
+    {
+      "client_count": 11,
+      "loops_per_client": 1818,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 11,
+          "max": 11
+        },
+        "results": [
+          {
+            "total_clients": 11,
+            "total_requests": 19998,
+            "success_rate": 1.0,
+            "avg_latency_ms": 2.436337030611716,
+            "std_latency_ms": 0.003544683622954697,
+            "total_duration_s": 4.52288556098938,
+            "throughput_per_second": 4421.5135957641705,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.065025568008423
+    },
+    {
+      "client_count": 12,
+      "loops_per_client": 1666,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 12,
+          "max": 12
+        },
+        "results": [
+          {
+            "total_clients": 12,
+            "total_requests": 19992,
+            "success_rate": 1.0,
+            "avg_latency_ms": 2.5936764526211284,
+            "std_latency_ms": 0.002461041971837237,
+            "total_duration_s": 4.4235334396362305,
+            "throughput_per_second": 4519.463969881065,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 5.956212282180786
+    },
+    {
+      "client_count": 13,
+      "loops_per_client": 1538,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 13,
+          "max": 13
+        },
+        "results": [
+          {
+            "total_clients": 13,
+            "total_requests": 19994,
+            "success_rate": 1.0,
+            "avg_latency_ms": 2.7916415270726063,
+            "std_latency_ms": 0.0028270429883247906,
+            "total_duration_s": 4.424745559692383,
+            "throughput_per_second": 4518.677905942692,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 5.957061290740967
+    },
+    {
+      "client_count": 14,
+      "loops_per_client": 1428,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 14,
+          "max": 14
+        },
+        "results": [
+          {
+            "total_clients": 14,
+            "total_requests": 19992,
+            "success_rate": 1.0,
+            "avg_latency_ms": 3.03889885690307,
+            "std_latency_ms": 0.003690567664575385,
+            "total_duration_s": 4.4256110191345215,
+            "throughput_per_second": 4517.342331615412,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 5.964378356933594
+    },
+    {
+      "client_count": 15,
+      "loops_per_client": 1333,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 15,
+          "max": 15
+        },
+        "results": [
+          {
+            "total_clients": 15,
+            "total_requests": 19995,
+            "success_rate": 1.0,
+            "avg_latency_ms": 3.290796610563384,
+            "std_latency_ms": 0.002721452672586106,
+            "total_duration_s": 4.528225660324097,
+            "throughput_per_second": 4415.636829938574,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.060198068618774
+    },
+    {
+      "client_count": 16,
+      "loops_per_client": 1250,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 16,
+          "max": 16
+        },
+        "results": [
+          {
+            "total_clients": 16,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 3.5465296005706475,
+            "std_latency_ms": 0.003103142157153794,
+            "total_duration_s": 4.527106285095215,
+            "throughput_per_second": 4417.833101433216,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.06788182258606
+    },
+    {
+      "client_count": 17,
+      "loops_per_client": 1176,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 17,
+          "max": 17
+        },
+        "results": [
+          {
+            "total_clients": 17,
+            "total_requests": 19992,
+            "success_rate": 1.0,
+            "avg_latency_ms": 3.7084028290211744,
+            "std_latency_ms": 0.0037846596994762687,
+            "total_duration_s": 4.527706146240234,
+            "throughput_per_second": 4415.480897893776,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.063028812408447
+    },
+    {
+      "client_count": 18,
+      "loops_per_client": 1111,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 18,
+          "max": 18
+        },
+        "results": [
+          {
+            "total_clients": 18,
+            "total_requests": 19998,
+            "success_rate": 1.0,
+            "avg_latency_ms": 3.927592345287922,
+            "std_latency_ms": 0.0040947167275622144,
+            "total_duration_s": 4.531250476837158,
+            "throughput_per_second": 4413.351259707614,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 6.065917491912842
+    },
+    {
+      "client_count": 19,
+      "loops_per_client": 1052,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 19,
+          "max": 19
+        },
+        "results": [
+          {
+            "total_clients": 19,
+            "total_requests": 19988,
+            "success_rate": 1.0,
+            "avg_latency_ms": 4.006513069533023,
+            "std_latency_ms": 0.0037442215786507864,
+            "total_duration_s": 4.332066535949707,
+            "throughput_per_second": 4613.9642210315415,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 5.870325326919556
+    },
+    {
+      "client_count": 20,
+      "loops_per_client": 1000,
+      "result": {
+        "test_type": "client_scaling",
+        "client_range": {
+          "min": 20,
+          "max": 20
+        },
+        "results": [
+          {
+            "total_clients": 20,
+            "total_requests": 20000,
+            "success_rate": 1.0,
+            "avg_latency_ms": 4.23352140764473,
+            "std_latency_ms": 0.005955118355023838,
+            "total_duration_s": 4.330226182937622,
+            "throughput_per_second": 4618.696380989507,
+            "errors": []
+          }
+        ]
+      },
+      "test_duration_seconds": 5.867934465408325
+    }
+  ],
+  "aggregate_summary": {
+    "total_tests_run": 20,
+    "successful_tests": 20,
+    "failed_tests": 0,
+    "total_duration_seconds": 151.338397
+  }
+}

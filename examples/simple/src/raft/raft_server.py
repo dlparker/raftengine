@@ -40,8 +40,8 @@ class RaftServer:
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
-        self.log = SqliteLog(self.raft_log_file)
-        #self.log = MemoryLog()
+        #self.log = SqliteLog(self.raft_log_file)
+        self.log = MemoryLog()
         self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)
