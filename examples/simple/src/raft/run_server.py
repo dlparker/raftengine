@@ -69,7 +69,7 @@ async def main(args):
         
 if __name__=="__main__":
     import uvloop;
-    #asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')

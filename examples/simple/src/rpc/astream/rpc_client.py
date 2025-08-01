@@ -217,7 +217,7 @@ class RPCClient:
         wrapped = {"mtype": "direct_server_command", "message": command}
         request_id = await self._send_request(wrapped)
         response = await self._wait_for_response(request_id)
-        return response
+        return json.loads(response)
 
     async def close(self):
         """Close the connection and clean up"""

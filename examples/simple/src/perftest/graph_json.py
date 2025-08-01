@@ -16,7 +16,7 @@ def load_scaling_data(json_file: str) -> Dict[str, Any]:
     """Load and validate scaling test data from JSON file."""
     try:
         with open(json_file, 'r') as f:
-            data = json.load(f)
+            raw_data = json.load(f)
     except FileNotFoundError:
         print(f"Error: File '{json_file}' not found")
         sys.exit(1)
@@ -25,21 +25,45 @@ def load_scaling_data(json_file: str) -> Dict[str, Any]:
         sys.exit(1)
     
     # Validate data format
-    if not isinstance(data, dict):
-        print(f"Error: Expected JSON object, got {type(data).__name__}")
+    if not isinstance(raw_data, dict):
+        print(f"Error: Expected JSON object, got {type(raw_data).__name__}")
         sys.exit(1)
     
-    if data.get("test_type") != "client_scaling":
-        print("Error: JSON file must contain client scaling test results (test_type: 'client_scaling')")
+    # Check for new format with individual_test_results
+    if "individual_test_results" not in raw_data or not isinstance(raw_data["individual_test_results"], list):
+        print("Error: JSON file must contain 'individual_test_results' array")
         sys.exit(1)
     
-    if "results" not in data or not isinstance(data["results"], list):
-        print("Error: JSON file must contain 'results' array")
+    if len(raw_data["individual_test_results"]) == 0:
+        print("Error: individual_test_results array is empty")
         sys.exit(1)
     
-    if len(data["results"]) == 0:
-        print("Error: Results array is empty")
-        sys.exit(1)
+    # Transform new format to expected format
+    results = []
+    for test_result in raw_data["individual_test_results"]:
+        if "result" not in test_result or "results" not in test_result["result"]:
+            print(f"Error: Invalid test result structure: {test_result}")
+            sys.exit(1)
+        
+        # Each result.results should contain exactly one item
+        result_data = test_result["result"]["results"]
+        if len(result_data) != 1:
+            print(f"Error: Expected exactly one result per test, got {len(result_data)}")
+            sys.exit(1)
+        
+        results.append(result_data[0])
+    
+    # Get client range from test_specification
+    client_range = {"min": 1, "max": 20}  # Default values
+    if "test_specification" in raw_data and "client_range" in raw_data["test_specification"]:
+        client_range = raw_data["test_specification"]["client_range"]
+    
+    # Create transformed data structure
+    data = {
+        "test_type": "client_scaling",
+        "client_range": client_range,
+        "results": results
+    }
     
     return data
 
