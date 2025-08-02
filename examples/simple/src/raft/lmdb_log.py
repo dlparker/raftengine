@@ -2,10 +2,11 @@ import os
 import json
 import lmdb
 import logging
+import time
 from pathlib import Path
 from dataclasses import asdict
 from typing import Union, Optional
-from raftengine.api.log_api import LogRec, LogAPI, RecordCode
+from raftengine.api.log_api import LogRec, LogAPI, RecordCode, LogStats
 from raftengine.api.snapshot_api import SnapShot
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
@@ -22,6 +23,7 @@ class Records:
         self.nodes_db = None        # Sub-DB for cluster nodes
         self.settings_db = None     # Sub-DB for cluster settings
         self.snapshots_db = None    # Sub-DB for snapshot metadata
+        self.timestamps_db = None   # Sub-DB for record timestamps
         
         # Raft state variables - initialized from database or defaults
         self.max_index = 0
@@ -45,7 +47,7 @@ class Records:
         self.env = lmdb.Environment(
             str(self.filepath),
             map_size=10**9 * 10,  # 10GB initial map size
-            max_dbs=5,           # 5 named databases
+            max_dbs=6,           # 6 named databases
             sync=True,           # Force sync to disk
             writemap=True        # Use writeable memory map
         )
@@ -57,6 +59,7 @@ class Records:
             self.nodes_db = self.env.open_db(b'nodes', txn=txn)
             self.settings_db = self.env.open_db(b'settings', txn=txn)
             self.snapshots_db = self.env.open_db(b'snapshots', txn=txn)
+            self.timestamps_db = self.env.open_db(b'timestamps', txn=txn, integerkey=True)
         
         # Load existing state or initialize defaults
         with self.env.begin() as txn:
@@ -97,6 +100,7 @@ class Records:
         self.nodes_db = None
         self.settings_db = None
         self.snapshots_db = None
+        self.timestamps_db = None
 
     def _serialize_rec(self, rec: LogRec) -> bytes:
         """Serialize LogRec to bytes for storage."""
@@ -140,6 +144,10 @@ class Records:
             
             value = self._serialize_rec(entry)
             txn.put(key, value, db=self.records_db)
+            
+            # Store timestamp for this record  
+            timestamp_value = str(time.time()).encode('utf-8')
+            txn.put(key, timestamp_value, db=self.timestamps_db)
             
             # Update tracking state
             if entry.index > self.max_index:
@@ -545,3 +553,74 @@ class LmdbLog(LogAPI):
 
     async def get_snapshot(self) -> Optional[SnapShot]:
         return self.records.get_snapshot()
+
+    async def get_stats(self) -> LogStats:
+        """Get statistics for LmdbLog with percent_remaining calculation."""
+        if not self.records.is_open():
+            self.records.open()
+        
+        with self.records.env.begin() as txn:
+            # Get record count
+            cursor = txn.cursor(db=self.records.records_db)
+            record_count = sum(1 for _ in cursor)
+            
+            # Calculate records since snapshot
+            snapshot_index = self.records.snapshot.index if self.records.snapshot else 0
+            records_since_snapshot = max(0, self.records.max_index - snapshot_index)
+            
+            # Calculate records per minute from timestamps
+            records_per_minute = 0.0
+            current_time = time.time()
+            five_minutes_ago = current_time - 300  # 5 minutes
+            
+            # Collect recent timestamps
+            recent_timestamps = []
+            cursor = txn.cursor(db=self.records.timestamps_db)
+            for key, value in cursor:
+                try:
+                    timestamp = float(value.decode('utf-8'))
+                    if timestamp >= five_minutes_ago:
+                        recent_timestamps.append(timestamp)
+                except (ValueError, UnicodeDecodeError):
+                    continue
+            
+            # Calculate rate from recent timestamps
+            if len(recent_timestamps) >= 2:
+                recent_timestamps.sort()
+                time_span = recent_timestamps[-1] - recent_timestamps[0]
+                if time_span > 0:
+                    records_per_minute = (len(recent_timestamps) - 1) * 60.0 / time_span
+            
+            # Get last record timestamp
+            last_record_timestamp = None
+            if recent_timestamps:
+                last_record_timestamp = max(recent_timestamps)
+            else:
+                # Try to get any timestamp
+                cursor = txn.cursor(db=self.records.timestamps_db)
+                if cursor.last():
+                    try:
+                        last_record_timestamp = float(cursor.value().decode('utf-8'))
+                    except (ValueError, UnicodeDecodeError):
+                        pass
+            
+            # Calculate LMDB memory usage and percent remaining
+            info = self.records.env.info()
+            stat = self.records.env.stat()
+            
+            map_size = info['map_size']
+            used_size = stat['psize'] * info['last_pgno']
+            
+            percent_remaining = None
+            if map_size > 0:
+                percent_remaining = max(0.0, min(100.0, (map_size - used_size) * 100.0 / map_size))
+            
+            return LogStats(
+                record_count=record_count,
+                records_since_snapshot=records_since_snapshot,
+                records_per_minute=records_per_minute,
+                percent_remaining=percent_remaining,  # LMDB memory limit tracking
+                total_size_bytes=used_size,
+                snapshot_index=snapshot_index if snapshot_index > 0 else None,
+                last_record_timestamp=last_record_timestamp
+            )

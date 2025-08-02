@@ -71,7 +71,7 @@ if __name__=="__main__":
                         default='aiozmq',
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', '-l',
-                        choices=['memory', 'sqlite', 'lmdb'],
+                        choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
                         default='memory',
                         help='Log storage type to use')
     args = parser.parse_args()

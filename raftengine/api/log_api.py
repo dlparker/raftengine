@@ -6,6 +6,7 @@ import os
 import abc
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional, Any
+import time
 from enum import Enum
 from raftengine.api.types import ClusterConfig
 from raftengine.api.snapshot_api import SnapShot
@@ -50,7 +51,30 @@ class CommandLogRec(LogRec):
 
 class ConfigLogRec(LogRec):
     code=RecordCode.cluster_config
+
+
+@dataclass
+class LogStats:
+    """
+    Statistics about the log storage for snapshot and pruning decisions.
     
+    Attributes:
+        record_count (int): Total number of log entries currently stored
+        records_since_snapshot (int): Number of records since last snapshot (0 if no snapshot)
+        records_per_minute (float): Average records written per minute (recent rate)
+        percent_remaining (Optional[float]): Percentage of storage capacity remaining (0-100), 
+                                           None if unlimited storage
+        total_size_bytes (int): Total storage size in bytes (data + metadata)
+        snapshot_index (Optional[int]): Index of last snapshot, None if no snapshot
+        last_record_timestamp (Optional[float]): Unix timestamp of most recent record
+    """
+    record_count: int
+    records_since_snapshot: int
+    records_per_minute: float
+    percent_remaining: Optional[float]
+    total_size_bytes: int
+    snapshot_index: Optional[int] = None
+    last_record_timestamp: Optional[float] = None
 
 
 # abstract class for all roles
@@ -248,6 +272,22 @@ class LogAPI(abc.ABC):
 
     @abc.abstractmethod
     async def get_snapshot(self) -> Optional[SnapShot]: # pragma: no cover abstract
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_stats(self) -> LogStats: # pragma: no cover abstract
+        """
+        Get statistics about the log storage for snapshot and pruning decisions.
+        
+        Returns LogStats containing:
+        - record_count: Total number of log entries
+        - records_since_snapshot: Records added since last snapshot  
+        - records_per_minute: Recent write rate
+        - percent_remaining: Storage capacity remaining (None if unlimited)
+        - total_size_bytes: Total storage size
+        - snapshot_index: Index of last snapshot (None if no snapshot)
+        - last_record_timestamp: Timestamp of most recent record
+        """
         raise NotImplementedError
 
         

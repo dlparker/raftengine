@@ -1,11 +1,12 @@
 import abc
 import os
 import sqlite3
+import time
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
-from raftengine.api.log_api import LogRec, LogAPI, RecordCode
+from raftengine.api.log_api import LogRec, LogAPI, RecordCode, LogStats
 from raftengine.api.snapshot_api import SnapShot
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
@@ -82,8 +83,17 @@ class Records:
         schema += "command TEXT, " 
         schema += "term int, "
         schema += "leader_id TEXT, "
-        schema += "serial TEXT)"
+        schema += "serial TEXT, "
+        schema += "timestamp REAL)"
         cursor.execute(schema)
+        
+        # Add timestamp column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE records ADD COLUMN timestamp REAL")
+            self.db.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
 
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER,"\
@@ -137,8 +147,8 @@ class Records:
         else:
             sql = f"insert into records ("
 
-        sql += "code, command, term, serial, leader_id) values "
-        values += "?,?,?,?,?)"
+        sql += "code, command, term, serial, leader_id, timestamp) values "
+        values += "?,?,?,?,?,?)"
         sql += values
         params.append(entry.code)
         params.append(entry.command)
@@ -148,6 +158,7 @@ class Records:
         else:
             params.append(entry.serial)
         params.append(entry.leader_id)
+        params.append(time.time())  # Add current timestamp
         cursor.execute(sql, params)
         entry.index = cursor.lastrowid
         if entry.index > self.max_index:
@@ -181,6 +192,7 @@ class Records:
         del conv['rec_index']
         if rec_data['serial']:
             conv['serial'] = int(rec_data['serial'])
+        del conv['timestamp']
         log_rec = LogRec.from_dict(conv)
         cursor.close()
         if self.max_commit >= log_rec.index:
@@ -483,4 +495,57 @@ class SqliteLog(LogAPI):
 
     async def get_snapshot(self) -> Optional[SnapShot]: 
         return self.records.get_snapshot()
+
+    async def get_stats(self) -> LogStats:
+        """Get statistics for SqliteLog."""
+        if not self.records.is_open():
+            self.records.open()
+        
+        cursor = self.records.db.cursor()
+        
+        # Get record count
+        cursor.execute("SELECT COUNT(*) FROM records")
+        record_count = cursor.fetchone()[0]
+        
+        # Calculate records since snapshot
+        snapshot_index = self.records.snapshot.index if self.records.snapshot else 0
+        records_since_snapshot = max(0, self.records.max_index - snapshot_index)
+        
+        # Calculate records per minute from timestamps
+        records_per_minute = 0.0
+        current_time = time.time()
+        five_minutes_ago = current_time - 300  # 5 minutes
+        
+        # Get timestamps from the last 5 minutes
+        cursor.execute("SELECT timestamp FROM records WHERE timestamp >= ? ORDER BY timestamp", 
+                      [five_minutes_ago])
+        recent_timestamps = [row[0] for row in cursor.fetchall() if row[0] is not None]
+        
+        if len(recent_timestamps) >= 2:
+            time_span = recent_timestamps[-1] - recent_timestamps[0]
+            if time_span > 0:
+                records_per_minute = (len(recent_timestamps) - 1) * 60.0 / time_span
+        
+        # Get last record timestamp
+        cursor.execute("SELECT MAX(timestamp) FROM records")
+        last_timestamp_result = cursor.fetchone()[0]
+        last_record_timestamp = last_timestamp_result if last_timestamp_result else None
+        
+        # Calculate database file size
+        try:
+            total_size_bytes = os.path.getsize(self.records.filepath)
+        except OSError:
+            total_size_bytes = 0
+        
+        cursor.close()
+        
+        return LogStats(
+            record_count=record_count,
+            records_since_snapshot=records_since_snapshot,
+            records_per_minute=records_per_minute,
+            percent_remaining=None,  # SQLite has unlimited storage
+            total_size_bytes=total_size_bytes,
+            snapshot_index=snapshot_index if snapshot_index > 0 else None,
+            last_record_timestamp=last_record_timestamp
+        )
 

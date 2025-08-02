@@ -1,9 +1,11 @@
 import abc
+import time
+import sys
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from copy import deepcopy
-from raftengine.api.log_api import LogRec, LogAPI
+from raftengine.api.log_api import LogRec, LogAPI, LogStats
 from raftengine.api.snapshot_api import SnapShot
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 
@@ -25,6 +27,10 @@ class MemoryLog(LogAPI):
         self.broken = False
         self.max_commit = 0
         self.max_apply = 0
+        
+        # Statistics tracking
+        self.record_timestamps = []  # Track timestamps for rate calculation
+        self.last_record_time = None
 
     async def close(self):
         self.first_index = 0
@@ -37,6 +43,10 @@ class MemoryLog(LogAPI):
         self.nodes = None
         self.pending_node = None
         self.cluster_settings = None
+        
+        # Reset statistics tracking
+        self.record_timestamps = []
+        self.last_record_time = None
         
     def insert_entry(self, rec: LogRec) -> LogRec:
         if rec.index > self.last_index + 1:
@@ -56,6 +66,16 @@ class MemoryLog(LogAPI):
             # we'll assume that the term needs to update
             self.last_index = rec.index
             self.last_term = rec.term
+            
+        # Track timestamp for statistics
+        current_time = time.time()
+        self.last_record_time = current_time
+        self.record_timestamps.append(current_time)
+        
+        # Keep only last 1000 timestamps for rate calculation (prevent memory growth)
+        if len(self.record_timestamps) > 1000:
+            self.record_timestamps = self.record_timestamps[-1000:]
+            
         return rec
             
     def get_entry_at(self, index):
@@ -228,4 +248,44 @@ class MemoryLog(LogAPI):
             
     async def get_snapshot(self):
         return self.snapshot
+        
+    async def get_stats(self) -> LogStats:
+        """Get statistics for MemoryLog."""
+        # Calculate record count
+        record_count = len(self.entries)
+        
+        # Calculate records since snapshot
+        snapshot_index = self.snapshot.index if self.snapshot else 0
+        records_since_snapshot = max(0, self.last_index - snapshot_index)
+        
+        # Calculate records per minute from timestamps
+        records_per_minute = 0.0
+        if len(self.record_timestamps) >= 2:
+            # Use timestamps from last 5 minutes or all available
+            current_time = time.time()
+            five_minutes_ago = current_time - 300  # 5 minutes
+            recent_timestamps = [t for t in self.record_timestamps if t >= five_minutes_ago]
+            
+            if len(recent_timestamps) >= 2:
+                time_span = recent_timestamps[-1] - recent_timestamps[0]
+                if time_span > 0:
+                    records_per_minute = (len(recent_timestamps) - 1) * 60.0 / time_span
+        
+        # Memory storage is unlimited
+        percent_remaining = None
+        
+        # Calculate approximate memory usage
+        # Rough estimate: each entry ~200 bytes (varies with command length)
+        avg_entry_size = 200
+        total_size_bytes = record_count * avg_entry_size
+        
+        return LogStats(
+            record_count=record_count,
+            records_since_snapshot=records_since_snapshot,
+            records_per_minute=records_per_minute,
+            percent_remaining=percent_remaining,  # Unlimited storage
+            total_size_bytes=total_size_bytes,
+            snapshot_index=snapshot_index if snapshot_index > 0 else None,
+            last_record_timestamp=self.last_record_time
+        )
     

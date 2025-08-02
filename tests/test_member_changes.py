@@ -100,7 +100,7 @@ async def test_cluster_config_ops(cluster_maker):
             local_config = cluster.nodes[uri].local_config
         
     log = MemoryLog()
-    log.start()
+    await log.start()
     
     deck = Deck(initial_cluster_config=tconfig, local_config=local_config, pilot = PilotSim(log))
     c_ops = deck.cluster_ops

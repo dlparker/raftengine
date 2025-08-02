@@ -100,7 +100,7 @@ async def main():
                         default='aiozmq',
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', 
-                        choices=['memory', 'sqlite', 'lmdb'],
+                        choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
                         default='memory',
                         help='Log storage type to use')
     parser.add_argument('-b', '--base_port', type=int, default=55555,

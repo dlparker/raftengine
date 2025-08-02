@@ -57,15 +57,6 @@ class Follower(BaseRole):
             return
         elif await self.log.get_last_index() > message.prevLogIndex:
             our_rec = await self.log.read(message.prevLogIndex)
-            if our_rec is None:
-                self.logger.error("%s log.get_last_index() > message.prevLogindex {message.prevLogindex} but no record"
-                                  " at {message.prevLogindex} found",              
-                                    self.my_uri(), message.prevLogIndex, message.prevLogIndex)
-                self.logger.error("%s log.get_last_index() = %d, message is %s",
-                                    self.my_uri(), await self.log.get_last_index(), message)
-                await self.log.set_broken()
-                await self.deck.stop(internal=True)
-                return None
             if our_rec.term != message.prevLogTerm:
                 self.logger.warning("%s Leader indicates invalid record after index %s, deleting",
                                     self.my_uri(), message.prevLogIndex)

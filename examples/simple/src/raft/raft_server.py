@@ -26,6 +26,7 @@ from raft.pilot import Pilot
 from raft.sqlite_log import SqliteLog
 from raft.memory_log import MemoryLog
 from raft.lmdb_log import LmdbLog
+from raft.hybrid_log import HybridLog, HybridLogConfig
 
 
 class RaftServer:
@@ -43,16 +44,24 @@ class RaftServer:
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.lmdb_log_file = Path(self.working_dir, "raftlog.lmdb")
+        self.hybrid_lmdb_file = Path(self.working_dir, "hybrid_raftlog.lmdb")
+        self.hybrid_sqlite_file = Path(self.working_dir, "hybrid_raftlog.db")
         
         # Initialize log based on type
         if log_type == 'sqlite':
             self.log = SqliteLog(self.raft_log_file)
         elif log_type == 'lmdb':
             self.log = LmdbLog(self.lmdb_log_file)
+        elif log_type == 'hybrid':
+            config = HybridLogConfig(
+                lmdb_path=self.hybrid_lmdb_file,
+                sqlite_path=self.hybrid_sqlite_file
+            )
+            self.log = HybridLog(config)
         elif log_type == 'memory':
             self.log = MemoryLog()
         else:
-            raise ValueError(f"Unknown log type: {log_type}. Valid types: memory, sqlite, lmdb")
+            raise ValueError(f"Unknown log type: {log_type}. Valid types: memory, sqlite, lmdb, hybrid")
         self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)
