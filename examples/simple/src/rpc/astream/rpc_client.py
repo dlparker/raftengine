@@ -183,10 +183,10 @@ class RPCClient:
             self.pending_requests.pop(request_id, None)
             raise asyncio.TimeoutError(f"Request {request_id} timed out after {timeout}s")
 
-    async def issue_command(self, command) -> str:
-        wrapped = {"mtype": "command", "message": command}
+    async def issue_command(self, command, timeout=10.0) -> str:
+        wrapped = {"mtype": "command", "message": command, 'timeout': timeout}
         request_id = await self._send_request(wrapped)
-        response = await self._wait_for_response(request_id)
+        response = await self._wait_for_response(request_id, timeout*2)
         # the CommandResponse object is serialized before return, then
         # the rpc_server serializes it, so unwrap it
         return json.loads(response)

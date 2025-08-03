@@ -16,7 +16,7 @@ logger = logging.getLogger('transport.client.grpc')
 
 class RPCClient:
     
-    def __init__(self, host, port, timeout=1.0):
+    def __init__(self, host, port, timeout=10.0):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -33,7 +33,7 @@ class RPCClient:
         self.stub = raft_service_pb2_grpc.RaftServiceStub(self.channel)
         logger.info(f"Connected to gRPC server at {self.host}:{self.port}")
     
-    async def issue_command(self, command):
+    async def issue_command(self, command, timeout):
         """
         This is the client side method that will take the command and send
         it to the server side. When it gets there, it will make its way
@@ -47,7 +47,7 @@ class RPCClient:
         
         request = raft_service_pb2.CommandRequest(command=command)
         try:
-            response = await self.stub.IssueCommand(request, timeout=self.timeout)
+            response = await self.stub.IssueCommand(request, timeout=timeout)
             # Deserialize the JSON response back to a dictionary
             return json.loads(response.result)
         except grpc.RpcError as e:

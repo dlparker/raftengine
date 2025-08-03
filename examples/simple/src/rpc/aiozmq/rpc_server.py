@@ -3,10 +3,11 @@ import aiozmq.rpc
 
 class RPCServer(aiozmq.rpc.AttrHandler):
 
-    def __init__(self, raft_server):
+    def __init__(self, raft_server, timeout=10.0):
         self.raft_server = raft_server
         self.zmq_server = None
         self.server_port = None
+        self.timeout = timeout
         
     async def start(self, port):
         self.server_port = port
@@ -38,8 +39,8 @@ class RPCServer(aiozmq.rpc.AttrHandler):
         
 
     @aiozmq.rpc.method
-    async def issue_command(self, command):
-        result = await self.raft_server.issue_command(command)
+    async def issue_command(self, command, timeout):
+        result = await self.raft_server.issue_command(command, timeout)
         return result
 
     @aiozmq.rpc.method

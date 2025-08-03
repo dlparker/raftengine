@@ -2,7 +2,7 @@ import aiozmq.rpc
 
 class RPCClient:
 
-    def __init__(self, host, port, timeout=1.0):
+    def __init__(self, host, port, timeout=10.0):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -14,7 +14,7 @@ class RPCClient:
         with raw_client.with_timeout(self.timeout) as new_client:
             self.aiozmq_conn = new_client
 
-    async def issue_command(self, command):
+    async def issue_command(self, command, timeout):
         """
         This is the client side method that will take the command and send
         it to the server side. When it gets there, it will make its way
@@ -25,7 +25,7 @@ class RPCClient:
         """
         if self.aiozmq_conn is None:
             await self.connect()
-        return await self.aiozmq_conn.call.issue_command(command)
+        return await self.aiozmq_conn.call.issue_command(command, timeout)
 
     async def raft_message(self, message):
         """

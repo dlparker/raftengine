@@ -140,9 +140,9 @@ class ClientFollower:
         try:
             mtype = request.get('mtype')
             message = request.get('message')
-            
+            timeout = request.get('timeout', 10.0)
             if mtype == "command":
-                result = await self.issue_command(message)
+                result = await self.issue_command(message, timeout)
             elif mtype == "direct_server_command":
                 result = await self.direct_server_command(message)
             elif mtype == "raft_message":
@@ -166,9 +166,9 @@ class ClientFollower:
             }
             await self.send_response(error_response)
 
-    async def issue_command(self, command):
+    async def issue_command(self, command, timeout):
         """Process a command request"""
-        raw_result = await self.raft_server.issue_command(command)
+        raw_result = await self.raft_server.issue_command(command, timeout)
         result = json.dumps(raw_result, default=lambda o: o.__dict__)
         return result
 

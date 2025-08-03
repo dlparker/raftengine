@@ -17,6 +17,7 @@ service RaftService {
 // Request message for commands
 message CommandRequest {
     string command = 1;
+    float timeout = 2;
 }
 
 // Response message for commands

@@ -26,7 +26,7 @@ from raft.pilot import Pilot
 from raft.sqlite_log import SqliteLog
 from raft.memory_log import MemoryLog
 from raft.lmdb_log import LmdbLog
-from raft.hybrid_log import HybridLog, HybridLogConfig
+from raft.hybrid_log import HybridLog
 
 
 class RaftServer:
@@ -44,8 +44,7 @@ class RaftServer:
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.lmdb_log_file = Path(self.working_dir, "raftlog.lmdb")
-        self.hybrid_lmdb_file = Path(self.working_dir, "hybrid_raftlog.lmdb")
-        self.hybrid_sqlite_file = Path(self.working_dir, "hybrid_raftlog.db")
+        self.hybrid_dir = Path(self.working_dir, "hybrid_raftlog")
         
         # Initialize log based on type
         if log_type == 'sqlite':
@@ -53,11 +52,9 @@ class RaftServer:
         elif log_type == 'lmdb':
             self.log = LmdbLog(self.lmdb_log_file)
         elif log_type == 'hybrid':
-            config = HybridLogConfig(
-                lmdb_path=self.hybrid_lmdb_file,
-                sqlite_path=self.hybrid_sqlite_file
-            )
-            self.log = HybridLog(config)
+            if not self.hybrid_dir.exists():
+                self.hybrid_dir.mkdir(parents=True)
+            self.log = HybridLog(dirpath=self.hybrid_dir)
         elif log_type == 'memory':
             self.log = MemoryLog()
         else:
@@ -118,10 +115,10 @@ class RaftServer:
     
         
     # RPC method
-    async def issue_command(self, command: str) -> CommandResult:
+    async def issue_command(self, command: str, timeout) -> CommandResult:
         reply = None
         try:
-            result = await self.deck.run_command(command, 5.0)
+            result = await self.deck.run_command(command, timeout)
             # this is a CommandResult, convert it to a dict for serialization
             logger.debug(result)
             reply = result.__dict__

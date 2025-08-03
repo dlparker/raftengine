@@ -72,7 +72,7 @@ if __name__=="__main__":
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', '-l',
                         choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
-                        default='memory',
+                        default='sqlite',
                         help='Log storage type to use')
     args = parser.parse_args()
     asyncio.run(main(args))

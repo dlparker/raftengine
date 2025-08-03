@@ -89,7 +89,7 @@ if __name__=="__main__":
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', '-l',
                         choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
-                        default='memory',
+                        default='sqlite',
                         help='Log storage type to use')
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-D', '--debug', action='store_true',

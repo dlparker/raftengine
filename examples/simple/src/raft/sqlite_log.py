@@ -15,9 +15,10 @@ def bool_converter(value):
 
 class Records:
 
-    def __init__(self, filepath: os.PathLike):
+    def __init__(self, filepath: os.PathLike, enable_wal=False):
         # log record indexes start at 1, per raftengine spec
         self.filepath = Path(filepath).resolve()
+        self.enable_wal = enable_wal
         self.index = 0
         self.entries = []
         self.db = None
@@ -32,34 +33,33 @@ class Records:
         # at least in testing. Maybe in real server if threading is used.
         # Let it get called when the running server is trying to use it.
 
-    def is_open(self):
-        return self.db is not None
-    
     def open(self) -> None:
         sqlite3.register_converter('BOOLEAN', bool_converter)
-        self.db = sqlite3.connect(self.filepath,
-                                  detect_types=sqlite3.PARSE_DECLTYPES |
-                                  sqlite3.PARSE_COLNAMES)
+        if self.enable_wal:
+            self.db = sqlite3.connect(self.filepath,
+                                      detect_types=sqlite3.PARSE_DECLTYPES |
+                                      sqlite3.PARSE_COLNAMES,
+                                      isolation_level=None)
+            self.db.execute('PRAGMA journal_mode=wal')            
+        else:
+            self.db = sqlite3.connect(self.filepath,
+                                      detect_types=sqlite3.PARSE_DECLTYPES |
+                                      sqlite3.PARSE_COLNAMES)
         self.db.row_factory = sqlite3.Row
         self.ensure_tables()
+        self.max_index = 0
+        self.term = 0
+        self.voted_for = None
+        self.broken = False
+        self.max_commit = 0
+        self.max_apply = 0
         cursor = self.db.cursor()
         sql = "select * from stats"
         cursor.execute(sql)
         row = cursor.fetchone()
         if row:
-            self.max_index = row['max_index']
-            self.term = row['term']
-            self.voted_for = row['voted_for']
-            self.broken = row['broken']
-            self.max_commit = row['max_commit']
-            self.max_apply = row['max_apply']
+            self.refresh_stats()
         else:
-            self.max_index = 0
-            self.term = 0
-            self.voted_for = None
-            self.broken = False
-            self.max_commit = 0
-            self.max_apply = 0
             sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply)" \
                 " values (?,?,?,?,?,?,?)"
             cursor.execute(sql, [1, 0, 0, None, False, 0, 0])
@@ -67,10 +67,32 @@ class Records:
         cursor.execute(sql)
         row = cursor.fetchone()
         if row:
-           self.snapshot = SnapShot(index=row['index'], term=row['term'])
+           self.snapshot = SnapShot(index=row['s_index'], term=row['term'])
+        self.db.commit()
+        cursor.close()
+        
+    def refresh_stats(self):
+        # might be doing multiprocessing and need to reread from disk after
+        # writer process writes
+        cursor = self.db.cursor()
+        sql = "select * from stats"
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        self.max_index = row['max_index']
+        self.term = row['term']
+        self.voted_for = row['voted_for']
+        self.broken = row['broken']
+        self.max_commit = row['max_commit']
+        self.max_apply = row['max_apply']
+        sql = "select * from snapshot where snap_id == 1"
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        if row:
+           self.snapshot = SnapShot(index=row['s_index'], term=row['term'])
+        cursor.close()
         
     def close(self) -> None:
-        if self.db is None:  # pragma: no cover
+        if self.db is None:  
             return  # pragma: no cover
         self.db.close()
         self.db = None
@@ -87,14 +109,6 @@ class Records:
         schema += "timestamp REAL)"
         cursor.execute(schema)
         
-        # Add timestamp column if it doesn't exist (for existing databases)
-        try:
-            cursor.execute("ALTER TABLE records ADD COLUMN timestamp REAL")
-            self.db.commit()
-        except sqlite3.OperationalError:
-            # Column already exists
-            pass
-
         schema = f"CREATE TABLE if not exists stats " \
             "(dummy INTERGER primary key, max_index INTEGER,"\
             " term INTEGER, " \
@@ -131,7 +145,7 @@ class Records:
         cursor.close()
                      
     def save_entry(self, entry):
-        if self.db is None: # pragma: no cover
+        if self.db is None: 
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         params = []
@@ -163,18 +177,18 @@ class Records:
         entry.index = cursor.lastrowid
         if entry.index > self.max_index:
             self.max_index = entry.index
-        if entry.index > self.max_commit and entry.committed:
-            self.max_commit = entry.index
-        if entry.index > self.max_apply and entry.applied:
-            self.max_apply = entry.index
         sql = "replace into stats (dummy, max_index, term, voted_for, broken, max_commit, max_apply) values (?,?,?,?,?,?,?)"
         cursor.execute(sql, [1, self.max_index, self.term, self.voted_for, self.broken, self.max_commit, self.max_apply])
         self.db.commit()
         cursor.close()
-        return self.read_entry(entry.index)
+        if self.max_commit >= entry.index:
+            entry.committed = True
+        if self.max_apply >= entry.index:
+            entry.applied = True
+        return entry
 
     def read_entry(self, index=None):
-        if self.db is None: # pragma: no cover
+        if self.db is None: 
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         if index == None:
@@ -253,16 +267,6 @@ class Records:
         rec = self.save_entry(rec)
         return rec
 
-    def get_commit_index(self):
-        if self.db is None: # pragma: no cover
-            self.open() # pragma: no cover
-        return self.commit_index
-
-    def get_applied_index(self):
-        if self.db is None: # pragma: no cover
-            self.open() # pragma: no cover
-        return self.apply_index
-
     def set_commit_index(self, index):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
@@ -282,7 +286,7 @@ class Records:
             self.open() # pragma: no cover
         cursor = self.db.cursor()
         cursor.execute("delete from records where rec_index >= ?", [index,])
-        self.max_index = index - 1
+        self.max_index = index - 1 if index > 0 else 0
         # If we are deleting committed records that violates raft rules,
         # but this is not the place to enforce that
         self.max_commit = min(self.max_index, self.max_commit)
@@ -343,12 +347,12 @@ class Records:
     def get_first_index(self):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
-        if not self.snapshot:
-            if self.max_index > 0:
-                return 1
+        if self.snapshot:
+            if self.max_index > self.snapshot.index:
+                return self.snapshot.index + 1
             return None
-        if self.max_index > self.snapshot.index:
-            return self.snapshot.index + 1
+        if self.max_index > 0:
+            return 1
         return None
 
     def get_last_index(self):
@@ -370,8 +374,7 @@ class Records:
         cursor.execute(sql, [snapshot.index,])
         cursor.close()
         self.db.commit()
-        if self.max_index < snapshot.index:
-            self.max_index = snapshot.index
+        self.max_index = max(snapshot.index, self.max_index)
         self.snapshot = snapshot
 
     def get_snapshot(self):
@@ -381,17 +384,17 @@ class Records:
 
 class SqliteLog(LogAPI):
 
-    def __init__(self, filepath: os.PathLike):
+    def __init__(self, filepath: os.PathLike, enable_wal=False):
         self.records = None
         self.filepath = filepath
         self.logger = logging.getLogger(__name__)
+        self.enable_wal = enable_wal
 
     async def start(self):
         # this indirection helps deal with the need to restrict
         # access to a single thread
-        self.records = Records(self.filepath)
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
+        self.records = Records(self.filepath, self.enable_wal)
+        self.records.open() 
         
     async def stop(self):
         self.records.close()
@@ -406,8 +409,6 @@ class SqliteLog(LogAPI):
         return self.records.set_fixed()
 
     async def get_term(self) -> Union[int, None]:
-        if not self.records.is_open(): # pragma: no cover
-            self.records.open() # pragma: no cover
         return self.records.term
     
     async def set_term(self, value: int):
@@ -498,8 +499,6 @@ class SqliteLog(LogAPI):
 
     async def get_stats(self) -> LogStats:
         """Get statistics for SqliteLog."""
-        if not self.records.is_open():
-            self.records.open()
         
         cursor = self.records.db.cursor()
         
@@ -531,11 +530,7 @@ class SqliteLog(LogAPI):
         last_timestamp_result = cursor.fetchone()[0]
         last_record_timestamp = last_timestamp_result if last_timestamp_result else None
         
-        # Calculate database file size
-        try:
-            total_size_bytes = os.path.getsize(self.records.filepath)
-        except OSError:
-            total_size_bytes = 0
+        total_size_bytes = os.path.getsize(self.records.filepath)
         
         cursor.close()
         
@@ -549,3 +544,6 @@ class SqliteLog(LogAPI):
             last_record_timestamp=last_record_timestamp
         )
 
+    # not part of API
+    async def refresh_stats(self):
+        self.records.refresh_stats()

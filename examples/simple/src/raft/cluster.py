@@ -11,7 +11,7 @@ from raft.raft_client import RaftClient
 
 class Cluster:
 
-    def __init__(self, transport, base_port=59050, log_type='memory'):
+    def __init__(self, transport, base_port=59050, log_type='sqlite'):
         self.transport = transport
         self.base_port = base_port
         self.log_type = log_type

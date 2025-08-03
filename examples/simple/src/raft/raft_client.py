@@ -5,7 +5,7 @@ from raftengine.api.types import CommandResult
         
 class RaftClient:
 
-    def __init__(self, server_uri, rpc_client_class, timeout=1.0):
+    def __init__(self, server_uri, rpc_client_class, timeout=10.0):
         self.leader_uri = server_uri
         self.rpc_client_class = rpc_client_class
         self.timeout = timeout
@@ -27,7 +27,7 @@ class RaftClient:
         port = int(port)
         host = host.lstrip('/')
         self.leader_uri = uri
-        self.rpc_client = self.rpc_client_class(host, port, self.timeout)
+        self.rpc_client = self.rpc_client_class(host, port, self.timeout * 2)
 
     async def close(self):
         if self.rpc_client is not None:
@@ -37,7 +37,7 @@ class RaftClient:
     async def issue_command(self, command:str, max_retries=50, retry_count=0) -> CommandResult:
         if self.rpc_client is None:
             await self.connect()
-        raw_result = await self.rpc_client.issue_command(command)
+        raw_result = await self.rpc_client.issue_command(command, timeout=self.timeout)
         try:
             result = CommandResult(**raw_result)
         except:

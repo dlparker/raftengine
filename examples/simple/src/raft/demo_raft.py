@@ -14,7 +14,7 @@ from split_base.collector import Collector
 from base.demo import Demo
 
 async def main(args):
-    cluster = Cluster(transport=args.transport, base_port=args.base_port)
+    cluster = Cluster(transport=args.transport, base_port=args.base_port, log_type=args.log_type)
     started_servers = False
     cluster_ready = False
     ready, reason = await cluster.check_cluster_ready()
@@ -67,5 +67,9 @@ if __name__=="__main__":
                         choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
                         help='Transport mechanism to use')
+    parser.add_argument('--log-type', '-l',
+                        choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
+                        default='sqlite',
+                        help='Log storage type to use')
     args = parser.parse_args()
     asyncio.run(main(args))
