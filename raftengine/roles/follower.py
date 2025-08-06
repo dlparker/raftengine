@@ -64,13 +64,13 @@ class Follower(BaseRole):
                 await self.send_no_sync_append_response(message)
                 return
             else:
-                if len(message.entries) > 0 and await self.log.get_last_index() > message.prevLogIndex:
-                    leader_rec = message.entries[0]
-                    our_next_rec = await self.log.read(leader_rec.index)
-                    self.logger.warning("%s Leader says rewrite at record pi=%d",  self.my_uri(), leader_rec.index)
-                    await self.delete_log_from(leader_rec.index)
-                    # fall through to append logic
-
+                msg_rec_count = len(message.entries)
+                if msg_rec_count > 0 and await self.log.get_last_index() > message.prevLogIndex:
+                    for leader_rec in message.entries:
+                        our_next_rec = await self.log.read(leader_rec.index)
+                        if our_next_rec.term != leader_rec.term:
+                            self.logger.warning("%s Leader says rewrite at record pi=%d",  self.my_uri(), leader_rec.index)
+                            await self.delete_log_from(leader_rec.index)
         elif (await self.log.get_last_index() != message.prevLogIndex
               or await self.log.get_last_term() != message.prevLogTerm):
             await self.send_no_sync_append_response(message)

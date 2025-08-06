@@ -13,9 +13,12 @@ import traceback
 from raftengine.deck.log_control import LogController
 log_controller = LogController.make_controller()
 
-# Add src directory to path
+src_dir = Path(__file__).parent.parent
+logs_dir = Path(src_dir, 'logs')
+sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
+
 from raft.cluster import Cluster
 
 async def setup_and_validate_cluster(cluster):

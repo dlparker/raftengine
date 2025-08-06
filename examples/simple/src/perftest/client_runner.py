@@ -43,12 +43,12 @@ async def client_looper(c_index, uri, loops, warmup_loops, result_queue, barrier
         for loop in range(loops):
             start = time.perf_counter()
             try:
-                res = await collector.counter_add('a', 0)
+                res = await collector.counter_add('a', 0, timeout=60.0)
                 if res != 0:
                     raise Exception(f'incorrect response "{res}" should have been 0')
                 successes += 1
             except Exception as e:
-                errors.append(str(e))
+                errors.append(f"{c_index}: {e}")
                 failures += 1
             end = time.perf_counter()
             duration = end-start

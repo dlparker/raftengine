@@ -23,10 +23,10 @@ logger = log_controller.add_logger("raft.RaftServer",
 
 
 from raft.pilot import Pilot
-from raft.sqlite_log import SqliteLog
-from raft.memory_log import MemoryLog
-from raft.lmdb_log import LmdbLog
-from raft.hybrid_log import HybridLog
+from sqlite_log.sqlite_log import SqliteLog
+from memory.memory_log import MemoryLog
+from lmdb_log.lmdb_log import LmdbLog
+from hybrid_log.hybrid_log import HybridLog
 
 
 class RaftServer:
@@ -81,6 +81,7 @@ class RaftServer:
         if not self.timers_running:
             logger.info("calling deck start")
             await self.log.start()
+            term = await self.log.get_term()
             if not self.start_paused:
                 await self.deck.start()
             print(f"Raft server on {self.uri} started\n")
@@ -142,13 +143,14 @@ class RaftServer:
         return reply
         
     # RPC for commands to be executed locally, not via Raft replication
-    async def direct_server_command(self, command: str):
+    async def direct_server_command(self, in_command: str):
         # Some trivial commands, might even want to
         # have them in real server. Pings can help
         # validate that a server is alive when it
         # seems to have trouble processing actual
         # work, and getpid can help with process monitoring
         # and forced shutdown.
+        command = in_command.split(' ')[0]
         if command not in self.direct_commands:
             return f"Error, command {command} unknown, should be one of {self.direct_commands}"
         if command == "ping":
@@ -157,20 +159,15 @@ class RaftServer:
             return os.getpid()
         elif command == "stop":
             async def shutter():
-                logger.warning("TEMP DEBUG: shutter() starting")
                 await asyncio.sleep(0.001)
                 logger.warning("Got signal to shutdown, stopping RaftServer")
                 try:
-                    logger.warning("TEMP DEBUG: shutter calling self.stop()")
                     # Wait for the stopper task to complete instead of just creating it
                     await self.stop()
                 except Exception as e:
-                    logger.error(f"TEMP DEBUG: Exception in shutter self.stop(): {e}")
                     traceback.print_exc()
-                logger.warning("TEMP DEBUG: shutter waiting before exit")
                 await asyncio.sleep(0.1)  # Additional safety margin
                 logger.warning("Got signal to shutdown, exiting")
-                logger.warning("TEMP DEBUG: shutter raising SystemExit")
                 raise SystemExit(0)
             asyncio.create_task(shutter())
             print(f'server {self.uri} shutting down')
@@ -230,18 +227,20 @@ class RaftServer:
             return res
         elif command == "get_logging_dict":
             return LogController.get_controller().to_dict_config()
-        elif command.startswith == "set_logging_level":
-            tmp = commands.split(' ')
+        elif command == "set_logging_level":
+            print(in_command)
+            tmp = in_command.split(' ')
             if len(tmp) < 2:
                 return "set_logging_level needs at least one argument"
+            lc = LogController.get_controller()
             if len(tmp) > 2:
                 level = tmp[2]
                 name = tmp[1]
+                lc.set_logger_level(logger, level)
             else:
                 level = tmp[1]
                 name = ""
-            lc = LogController.get_controller()
-            lc.set_logger_level(logger, evel)
+                lc.set_default_level(level)
             res = f"logging for name '{name}' set to {level}"
             return res
 

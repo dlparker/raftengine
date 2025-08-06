@@ -22,7 +22,7 @@ class RaftServerStub():
         if self.shutdown_callback:
             asyncio.create_task(self.shutdown_callback(self))
     
-    async def issue_command(self, command):
+    async def issue_command(self, command, timeout):
         result = await self.dispatcher.route_command(command)
         return result
 

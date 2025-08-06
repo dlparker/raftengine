@@ -679,10 +679,10 @@ class Leader(BaseRole):
                 self.logger.debug("%s command result ready for serial %d for log index %d", self.my_uri(),
                          command_rec['serial'], log_rec.index)
                 return result
-            except (asyncio.TimeoutError, asyncio.exceptions.CancelledError):
+            except (asyncio.TimeoutError, asyncio.exceptions.CancelledError) as e:
                 remaining_wait = timeout - (time.time() - start_time)
                 retry =  [True if remaining_wait > 0 else False ]
-                timeout = [True if remaining_wait <= 0 else False ]
+                timeout = [True if remaining_wait <= 0 or isinstance(e, asyncio.TimeoutError)  else False ]
                 self.logger.warning("%s command timeout for log index %d", self.my_uri(), log_rec.index)
                 async with self.active_commands_lock:
                     if log_rec.index in self.active_commands:

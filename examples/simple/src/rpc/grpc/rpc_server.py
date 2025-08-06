@@ -24,7 +24,7 @@ class RaftServicer(raft_service_pb2_grpc.RaftServiceServicer):
         """Handle issue_command requests"""
         try:
             logger.debug(f"Processing command via gRPC: {request.command[:50]}...")
-            result = await self.raft_server.issue_command(request.command, request.timeout)
+            result = await self.raft_server.issue_command(request.command, request.raft_timeout)
             # Handle CommandResult objects properly
             json_result = json.dumps(result, default=lambda o: o.__dict__)
             return raft_service_pb2.CommandResponse(result=json_result)

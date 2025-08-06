@@ -23,16 +23,16 @@ class Collector:
     def __init__(self, pipe):
         self.pipe = pipe
 
-    async def counter_add(self, name, value):
+    async def counter_add(self, name, value, timeout=10.0):
         package = dict(command_name="counter_add", args={'name': name, 'value': value})
         pstring = json.dumps(package)
-        res = await self.pipe.issue_command(pstring)
+        res = await self.pipe.issue_command(pstring, timeout=timeout)
         return json.loads(res)
 
     async def get_counters(self):
         package = dict(command_name="get_counters", args={})
         pstring = json.dumps(package)
-        res = await self.pipe.issue_command(pstring)
+        res = await self.pipe.issue_command(pstring, timeout=10.0)
         return json.loads(res)
 
 

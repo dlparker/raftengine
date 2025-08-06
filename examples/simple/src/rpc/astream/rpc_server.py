@@ -30,7 +30,7 @@ class RPCServer:
             self.handle_client, '127.0.0.1', self.port
         )
         async def serve():
-            print(f"server running on port {self.port}")
+            logger.info(f"server running on port {self.port}")
             try:
                 # Keep the server running
                 await asyncio.Event().wait()
@@ -190,6 +190,7 @@ class ClientFollower:
 
     async def run(self):
         """Main connection handling loop"""
+        counter = 0
         try:
             while not self.rpc_server.shutdown_event.is_set():
                 try:
@@ -199,7 +200,7 @@ class ClientFollower:
                     except asyncio.TimeoutError:
                         # Timeout - check if we should shutdown
                         continue
-                    
+                    counter += 1 
                     if not len_data:
                         break  # Connection closed
                     
@@ -239,6 +240,9 @@ class ClientFollower:
                     try:
                         if not self.rpc_server.shutdown_event.is_set():
                             logger.error(f"Error processing request from {self.info}: {e}")
+                            if "Unterminated" in str(e):
+                                with open(f'/tmp/error_{counter}.txt', 'w') as f:
+                                    f.write(data)
                             if not asyncio.current_task().cancelled():
                                 logger.debug(traceback.format_exc())
                     except:

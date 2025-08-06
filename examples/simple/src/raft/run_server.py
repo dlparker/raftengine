@@ -5,10 +5,18 @@ import shutil
 from pathlib import Path
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
+
 log_controller = LogController.make_controller()
-log_controller.set_default_level('error')
+log_controller.set_default_level('warning')
+#log_controller.set_logger_level('Leader', 'info')
+#log_controller.set_logger_level('Follower', 'info')
+#log_controller.set_logger_level('HybridLog', 'debug')
+#log_controller.set_logger_level('HybridLog.sqlite_writer', 'debug')
 
 import sys
+src_dir = Path(__file__).parent.parent
+logs_dir = Path(src_dir, 'logs')
+sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer

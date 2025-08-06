@@ -51,6 +51,7 @@ class Cluster:
         for index, spec in self.servers.items():
             work_dir = Path(spec['local_config'].working_dir)
             if work_dir.exists():
+                print(f"removing {work_dir}")
                 shutil.rmtree(work_dir)
             work_dir.mkdir()
             
@@ -184,7 +185,7 @@ class Cluster:
         if command == "set_logging_level":
             full_string = command
             for arg in args:
-                full_string += " {arg}"
+                full_string += f" {arg}"
         else:
             full_string = command
         for index,spec in self.servers.items():

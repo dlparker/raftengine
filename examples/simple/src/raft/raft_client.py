@@ -34,7 +34,7 @@ class RaftClient:
             await self.rpc_client.close()
         self.rpc_client = None
         
-    async def issue_command(self, command:str, max_retries=50, retry_count=0) -> CommandResult:
+    async def issue_command(self, command:str, timeout=10.0, max_retries=50, retry_count=0) -> CommandResult:
         if self.rpc_client is None:
             await self.connect()
         raw_result = await self.rpc_client.issue_command(command, timeout=self.timeout)
@@ -50,7 +50,7 @@ class RaftClient:
             raise Exception(f'got timeout at server, cluster not available')
         elif result.redirect:
             await self.connect(result.redirect)
-            return await self.issue_command(command)
+            return await self.issue_command(command, timeout)
         elif not result.retry:
             raise Exception(f"Command result does not make sense {result.__dict__}")
 

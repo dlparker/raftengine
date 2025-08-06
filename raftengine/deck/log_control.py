@@ -101,13 +101,21 @@ class LogController:
             'Leader': LoggerDef('Leader', 'Leader role', handler_names=self.default_handlers.copy()),
             'Follower': LoggerDef('Follower', 'Follower role', handler_names=self.default_handlers.copy()),
             'Candidate': LoggerDef('Candidate', 'Candidate role',
-                                   handler_names=self.default_handlers.copy(), custom_level="ERROR"),
+                                   handler_names=self.default_handlers.copy()),
             'BaseRole': LoggerDef('BaseRole', 'Base role functionality',
-                                  handler_names=self.default_handlers.copy(), custom_level="ERROR"),
+                                  handler_names=self.default_handlers.copy()),
             'Deck': LoggerDef('Deck', 'Main Raft engine controller', handler_names=self.default_handlers.copy()),
             'Elections': LoggerDef('Elections', 'Events in election logic',
-                                   handler_names=self.default_handlers.copy(), custom_level="ERROR"),
-        }
+                                   handler_names=self.default_handlers.copy()),
+            'SqliteLog': LoggerDef('SqliteLog', '',
+                                   handler_names=self.default_handlers.copy()),
+            'LMDBLog': LoggerDef('LMDBLog', '',
+                                   handler_names=self.default_handlers.copy()),
+            'HybridLog': LoggerDef('HybridLog', '',
+                                   handler_names=self.default_handlers.copy()),
+            'HybridLog.sqlite_writer': LoggerDef('HybridLog.sqlite_writer', '',
+                                                 handler_names=self.default_handlers.copy()),
+         }
         
         if additional_loggers:
             for logger_name, description in additional_loggers:

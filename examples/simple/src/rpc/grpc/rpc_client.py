@@ -45,9 +45,9 @@ class RPCClient:
         if self.stub is None:
             await self.connect()
         
-        request = raft_service_pb2.CommandRequest(command=command)
+        request = raft_service_pb2.CommandRequest(command=command, raft_timeout=timeout)
         try:
-            response = await self.stub.IssueCommand(request, timeout=timeout)
+            response = await self.stub.IssueCommand(request)
             # Deserialize the JSON response back to a dictionary
             return json.loads(response.result)
         except grpc.RpcError as e:

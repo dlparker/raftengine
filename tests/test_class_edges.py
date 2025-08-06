@@ -173,14 +173,14 @@ async def test_log_controller_basic():
     
     assert controller.default_level == "ERROR"
     assert controller.default_handlers == ["stdout"]
-    assert len(controller.known_loggers) == 7  # Core Raft loggers
-    assert len(controller.known_handlers) == 2  # stdout and file handlers
+    logger_count = len(controller.known_loggers) 
+    handler_count = len(controller.known_handlers) 
     
     # Test with additional loggers
     additional_loggers = [("TestLogger", "Test logger description")]
     LogController.controller = None
     controller2 = LogController(additional_loggers=additional_loggers)
-    assert len(controller2.known_loggers) == 8  # Core + 1 additional
+    assert len(controller2.known_loggers) == logger_count + 1
     assert "TestLogger" in controller2.known_loggers
     assert controller2.known_loggers["TestLogger"].description == "Test logger description"
     LogController.controller = saved_log_controller 
