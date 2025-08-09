@@ -81,6 +81,8 @@ class Follower(BaseRole):
             await self.send_append_entries_response(message)
             if (message.commitIndex > await self.log.get_commit_index()
                 or message.commitIndex > await self.log.get_applied_index()):
+                self.logger.debug("%s message.commitIndex %d > local commit or applied, processing",
+                             self.my_uri(), message.commitIndex)
                 await self.new_leader_commit_index(message.commitIndex)
             return
         recs = []
@@ -120,17 +122,20 @@ class Follower(BaseRole):
         our_commit = await self.log.get_commit_index()
         our_apply =  await self.log.get_applied_index()
         our_last_index = await self.log.get_last_index()
-        min_index = our_commit + 1
-        max_index = min(leader_commit_index + 1, our_last_index + 1)
-        self.logger.info("%s Leader commit index %d higher than ours %d, committing from %d through %d ",
-                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index-1)
-        for index in range(min_index, max_index):
-            await self.log.mark_committed(index)
+        our_first = await self.log.get_first_index()
+        first_record = our_first if our_first is not None else our_last_index
+        min_index = max(our_commit + 1, first_record)
+        max_index = min(leader_commit_index, our_last_index)
+        self.logger.info("%s Leader commit index %d higher than ours %d, committing from %d up to %d ",
+                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index)
+        for index in range(min_index, max_index + 1):
             self.logger.debug("%s committing %d ", self.my_uri(), index)
+            await self.log.mark_committed(index)
         min_index = our_apply + 1 # it might be lower than out_commit, max is the same for both
-        self.logger.info("%s Applying from %d through %d ",
-                         self.my_uri(), min_index, max_index-1)
-        for index in range(min_index, max_index):
+        min_index = max(min_index, first_record)
+        self.logger.info("%s Applying from %d up to %d ",
+                         self.my_uri(), min_index, max_index)
+        for index in range(min_index, max_index + 1):
             log_rec = await self.log.read(index)
             if log_rec.code == RecordCode.client_command:
                 self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
@@ -168,7 +173,8 @@ class Follower(BaseRole):
                 await self.log.set_broken()
                 await self.deck.stop()
                 return
-            self.logger.warning("processor ran but had an error %s, not marking applied", error_data)
+            self.logger.warning("processor ran but had an error \n%s\nnot marking applied, applied is %d",
+                                error_data, await self.log.get_applied_index())
             await self.deck.event_control.emit_error(error_data)
     
     async def on_vote_request(self, message):

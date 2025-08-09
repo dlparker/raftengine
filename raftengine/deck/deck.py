@@ -202,33 +202,32 @@ class Deck(DeckAPI):
     
     # Part of DeckAPI
     async def take_snapshot(self, timeout=2.0) -> SnapShot:
-        if not self.stopped:
-            if self.role.role_name == "LEADER":
-                nodes = self.cluster_ops.get_cluster_node_ids()
-                target = None
-                for uri in nodes:
-                    if uri != self.get_my_uri():
-                        target = uri
-                        break
-                await self.role.transfer_power(target)
-                start_time = time.time()
-                while time.time() - start_time < timeout and self.role.role_name == "LEADER":
-                    await asyncio.sleep(0.00001)
+        index = await self.log.get_applied_index()
+        first = await self.log.get_first_index()
+        index <= await self.log.get_applied_index()
+        if first and index and index > first:
+            if not self.stopped:
                 if self.role.role_name == "LEADER":
-                    raise Exception("could not start snapshot, node is leader and transfer power failed")
-            await self.role.stop()
-            index = await self.log.get_applied_index()
-            rec = await self.log.read(index)
-            if rec is not None:
+                    nodes = self.cluster_ops.get_cluster_node_ids()
+                    target = None
+                    for uri in nodes:
+                        if uri != self.get_my_uri():
+                            target = uri
+                            break
+                    await self.role.transfer_power(target)
+                    start_time = time.time()
+                    while time.time() - start_time < timeout and self.role.role_name == "LEADER":
+                        await asyncio.sleep(0.00001)
+                    if self.role.role_name == "LEADER":
+                        raise Exception("could not start snapshot, node is leader and transfer power failed")
+                await self.role.stop()
+                index = await self.log.get_applied_index()
+                rec = await self.log.read(index)
                 term = rec.term
                 snapshot = await self.pilot.create_snapshot(index, term)
                 await self.log.install_snapshot(snapshot)
-            else:
-                self.logger.warning("%s snapshot not possible, last_applied index %d record is None",
-                                    self.get_my_uri(), index)
-                snapshot = None
-            self.role = Follower(self, self.cluster_ops)
-            await self.role.start()
+                self.role = Follower(self, self.cluster_ops)
+                await self.role.start()
             return snapshot
     
     # Part of DeckAPI 
