@@ -14,7 +14,8 @@ from raftengine.deck.deck import Deck
 from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
 
-from base.counters import Counters
+#from base.counters import Counters
+from raft.raft_counters import RaftCounters
 from split_base.dispatcher import Dispatcher
 
 log_controller = LogController.get_controller()
@@ -32,7 +33,7 @@ from hybrid_log.hybrid_log import HybridLog
 class RaftServer:
 
     direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft',
-                       'take_power', 'get_logging_dict', 'set_logging_level']
+                       'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
     def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, 
                  start_paused=False, log_type='memory'):
         self.initial_config = initial_cluster_config
@@ -59,7 +60,7 @@ class RaftServer:
             self.log = MemoryLog()
         else:
             raise ValueError(f"Unknown log type: {log_type}. Valid types: memory, sqlite, lmdb, hybrid")
-        self.counters = Counters(self.working_dir)
+        self.counters = RaftCounters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher, self.rpc_client_class)
         self.deck = Deck(self.initial_config, self.local_config, self.pilot)
@@ -243,6 +244,12 @@ class RaftServer:
                 lc.set_default_level(level)
             res = f"logging for name '{name}' set to {level}"
             return res
+        elif command == "take_snapshot":
+            snap = await self.deck.take_snapshot()
+            return snap
+        elif command == "log_stats":
+            stats = await self.log.get_stats()
+            return json.dumps(stats, default=lambda o:o.__dict__)
 
         return f"unrecognized command '{command}'"
         

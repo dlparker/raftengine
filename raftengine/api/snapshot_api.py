@@ -18,5 +18,5 @@ class SnapShotToolAPI(abc.ABC):
         raise NotImplementedError
         
     async def apply_snapshot(self):# pragma: no cover abstract
-        await self.log.install_snapshot()
+        raise NotImplementedError
 

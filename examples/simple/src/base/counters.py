@@ -19,7 +19,7 @@ class Counters:
         with open(self.file_path, 'wb') as f:
             data = pickle.dumps(self.counts)
             f.write(data)
-            
+
     async def counter_add(self, name, value):
         if len(name) != 1 or name[0] not in string.ascii_letters:
             raise Exception('Counter names must be a single ascii letter')
@@ -29,5 +29,4 @@ class Counters:
 
     async def get_counters(self):
         return dict(self.counts)
-    
-        
+

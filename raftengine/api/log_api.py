@@ -68,6 +68,9 @@ class LogStats:
         snapshot_index (Optional[int]): Index of last snapshot, None if no snapshot
         last_record_timestamp (Optional[float]): Unix timestamp of most recent record
     """
+    first_index: int
+    last_index: int
+    last_term: int
     record_count: int
     records_since_snapshot: int
     records_per_minute: float
@@ -75,6 +78,7 @@ class LogStats:
     total_size_bytes: int
     snapshot_index: Optional[int] = None
     last_record_timestamp: Optional[float] = None
+    extra_stats: Optional[Any] = None
 
 
 # abstract class for all roles

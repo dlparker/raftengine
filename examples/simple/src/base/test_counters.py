@@ -5,6 +5,8 @@ async def main():
     file_path = Path(storage_dir, 'counters.pickle')
     counters = Counters(storage_dir)
     vt = Validator(counters)
+
+
     
 if __name__=="__main__":
     import asyncio

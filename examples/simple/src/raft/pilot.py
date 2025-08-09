@@ -9,16 +9,17 @@ from raftengine.deck.log_control import LogController
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 from raftengine.messages.message_codec import MessageCodec
+from raft.raft_counters import SnapShotTool
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.Pilot",
                                    "The application's implemention of the Raftengine PilotAPI")
-
 class Pilot(PilotAPI):
 
     def __init__(self, log, dispatcher, rpc_client_class):
         self.log = log
         self.dispatcher = dispatcher
+        self.counters = dispatcher.counters
         self.rpc_client_class = rpc_client_class
         self.other_node_clients = {}
         self.msg_index = 0
@@ -80,15 +81,18 @@ class Pilot(PilotAPI):
         
     # PilotAPI
     async def begin_snapshot_import(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        raise NotImplementedError
+        tool = SnapShotTool(self.counters, snapshot)
+        return tool
 
     # PilotAPI
     async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        raise NotImplementedError
-    
+        tool = SnapShotTool(self.counters, snapshot)
+        return tool
+
     # PilotAPI
     async def create_snapshot(self, index:int , term: int) -> SnapShot:
-        raise NotImplementedError
+        await self.counters.make_snapshot()
+        return SnapShot(index, term)
 
     # PilotAPI
     async def stop_commanded(self) -> None:

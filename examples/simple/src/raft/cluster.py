@@ -66,6 +66,9 @@ class Cluster:
             spec['client'] = client
         return client
     
+    def get_server_props(self, index=0):
+        return self.servers[index]
+    
     async def start_servers(self, targets=None, in_process=False, start_paused=False, default_logging_level='error'):
         for index,spec in self.servers.items():
             if targets and spec['uri'] not in targets:
@@ -181,7 +184,8 @@ class Cluster:
     async def direct_command(self, uri, command, *args):
         full_string = None
         if command not in RaftServer.direct_commands:
-            raise Exception(f'command {command} unknown, should be in RaftServer.direct_commands {RaftServer.direct_commands}')
+            raise Exception(f'command {command} unknown, should be in RaftServer.direct_commands'
+                            ' {RaftServer.direct_commands}')
         if command == "set_logging_level":
             full_string = command
             for arg in args:

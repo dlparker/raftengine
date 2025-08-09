@@ -3,7 +3,9 @@ import asyncio
 from pathlib import Path
 import sys
 import time
+import json
 import argparse
+import pickle
 import traceback
 src_dir = Path(__file__).parent.parent
 logs_dir = Path(src_dir, 'logs')
@@ -57,8 +59,31 @@ async def main(args):
     # trusting in redirect logic to send us to the right node
     client_0 = cluster.get_client(0)
     collector = Collector(client_0)
-    ct = Demo(collector)
-    res = await ct.do_unknown_state_demo()
+    dclass = Demo(collector)
+    res = await dclass.do_unknown_state_demo()
+
+    print('Basic functions worked, testing snapshot operations')
+    pre_snap_a_value = await collector.counter_add('a', 0)
+    pre_stats = json.loads(await cluster.direct_command(cluster.node_uris[0], 'log_stats'))
+    snapshot_dict = await cluster.direct_command(cluster.node_uris[0], 'take_snapshot')
+    post_stats = json.loads(await cluster.direct_command(cluster.node_uris[0], 'log_stats'))
+    post_snap_a_value = await collector.counter_add('a', 1)
+    print(f"Before snapshot stats\n{pre_stats}\nAfter snaphot and op stats\n{post_stats}\n")
+    if snapshot_dict['index'] != pre_stats['last_index']:
+        print(f"Expected snapshot index {snapshot_dict['index']} to eqaul pre_stats['last_index'] not {pre_stats['last_index']}")
+    
+    # now read the snapshot file and make sure it has the pre value
+    server_props = cluster.get_server_props(0)
+    wdir = server_props['local_config'].working_dir
+    with open(Path(wdir, 'counters_snapshot.pickle'), 'rb') as f:
+        buff = f.read()
+    counts = pickle.loads(buff)
+    print(counts)
+    #    import ipdb; ipdb.set_trace()
+    assert counts['a'] == pre_snap_a_value
+    assert counts['a'] != post_snap_a_value
+    print('reading snapshot file went as expected')
+
     if started_servers:
         await cluster.stop_servers()
     await client_0.close()
