@@ -11,7 +11,7 @@ class RaftCounters(Counters):
         with open(fp, 'wb') as f:
             data = pickle.dumps(self.counts)
             f.write(data)
-        print(f'saved {self.counts} to {fp}')
+        print(f'\n\nsaved {self.counts} to {fp}\n\n')
 
     async def get_snapshot_chunk(self, offset=0):
         # We don't care what the caller thinks the offset should

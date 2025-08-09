@@ -91,6 +91,7 @@ class Pilot(PilotAPI):
 
     # PilotAPI
     async def create_snapshot(self, index:int , term: int) -> SnapShot:
+        print(f'\nPilot taking snapshot at index {index}\n\n')
         await self.counters.make_snapshot()
         return SnapShot(index, term)
 

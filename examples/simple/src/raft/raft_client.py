@@ -6,28 +6,34 @@ from raftengine.api.types import CommandResult
 class RaftClient:
 
     def __init__(self, server_uri, rpc_client_class, timeout=10.0):
-        self.leader_uri = server_uri
+        self.server_uri = server_uri
         self.rpc_client_class = rpc_client_class
         self.timeout = timeout
         self.rpc_client = None
+        self.leader_uri = None
+        self.leader_rpc_client = None
         
     def get_uri(self):
         return self.leader_uri
 
-    async def connect(self, uri=None):
-        if uri is None:
-            uri = self.leader_uri
-        elif uri == self.leader_uri and self.rpc_client is not None:
-            return
+    async def connect(self):
         if self.rpc_client is not None:
-            c = self.rpc_client
-            self.rpc_client = None
-            asyncio.create_task(c.close())
+            return
+        host, port = self.server_uri.split(':')[1:]
+        port = int(port)
+        host = host.lstrip('/')
+        self.rpc_client = self.rpc_client_class(host, port, self.timeout * 2)
+
+    async def connect_to_leader(self, uri):
+        if self.leader_rpc_client is not None:
+            if self.leader_uri == uri:
+                return
+            await self.leader_rpc_client.close()
+        self.leader_uri = uri
         host, port = uri.split(':')[1:]
         port = int(port)
         host = host.lstrip('/')
-        self.leader_uri = uri
-        self.rpc_client = self.rpc_client_class(host, port, self.timeout * 2)
+        self.leader_rpc_client = self.rpc_client_class(host, port, self.timeout * 2)
 
     async def close(self):
         if self.rpc_client is not None:
@@ -37,7 +43,11 @@ class RaftClient:
     async def issue_command(self, command:str, timeout=10.0, max_retries=50, retry_count=0) -> CommandResult:
         if self.rpc_client is None:
             await self.connect()
-        raw_result = await self.rpc_client.issue_command(command, timeout=self.timeout)
+        elif self.leader_rpc_client is not None:
+            client = self.leader_rpc_client
+        else:
+            client = self.rpc_client
+        raw_result = await client.issue_command(command, timeout=self.timeout)
         try:
             result = CommandResult(**raw_result)
         except:
@@ -49,7 +59,7 @@ class RaftClient:
         elif result.timeout_expired:
             raise Exception(f'got timeout at server, cluster not available')
         elif result.redirect:
-            await self.connect(result.redirect)
+            await self.connect_to_leader(result.redirect)
             return await self.issue_command(command, timeout)
         elif not result.retry:
             raise Exception(f"Command result does not make sense {result.__dict__}")

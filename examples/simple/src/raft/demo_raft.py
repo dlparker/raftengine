@@ -73,6 +73,7 @@ async def main(args):
         print(f"Expected snapshot index {snapshot_dict['index']} to eqaul pre_stats['last_index'] not {pre_stats['last_index']}")
     
     # now read the snapshot file and make sure it has the pre value
+    await asyncio.sleep(0.3) # make sure it has time to save
     server_props = cluster.get_server_props(0)
     wdir = server_props['local_config'].working_dir
     with open(Path(wdir, 'counters_snapshot.pickle'), 'rb') as f:

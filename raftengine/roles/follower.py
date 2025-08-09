@@ -79,10 +79,9 @@ class Follower(BaseRole):
             self.logger.debug("%s heartbeat from leader %s", self.my_uri(),
                               message.sender)
             await self.send_append_entries_response(message)
-            if message.commitIndex >= await self.log.get_last_index():
-                if (message.commitIndex > await self.log.get_commit_index()
-                    or message.commitIndex > await self.log.get_applied_index()):
-                    await self.new_leader_commit_index(message.commitIndex)
+            if (message.commitIndex > await self.log.get_commit_index()
+                or message.commitIndex > await self.log.get_applied_index()):
+                await self.new_leader_commit_index(message.commitIndex)
             return
         recs = []
         for log_rec in message.entries:
@@ -98,9 +97,9 @@ class Follower(BaseRole):
                 # leader has. Any changes will come in cluster_config record types
                 await self.cluster_ops.update_cluster_config_from_json_string(log_rec.command)
         await self.send_append_entries_response(message)
-        if message.commitIndex >= await self.log.get_last_index():
-            if message.commitIndex > await self.log.get_commit_index():
-                await self.new_leader_commit_index(message.commitIndex)
+        if (message.commitIndex > await self.log.get_commit_index() or
+            message.commitIndex > await self.log.get_applied_index()):
+            await self.new_leader_commit_index(message.commitIndex)
         return
 
     async def send_no_sync_append_response(self, message):
@@ -130,7 +129,7 @@ class Follower(BaseRole):
             self.logger.debug("%s committing %d ", self.my_uri(), index)
         min_index = our_apply + 1 # it might be lower than out_commit, max is the same for both
         self.logger.info("%s Applying from %d through %d ",
-                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index-1)
+                         self.my_uri(), min_index, max_index-1)
         for index in range(min_index, max_index):
             log_rec = await self.log.read(index)
             if log_rec.code == RecordCode.client_command:

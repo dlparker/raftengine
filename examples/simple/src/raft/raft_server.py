@@ -245,6 +245,7 @@ class RaftServer:
             res = f"logging for name '{name}' set to {level}"
             return res
         elif command == "take_snapshot":
+            print(f'\nDirect command taking snapshot\n')
             snap = await self.deck.take_snapshot()
             return snap
         elif command == "log_stats":

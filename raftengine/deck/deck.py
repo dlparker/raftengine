@@ -219,9 +219,14 @@ class Deck(DeckAPI):
             await self.role.stop()
             index = await self.log.get_applied_index()
             rec = await self.log.read(index)
-            term = rec.term
-            snapshot = await self.pilot.create_snapshot(index, term)
-            await self.log.install_snapshot(snapshot)
+            if rec is not None:
+                term = rec.term
+                snapshot = await self.pilot.create_snapshot(index, term)
+                await self.log.install_snapshot(snapshot)
+            else:
+                self.logger.warning("%s snapshot not possible, last_applied index %d record is None",
+                                    self.get_my_uri(), index)
+                snapshot = None
             self.role = Follower(self, self.cluster_ops)
             await self.role.start()
             return snapshot
