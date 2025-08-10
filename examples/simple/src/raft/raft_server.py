@@ -13,21 +13,21 @@ from collections import defaultdict
 from raftengine.deck.deck import Deck
 from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
+from raftengine_logs.sqlite_log.sqlite_log import SqliteLog
+from raftengine_logs.memory_log.memory_log import MemoryLog
+from raftengine_logs.lmdb_log.lmdb_log import LmdbLog
+from raftengine_logs.hybrid_log.hybrid_log import HybridLog
+
 
 #from base.counters import Counters
 from raft.raft_counters import RaftCounters
+from raft.pilot import Pilot
 from split_base.dispatcher import Dispatcher
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.RaftServer",
                                    "The application's implemention of the Raftengine PilotAPI and other server functions")
 
-
-from raft.pilot import Pilot
-from sqlite_log.sqlite_log import SqliteLog
-from memory.memory_log import MemoryLog
-from lmdb_log.lmdb_log import LmdbLog
-from hybrid_log.hybrid_log import HybridLog
 
 
 class RaftServer:
