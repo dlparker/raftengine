@@ -55,7 +55,12 @@ class RaftServer:
         elif log_type == 'hybrid':
             if not self.hybrid_dir.exists():
                 self.hybrid_dir.mkdir(parents=True)
-            self.log = HybridLog(dirpath=self.hybrid_dir)
+            # These values are chosen to make the hybrid log actually have to
+            # do the archiving operations during performance testing, as those
+            # runs typically use loop counts in the tens of thousands. 
+            self.log = HybridLog(dirpath=self.hybrid_dir, hold_count=5000,
+                                 push_trigger=100, push_snap_size=200,
+                                 copy_block_size=100)
         elif log_type == 'memory':
             self.log = MemoryLog()
         else:
