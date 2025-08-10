@@ -59,10 +59,14 @@ def load_scaling_data(json_file: str) -> Dict[str, Any]:
     if "test_specification" in raw_data and "client_range" in raw_data["test_specification"]:
         client_range = raw_data["test_specification"]["client_range"]
     
-    # Get transport type for labeling
+    # Get transport type and log type for labeling
     transport = "unknown"
-    if "test_specification" in raw_data and "transport" in raw_data["test_specification"]:
-        transport = raw_data["test_specification"]["transport"]
+    log_type = "unknown"
+    if "test_specification" in raw_data:
+        if "transport" in raw_data["test_specification"]:
+            transport = raw_data["test_specification"]["transport"]
+        if "log_type" in raw_data["test_specification"]:
+            log_type = raw_data["test_specification"]["log_type"]
     
     # Create transformed data structure
     data = {
@@ -70,6 +74,8 @@ def load_scaling_data(json_file: str) -> Dict[str, Any]:
         "client_range": client_range,
         "results": results,
         "transport": transport,
+        "log_type": log_type,
+        "label": f"{transport}+{log_type}",
         "source_file": Path(json_file).stem
     }
     
@@ -125,8 +131,8 @@ def generate_comparative_chart(datasets: List[Dict[str, Any]], output_file: str)
     max_clients = max(all_client_ranges)
     
     # Set up figure title
-    transport_names = [data['transport'] for data in datasets]
-    fig.suptitle(f'Performance Comparison: {", ".join(transport_names)} ({min_clients}-{max_clients} Clients)', 
+    config_labels = [data['label'] for data in datasets]
+    fig.suptitle(f'Performance Comparison: {", ".join(config_labels)} ({min_clients}-{max_clients} Clients)', 
                  fontsize=16, fontweight='bold')
     
     # Plot Response Time (left subplot)
@@ -141,7 +147,7 @@ def generate_comparative_chart(datasets: List[Dict[str, Any]], output_file: str)
         line = ax1.plot(client_counts, response_times, 
                        color=color, marker=markers[i], linewidth=2, markersize=6,
                        linestyle=line_styles[i], 
-                       label=f'{data["transport"]} Response Time')
+                       label=f'{data["label"]} Response Time')
         response_lines.extend(line)
     
     # Plot Throughput (right subplot)  
@@ -156,7 +162,7 @@ def generate_comparative_chart(datasets: List[Dict[str, Any]], output_file: str)
         line = ax2.plot(client_counts, throughputs,
                        color=color, marker=markers[i], linewidth=2, markersize=6,
                        linestyle=line_styles[i],
-                       label=f'{data["transport"]} Throughput')
+                       label=f'{data["label"]} Throughput')
         throughput_lines.extend(line)
     
     # Set consistent x-axis limits and integer ticks
@@ -180,7 +186,7 @@ def generate_comparative_chart(datasets: List[Dict[str, Any]], output_file: str)
         min_response_time = min(response_times)
         min_response_time_clients = client_counts[response_times.index(min_response_time)]
         
-        stats_text += f"{data['transport']}: "
+        stats_text += f"{data['label']}: "
         stats_text += f"Avg RT: {avg_response_time:.2f}ms, "
         stats_text += f"Avg TP: {avg_throughput:.1f} req/sec, "
         stats_text += f"Peak TP: {max_throughput:.1f} req/sec @ {max_throughput_clients} clients\\n"
@@ -205,7 +211,7 @@ def generate_comparative_chart(datasets: List[Dict[str, Any]], output_file: str)
         max_throughput_clients = client_counts[throughputs.index(max_throughput)]
         min_response_time = min(response_times)
         min_response_time_clients = client_counts[response_times.index(min_response_time)]
-        print(f"  {data['transport']}: Peak throughput {max_throughput:.1f} req/sec @ {max_throughput_clients} clients, "
+        print(f"  {data['label']}: Peak throughput {max_throughput:.1f} req/sec @ {max_throughput_clients} clients, "
               f"Best response time {min_response_time:.2f}ms @ {min_response_time_clients} clients")
     
     plt.close()
@@ -239,7 +245,7 @@ def main():
     for json_file in args.json_files:
         print(f"Loading scaling data from {json_file}...")
         data = load_scaling_data(json_file)
-        print(f"  Found {len(data['results'])} test results for {data['transport']}")
+        print(f"  Found {len(data['results'])} test results for {data['label']}")
         datasets.append(data)
     
     # Generate comparative chart

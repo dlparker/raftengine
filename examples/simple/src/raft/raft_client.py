@@ -41,11 +41,11 @@ class RaftClient:
         self.rpc_client = None
         
     async def issue_command(self, command:str, timeout=10.0, max_retries=50, retry_count=0) -> CommandResult:
-        if self.rpc_client is None:
-            await self.connect()
-        elif self.leader_rpc_client is not None:
+        if self.leader_rpc_client is not None:
             client = self.leader_rpc_client
         else:
+            if self.rpc_client is None:
+                await self.connect()
             client = self.rpc_client
         raw_result = await client.issue_command(command, timeout=self.timeout)
         try:

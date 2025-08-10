@@ -63,7 +63,6 @@ async def run_client_test(client_count, loops_per_client, warmup, transport, bas
     ]
     
     print(f"Running: {' '.join(cmd)}")
-    
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 minute timeout
         
