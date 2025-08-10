@@ -1,0 +1,7 @@
+
+
+1. [] Add a demo function to spread snapshot to all nodes (update the api so that you can request a specific log entry, that makes it possible to dup).
+2. [] Add a demo function to add a node. There is alread a start_and join method in deck, just need to demo how to use it.
+3. [] Add a demo function to make a node exit cluster. Think about the fact that there is no prevention against leaving if there are only three nodes, or two, or one.
+   
+   
