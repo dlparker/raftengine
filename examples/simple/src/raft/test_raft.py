@@ -64,8 +64,7 @@ async def main(args):
 
     vt = Validator(collector)
     expected = await vt.do_test()
-    print(f'validator complete, returned {expected}')
-        
+    print(f'validator complete')
     print('Basic functions worked, testing snapshot operations')
     try:
         await test_snapshots(cluster)
@@ -82,7 +81,7 @@ if __name__=="__main__":
                         help='Port number for first node in cluster')
     parser.add_argument('--transport', '-t', 
                         choices=['astream', 'aiozmq', 'grpc'],
-                        default='aiozmq',
+                        default='astream',
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', '-l',
                         choices=['memory', 'sqlite', 'lmdb', 'hybrid'],

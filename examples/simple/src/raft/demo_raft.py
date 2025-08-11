@@ -71,7 +71,7 @@ if __name__=="__main__":
                         help='Port number for first node in cluster')
     parser.add_argument('--transport', '-t', 
                         choices=['astream', 'aiozmq', 'grpc'],
-                        default='aiozmq',
+                        default='astream',
                         help='Transport mechanism to use')
     parser.add_argument('--log-type', '-l',
                         choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
