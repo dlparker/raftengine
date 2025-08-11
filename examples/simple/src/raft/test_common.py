@@ -1,7 +1,6 @@
 import asyncio
 from pathlib import Path
 import pickle
-import json
 from split_base.collector import Collector
 
 async def test_snapshots(cluster, demo_print=False):
@@ -30,18 +29,18 @@ async def test_snapshots(cluster, demo_print=False):
         if demo_print:
             print(f"doing snapshot on server {index}")
         pre_snap_a_value = await collector.counter_add('a', 0)
-        pre_stats = json.loads(await cluster.direct_command(cluster.node_uris[index], 'log_stats'))
+        pre_stats = await cluster.direct_command(cluster.node_uris[index], 'status')
         if demo_print:
-            print(f"before snapshot last index is {pre_stats['last_index']}")
-            print(f"before snapshot applied index is {pre_stats['applied_index']}")
+            print(f"before snapshot last index is {pre_stats['last_log_index']}")
+            print(f"before snapshot applied index is {pre_stats['log_apply_index']}")
         snapshot_dict = await cluster.direct_command(cluster.node_uris[index], 'take_snapshot')
         if demo_print:
             print(f"snapshot is {snapshot_dict}")
-        post_stats = json.loads(await cluster.direct_command(cluster.node_uris[index], 'log_stats'))
+        post_stats = await cluster.direct_command(cluster.node_uris[index], 'status')
         if demo_print:
-            print(f"post sanpshot last_index = {post_stats['last_index']}, first = {post_stats['first_index']}")
-            print(f"post snapshot applied index is {pre_stats['applied_index']}")
-        if snapshot_dict['index'] != pre_stats['applied_index']:
+            print(f"post sanpshot last_log_index = {post_stats['last_log_index']}, first = {post_stats['first_log_index']}")
+            print(f"post snapshot applied index is {pre_stats['log_apply_index']}")
+        if snapshot_dict['index'] != pre_stats['log_apply_index']:
             print(f"pre_stats = \n{pre_stats}")
             print(f"post_stats = \n{post_stats}")
             raise Exception(f"Expected snapshot index {snapshot_dict['index']} " \
