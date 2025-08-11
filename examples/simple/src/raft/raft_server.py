@@ -255,7 +255,16 @@ class RaftServer:
             return snap
         elif command == "log_stats":
             stats = await self.log.get_stats()
-            return json.dumps(stats, default=lambda o:o.__dict__)
+            # The LogStats class returned by log.get_stats() does
+            # not include commit index or apply index, but we
+            # can benefit from those values in testing, see test_raft.py
+            # so we manipulate the return class to add them.
+            # This means you can't turn them back into LogStats on the
+            # client side without removing the extras.
+            sd = dict(stats.__dict__)
+            sd['commit_index'] = await self.log.get_commit_index()
+            sd['applied_index'] = await self.log.get_applied_index()
+            return json.dumps(sd)
 
         return f"unrecognized command '{command}'"
         

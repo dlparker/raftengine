@@ -156,7 +156,12 @@ class Cluster:
             return  True
         if status['is_leader'] is False and status['leader_uri'] is None:
             return False
-                
+
+    async def find_leader(self):
+        client = self.get_client(0)
+        stats = await client.direct_server_command("status")
+        return stats['leader_uri']
+    
     async def check_cluster_ready(self):
         leader_index = None
         leader_spec = None

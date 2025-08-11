@@ -14,7 +14,7 @@ class RaftClient:
         self.leader_rpc_client = None
         
     def get_uri(self):
-        return self.leader_uri
+        return self.server_uri
 
     async def connect(self):
         if self.rpc_client is not None:
