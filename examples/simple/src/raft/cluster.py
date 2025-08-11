@@ -47,6 +47,25 @@ class Cluster:
                 'client': None
             }
 
+    async def prepare_new_node(self):
+        index = len(self.node_uris) + 1
+        port = self.base_port + index
+        uri = f"{self.transport}://127.0.0.1:{port}"
+        leader_uri = await self.find_leader()
+        work_dir = Path('/tmp', f"counters_raft_server.{self.transport}.{index}")
+        if not work_dir.exists():
+            work_dir.mkdir()
+            
+        spec = {
+            'uri': uri,
+            'initial_cluster_config': self.initial_cluster_config,
+            'local_config': LocalConfig(uri=uri, working_dir=work_dir),
+            'server': None,
+            'server_proc': None,
+            'client': None
+        }
+        
+        
     def clear_server_files(self):
         for index, spec in self.servers.items():
             work_dir = Path(spec['local_config'].working_dir)

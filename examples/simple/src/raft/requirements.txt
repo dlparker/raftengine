@@ -1,4 +1,4 @@
-#-e /home/dparker/projects/raft/raftengine
+-e /home/dparker/projects/raft/raftengine
 git+https://github.com/dlparker/raftengine.git@v0.2.0#egg=raftengine
 #-e /home/dparker/projects/raft/raftengine_logs
 git+https://github.com/dlparker/raftengine_logs.git@v0.5.0#subdirectory=packages/hybridlog

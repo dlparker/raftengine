@@ -82,9 +82,9 @@ class ClusterOps:
                                    use_dynamic_config=init.use_dynamic_config,
                                    commands_idempotent=init.commands_idempotent)
         cc = ClusterConfig(nodes=nd, settings=settings)
-        res = await self.log.save_cluster_config(cc)
-        self.current_config = res
-        return res
+        cc = await self.log.save_cluster_config(cc)
+        self.current_config = cc
+        return cc
 
     def get_cluster_node_ids(self):
         return list(self.current_config.nodes.keys())
@@ -196,6 +196,9 @@ class ClusterOps:
         self.logger.info("%s initial load to new server %s has reached %d of %d on round %d", self.my_uri(),
                          target_uri, log_index, my_index, self.loading_data.round_count)
 
+
+        cc = await self.get_cluster_config()
+        
         if log_index == my_index:
             self.logger.info("%s initial load to new server %s is complete," +
                              " logging membership change and replicating", self.my_uri(),
@@ -213,7 +216,7 @@ class ClusterOps:
             msg = self.loading_data.change_message
             if msg:
                 await leader.send_membership_change_response_message(msg, ok=True)
-            await self.deck.note_join_done(True)
+            #await self.deck.note_join_done(True)
             self.loading_data = None
             return True
         config = await self.get_cluster_config()
@@ -249,6 +252,7 @@ class ClusterOps:
             return True
         
     async def abort_node_add(self, node_uri, leader):
+        self.logger.debug("%s aborting add of node %s", self.my_uri(), node_uri)
         cc = await self.get_cluster_config()
         cc.pending_node = None
         await self.log.save_cluster_config(cc)
@@ -334,6 +338,7 @@ class ClusterOps:
             new_cc = await self.plan_add_node(node_uri)
             res = await self.log.save_cluster_config(new_cc)
             self.current_config = res
+            self.logger.debug("%s started add of node %s", self.my_uri(), node_uri)
             return res
         raise Exception(f'node {node_uri} is already in active node set')
         
@@ -345,10 +350,12 @@ class ClusterOps:
         """
         cc = await self.get_cluster_config()
         if cc.pending_node is not None and cc.pending_node.uri == node_uri:
+            cc.pending_node.is_adding = False
             cc.nodes[node_uri] = cc.pending_node
             cc.pending_node = None
             res = await self.log.save_cluster_config(cc)
             self.current_config = res
+            self.logger.debug("%s finished add of node %s", self.my_uri(), node_uri)
             return res
         raise Exception(f'node {node_uri} is not pending addition')
 
@@ -368,6 +375,7 @@ class ClusterOps:
             new_cc = await self.plan_remove_node(node_uri)
             res =  await self.log.save_cluster_config(new_cc)
             self.current_config = res
+            self.logger.debug("%s started remove of node %s", self.my_uri(), node_uri)
             return res
         raise Exception(f'node {node_uri} is not in active node set')
 
@@ -383,6 +391,7 @@ class ClusterOps:
             cc.pending_node = None
             res =  await self.log.save_cluster_config(cc)
             self.current_config = res
+            self.logger.debug("%s finished remove of node %s", self.my_uri(), node_uri)
             return res
         raise Exception(f'node {node_uri} is not pending removal')
 
@@ -401,6 +410,7 @@ class ClusterOps:
         operand = cdict['operand']
         if op == "remove_node" and cc.pending_node and cc.pending_node.uri == operand:
             cc.nodes[operand] = cc.pending_node
+            cc.pending_node.is_removing = False
             if operand == self.my_uri():
                 await self.deck.note_exit_done(success=False)
         cc.pending_node = None
@@ -450,7 +460,7 @@ class ClusterOps:
                 await self.deck.note_exit_done(success=True)
         elif op == "update_settings":
             stored_config = await self.log.get_cluster_config()
-            stored_config.settings = ClusterSettings(stored_config.settings.__dict__)
+            stored_config.settings = ClusterSettings(**cdict['config']['settings'])
             res = await self.log.save_cluster_config(stored_config)
             self.current_config = res
         self.logger.debug(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
@@ -482,11 +492,10 @@ class ClusterOps:
                 await self.deck.role.transfer_power(t_uri, log_record)
                 return
         elif op == "add_node":
-            # we need to start the catchup for this node
             await self.finish_node_add(operand)
         elif op == "update_settings":
             stored_config = await self.log.get_cluster_config()
-            stored_config.settings = ClusterSettings(stored_config.settings.__dict__)
+            stored_config.settings = ClusterSettings(**cdict['config']['settings'])
             res = await self.log.save_cluster_config(stored_config)
             self.current_config = res
 

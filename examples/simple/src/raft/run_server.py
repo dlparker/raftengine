@@ -50,13 +50,18 @@ async def main(args):
         work_dir.mkdir()
     elif not work_dir.exists():
         work_dir.mkdir()
-    uri = nodes[args.index]
+
+    if args.join:
+        uri = f"{args.transport}://127.0.0.1:{args.base_port + args.index}"
+    else:
+        uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
     rpc_run_tools = RPCRunTools(args.transport)
     server = RaftServer(initial_cluster_config,
                         LocalConfig(uri=uri, working_dir=work_dir),
                         rpc_run_tools.get_server_class(), rpc_run_tools.get_client_class(),
-                        log_type=args.log_type
+                        log_type=args.log_type,
+                        start_and_join=args.join,
                         )
     try:
         await server.start()
@@ -86,8 +91,6 @@ if __name__=="__main__":
 
     parser.add_argument('-b', '--base_port', type=int, default=50090,
                         help='Port number for first node in cluster')
-    parser.add_argument('-i', '--index', type=int, required=True,
-                        help='Index of this server node in cluster node list')
     parser.add_argument('--clear-data', action='store_true',
                         help='Clear Raft log and bank db, must be used with --tell-me-twice')
     parser.add_argument('--tell-me-twice', action='store_true',
@@ -100,6 +103,8 @@ if __name__=="__main__":
                         choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
                         default='sqlite',
                         help='Log storage type to use')
+    parser.add_argument('-i', '--index', type=int, default=0, required=True,
+                        help='Index from cluster base port, also index into node list')
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-D', '--debug', action='store_true',
                        help="Set global logging level to debug")
@@ -109,6 +114,8 @@ if __name__=="__main__":
                        help="Set global logging level to warning")
     group.add_argument('-E', '--error', action='store_true',
                        help="Set global logging level to error, which is the default")
+    parser.add_argument('-j', '--join', action='store_true',
+                        help='Join existing cluster as new node at the index specified by -i')
     # Parse arguments
     args = parser.parse_args()
     if args.warning:

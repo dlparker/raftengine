@@ -74,7 +74,11 @@ class BaseRole:
     async def stop(self):
         # child classes not required to have this method, but if they do,
         # they should call this one (i.e. super().stop())
-        await self.log.set_voted_for(None) # in case we voted 
+        try:
+            await self.log.set_voted_for(None) # in case we voted
+        except:
+            # log might be stopped
+            pass
         self.stopped = True
 
     async def run_after(self, delay, target):

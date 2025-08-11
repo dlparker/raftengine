@@ -35,12 +35,13 @@ class RaftServer:
     direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft',
                        'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
     def __init__(self, initial_cluster_config, local_config, rpc_server_class, rpc_client_class, 
-                 start_paused=False, log_type='memory'):
+                 start_paused=False, log_type='memory', start_and_join=False):
         self.initial_config = initial_cluster_config
         self.local_config = local_config
         self.start_paused = start_paused
         self.rpc_server_class = rpc_server_class
         self.rpc_client_class = rpc_client_class
+        self.start_and_join = start_and_join
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
@@ -89,7 +90,11 @@ class RaftServer:
             await self.log.start()
             term = await self.log.get_term()
             if not self.start_paused:
-                await self.deck.start()
+                if self.start_and_join:
+                    leader_guess = self.initial_config.node_uris[0]
+                    await self.deck.start_and_join(leader_guess)
+                else:
+                    await self.deck.start()
             print(f"Raft server on {self.uri} started\n")
             config = await self.deck.cluster_ops.get_cluster_config()
             print(f"   config = {json.dumps(config, indent=4, default=lambda o:o.__dict__)}")
@@ -101,7 +106,11 @@ class RaftServer:
     # local method reachable through local_command RPC
     async def start_raft(self):
         if not self.deck.started:
-            await self.deck.start()
+            if self.start_and_join:
+                leader_guess = self.initial_config.node_uris[0]
+                await self.deck.start_and_join(leader_guess)
+            else:
+                await self.deck.start()
         
     # local method reachable through local_command RPC
     async def stop(self):

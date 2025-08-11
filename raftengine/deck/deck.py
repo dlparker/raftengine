@@ -350,10 +350,6 @@ class Deck(DeckAPI):
     async def note_join_done(self, success):
         self.join_result = success
         self.logger.warning("%s join leader result is %s", self.get_my_uri(), self.join_result)
-        if not self.joining_cluster:
-            self.logger.error("%s join leader result is %s but no waiter for join!",
-                              self.get_my_uri(), self.join_result)
-            
         
     async def _join_waiter(self, timeout, callback=None):
         start_time = time.time()
@@ -383,6 +379,8 @@ class Deck(DeckAPI):
         self.joining_cluster = False
         if not ok:
             await self.stop()
+        else:
+            self.logger.warning("%s attempt to join leader successful", self.get_my_uri())
         self.join_waiter_handle = None
         
     #called by Role

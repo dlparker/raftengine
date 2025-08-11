@@ -57,3 +57,8 @@ async def test_snapshots(cluster, demo_print=False):
         assert counts['a'] == pre_snap_a_value
         assert counts['a'] != post_snap_a_value
         print(f'reading server {index} snapshot file went as expected')
+
+async def test_membership(cluster, demo_print=False):
+    pass
+
+        

@@ -93,6 +93,8 @@ class Follower(BaseRole):
             recs.append(new_rec)
             # config changes are applied immediately
             if log_rec.code == RecordCode.cluster_config:
+                self.logger.info("%s record at index %s is cluster config update",
+                                 self.my_uri(), log_rec.index)
                 await self.cluster_ops.handle_membership_change_log_update(log_rec)
             elif log_rec.code == RecordCode.term_start and log_rec.index == 1:
                 # At the start of the first term we update the cluster config to whatever the
@@ -118,19 +120,25 @@ class Follower(BaseRole):
         self.logger.warning("%s out of sync with leader, sending %s",  self.my_uri(), reply)
 
     async def new_leader_commit_index(self, leader_commit_index):
-
         our_commit = await self.log.get_commit_index()
         our_apply =  await self.log.get_applied_index()
         our_last_index = await self.log.get_last_index()
         our_first = await self.log.get_first_index()
         first_record = our_first if our_first is not None else our_last_index
-        min_index = max(our_commit + 1, first_record)
+        need_commits = False
+        need_applies = False
+        min_index = min(first_record, our_apply + 1)
+        if our_commit < leader_commit_index:
+            need_commits = True
+        if our_apply < leader_commit_index:
+            need_apply = True
         max_index = min(leader_commit_index, our_last_index)
-        self.logger.info("%s Leader commit index %d higher than ours %d, committing from %d up to %d ",
-                            self.my_uri(), leader_commit_index, our_commit, min_index, max_index)
-        for index in range(min_index, max_index + 1):
-            self.logger.debug("%s committing %d ", self.my_uri(), index)
-            await self.log.mark_committed(index)
+        self.logger.info("%s starting commit and apply sweep, leader_commit is %d, our_commit is %d, our_apply is %d",
+                         self.my_uri(), leader_commit_index, our_commit, our_apply)
+        if need_commits:
+            for index in range(min_index, max_index + 1):
+                self.logger.debug("%s committing %d ", self.my_uri(), index)
+                await self.log.mark_committed(index)
         min_index = our_apply + 1 # it might be lower than out_commit, max is the same for both
         min_index = max(min_index, first_record)
         self.logger.info("%s Applying from %d up to %d ",
@@ -140,7 +148,7 @@ class Follower(BaseRole):
             if log_rec.code == RecordCode.client_command:
                 self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
                 await self.process_command_record(log_rec)
-            if log_rec.code == RecordCode.cluster_config:
+            elif log_rec.code == RecordCode.cluster_config:
                 self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
                 await self.cluster_ops.handle_membership_change_log_commit(log_rec)
                 await self.log.mark_applied(log_rec.index)

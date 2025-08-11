@@ -1,0 +1,7 @@
+-e /home/dparker/projects/raft/raftengine
+-e /home/dparker/projects/raft/raftengine_logs/packages/hybridlog
+-e /home/dparker/projects/raft/raftengine_logs/packages/lmdblog
+-e /home/dparker/projects/raft/raftengine_logs/packages/sqlitelog
+-e /home/dparker/projects/raft/raftengine_logs/packages/memorylog
+
+uvloop==0.21.0

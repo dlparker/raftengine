@@ -1,6 +1,6 @@
 
 
-1. [] Add a demo function to make sure all nodes have a snapshot.
+1. [X] Add a demo function to make sure all nodes have a snapshot.
 2. [] Add a demo function to add a node. There is alread a start_and join method in deck, just need to demo how to use it.
 3. [] Add a demo function to make a node exit cluster. Think about the fact that there is no prevention against leaving if there are only three nodes, or two, or one.
    

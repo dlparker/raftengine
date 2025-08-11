@@ -413,7 +413,7 @@ class Leader(BaseRole):
                     self.logger.debug('%s Doing command apply on %d', self.my_uri(), cur_index)
                     await self.run_command_locally(t_rec)
                 elif t_rec.code == RecordCode.cluster_config:
-                    self.logger.info('%s Doing cluster ops config change vote passed logic %d', self.my_uri(), cur_index)
+                    self.logger.info('%s Doing cluster ops config change vote passed logic for index %d', self.my_uri(), cur_index)
                     await self.cluster_ops.cluster_config_vote_passed(t_rec, self)
                 cur_index += 1
                 

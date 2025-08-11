@@ -745,7 +745,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     when one election_timeout_max period has passed since the beginning of a loading round
     that is not the first round.
 
-    First an normal election is run with three nodes. Next the node a loaded with a few log
+    First an normal election is run with three nodes. Next the node is loaded with a few log
     records, but we cheat and do it directly rather than running the commands for real. This
     reduces the logger output to help with debugging, and it reduces the tracing output.
     Not really necessisary, but nice.
@@ -963,8 +963,8 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 async def test_reverse_add_follower_1(cluster_maker):
     """
     This tests the scenario where a node begins the process of joining the cluster but 
-     a crash of the leader at a specific time leaves the leader with a log record describing
-    the membership change, but no other node also having that record. Then and election is run
+    a crash of the leader at a specific time leaves the leader with a log record describing
+    the membership change, but no other node also having that record. Then an election is run
     and the new leader writes a term start record in the log which ends up with the same
     record index as the old leader's change membership record. So once the old leader restarts
     and resynchronizes it overwrites the member change record and reverses its effect, so it
@@ -1165,11 +1165,28 @@ async def reverse_remove_part_1(cluster, timeout, callback, event_handler):
     # this should note out of sync
     await ts_1.do_next_in_msg()
     assert not ts_1.out_messages[0].success
-    await ts_1.do_next_out_msg()
-    await ts_2.do_next_in_msg()
-    await ts_2.do_next_out_msg()
-    await ts_1.do_next_in_msg()
-    
+    msg = await ts_1.do_next_out_msg()
+    logger.debug(f'\nout from ts1 {msg}\n')
+    if msg.code == 'append_entries' and len(msg.entries) > 0:
+        logger.debug(f'{msg.entries[0].code}')
+        
+    msg = await ts_2.do_next_in_msg()
+    logger.debug(f'\nin at ts2 {msg}\n')
+    if msg.code == 'append_entries' and len(msg.entries) > 0:
+        logger.debug(f'{msg.entries[0].code}')
+    msg = await ts_2.do_next_out_msg()
+    logger.debug(f'\nout from ts2 {msg}\n')
+    if msg.code == 'append_entries' and len(msg.entries) > 0:
+        logger.debug(f'{msg.entries[0].code}')
+    msg = await ts_1.do_next_in_msg()
+    logger.debug(f'\nin at ts1 {msg}\n')
+    if msg.code == 'append_entries' and len(msg.entries) > 0:
+        logger.debug(f'{msg.entries[0].code}')
+    msg = await ts_1.do_next_out_msg()
+    logger.debug(f'\nout from ts1 {msg}\n')
+    if msg.code == 'append_entries' and len(msg.entries) > 0:
+        logger.debug(f'{msg.entries[0].code}')
+    await asyncio.sleep(0)
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None
     await cluster.test_trace.start_subtest("Old leader cluster membership as original confirmed, running final checks")
@@ -1552,7 +1569,13 @@ async def test_update_settings(cluster_maker):
     assert (await ts_1.deck.get_cluster_config()).settings.max_entries_per_message != orig_value
 
     await ts_1.send_heartbeats()
-    await cluster.deliver_all_pending()
-
+    new_cc = await ts_2.deck.get_cluster_config()
+    cur_settings = new_cc.settings
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and cur_settings.max_entries_per_message == orig_value:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+        new_cc = await ts_2.deck.get_cluster_config()
+        cur_settings = new_cc.settings
     assert (await ts_2.deck.get_cluster_config()).settings.max_entries_per_message != orig_value
     assert (await ts_3.deck.get_cluster_config()).settings.max_entries_per_message != orig_value

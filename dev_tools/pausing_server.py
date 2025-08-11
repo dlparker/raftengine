@@ -1,4 +1,5 @@
 import asyncio
+import os
 import json
 import logging
 import time
@@ -66,7 +67,8 @@ class PausingServer(PilotAPI):
 
     async def simulate_crash(self):
         await self.deck.stop()
-        await self.log.stop()
+        # do not stop the log, for memory log that will clear the data
+        # await self.log.stop()
         self.am_crashed = True
         self.network.isolate_server(self)
         self.in_messages = []
@@ -232,6 +234,7 @@ class PausingServer(PilotAPI):
         await self.log.stop()
 
     async def start_and_join(self, leader_uri, callback=None, timeout=10.0):
+        await self.log.start()
         await self.deck.start_and_join(leader_uri, callback, timeout)
 
     async def start_election(self):
@@ -473,6 +476,7 @@ class Testdeck(Deck):
     # For testing only
     async def change_cluster_config(self, init: ClusterInitConfig):
         # cant add or remove  nodes here, just update settings
+        await self.log.start()
         config = await self.get_cluster_config()
         settings = ClusterSettings(heartbeat_period=init.heartbeat_period,
                                    election_timeout_min=init.election_timeout_min,
@@ -527,6 +531,9 @@ class Testdeck(Deck):
 def setup_log(server, use_log_class=MemoryLog):
     number = server.uri.split('/')[-1]
     path_root = Path('/tmp', f"pserver_{number}")
+    over = os.environ.get('TEST_WITH_SQLITE', None)
+    if over:
+        use_log_class = SqliteLog
     if use_log_class == MemoryLog:
         log = MemoryLog()
         return log
