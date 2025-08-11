@@ -94,7 +94,6 @@ class RPCClient:
             response = await self.stub.DirectServerCommand(request, timeout=self.timeout)
             return json.loads(response.result)
         except grpc.RpcError as e:
-            logger.error(f"gRPC error in direct_server_command: {e}")
             raise Exception(f"gRPC error: {e}")
 
     async def close(self):

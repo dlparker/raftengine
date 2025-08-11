@@ -12,6 +12,7 @@ log_controller.set_default_level('warning')
 #log_controller.set_logger_level('Follower', 'info')
 #log_controller.set_logger_level('HybridLog', 'debug')
 #log_controller.set_logger_level('HybridLog.sqlite_writer', 'debug')
+#log_controller.set_logger_level('HybridLog.sqlite_writer', 'debug')
 
 import sys
 src_dir = Path(__file__).parent.parent

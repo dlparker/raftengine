@@ -30,7 +30,7 @@ async def main(args):
         print(f"Cluster reports ready {reason}", flush=True)
         cluster_ready = True
     else:
-        print(f"Cluster reports not ready {reason}", flush=True)
+        print(f"Cluster reports not ready", flush=True)
         if "take_power" in reason:
             await cluster.elect_leader(0)
             ready, reason = await cluster.check_cluster_ready()
