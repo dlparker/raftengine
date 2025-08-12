@@ -239,7 +239,7 @@ async def test_command_sqlite_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
-    from dev_tools.sqlite_log import SqliteLog
+    from raftengine_logs.sqlite_log import SqliteLog
     cluster = cluster_maker(3, use_log=SqliteLog)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris

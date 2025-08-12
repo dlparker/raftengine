@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from dev_tools.memory_log import MemoryLog
 from dev_tools.sequences import SPartialElection, SPartialCommand
 from dev_tools.network_sim import NetManager
 from dev_tools.pausing_server import PausingServer, SimpleOps
@@ -15,7 +14,7 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 
 class PausingCluster:
 
-    def __init__(self, node_count, use_log=MemoryLog):
+    def __init__(self, node_count, use_log=None):
         self.use_log = use_log
         self.node_uris = []
         self.nodes = dict()
@@ -27,7 +26,7 @@ class PausingCluster:
             nid = i + 1
             uri = f"mcpy://{nid}"
             self.node_uris.append(uri)
-            t1s = PausingServer(uri, self, use_log=use_log)
+            t1s = PausingServer(uri, self, use_log=self.use_log)
             self.nodes[uri] = t1s
         self.net_mgr = NetManager(self.nodes)
         self.net_mgr.set_test_trace(self.test_trace)

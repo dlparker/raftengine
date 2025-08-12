@@ -18,6 +18,12 @@ for arg in "$@"; do
     if [[ "$arg" == "--debug" ]]; then
         CAPTURE_OPT="--show-capture=no"
         export RAFT_DEBUG_LOGGING=1
+    elif [[ "$arg" == "--sqlite" ]]; then
+        export RAFT_LOG_DEFAULT="sqlite"
+    elif [[ "$arg" == "--lmdb" ]]; then
+        export RAFT_LOG_DEFAULT="lmdb"
+    elif [[ "$arg" == "--hybrid" ]]; then
+        export RAFT_LOG_DEFAULT="hybrid"
     else
         ARGS+=("$arg")
     fi

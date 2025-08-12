@@ -14,6 +14,7 @@ from raftengine.api.types import RoleName
 from raftengine.api.log_api import LogRec
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.log_control import setup_logging
+from raftengine_logs.sqlite_log import SqliteLog
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
@@ -33,6 +34,20 @@ async def test_bogus_pilot(cluster_maker):
         pass
     with pytest.raises(Exception):
         Deck(ts_1.cluster_init_config, ts_1.local_config, BadPilot())
+
+async def test_shutdown_mis_order(cluster_maker):
+    """
+    Ensures that Deck constructor rejects Pilot class that does
+    not implement PilotAPI
+    """
+    cluster = cluster_maker(3, use_log=SqliteLog)
+    await cluster.test_trace.define_test("Testing shutdown out of order where log is closed before deck", logger=logger)
+    cluster.set_configs()
+    uri_1 = cluster.node_uris[0]
+    ts_1 = cluster.nodes[uri_1]
+    await ts_1.start()
+    await ts_1.log.stop()
+    await ts_1.deck.role.stop()
 
 async def test_str_methods():
     """

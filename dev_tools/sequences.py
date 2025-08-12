@@ -3,8 +3,8 @@ import logging
 import traceback
 import time
 
-from dev_tools.triggers import WhenElectionDone, WhenHasAppliedIndex, \
-    WhenCommitIndexSent
+from dev_tools.triggers import (WhenElectionDone, WhenHasAppliedIndex, 
+                                WhenCommitIndexSent)
 
 
 class StdSequence:
@@ -247,7 +247,6 @@ class SPartialCommand(StdSequence):
             elif node.trigger_set is not None:
                 for trigger in node.trigger_set:
                     msg  += ' ' + await trigger.dump_condition(node)
-            breakpoint()
             raise Exception(msg)
             
 

@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import time
+import shutil
 from copy import deepcopy
 from pathlib import Path
 
@@ -14,14 +15,27 @@ from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 from dev_tools.triggers import TriggerSet
 from dev_tools.operations import SimpleOps
-from dev_tools.memory_log import MemoryLog
-from dev_tools.sqlite_log import SqliteLog
+from raftengine_logs.memory_log import MemoryLog
+from raftengine_logs.sqlite_log import SqliteLog
+from raftengine_logs.lmdb_log import LmdbLog
+from raftengine_logs.hybrid_log import HybridLog
 
 class PausingServer(PilotAPI):
 
-    def __init__(self, uri, cluster, use_log=MemoryLog):
+    def __init__(self, uri, cluster, use_log):
         self.uri = uri
         self.cluster = cluster
+        if use_log is None:
+            log_type = os.environ.get('RAFT_LOG_DEFAULT', "memory")
+            if log_type == "memory":
+                use_log = MemoryLog
+            elif log_type == "sqlite":
+                use_log = SqliteLog
+            elif log_type == "lmdb":
+                use_log = LmdbLog
+            elif log_type == "hybrid":
+                use_log = HybridLog
+        self.use_log = use_log
         self.cluster_init_config = None
         self.local_config = None
         self.deck = None
@@ -424,10 +438,10 @@ class PausingServer(PilotAPI):
         if not done:
             if self.trigger and hasattr(self.trigger, 'dump_condition'):
                 print(await self.trigger.dump_condition(self))
-                raise Exception(f'{self.uri} timeout waiting for triggers')
+                res = await self.trigger.is_tripped(self)
+                raise Exception(f'{self.uri} timeout waiting for triggers, condition tripped = {res}')
         self.logger.info("-----!!!! PAUSE !!!!----- %s run_till_triggers complete, pausing", self.uri)
         self.am_paused = True
-
         return # all triggers tripped as required by mode flags, so pause ops
 
     async def fetch_log(self, start_rec, end_rec):
@@ -527,21 +541,38 @@ class Testdeck(Deck):
                                           self.role_run_later_def['target'])
         self.timers_disabled = False
 
+class HL(HybridLog):
+       
+    async def start(self):
+        await self.lmdb_log.start()
+        await self.sqlite_log.start()
+        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        
 
-def setup_log(server, use_log_class=MemoryLog):
+def setup_log(server, use_log_class):
     number = server.uri.split('/')[-1]
     path_root = Path('/tmp', f"pserver_{number}")
-    over = os.environ.get('TEST_WITH_SQLITE', None)
-    if over:
-        use_log_class = SqliteLog
     if use_log_class == MemoryLog:
         log = MemoryLog()
         return log
     elif use_log_class == SqliteLog:
-        path = Path(str(path_root) +'db')
+        path = Path(str(path_root) +'.db')
         if path.exists():
             path.unlink()
         log = SqliteLog(path)
+    elif use_log_class == LmdbLog:
+        path = Path(str(path_root) +'.lmdb')
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir()
+        log = LmdbLog(path)
+    elif use_log_class == HybridLog:
+        path = Path(str(path_root) +'.hybrid')
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir()
+        #log = HybridLog(path)
+        log = HL(path)
     else:
-        raise Exception(f"don't know log type {self.use_log}")
+        raise Exception(f"don't know log type {use_log_class}")
     return log

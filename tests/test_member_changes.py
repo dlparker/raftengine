@@ -15,7 +15,7 @@ from raftengine.api.snapshot_api import SnapShot
 from raftengine.messages.cluster_change import MembershipChangeMessage, ChangeOp, MembershipChangeResponseMessage
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.sequences import SPartialElection
-from dev_tools.memory_log import MemoryLog
+from raftengine_logs.memory_log import MemoryLog
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.log_control import setup_logging
 

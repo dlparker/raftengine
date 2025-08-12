@@ -12,13 +12,12 @@ from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.deck_config import ClusterInitConfig
 from raftengine.api.snapshot_api import SnapShot
-from dev_tools.memory_log import MemoryLog
-from dev_tools.sqlite_log import SqliteLog
+from raftengine_logs.memory_log import MemoryLog
+from raftengine_logs.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.pausing_server import setup_log
-from dev_tools.sqlite_log import SqliteLog
 from dev_tools.operations import DictTotalsOps, SnapShotTool
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 

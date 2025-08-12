@@ -4,6 +4,7 @@ from collections import defaultdict
 from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.api.log_api import RecordCode
 
+logger = logging.getLogger("Triggers")
 
 class PauseTrigger: # pragma: no cover
 
@@ -134,7 +135,6 @@ class WhenInMessageCount(PauseTrigger):
         return msg
     
     async def is_tripped(self, server):
-        logger = logging.getLogger("Triggers")
         for message in server.in_messages:
             if message.get_code() == self.message_code:
                 if message not in self.captured:
@@ -271,13 +271,13 @@ class WhenElectionDone(PauseTrigger):
         self.announced = defaultdict(dict)
         self.voters = voters
         self.wait_for_term_start = wait_for_term_start
+        logger.debug("WhenElectionDone setup with voters = %s", voters)
         
     def __repr__(self):
         msg = f"{self.__class__.__name__}"
         return msg
         
     async def is_tripped(self, server):
-        logger = logging.getLogger("Triggers")
         quiet = []
         have_leader = None
         if self.voters is None:
@@ -295,17 +295,23 @@ class WhenElectionDone(PauseTrigger):
         for uri in self.voters:
             node = server.cluster.nodes[uri]
             if node.deck.leader_uri != have_leader:
+                logger.debug('%s has no leader', uri)
                 return False
         if not self.wait_for_term_start:
             for uri in self.voters:
+                #if uri == have_leader:
+                    #continue
                 node = server.cluster.nodes[uri]
                 if len(node.in_messages) != 0 or len(node.out_messages) != 0:
+                    logger.debug('%s has message(s)', uri)
                     return False
             return True
         for uri in self.voters:
             node = server.cluster.nodes[uri]
-            last_log = await node.log.read(await node.log.get_last_index())
+            now_index = await node.log.get_last_index()
+            last_log = await node.log.read(now_index)
             if last_log.code != RecordCode.term_start:
+                logger.debug('%s has no term start yet', uri)
                 return False
         return True
     
@@ -343,7 +349,6 @@ class TriggerSet:
         self.triggers.append(trigger)
 
     async def is_tripped(self, server):
-        logger = logging.getLogger("Triggers")
         for_set = 0
         for cond in self.triggers:
             is_tripped = await cond.is_tripped(server)

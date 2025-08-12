@@ -67,6 +67,12 @@ def configure_breakpoint():
             controller = LogController.make_controller()
         controller.add_logger('test_code')
         controller.add_logger('SimpleOps')
+        controller.add_logger('Triggers')
+        controller.add_logger('HybridLog')
+        controller.add_logger('HybridLog.sqlite_writer')
+        controller.add_logger('SqliteLog')
+        controller.add_logger('LMDBLog')
+
         if os.environ.get('RAFT_DEBUG_LOGGING') == '1':
             controller.set_default_level('debug')
     except ImportError:

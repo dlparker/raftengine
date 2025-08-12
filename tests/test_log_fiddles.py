@@ -7,7 +7,7 @@ import pytest
 from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
 from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 from raftengine.api.log_api import LogRec
-from dev_tools.memory_log import MemoryLog
+from raftengine_logs.memory_log import MemoryLog
 
 from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.triggers import WhenHasLogIndex

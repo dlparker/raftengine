@@ -44,7 +44,7 @@ logger = logging.getLogger("test_code")
 async def test_get_deck():
     from raftengine.api import get_deck_class
     from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
-    from dev_tools.memory_log import MemoryLog
+    from raftengine_logs.memory_log import MemoryLog
     from raftengine.api.pilot_api import PilotAPI
 
     class PilotSim(PilotAPI):
