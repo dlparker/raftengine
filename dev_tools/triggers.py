@@ -299,8 +299,6 @@ class WhenElectionDone(PauseTrigger):
                 return False
         if not self.wait_for_term_start:
             for uri in self.voters:
-                #if uri == have_leader:
-                    #continue
                 node = server.cluster.nodes[uri]
                 if len(node.in_messages) != 0 or len(node.out_messages) != 0:
                     logger.debug('%s has message(s)', uri)
