@@ -187,10 +187,11 @@ async def test_run_to_election_1(cluster_maker):
     assert ts_3.get_role_name() == "FOLLOWER"
     # simulate timeout on heartbeat on only one follower, so it should win
     await ts_2.start_campaign(authorized=True)
-    
-    ts_1.set_trigger(WhenElectionDone(ts_1))
-    ts_2.set_trigger(WhenElectionDone(ts_2))
-    ts_3.set_trigger(WhenElectionDone(ts_3))
+
+    wed = WhenElectionDone(cluster)
+    ts_1.set_trigger(wed)
+    ts_2.set_trigger(wed)
+    ts_3.set_trigger(wed)
         
     await asyncio.gather(ts_1.run_till_triggers(),
                          ts_2.run_till_triggers(),

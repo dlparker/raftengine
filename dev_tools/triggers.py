@@ -265,14 +265,20 @@ class WhenHasAppliedIndex(PauseTrigger):
     
 class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the
-    # post election quiet period
+    # post election quiet period. This only works if
+    # all the nodes listed in voters, or all the nodes
+    # in the cluster, share the same instance.
 
-    def __init__(self, server, voters=None, wait_for_term_start=False):
-        self.server = server
+    def __init__(self, cluster, voters=None, wait_for_term_start=False):
+        self.cluster = cluster
         self.announced = defaultdict(dict)
         self.voters = voters
+        if self.voters is None:
+            self.voters = list(self.cluster.nodes.keys())
         self.wait_for_term_start = wait_for_term_start
-        self.triggered = False
+        self.done_flags = {}
+        for uri in self.voters:
+            self.done_flags[uri] = False
         logger.debug("WhenElectionDone setup with voters = %s", voters)
         
     def __repr__(self):
@@ -280,10 +286,12 @@ class WhenElectionDone(PauseTrigger):
         return msg
         
     async def is_tripped(self, server):
-        quiet = []
+        if self.done_flags[server.uri]:
+            return True
+        if len(server.in_messages) != 0 or len(server.out_messages) != 0:
+            # have pending messages, not done by definition, since we want the quiet period after election
+            return False
         have_leader = None
-        if self.voters is None:
-            self.voters = list(server.cluster.nodes.keys())
         for uri in self.voters:
             node = server.cluster.nodes[uri]
             if node.deck.get_role_name() == "LEADER":
@@ -291,30 +299,19 @@ class WhenElectionDone(PauseTrigger):
                 rec = self.announced[uri]
                 if "is_leader" not in rec:
                     rec['is_leader'] = True
-                    logger.debug('%s is now leader', uri)
+                    logger.debug('%s is now leader at node %s', uri, node.uri)
         if  have_leader is None:
             return False
+        # see if any other server is busy
         for uri in self.voters:
+            if self.done_flags[uri] or uri == server.uri:
+                continue
             node = server.cluster.nodes[uri]
-            if node.deck.leader_uri != have_leader:
-                logger.debug('%s has no leader', uri)
+            if len(node.in_messages) != 0 or len(node.out_messages) != 0:
                 return False
-        if not self.wait_for_term_start:
-            for uri in self.voters:
-                node = server.cluster.nodes[uri]
-                if len(node.in_messages) != 0 or len(node.out_messages) != 0:
-                    logger.debug('%s has message(s)', uri)
-                    return False
-            self.triggered = True
-            return True
-        for uri in self.voters:
-            node = server.cluster.nodes[uri]
-            now_index = await node.log.get_last_index()
-            last_log = await node.log.read(now_index)
-            if last_log.code != RecordCode.term_start:
-                logger.debug('%s has no term start yet', uri)
-                return False
-        self.triggered = True
+        # we must be done because no other server has pending messages
+        # and we are waiting for the quite after an election.
+        self.done_flags[server.uri] = True
         return True
     
     async def dump_condition(self, server):

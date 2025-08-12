@@ -24,9 +24,10 @@ class SNormalElection(StdSequence):
         self.expected_count = 0
 
     async def do_setup(self):
+        wed = WhenElectionDone(self.cluster)
         for uri,node in self.cluster.nodes.items():
             node.clear_triggers()
-            node.set_trigger(WhenElectionDone(node))
+            node.set_trigger(wed)
             self.expected_count += 1
 
     async def runner_wrapper(self, node):
@@ -146,10 +147,11 @@ class SPartialElection(StdSequence):
         self.expected_count = 0
 
     async def do_setup(self):
+        wed = WhenElectionDone(self.cluster, self.voters)
         for uri in self.voters:
             node = self.cluster.nodes[uri]
             node.clear_triggers()
-            node.set_trigger(WhenElectionDone(node, self.voters))
+            node.set_trigger(wed)
             self.expected_count += 1
 
     async def runner_wrapper(self, node):
