@@ -4,13 +4,10 @@ import logging
 import pytest
 import time
 from pathlib import Path
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
 
-from dev_tools.triggers import WhenElectionDone
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
-from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialCommand
+from dev_tools.sequences import SNormalElection, SNormalCommand
 from dev_tools.log_control import setup_logging
+from dev_tools.pausing_cluster import cluster_maker
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")

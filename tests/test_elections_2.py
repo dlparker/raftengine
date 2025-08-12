@@ -12,11 +12,10 @@ from dev_tools.triggers import WhenMessageOut, WhenMessageIn
 from dev_tools.triggers import WhenIsLeader, WhenHasLeader
 from dev_tools.triggers import WhenElectionDone
 from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
-from dev_tools.triggers import WhenInMessageCount
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.sequences import SNormalElection
 from dev_tools.log_control import setup_logging
-from dev_tools.features import registry, FeatureRegistry
+from dev_tools.features import FeatureRegistry
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
@@ -189,9 +188,9 @@ async def test_run_to_election_1(cluster_maker):
     # simulate timeout on heartbeat on only one follower, so it should win
     await ts_2.start_campaign(authorized=True)
     
-    ts_1.set_trigger(WhenElectionDone())
-    ts_2.set_trigger(WhenElectionDone())
-    ts_3.set_trigger(WhenElectionDone())
+    ts_1.set_trigger(WhenElectionDone(ts_1))
+    ts_2.set_trigger(WhenElectionDone(ts_2))
+    ts_3.set_trigger(WhenElectionDone(ts_3))
         
     await asyncio.gather(ts_1.run_till_triggers(),
                          ts_2.run_till_triggers(),

@@ -4,29 +4,14 @@ import logging
 import time
 from pathlib import Path
 import pytest
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
-from raftengine.api.log_api import LogRec
-from raftengine_logs.memory_log import MemoryLog
 
-from dev_tools.triggers import WhenMessageOut, WhenMessageIn
-from dev_tools.triggers import WhenHasLogIndex
-from dev_tools.triggers import WhenHasCommitIndex
-from dev_tools.triggers import WhenInMessageCount, WhenElectionDone
-from dev_tools.triggers import WhenAllMessagesForwarded, WhenAllInMessagesHandled
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
-from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection
 from dev_tools.log_control import setup_logging
-from dev_tools.features import registry, FeatureRegistry
+from dev_tools.features import FeatureRegistry
+from dev_tools.pausing_cluster import cluster_maker
 
 # Initialize feature registry
 registry = FeatureRegistry.get_registry()
 
-#extra_logging = [dict(name=__name__, level="debug"), dict(name="Triggers", level="debug")]
-#extra_logging = [dict(name=__name__, level="debug"),]
-#log_config = setup_logging(extra_logging)
-default_level='error'
-#default_level='debug'
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
 

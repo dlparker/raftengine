@@ -5,14 +5,11 @@ import time
 import json
 from pathlib import Path
 import pytest
-from raftengine.messages.request_vote import RequestVoteMessage,RequestVoteResponseMessage
-from raftengine.messages.append_entries import AppendEntriesMessage, AppendResponseMessage
+from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.messages.message_codec import MessageCodec
-from raftengine.api.log_api import LogRec
 
-from dev_tools.triggers import WhenElectionDone
 from dev_tools.sequences import SNormalElection
-from dev_tools.pausing_cluster import PausingCluster, cluster_maker
+from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()

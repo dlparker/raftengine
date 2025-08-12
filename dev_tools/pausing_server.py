@@ -546,7 +546,8 @@ class HL(HybridLog):
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        #await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        self.sqlwriter = None
         
 
 def setup_log(server, use_log_class):

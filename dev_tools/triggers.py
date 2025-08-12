@@ -267,10 +267,12 @@ class WhenElectionDone(PauseTrigger):
     # Examine whole cluster to make sure we are in the
     # post election quiet period
 
-    def __init__(self, voters=None, wait_for_term_start=False):
+    def __init__(self, server, voters=None, wait_for_term_start=False):
+        self.server = server
         self.announced = defaultdict(dict)
         self.voters = voters
         self.wait_for_term_start = wait_for_term_start
+        self.triggered = False
         logger.debug("WhenElectionDone setup with voters = %s", voters)
         
     def __repr__(self):
@@ -303,6 +305,7 @@ class WhenElectionDone(PauseTrigger):
                 if len(node.in_messages) != 0 or len(node.out_messages) != 0:
                     logger.debug('%s has message(s)', uri)
                     return False
+            self.triggered = True
             return True
         for uri in self.voters:
             node = server.cluster.nodes[uri]
@@ -311,6 +314,7 @@ class WhenElectionDone(PauseTrigger):
             if last_log.code != RecordCode.term_start:
                 logger.debug('%s has no term start yet', uri)
                 return False
+        self.triggered = True
         return True
     
     async def dump_condition(self, server):
