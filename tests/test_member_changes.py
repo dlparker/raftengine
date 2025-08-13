@@ -362,8 +362,8 @@ async def test_add_follower_2(cluster_maker):
         await asyncio.sleep(0.001)
 
     assert ts_4.operations.total == ts_1.operations.total
-    assert done_by_callback 
     await asyncio.sleep(0.00)
+    assert done_by_callback 
     assert done_by_event 
     
 async def test_add_follower_2_rounds_1(cluster_maker):
@@ -471,8 +471,8 @@ async def test_add_follower_2_rounds_1(cluster_maker):
         await asyncio.sleep(0.001)
 
     assert ts_4.operations.total == ts_1.operations.total
+    await asyncio.sleep(0.001)
     assert done_by_callback 
-    await asyncio.sleep(0.00)
     assert done_by_event 
     
 async def test_add_follower_3_rounds_1(cluster_maker):
@@ -926,7 +926,7 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     await cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal")
 
     # trying to add node again should work
-    await ts_4.stop()
+    await ts_4.tmp_stop()
     done_by_callback = None
     done_by_event = None
     ts_2.unblock_network()

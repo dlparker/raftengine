@@ -172,7 +172,6 @@ async def test_run_to_election_1(cluster_maker):
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
     await cluster.run_sequence(sequence)
-    
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
@@ -201,6 +200,8 @@ async def test_run_to_election_1(cluster_maker):
     ts_2.clear_triggers()
     ts_3.clear_triggers()
 
+    await cluster.deliver_all_pending()
+    await asyncio.sleep(0.0001)
     await cluster.deliver_all_pending()
     assert ts_2.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_2

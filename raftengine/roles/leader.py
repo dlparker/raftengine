@@ -545,11 +545,9 @@ class Leader(BaseRole):
                 prevLogTerm = 0
         return prevLogIndex, prevLogTerm
                 
-        
     async def delayed_exit(self, log_record):
         await self.cluster_ops.finish_node_remove(self.my_uri())
-        log_record.applied = True
-        await self.log.replace(log_record)
+        await self.log.mark_applied(log_record.index)
         self.elec_logger.info("%s leader exiting cluster", self.my_uri())
         await self.deck.note_exit_done(success=True)
         

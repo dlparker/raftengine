@@ -87,6 +87,7 @@ class Follower(BaseRole):
             return
         recs = []
         for log_rec in message.entries:
+            
             self.logger.info("%s Added record from leader at index %s",
                                 self.my_uri(), log_rec.index)
             new_rec = await self.log.append(log_rec)
@@ -127,11 +128,13 @@ class Follower(BaseRole):
         first_record = our_first if our_first is not None else our_last_index
         need_commits = False
         need_applies = False
-        min_index = min(first_record, our_apply + 1)
+        min_index = first_record
         if our_commit < leader_commit_index:
             need_commits = True
+            min_index = our_commit + 1
         if our_apply < leader_commit_index:
             need_apply = True
+            min_index = min(min_index, our_apply + 1)
         max_index = min(leader_commit_index, our_last_index)
         self.logger.info("%s starting commit and apply sweep, leader_commit is %d, our_commit is %d, our_apply is %d",
                          self.my_uri(), leader_commit_index, our_commit, our_apply)
@@ -202,8 +205,9 @@ class Follower(BaseRole):
             # If the messages claim for last committed log index or term are not at least as high
             # as our local values, then vote no.
             if message.prevLogIndex < local_index or message.prevLogTerm < local_term:
-                self.elec_logger.info("%s voting false on %s", self.my_uri(),
-                                 message.sender)
+                self.elec_logger.info("%s voting false on %s local index=%d, term=%d, msg index=%d, term=%d",
+                                      self.my_uri(), message.sender, local_index, local_term,
+                                      message.prevLogIndex, message.prevLogTerm)
                 vote = False
             else: # both term and index proposals are acceptable, so vote yes
                 await self.log.set_voted_for(message.sender)

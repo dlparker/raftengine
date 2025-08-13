@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dev_tools.sequences import SPartialElection, SPartialCommand
+from dev_tools.sequences import SPartialElection, SPartialCommand, SNormalElection
 from dev_tools.network_sim import NetManager
 from dev_tools.pausing_server import PausingServer, SimpleOps
 from dev_tools.test_trace import TestTrace
@@ -123,6 +123,11 @@ class PausingCluster:
         await sequence.do_setup()
         # may raise timeout
         result = await sequence.wait_till_done()
+        if (isinstance(sequence, SNormalElection)
+            or isinstance(sequence, SPartialElection)):
+            await self.deliver_all_pending()
+            await asyncio.sleep(0.0)
+            await self.deliver_all_pending()
         await sequence.do_teardown()
         return result
 

@@ -18,7 +18,9 @@ from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
-
+#log_control.set_default_level("warning")
+#log_control.set_logger_level("Elections", "debug")
+#log_control.set_logger_level("Follower", "debug")
 registry = FeatureRegistry.get_registry()
 
 async def test_command_1(cluster_maker):
@@ -370,6 +372,7 @@ async def double_leader_inner(cluster, discard):
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
+    await cluster.deliver_all_pending()
     assert ts_3.get_leader_uri() == uri_2
 
     logger.info('------------------ 2 leaders, telling actual leader to run command')

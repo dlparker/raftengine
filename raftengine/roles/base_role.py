@@ -16,6 +16,7 @@ class BaseRole:
         self.deck = deck
         self.role_name = role_name
         self.logger = logging.getLogger("BaseRole")
+        self.elec_logger = logging.getLogger("Elections")
         self.log = deck.get_log()
         self.stopped = False
         self.routes = None
@@ -131,7 +132,7 @@ class BaseRole:
         
     async def on_pre_vote_request(self, message):
         if self.role_name == "LEADER" and not message.authorized:
-            self.logger.info("%s pre voting false on %s, am leader and last check quorum succeeded", self.my_uri(),
+            self.elec_logger.info("%s pre voting false on %s, am leader and last check quorum succeeded", self.my_uri(),
                              message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
@@ -142,27 +143,27 @@ class BaseRole:
             and self.leader_uri is not None
             and time.time() - self.last_leader_contact < e_max
             and not message.authorized):
-            self.logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(), message.sender)
+            self.elec_logger.info("%s pre voting false on %s, leader is in contact", self.my_uri(), message.sender)
             await self.send_pre_vote_response_message(message, vote_yes=False)
             return
         
         commit_index = await self.log.get_commit_index()
         if message.term <= await self.log.get_term():
             vote = False
-            self.logger.info("%s pre voting false on %s on low term %d", self.my_uri(),
+            self.elec_logger.info("%s pre voting false on %s on low term %d", self.my_uri(),
                              message.sender, message.term)
         elif commit_index == 0:
             # we don't have any committed entries, so anybody wins
-            self.logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
+            self.elec_logger.info("%s voting true for candidate %s", self.my_uri(), message.sender)
             vote = True
         else:
             rec = await self.log.read(commit_index)
             if message.prevLogIndex < commit_index or message.prevLogTerm < rec.term:
-                self.logger.info("%s pre voting false on %s", self.my_uri(),
+                self.elec_logger.info("%s pre voting false on %s", self.my_uri(),
                                  message.sender)
                 vote = False
             else: # both term and index proposals are acceptable, so vote yes
-                self.logger.info("%s pre voting true for candidate %s", self.my_uri(), message.sender)
+                self.elec_logger.info("%s pre voting true for candidate %s", self.my_uri(), message.sender)
                 vote = True
         await self.send_pre_vote_response_message(message, vote_yes=vote)
 

@@ -365,10 +365,12 @@ class Deck(DeckAPI):
             etime  = time.time() - start_time
             self.logger.warning("%s attempt to join leader timedout after %f", self.get_my_uri(), etime)
         if ok:
-            if EventType.membership_change_complete in self.event_control.active_events:
+            cc = await self.cluster_ops.get_cluster_config()
+            if cc.pending_node is not None:
+                # might already have been processed, message arrival is not deterministic
                 self.logger.debug("%s marking join complete", self.get_my_uri())
                 await self.cluster_ops.finish_node_add(self.get_my_uri())
-                cc = await self.cluster_ops.get_cluster_config()
+            if EventType.membership_change_complete in self.event_control.active_events:
                 await self.event_control.emit_membership_change_complete(ChangeOp.add, self.get_my_uri())
         else:
             if EventType.membership_change_aborted in self.event_control.active_events:

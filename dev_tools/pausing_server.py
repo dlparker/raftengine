@@ -43,7 +43,6 @@ class PausingServer(PilotAPI):
         self.out_messages = []
         self.lost_out_messages = []
         self.logger = logging.getLogger("PausingServer")
-        self.use_log = use_log
         self.log = setup_log(self, use_log)
         self.trigger_set = None
         self.trigger = None
@@ -246,6 +245,10 @@ class PausingServer(PilotAPI):
     async def stop(self):
         await self.deck.stop()
         await self.log.stop()
+
+    async def tmp_stop(self):
+        # don't stop the log, expect to restart it
+        await self.deck.stop()
 
     async def start_and_join(self, leader_uri, callback=None, timeout=10.0):
         await self.log.start()
@@ -550,7 +553,7 @@ class HL(HybridLog):
         self.sqlwriter = None
         
 
-def setup_log(server, use_log_class):
+def setup_log(server, use_log_class, reset=True):
     number = server.uri.split('/')[-1]
     path_root = Path('/tmp', f"pserver_{number}")
     if use_log_class == MemoryLog:
@@ -558,20 +561,26 @@ def setup_log(server, use_log_class):
         return log
     elif use_log_class == SqliteLog:
         path = Path(str(path_root) +'.db')
-        if path.exists():
+        if path.exists() and reset:
             path.unlink()
         log = SqliteLog(path)
     elif use_log_class == LmdbLog:
         path = Path(str(path_root) +'.lmdb')
         if path.exists():
-            shutil.rmtree(path)
-        path.mkdir()
+            if reset:
+                shutil.rmtree(path)
+                path.mkdir()
+        else:
+            path.mkdir()
         log = LmdbLog(path)
     elif use_log_class == HybridLog:
         path = Path(str(path_root) +'.hybrid')
         if path.exists():
-            shutil.rmtree(path)
-        path.mkdir()
+            if reset:
+                shutil.rmtree(path)
+                path.mkdir()
+        else:
+            path.mkdir()
         #log = HybridLog(path)
         log = HL(path)
     else:

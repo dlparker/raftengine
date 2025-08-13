@@ -432,7 +432,8 @@ class ClusterOps:
             config = await self.start_node_remove(operand)
         elif op == "update_settings":
             pass
-        self.logger.debug(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
+            
+        self.logger.info(f"%s started op=%s operand=%s", self.my_uri(), op, operand)
 
     async def handle_membership_change_log_commit(self, log_rec):
         """
@@ -443,6 +444,7 @@ class ClusterOps:
         config = ClusterConfig(**cdict['config'])
         op = cdict['op']
         operand = cdict['operand']
+        self.logger.info(f"%s got commit log rec for op=%s operand=%s", self.my_uri(), op, operand)
         if op == "add_node":
             # leader committed record, means that the node is loaded and ready
             # to vote
@@ -451,7 +453,9 @@ class ClusterOps:
                 # membership add node request, and on that reply
                 # it updates the cluster config. Trying to do
                 # it again will raise an error
-                return
+                cc = await self.get_cluster_config()
+                if not cc.pending_node:
+                    return
             config = await self.finish_node_add(operand)
         elif op == "remove_node":
             config = await self.finish_node_remove(operand)
