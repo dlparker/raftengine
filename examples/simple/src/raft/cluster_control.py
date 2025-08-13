@@ -15,7 +15,6 @@ log_controller = LogController.make_controller()
 from cluster import Cluster
 from split_base.collector import Collector
 from base.demo import Demo
-from rpc.run_tools import RunTools
 
 async def main():
 

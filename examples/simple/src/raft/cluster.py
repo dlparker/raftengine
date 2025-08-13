@@ -5,7 +5,6 @@ from pathlib import Path
 import time
 from subprocess import Popen
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
-from rpc.run_tools import RunTools as RPCRunTools
 from raft.raft_server import RaftServer
 from raft.raft_client import RaftClient
 
@@ -13,7 +12,6 @@ class Cluster:
 
     def __init__(self, base_port=59050):
         self.base_port = base_port
-        self.rpc_tools = RPCRunTools()
         self.node_uris = []
         self.servers = {}
         for port in range(base_port, base_port + 3):

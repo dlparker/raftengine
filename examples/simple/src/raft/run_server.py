@@ -17,7 +17,6 @@ sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer
-from rpc.run_tools import RunTools as RPCRunTools
 
 
 async def main(args):
@@ -45,7 +44,6 @@ async def main(args):
         
     uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
-    rpc_run_tools = RPCRunTools()
     server = RaftServer(initial_cluster_config,
                         LocalConfig(uri=uri, working_dir=work_dir))
     try:
