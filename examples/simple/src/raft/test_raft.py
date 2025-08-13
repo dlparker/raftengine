@@ -18,7 +18,6 @@ log_controller = LogController.make_controller()
 from cluster import Cluster
 from split_base.collector import Collector
 from base.validator import Validator
-from raft.test_common import test_snapshots
 
 async def main(args):
 

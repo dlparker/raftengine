@@ -18,7 +18,6 @@ log_controller = LogController.make_controller()
 from cluster import Cluster
 from split_base.collector import Collector
 from base.demo import Demo
-from raft.test_common import test_snapshots
 
 async def main(args):
     cluster = Cluster(base_port=args.base_port)

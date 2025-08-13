@@ -16,7 +16,7 @@ from raftengine.deck.log_control import LogController
 from raftengine_logs.sqlite_log.sqlite_log import SqliteLog
 
 #from base.counters import Counters
-from raft.raft_counters import RaftCounters
+from base.counters import Counters
 from raft.pilot import Pilot
 from split_base.dispatcher import Dispatcher
 from rpc.rpc_client import RPCClient
@@ -35,7 +35,7 @@ class RaftServer:
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.log = SqliteLog(self.raft_log_file)
-        self.counters = RaftCounters(self.working_dir)
+        self.counters = Counters(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher)
         self.deck = Deck(self.initial_config, self.local_config, self.pilot)

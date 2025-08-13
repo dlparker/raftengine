@@ -6,10 +6,9 @@ from typing import Dict, Any
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.log_api import LogAPI
 from raftengine.deck.log_control import LogController
-from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
+from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.messages.message_codec import MessageCodec
-from raft.raft_counters import SnapShotTool
 from rpc.rpc_client import RPCClient
 
 log_controller = LogController.get_controller()
@@ -81,19 +80,15 @@ class Pilot(PilotAPI):
         
     # PilotAPI
     async def begin_snapshot_import(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        tool = SnapShotTool(self.counters, snapshot)
-        return tool
+        raise NotImplemented
 
     # PilotAPI
     async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        tool = SnapShotTool(self.counters, snapshot)
-        return tool
+        raise NotImplemented
 
     # PilotAPI
     async def create_snapshot(self, index:int , term: int) -> SnapShot:
-        print(f'\nPilot taking snapshot at index {index}\n\n')
-        await self.counters.make_snapshot()
-        return SnapShot(index, term)
+        raise NotImplemented
 
     # PilotAPI
     async def stop_commanded(self) -> None:
