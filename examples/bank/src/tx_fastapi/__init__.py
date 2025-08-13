@@ -1,1 +1,0 @@
-# FastAPI transport implementation for banking service

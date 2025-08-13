@@ -1,2 +1,0 @@
-aiozmq==1.0.0
-msgpack>=0.5.0
