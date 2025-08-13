@@ -21,7 +21,7 @@ from base.demo import Demo
 from raft.test_common import test_snapshots
 
 async def main(args):
-    cluster = Cluster(transport=args.transport, base_port=args.base_port, log_type=args.log_type)
+    cluster = Cluster(base_port=args.base_port)
     started_servers = False
     cluster_ready = False
     ready, reason = await cluster.check_cluster_ready()
@@ -30,14 +30,7 @@ async def main(args):
         cluster_ready = True
     else:
         print(f"Cluster reports not ready {reason}", flush=True)
-        if "take_power" in reason:
-            await cluster.elect_leader(0)
-            ready, reason = await cluster.check_cluster_ready()
-            if not ready:
-                raise Exception('cluster running but did not elect a leader')
-            cluster_ready = True
-        else:
-            print("will start cluster")
+        print("will start cluster")
 
     if not cluster_ready:
         cluster.clear_server_files()
@@ -50,9 +43,6 @@ async def main(args):
             ready, reason = await cluster.check_cluster_ready()
             if ready:
                 break
-            if 'take_power' in reason:
-                print('cluster running, election needed')
-                await cluster.elect_leader(0)
         if not ready:
             raise Exception('could not start cluster and run election in 3 seconds')
 
@@ -60,27 +50,13 @@ async def main(args):
     collector = Collector(client_0)
     demo = Demo(collector)
     res = await demo.do_unknown_state_demo()
-
-    print('Basic functions worked, testing snapshot operations')
-    try:
-        await test_snapshots(cluster, demo_print=True)
-    except:
-        traceback.print_exc()
-    finally:
-        if started_servers:
-            await cluster.stop_servers()
+    
+    if started_servers:
+        await cluster.stop_servers()
     
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Raft Cluster Performance Testing Tool')
     parser.add_argument('-b', '--base_port', type=int, default=59090,
                         help='Port number for first node in cluster')
-    parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'grpc'],
-                        default='astream',
-                        help='Transport mechanism to use')
-    parser.add_argument('--log-type', '-l',
-                        choices=['memory', 'sqlite', 'lmdb', 'hybrid'],
-                        default='sqlite',
-                        help='Log storage type to use')
     args = parser.parse_args()
     asyncio.run(main(args))
