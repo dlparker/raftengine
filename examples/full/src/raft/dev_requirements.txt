@@ -1,0 +1,4 @@
+-e /home/dparker/projects/raft/raftengine
+-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/sqlitelog
+
+uvloop==0.21.0

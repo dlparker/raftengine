@@ -148,6 +148,22 @@ class Cluster:
         if status['is_leader'] is False and status['leader_uri'] is None:
             return False
 
+    async def elect_leader(self, index):
+        running = await self.check_server_ready(index, require_leader=False)
+        if not running:
+            raise Exception(f'bad state, server {index} {self.servers[index]["uri"]} not running')
+        client = self.get_client(index)
+        await client.direct_server_command("take_power")
+        start_time = time.time()
+        time_limit = 0.5
+        while time.time() - start_time < time_limit:
+            status = await client.direct_server_command("status")
+            if status['is_leader']:
+                break
+        if status['is_leader']:
+            return
+        raise Exception(f"server {index} {self.servers[index]['uri']} failed to win election in {time_limit}")
+
     async def find_leader(self):
         client = self.get_client(0)
         stats = await client.direct_server_command("status")

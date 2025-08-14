@@ -18,6 +18,7 @@ log_controller = LogController.make_controller()
 from cluster import Cluster
 from split_base.collector import Collector
 from base.validator import Validator
+from raft.test_common import test_snapshots
 
 async def main(args):
 
@@ -29,7 +30,15 @@ async def main(args):
         print(f"Cluster reports ready {reason}", flush=True)
         cluster_ready = True
     else:
-        print(f"Cluster reports not ready, will start", flush=True)
+        print(f"Cluster reports not ready", flush=True)
+        if "take_power" in reason:
+            await cluster.elect_leader(0)
+            ready, reason = await cluster.check_cluster_ready()
+            if not ready:
+                raise Exception('cluster running but did not elect a leader')
+            cluster_ready = True
+        else:
+            print("will start cluster")
 
     if not cluster_ready:
         cluster.clear_server_files()
@@ -42,6 +51,9 @@ async def main(args):
             ready, reason = await cluster.check_cluster_ready()
             if ready:
                 break
+            if 'take_power' in reason:
+                print('cluster running, election needed')
+                await cluster.elect_leader(0)
         if not ready:
             raise Exception('could not start cluster and run election in 3 seconds')
 
@@ -50,10 +62,14 @@ async def main(args):
     client_0 = cluster.get_client(0)
     collector = Collector(client_0)
 
+    vt = Validator(collector)
+    expected = await vt.do_test()
+    print(f'validator complete')
+    print('Basic functions worked, testing snapshot operations')
     try:
-        vt = Validator(collector)
-        expected = await vt.do_test()
-        print(f'validator complete')
+        await test_snapshots(cluster)
+    except:
+        traceback.print_exc()
     finally:
         if started_servers:
             await cluster.stop_servers()

@@ -18,6 +18,7 @@ log_controller = LogController.make_controller()
 from cluster import Cluster
 from split_base.collector import Collector
 from base.demo import Demo
+from raft.test_common import test_snapshots
 
 async def main(args):
     cluster = Cluster(base_port=args.base_port)
@@ -29,7 +30,14 @@ async def main(args):
         cluster_ready = True
     else:
         print(f"Cluster reports not ready {reason}", flush=True)
-        print("will start cluster")
+        if "take_power" in reason:
+            await cluster.elect_leader(0)
+            ready, reason = await cluster.check_cluster_ready()
+            if not ready:
+                raise Exception('cluster running but did not elect a leader')
+            cluster_ready = True
+        else:
+            print("will start cluster")
 
     if not cluster_ready:
         cluster.clear_server_files()
@@ -42,6 +50,9 @@ async def main(args):
             ready, reason = await cluster.check_cluster_ready()
             if ready:
                 break
+            if 'take_power' in reason:
+                print('cluster running, election needed')
+                await cluster.elect_leader(0)
         if not ready:
             raise Exception('could not start cluster and run election in 3 seconds')
 
@@ -49,9 +60,15 @@ async def main(args):
     collector = Collector(client_0)
     demo = Demo(collector)
     res = await demo.do_unknown_state_demo()
-    
-    if started_servers:
-        await cluster.stop_servers()
+
+    print('Basic functions worked, testing snapshot operations')
+    try:
+        await test_snapshots(cluster, demo_print=True)
+    except:
+        traceback.print_exc()
+    finally:
+        if started_servers:
+            await cluster.stop_servers()
     
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Raft Cluster Performance Testing Tool')
