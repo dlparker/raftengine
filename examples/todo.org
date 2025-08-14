@@ -1,0 +1,2 @@
+
+1. [] Add logic to deck to save cluster config at startup and on every change. Save URI in a file like PID.

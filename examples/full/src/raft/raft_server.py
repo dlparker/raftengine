@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from logging.config import dictConfig
 from collections import defaultdict
+from dataclasses import asdict
 from raftengine.deck.deck import Deck
 from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
@@ -27,12 +28,12 @@ logger = log_controller.add_logger("raft.RaftServer","")
 
 class RaftServer:
 
-    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft',
+    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft', 'get_config',
                        'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
     
-    def __init__(self, initial_cluster_config, local_config):
-        self.initial_config = initial_cluster_config
+    def __init__(self, local_config, initial_cluster_config=None):
         self.local_config = local_config
+        self.initial_config = initial_cluster_config
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
@@ -193,6 +194,8 @@ class RaftServer:
             return res
         elif command == "get_logging_dict":
             return LogController.get_controller().to_dict_config()
+        elif command == "get_config":
+            return asdict(await self.deck.get_cluster_config())
         elif command == "set_logging_level":
             tmp = in_command.split(' ')
             if len(tmp) < 2:

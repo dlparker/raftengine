@@ -1,0 +1,14 @@
+
+New cluster
+1. Create initial config and save config
+   1. create_cluster.py -a OR
+   2. create_cluster.py -n 192.168.100.200 192.168.100.214 192.168.100.222
+2. If all local (option 1 above) start_local.py pointed at config
+3. If not all local or running manually, for each server:
+   1. prep_server.py pointed provided config, uri, working dir (can default)
+   2. run_server pointed at working_dir, provided uri if never run before
+
+Existing cluster
+1. custer_status.py with either a uri or a cluster_config file.
+      
+   

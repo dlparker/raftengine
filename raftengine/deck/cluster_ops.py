@@ -55,7 +55,6 @@ class ClusterOps:
         self.loading_round_timer_handle = None
         self.remove_message:Optional[MembershipChangeMessage] = None
 
-
     @property
     def leader_uri(self):
         return self._leader_uri

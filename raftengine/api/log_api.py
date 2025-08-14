@@ -199,6 +199,14 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
     
     @abc.abstractmethod
+    async def get_uri(self) -> Union[str, None]:  # pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    async def set_uri(self, uri: str):  # pragma: no cover abstract
+        raise NotImplementedError
+    
+    @abc.abstractmethod
     async def get_term(self) -> int:  # pragma: no cover abstract
         raise NotImplementedError
     

@@ -40,6 +40,7 @@ class Deck(DeckAPI):
         self.role_run_after_target = None
         self.message_problem_history = []
         self.event_control = EventControl()
+        # note that initial_cluster_config might be None, which should not cause a problem in cluster_ops
         self.cluster_ops = ClusterOps(self, initial_cluster_config, self.log)
         self.role = Follower(self, self.cluster_ops)
         self.joining_cluster = False
@@ -60,6 +61,7 @@ class Deck(DeckAPI):
         if await self.log.get_broken():
             raise Exception("Cannot start, raft log is marked broken")
         self.started = True
+        await self.log.set_uri(self.local_config.uri)
         self.logger.info("%s starting", self.get_my_uri())
         await self.role.start()
         if EventType.role_change in self.event_control.active_events:

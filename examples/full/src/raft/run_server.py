@@ -44,8 +44,8 @@ async def main(args):
         
     uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
-    server = RaftServer(initial_cluster_config,
-                        LocalConfig(uri=uri, working_dir=work_dir))
+    server = RaftServer(LocalConfig(uri=uri, working_dir=work_dir),
+                        initial_cluster_config)
     try:
         await server.start()
         while not server.stopped:
