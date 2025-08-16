@@ -238,7 +238,7 @@ async def test_message_serializer(cluster_maker):
     async with release_msg:
         release_msg.notify_all()
     # intercepter should  hit  now 
-    await asyncio.sleep(0.0001)
+    await asyncio.sleep(0.01)
     assert trapped_msg is not None
     async with release_msg:
         release_msg.notify_all()
