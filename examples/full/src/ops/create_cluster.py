@@ -29,8 +29,8 @@ class Config:
             used_hosts = set()
             for host in hosts:
                 port = base_port
-                if host == "127.0.0.1":
-                    host = "localhost"
+                if host in ("127.0.0.1", "localhost"):
+                    raise Exception("Can't use loopback address in real host list")
                 uri = f"as_raft://{host}:{port}"
                 while uri in self.node_uris:
                     port += 1

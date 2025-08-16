@@ -2,6 +2,7 @@
 import asyncio
 import argparse
 import shutil
+import json
 from pathlib import Path
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
@@ -19,47 +20,42 @@ src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer
 
-
-async def main(initial_dir, uri=None):
+async def main(working_dir):
     config = None
+    uri = None
     initial_config = None
-    raft_log_file = Path(initial_dir, "raftlog.db")
+    raft_log_file = Path(working_dir, "raftlog.db")
     if raft_log_file.exists():
         try:
             log = SqliteLog(self.raft_log_file)
             await log.start()
             config = await log.get_cluster_config()
-            my_uri = await log.get_uri()
+            uri = await log.get_uri()
             await log.stop()
-            working_dir = initial_dir
-            if uri and uri != my_uri:
-                raise Exception(f'Specified URI {uri} does not match log stored value {my_uri}')
-            if uri and uri not in config.nodes:
-                raise Exception(f'Specified URI {uri} is not in {config.nodes.keys()}')
-            uri = my_uri
+            working_dir = working_dir
         except Exception as e:
             print(f'unable to load config from existing log, looking for initial_config file {e}')
     if config is None:
-        config_file_path = Path(initial_dir, "initial_config.json")
+        config_file_path = Path(working_dir, "initial_config.json")
         if not config_file_path.exists():
-            raise Exception(f'cannot find "initial_config.json" in "{initial_dir}"')
+            raise Exception(f'cannot find "initial_config.json" in "{working_dir}"')
         try:
-            with open(config_file, 'r') as f:
+            with open(config_file_path, 'r') as f:
                 config_data = json.load(f)
+            initial_config = ClusterInitConfig(**config_data)
         except FileNotFoundError:
             print(f"Error: File '{config_file}' not found")
             sys.exit(1)
         except json.JSONDecodeError as e:
             print(f"Error: Invalid JSON in '{config_file}': {e}")
             sys.exit(1)
-        initial_config = ClusterInitialConfig(**config_data)
-        working_dir = initial_config.working_dir
-        if uri and uri not in config.nodes:
-            raise Exception(f'Specified URI {uri} is not in {config.nodes.keys()}')
-        if uri != initial_config.uri:
-            raise Exception(f'initial_config.uri is {initial_config.uri} but {uri} was specified')
-    local_config = LocalConfig(uri=uri, working_dir=work_dir))
-    server = RaftServer(initial_config, local_config)
+        uri_file_path = Path(working_dir, "uri_config.txt")
+        with open(uri_file_path, 'r') as f:
+                uri = f.read().strip("\n")
+        if uri and uri not in initial_config.node_uris:
+            raise Exception(f'Specified URI {uri} is not in {initial_config.node_uris}')
+    local_config = LocalConfig(uri=uri, working_dir=working_dir)
+    server = RaftServer(local_config, initial_config)
     try:
         await server.start()
         while not server.stopped:
@@ -100,18 +96,18 @@ if __name__=="__main__":
                        help="Set global logging level to error, which is the default")
     # Parse arguments
     args = parser.parse_args()
-    initial_dir = Path(args.working_dir)
-    if not initial_dir.exists():
-        raise Exception(f'specified working directory does not exist: {initial_dir}')
-    
-    raft_log_file = Path(initial_dir, "raftlog.db")
-    config_file_path = Path(initial_dir, "initial_config.json")
+    working_dir = Path(args.working_dir)
+    if not working_dir.exists():
+        raise Exception(f'specified working directory does not exist: {working_dir}')
+
+    raft_log_file = Path(working_dir, "raftlog.db")
+    config_file_path = Path(working_dir, "initial_config.json")
     if not raft_log_file.exists() and not config_file_path.exists():
-        raise Exception(f'specified working directory contains neither raflog.db or initial_config.jason: {initial_dir}')
+        raise Exception(f'specified working directory contains neither raflog.db or initial_config.jason: {working_dir}')
     if args.warning:
         log_controller.set_default_level('warning')
     elif args.info:
         log_controller.set_default_level('info')
     if args.debug:
         log_controller.set_default_level('debug')
-    asyncio.run(main(args))
+    asyncio.run(main(working_dir))
