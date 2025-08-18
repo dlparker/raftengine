@@ -10,6 +10,7 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine_logs.sqlite_log import SqliteLog
 from raft.raft_client import RaftClient
+from raft.ops_support import DirectCommandClient
 
 import sys
 
@@ -63,27 +64,22 @@ async def find_local_clusters(root_working_dir):
                 rec = dict(uri=uri, working_dir=str(wd))
                 clusters[cluster_key][uri] = rec
     return clusters
-
+        
 async def get_server_status(uri):
-    client = RaftClient(uri)
+    client = DirectCommandClient(uri)
     status = None
     try:
-        status = await client.direct_server_command("status")
+        status = await client.get_status()
     except:
         pass
     return status
         
         
 async def get_cluster_config(uri):
-    client = RaftClient(uri)
+    client = DirectCommandClient(uri)
     config = None
     try:
-        config_data = await client.direct_server_command("get_config")
-        settings = ClusterSettings(**config_data['settings'])
-        nodes = {}
-        for n_uri,nr in config_data['nodes'].items():
-            nodes[n_uri] = (NodeRec(**nr))
-        config = ClusterConfig(nodes, settings=settings)
+        config = await client.get_cluster_config()
     except:
         traceback.print_exc()
     return config

@@ -22,15 +22,13 @@ from raft.pilot import Pilot
 from split_base.dispatcher import Dispatcher
 from rpc.rpc_client import RPCClient
 from rpc.rpc_server import RPCServer
-
+from raft.ops_support import DirectCommander
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.RaftServer","")
 
+
 class RaftServer:
 
-    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft', 'get_config',
-                       'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
-    
     def __init__(self, local_config, initial_cluster_config=None):
         self.local_config = local_config
         self.initial_config = initial_cluster_config
@@ -47,6 +45,8 @@ class RaftServer:
         self.stopped = False
         self.stopping = False
         self.stop_reply_sent = False
+        self.direct_commander = DirectCommander(self)
+        self.direct_commands = DirectCommander.direct_commands
         with open(Path(self.working_dir, 'server.pid'), 'w') as f:
             f.write(f"{os.getpid()}")
         print(f"Raft server on {self.uri} created\n")
@@ -115,110 +115,11 @@ class RaftServer:
         
     # RPC for commands to be executed locally, not via Raft replication
     async def direct_server_command(self, in_command: str):
-        # Some commands to help manage server processes
-        command = in_command.split(' ')[0]
-        if command not in self.direct_commands:
-            return f"Error, command {command} unknown, should be one of {self.direct_commands}"
-        if command == "ping":
-            return "pong"
-        elif command == "getpid":
-            return os.getpid()
-        elif command == "stop":
-            async def shutter():
-                await asyncio.sleep(0.001)
-                logger.warning("Got signal to shutdown, stopping RaftServer")
-                try:
-                    # Wait for the stopper task to complete instead of just creating it
-                    await self.stop()
-                except Exception as e:
-                    traceback.print_exc()
-                await asyncio.sleep(0.1)  # Additional safety margin
-                logger.warning("Got signal to shutdown, exiting")
-                raise SystemExit(0)
-            asyncio.create_task(shutter())
-            print(f'server {self.uri} shutting down')
-            return "shutting down"
-        elif command == "take_power":
-            # This can be dangerous if you don't know what you
-            # are doing. Issuing it will cause an election with
-            # this server winning, maybe, depending on the election
-            # rules. Doing this for no reason is dumb as it just
-            # makes the cluster less stable. However, it
-            # can be useful during development if you want to
-            # start with timers set to some huge value so you
-            # can probe and debug the server without Raft timeouts
-            # happening, in which case you'll need to call this
-            # to get the inital election done.
-            await self.start_raft()
-            await self.deck.start_campaign()
-            return "started campaign"
-        elif command == "start_raft":
-            # you can start the server in a paused state, meaning
-            # that it won't do any raft operations until you run 
-            # this command or the 'take_power' command
-            await self.start_raft()
-            return "started raft ops"
-        elif command == "stop_raft":
-            # If you want to do some server administration with 
-            # All raft activity disabled, here's how to do it
-            if self.pilot:
-                await self.pilot.stop_commanded()
-            if self.deck:
-                await self.deck.stop()
-                await self.log.stop()
-                logger.warning("Raft server operations stopped on command")
-            self.stopped = True
-            self.timers_running = False
-            return "stopped raft"
-        elif command == "status" or command == "dump_status":
-            res = dict(pid=os.getpid(),
-                       datetime=datetime.datetime.now().isoformat(),
-                       working_dir=str(self.working_dir),
-                       raft_log_file=str(self.raft_log_file),
-                       timers_running=self.timers_running,
-                       leader_uri=await self.deck.get_leader_uri(),
-                       uri=self.deck.get_my_uri(),
-                       is_leader=self.deck.is_leader(),
-                       first_log_index=await self.deck.log.get_first_index(),
-                       last_log_index=await self.deck.log.get_last_index(),
-                       last_log_term=await self.deck.log.get_last_term(),
-                       log_commit_index=await self.deck.log.get_commit_index(),
-                       log_apply_index=await self.deck.log.get_applied_index(),
-                       term=await self.deck.log.get_term())
-            if command == "dump_status":
-                # write it to standard out
-                print("\n\n-------------- STATUS DUMP BEGINS --------------\n")
-                for key in res: # get them in the order written
-                    print(f"{key:20s}: {res[key]}")
-                print("\n\n-------------- STATUS DUMP ENDS --------------\n", flush=True)
-            return res
-        elif command == "get_logging_dict":
-            return LogController.get_controller().to_dict_config()
-        elif command == "get_config":
-            return asdict(await self.deck.get_cluster_config())
-        elif command == "set_logging_level":
-            tmp = in_command.split(' ')
-            if len(tmp) < 2:
-                return "set_logging_level needs at least one argument"
-            lc = LogController.get_controller()
-            if len(tmp) > 2:
-                level = tmp[2]
-                name = tmp[1]
-                lc.set_logger_level(logger, level)
-            else:
-                level = tmp[1]
-                name = ""
-                lc.set_default_level(level)
-            res = f"logging for name '{name}' set to {level}"
-            return res
-        elif command == "take_snapshot":
-            snap = await self.deck.take_snapshot()
-            return dict(snap.__dict__)
-        elif command == "log_stats":
-            stats = await self.log.get_stats()
-            return dict(stats.__dict__)
-        return f"unrecognized command '{command}'"
-        
+        try:
+            res = await self.direct_commander.direct_server_command(in_command)
+        except:
+            res = traceback.format_exc()
+        return res
 
     
 
