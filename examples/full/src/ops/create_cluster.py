@@ -20,6 +20,8 @@ class Config:
         if all_local and hosts is not None:
             raise Exception('if all_local is true, a list of hosts is not allowed')
 
+        if all_local and base_port == 50090:
+            base_port = 50100
         self.node_uris = []
         if all_local:
             for port in range(base_port, base_port + 3):

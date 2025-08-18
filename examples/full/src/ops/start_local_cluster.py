@@ -48,10 +48,13 @@ async def main():
             break
     if local is None:
         print(f"Did not find any server config files for a local cluster (hostname=127.0.0.1) in {args.directory}")
-    for uri,spec in local.items():
+    uris = list(local.keys())
+    uris.sort()
+    for uri in uris:
+        spec = local[uri]
         status = await get_server_status(uri)
         if status is not None:
-            print(f"server {uri} not running as pid = {status['pid']} in {status['working_dir']} with leader {status['leader_uri']}")
+            print(f"server {uri} running as pid = {status['pid']} in {status['working_dir']} with leader {status['leader_uri']}")
         else:
             print(f"server {uri} not running, starting")
             this_dir = Path(__file__).parent

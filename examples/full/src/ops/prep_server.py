@@ -45,7 +45,7 @@ async def main():
     else:
         settings = ClusterSettings(**config_data['settings'])
         nodes = []
-        for nr in config_data['nodes']:
+        for uri,nr in config_data['nodes'].items():
             nodes.append(NodeRec(**nr))
         config = ClusterConfig(nodes, settings=settings)
         uris = list(config.node,keys())
