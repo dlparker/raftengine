@@ -27,7 +27,7 @@ class RPCServer:
             return
         self.port = port
         self.sock_server = await asyncio.start_server(
-            self.handle_client, '127.0.0.1', self.port
+            self.handle_client, '0.0.0.0', self.port
         )
         async def serve():
             logger.info(f"server running on port {self.port}")

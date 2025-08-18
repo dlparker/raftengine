@@ -100,6 +100,7 @@ class Follower(BaseRole):
             elif log_rec.code == RecordCode.term_start and log_rec.index == 1:
                 # At the start of the first term we update the cluster config to whatever the
                 # leader has. Any changes will come in cluster_config record types
+                self.elec_logger.info("%s got term start from %s", self.my_uri(), message.sender)
                 await self.cluster_ops.update_cluster_config_from_json_string(log_rec.command)
         await self.send_append_entries_response(message)
         if (message.commitIndex > await self.log.get_commit_index() or
@@ -152,8 +153,11 @@ class Follower(BaseRole):
                 self.logger.debug("%s applying command at record %d ", self.my_uri(), log_rec.index)
                 await self.process_command_record(log_rec)
             elif log_rec.code == RecordCode.cluster_config:
-                self.logger.debug("%s applying cluster config qt record %d ", self.my_uri(), log_rec.index)
+                self.logger.debug("%s applying cluster config at record %d ", self.my_uri(), log_rec.index)
                 await self.cluster_ops.handle_membership_change_log_commit(log_rec)
+                await self.log.mark_applied(log_rec.index)
+            elif log_rec.code == RecordCode.term_start:
+                self.logger.debug("%s applying rerm_start at record %d ", self.my_uri(), log_rec.index)
                 await self.log.mark_applied(log_rec.index)
                     
     async def process_command_record(self, log_record):
