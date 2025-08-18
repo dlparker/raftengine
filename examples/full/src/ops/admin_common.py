@@ -7,6 +7,7 @@ from pathlib import Path
 from collections import defaultdict
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine_logs.sqlite_log import SqliteLog
+from raft.raft_client import RaftClient
 
 import sys
 
@@ -22,7 +23,7 @@ async def find_local_clusters(root_working_dir):
             continue
         saved_config = None
         if raft_log_file.exists():
-            print(f"checking log {raft_log_file}")
+            #print(f"checking log {raft_log_file}")
             try:
                 log = SqliteLog(raft_log_file)
                 await log.start()
@@ -61,3 +62,13 @@ async def find_local_clusters(root_working_dir):
                 clusters[cluster_key][uri] = rec
     return clusters
 
+async def get_server_status(uri):
+    client = RaftClient(uri)
+    status = None
+    try:
+        status = await client.direct_server_command("status")
+    except:
+        pass
+    return status
+        
+        
