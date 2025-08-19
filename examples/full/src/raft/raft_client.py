@@ -80,7 +80,8 @@ class RaftClient:
     async def direct_server_command(self, command:str) -> None:
         if self.rpc_client is None:
             await self.connect()
-        return await self.rpc_client.direct_server_command(command)
+        res = await self.rpc_client.direct_server_command(command)   
+        return res
         
     
 

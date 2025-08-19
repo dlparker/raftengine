@@ -72,16 +72,20 @@ async def get_server_status(uri):
         status = await client.get_status()
     except:
         pass
+    await client.close()
     return status
-        
         
 async def get_cluster_config(uri):
     client = DirectCommandClient(uri)
     config = None
-    try:
-        config = await client.get_cluster_config()
-    except:
-        traceback.print_exc()
+    config = await client.get_cluster_config()
+    await client.close()
     return config
         
+async def stop_server(uri):
+    client = DirectCommandClient(uri)
+    status = None
+    status = await client.stop()
+    await client.close()
+    return status
         

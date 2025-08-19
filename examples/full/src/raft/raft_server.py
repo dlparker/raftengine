@@ -45,7 +45,7 @@ class RaftServer:
         self.stopped = False
         self.stopping = False
         self.stop_reply_sent = False
-        self.direct_commander = DirectCommander(self)
+        self.direct_commander = DirectCommander(self, logger)
         self.direct_commands = DirectCommander.direct_commands
         with open(Path(self.working_dir, 'server.pid'), 'w') as f:
             f.write(f"{os.getpid()}")
@@ -69,6 +69,21 @@ class RaftServer:
             self.timers_running = True
             await self.rpc_server.start(port)
             
+    # local only method
+    async def start_and_join(self, leader_uri):
+        if not self.timers_running:
+            logger.info("calling deck start_and_join")
+            await self.log.start()
+            term = await self.log.get_term()
+            port = self.uri.split(':')[-1]
+            await self.rpc_server.start(port)
+            await self.deck.start_and_join(leader_uri)
+            print(f"Raft server on {self.uri} started\n")
+            config = await self.deck.cluster_ops.get_cluster_config()
+            print(f"   config = {json.dumps(config, indent=4, default=lambda o:o.__dict__)}")
+            self.stopped = False
+            self.timers_running = True
+        
     # local method reachable through local_command RPC
     async def stop(self):
         async def stopper(delay=2.0):

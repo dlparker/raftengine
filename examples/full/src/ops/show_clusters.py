@@ -15,7 +15,7 @@ sys.path.insert(0, str(src_dir))
 from admin_common import find_local_clusters, get_server_status, get_cluster_config
 
 async def main():
-    parser = argparse.ArgumentParser(description="Counters Raft Server Local Cluster starter")
+    parser = argparse.ArgumentParser(description="Counters Raft Cluster Discovery Tool")
     parser.add_argument('-d', '--directory', required=True, help="The base directory for the working directories for the local cluster")
     args = parser.parse_args()
 

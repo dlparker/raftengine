@@ -19,8 +19,9 @@ class DirectCommander:
     direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft', 'get_config',
                        'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
     
-    def __init__(self, raft_server):
+    def __init__(self, raft_server, logger):
         self.raft_server = raft_server
+        self.logger = logger
 
     async def direct_server_command(self, in_command: str):
         # Some commands to help manage server processes
@@ -34,17 +35,17 @@ class DirectCommander:
         elif command == "stop":
             async def shutter():
                 await asyncio.sleep(0.001)
-                logger.warning("Got signal to shutdown, stopping RaftServer")
+                self.logger.warning("Got signal to shutdown, stopping RaftServer")
                 try:
                     # Wait for the stopper task to complete instead of just creating it
                     await self.raft_server.stop()
                 except Exception as e:
                     traceback.print_exc()
                 await asyncio.sleep(0.1)  # Additional safety margin
-                logger.warning("Got signal to shutdown, exiting")
+                self.logger.warning("Got signal to shutdown, exiting")
                 raise SystemExit(0)
             asyncio.create_task(shutter())
-            print(f'server {self.uri} shutting down')
+            print(f'server {self.raft_server.uri} shutting down', flush=True)
             return "shutting down"
         elif command == "take_power":
             # This can be dangerous if you don't know what you
@@ -67,7 +68,7 @@ class DirectCommander:
             if self.raft_server.deck:
                 await self.raft_server.deck.stop()
                 await self.raft_server.log.stop()
-                logger.warning("Raft server operations stopped on command")
+                self.logger.warning("Raft server operations stopped on command")
             self.raft_server.stopped = True
             self.raft_server.timers_running = False
             return "stopped raft"
@@ -129,7 +130,11 @@ class DirectCommandClient:
         self.raft_client = raft_client
         if raft_client is None:
             self.raft_client = RaftClient(self.uri, timeout=1.0)
-        
+
+    async def close(self):
+        if self.raft_client:
+            await self.raft_client.close()
+            
     async def ping(self):
         return await self.raft_client.direct_server_command('ping')
 
