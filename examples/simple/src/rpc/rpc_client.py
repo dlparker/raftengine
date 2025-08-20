@@ -109,66 +109,49 @@ class RPCClient:
                     future.set_exception(ConnectionError("Connection closed"))
             self.pending_requests.clear()
 
-    async def _send_request(self, message: dict, retry_count: int = 1) -> str:
+    async def _send_request(self, message: dict) -> str:
         """
         Send a request with a unique ID and return the request ID.
         The actual response will be handled by the response handler.
         """
         last_exception = None
         
-        for attempt in range(retry_count + 1):
-            try:
-                await self._ensure_connection()
-                
-                # Generate unique request ID
-                request_id = str(uuid.uuid4())
-                message['request_id'] = request_id
-                
-                # Create future for this request
-                future = asyncio.Future()
-                self.pending_requests[request_id] = future
-                
-                try:
-                    # Send the request
-                    msg_str = json.dumps(message)
-                    msg_bytes = msg_str.encode()
-                    count = str(len(msg_bytes))
-                    
-                    self.writer.write(f"{count:20s}".encode())
-                    self.writer.write(msg_bytes)
-                    await self.writer.drain()
-                    
-                    return request_id
-                    
-                except Exception as e:
-                    # Clean up on send failure
-                    self.pending_requests.pop(request_id, None)
-                    if not future.done():
-                        future.set_exception(e)
-                    raise
-                    
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as e:
-                last_exception = e
-                
-                # Only log connection errors if not a raft message (which are fire-and-forget)
-                if message.get('mtype') != 'raft_message':
-                    logger.warning(f"Connection error on attempt {attempt + 1}: {e}")
-                
-                # Reset connection for retry
-                self.reader = None
-                self.writer = None
-                if self.response_handler_task:
-                    self.response_handler_task.cancel()
-                    self.response_handler_task = None
-                
-                if attempt < retry_count:
-                    if message.get('mtype') != 'raft_message':
-                        logger.info(f"Retrying connection in {0.1 * (attempt + 1)}s...")
-                    await asyncio.sleep(0.1 * (attempt + 1))  # Exponential backoff
-                
-        # If we get here, all retries failed
-        raise last_exception or ConnectionError("Failed to send request after retries")
+        try:
+            await self._ensure_connection()
 
+            # Generate unique request ID
+            request_id = str(uuid.uuid4())
+            message['request_id'] = request_id
+
+            # Create future for this request
+            future = asyncio.Future()
+            self.pending_requests[request_id] = future
+
+            try:
+                # Send the request
+                msg_str = json.dumps(message)
+                msg_bytes = msg_str.encode()
+                count = str(len(msg_bytes))
+
+                self.writer.write(f"{count:20s}".encode())
+                self.writer.write(msg_bytes)
+                await self.writer.drain()
+
+                return request_id
+
+            except Exception as e:
+                # Clean up on send failure
+                self.pending_requests.pop(request_id, None)
+                if not future.done():
+                    future.set_exception(e)
+                raise
+
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as e:
+            last_exception = e
+            if message.get('mtype') == 'raft_message':
+                logger.warning(f"Connection error on attempt {attempt + 1}: {e}")
+            raise
+        
     async def _wait_for_response(self, request_id: str, timeout: float = 30.0) -> Any:
         """Wait for response to a specific request ID"""
         if request_id not in self.pending_requests:
@@ -195,8 +178,7 @@ class RPCClient:
         wrapped = {"mtype": "raft_message", "message": message}
         # For raft messages, we send but don't wait for response
         try:
-            # Don't retry for raft messages - they're fire-and-forget
-            request_id = await self._send_request(wrapped, retry_count=0)
+            request_id = await self._send_request(wrapped)
             # Create a task to wait for the response but don't await it
             # This ensures proper cleanup of the request tracking
             async def cleanup_raft_response():
