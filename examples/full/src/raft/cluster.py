@@ -7,6 +7,7 @@ from subprocess import Popen
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raft.raft_server import RaftServer
 from raft.raft_client import RaftClient
+from raft.ops_support import DirectCommander
 
 class Cluster:
 
@@ -195,7 +196,7 @@ class Cluster:
             
     async def direct_command(self, uri, command, *args):
         full_string = None
-        if command not in RaftServer.direct_commands:
+        if command not in DirectCommander.direct_commands:
             raise Exception(f'command {command} unknown, should be in RaftServer.direct_commands'
                             ' {RaftServer.direct_commands}')
         if command == "set_logging_level":

@@ -22,21 +22,26 @@ sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer
 from admin_common import get_cluster_config, get_server_status
 
-async def joiner(working_dir, join_uri, cluster_uri):
+async def joiner(base_dir, join_uri, cluster_uri):
     config = await get_cluster_config(cluster_uri)
     uris = list(config.nodes.keys())
     if join_uri in uris:
         raise Exception(f"URI {join_uri} is already part of cluster")
     uris.append(join_uri)
-    local_config = LocalConfig(uri=join_uri, working_dir=working_dir)
+    host,port = join_uri.split('/')[-1].split(':')
+    wd = Path(base_dir, f"counter_raft_server.{host}.{port}")
+    local_config = LocalConfig(uri=join_uri, working_dir=wd)
     cdict = dict(node_uris=uris)
     cdict.update(asdict(config.settings))
     init_config = ClusterInitConfig(**cdict)
-    wd = Path(working_dir)
+    # save config and uri in files for future use
     if not wd.exists():
         wd.mkdir(parents=True)
     with open(Path(wd, 'initial_config.json'), 'w') as f:
         f.write(json.dumps(asdict(init_config), indent=2))
+    uri_config_file = Path(wd, 'uri_config.txt')
+    with open(uri_config_file, 'w') as f:
+        f.write(join_uri)
     status = await get_server_status(cluster_uri)
     server = RaftServer(local_config, init_config)
     await server.start_and_join(status['leader_uri'])
@@ -45,7 +50,6 @@ async def joiner(working_dir, join_uri, cluster_uri):
 async def starter(working_dir):
     if not working_dir.exists():
         raise Exception(f'specified working directory does not exist: {working_dir}')
-
     raft_log_file = Path(working_dir, "raftlog.db")
     config_file_path = Path(working_dir, "initial_config.json")
     if not raft_log_file.exists() and not config_file_path.exists():
@@ -120,21 +124,25 @@ if __name__=="__main__":
     
     parser = argparse.ArgumentParser(description='Counters Raft Server')
 
-    parser.add_argument('--working_dir', '-w', required=True,
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--working_dir', '-w', 
                         help='Filesystem location of server working directory')
+    group.add_argument('--base_dir', '-b', 
+                        help='Filesystem location of where server working directory should be created')
+    
     parser.add_argument('--join_uri', '-j', 
                         help='Server should join running cluster as provided uri')
     parser.add_argument('--cluster_uri', '-c', 
                         help='Server should join running cluster by contacting provided uri')
 
-    group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('-D', '--debug', action='store_true',
+    group2 = parser.add_mutually_exclusive_group(required=False)
+    group2.add_argument('-D', '--debug', action='store_true',
                        help="Set global logging level to debug")
-    group.add_argument('-I', '--info', action='store_true',
+    group2.add_argument('-I', '--info', action='store_true',
                        help="Set global logging level to info")
-    group.add_argument('-W', '--warning', action='store_true',
+    group2.add_argument('-W', '--warning', action='store_true',
                        help="Set global logging level to warning")
-    group.add_argument('-E', '--error', action='store_true',
+    group2.add_argument('-E', '--error', action='store_true',
                        help="Set global logging level to error, which is the default")
     # Parse arguments
     args = parser.parse_args()
@@ -142,10 +150,15 @@ if __name__=="__main__":
     if args.join_uri:
         if not args.cluster_uri:
             parser.error("must supply cluster uri with join uri")
+        if args.base_dir is None:
+            parser.error("must supply --base-dir with join uri")
+        working_dir = Path(args.base_dir)
     elif args.cluster_uri:
         parser.error("must supply cluster uri with join uri")
-
-    working_dir = Path(args.working_dir)
+    else:
+        if args.working_dir is None:
+            parser.error("must supply working directory if not using --join_uri")
+        working_dir = Path(args.working_dir)
     if args.warning:
         log_controller.set_default_level('warning')
     elif args.info:

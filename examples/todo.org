@@ -1,2 +1,26 @@
 
-1. [] Add logic to deck to save cluster config at startup and on every change. Save URI in a file like PID.
+1. [] Add logic to raft_server to save cluster config at startup and on every change. Save URI in a file like PID.
+2. [] full/ops needs a wait to trigger take power if cluster settings has long timeouts, probably want some kind
+   of overall "debug" status somewhere so that we can run do things such as debugging while running. Probably
+   means we need a special command to change timeouts between normal and slow. If servers starting when with
+   slow timers they should probably try to run campaign immediately. Note that this still leaves the problem
+   of servers not knowing who the leader is if they start after take_power, so some solution to this is needed,
+   probably something that triggers a heartbeat. So probably we need something like a "nudge_leader.py" script
+   that looks for a leader, and if servers are running but no leader exists, sends take_power to one of the
+   running servers, else sends a heartbeat from the leader. This all needs to be documented clearly.
+3. [] Need a more encompassing tool for local_only clusters, one that has all the needed tools for
+   creating, starting, stopping, changing settings, nudging, clearing for restart, etc. Could be a
+   special variant of cluster_cmd.py.
+4. [] Consider combining cluster_cmd.py with other command line options such as create_cluster.py and prep_server.py
+   so you can do either single command ops or the command loop. Could make a special --local_only switch for this.
+
+   -l --local_cluster will look for one in /tmp and if none found will offer to create one
+   -d --discover /tmp  do current find_clusters work
+   -q --query_connect "host:port" do current add_cluster work
+   
+   Could have a "set cluster files root dir and fire up loop" option, and a "cluster_uri" and fire up loop option. Maybe
+   just use cluster_uri to decide it is local, and in the other case 
+   
+
+   
+

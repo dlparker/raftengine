@@ -1,4 +1,3 @@
-import json
 import os
 import time
 import asyncio
@@ -16,8 +15,9 @@ from raft.raft_client import RaftClient
 
 class DirectCommander:
 
-    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'start_raft', 'get_config',
-                       'take_power', 'get_logging_dict', 'set_logging_level', 'take_snapshot', 'log_stats']
+    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'exit_cluster',
+                       'start_raft', 'get_config', 'take_power', 'get_logging_dict',
+                       'set_logging_level', 'take_snapshot', 'log_stats']
     
     def __init__(self, raft_server, logger):
         self.raft_server = raft_server
@@ -47,6 +47,22 @@ class DirectCommander:
             asyncio.create_task(shutter())
             print(f'server {self.raft_server.uri} shutting down', flush=True)
             return "shutting down"
+        elif command == "exit_cluster":
+            cb_result = None
+            async def cb(ok, uri):
+                nonlocal cb_result
+                cb_result = ok
+                print(f"\n\nin exit callback with {cb_result}\n\n")
+            await self.raft_server.deck.exit_cluster(cb)
+            start_time = time.time()
+            while time.time() - start_time < 10.0 and cb_result is None:
+                await asyncio.sleep(0.0001)
+            if cb_result is None:
+                return "Did not exit cluster in 10 seconds"
+            if cb_result:
+                return "Cluster exit complete"
+            else:
+                return "Cluster exit failed"
         elif command == "take_power":
             # This can be dangerous if you don't know what you
             # are doing. Issuing it will cause an election with
@@ -115,10 +131,15 @@ class DirectCommander:
             return res
         elif command == "take_snapshot":
             snap = await self.raft_server.deck.take_snapshot()
-            return dict(snap.__dict__)
+            if snap:
+                return dict(snap.__dict__)
+            return dict(error="snapshot call returned none!")
         elif command == "log_stats":
             stats = await self.raft_server.log.get_stats()
-            return dict(stats.__dict__)
+            res =  dict(stats.__dict__)
+            if res['extra_stats'] is not None:
+                res['extra_stats'] = res['extra_stats'].__dict__
+            return res
         return f"unrecognized command '{command}'"
         
 
@@ -143,6 +164,12 @@ class DirectCommandClient:
     
     async def stop(self):
         return await self.raft_client.direct_server_command('stop')
+
+    async def exit_cluster(self):
+        res = await self.raft_client.direct_server_command('exit_cluster')
+        if "complete" in res:
+            return "exited"
+        return res
 
     async def take_power(self):
         return await self.raft_client.direct_server_command('take_power')

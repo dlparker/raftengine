@@ -414,7 +414,8 @@ class Deck(DeckAPI):
             if EventType.membership_change_aborted in self.event_control.active_events:
                 await self.event_control.emit_membership_change_aborted(ChangeOp.remove, self.get_my_uri())
         if callback:
-            await callback(ok ,self.get_my_uri())
+            self.logger.warning("%s calling callback during cluster exit processing", self.get_my_uri())
+            await callback(ok, self.get_my_uri())
         self.exiting_cluster = False
         if ok:
             self._exit_waiter_handle = None

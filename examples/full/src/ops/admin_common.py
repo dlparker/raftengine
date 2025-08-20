@@ -74,18 +74,34 @@ async def get_server_status(uri):
         pass
     await client.close()
     return status
-        
+
+async def get_log_stats(uri):
+    client = DirectCommandClient(uri)
+    log_stats = await client.log_stats()
+    await client.close()
+    return log_stats
+
 async def get_cluster_config(uri):
     client = DirectCommandClient(uri)
-    config = None
     config = await client.get_cluster_config()
     await client.close()
     return config
         
+async def take_snapshot(uri):
+    client = DirectCommandClient(uri)
+    snapshot = await client.take_snapshot()
+    await client.close()
+    return snapshot
+        
 async def stop_server(uri):
     client = DirectCommandClient(uri)
-    status = None
     status = await client.stop()
+    await client.close()
+    return status
+        
+async def server_exit_cluster(uri):
+    client = DirectCommandClient(uri)
+    status = await client.exit_cluster()
     await client.close()
     return status
         

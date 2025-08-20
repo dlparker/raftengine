@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import asyncio
+import json
 from pathlib import Path
 from aiocmd import aiocmd
 from subprocess import Popen
@@ -12,7 +13,8 @@ sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 
-from admin_common import find_local_clusters, get_server_status, get_cluster_config, stop_server
+from admin_common import (find_local_clusters, get_server_status, get_log_stats,
+                          get_cluster_config, stop_server, take_snapshot, server_exit_cluster)
 
 class MyCLI(aiocmd.PromptToolkitCmd):
 
@@ -29,10 +31,11 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         for index,key in enumerate(res.keys()):
             config = None
             cdict = res[key]
-            rec = dict(discovered=cdict, config=config, discovered_dir=search_dir)
+            rec = dict(discovered=cdict, config=config, discovered_dir=search_dir, cluster_key=key)
             self.clusters[str(index)] = rec
-            rec['servers'] = servers = defaultdict(dict)
+            rec['servers'] = servers = dict()
             for uri,server in cdict.items():
+                servers[uri] = dict()
                 status = await get_server_status(uri)
                 servers[uri]['status'] = status
                 host, port = uri.split('/')[-1].split(':')
@@ -47,6 +50,64 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         if len(self.clusters) == 1:
             await self.do_select(str(0))
 
+    async def do_add_cluster(self, port, host='127.0.0.1'):
+        uri = f"as_raft://{host}:{port}"
+        config  = await get_cluster_config(uri)
+        if not config:
+            print(f"cannot collect cluster config from uri {uri}, got None response")
+            return
+        c_dict = dict(discovered=None, config=config, discovered_dir=None)
+        servers = {}
+        uris = list(config.nodes.keys())
+        uris.sort()
+        cluster_key = ",".join(uris)
+        c_dict['cluster_key'] = cluster_key
+        for uri in uris:
+            status = await get_server_status(uri)
+            servers[uri] = dict()
+            servers[uri]['status'] = status
+            if status is not None:
+                servers[uri]['running'] = True
+            else:
+                servers[uri]['running'] = False
+        c_dict['servers'] = servers
+        done = False
+        for index, ocluster in self.clusters.items():
+            if ocluster['cluster_key'] == cluster_key:
+                # just update it
+                self.clusters[index] = c_dict
+                done = True
+                break
+        if not done:
+            index = str(len(self.clusters))
+            self.clusters[index] = c_dict
+        await self.do_select(index)
+        await self.do_show_cluster(index)
+        
+    async def do_show_cluster(self, index=None):
+        if len(self.clusters) == 0:
+            print('No clusters found, try find_clusters or add_cluster')
+            return
+        if not self.selected and index is None:
+            print('No cluster selected')
+            return
+        if index is None:
+            index = self.selected
+        if index not in self.clusters:
+            print(f'No cluster with index {index} found')
+            return
+            
+        cluster = self.clusters[index]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        for index,uri in enumerate(uris):
+            server = cluster['servers'][uri]
+            status = await get_server_status(uri)
+            if status:
+                print(f" {index} {uri}: running")
+            else:
+                print(f" {index} {uri}: NOT running")
+                
     async def do_list_clusters(self):
         if len(self.clusters) == 0:
             print('No clusters found, try find_clusters or add_cluster')
@@ -55,20 +116,84 @@ class MyCLI(aiocmd.PromptToolkitCmd):
                 print(f"{index}: non-running cluster of servers {','.join(cluster['servers'].keys())}")
             else:
                 print(f"{index}: cluster server status list --")
-                for uri,server in cluster['servers'].items():
+                uris = list(cluster['servers'].keys())
+                uris.sort()
+                for index,uri in enumerate(uris):
+                    server = cluster['servers'][uri]
                     status = await get_server_status(uri)
                     if status:
-                        print(f"   {uri}: running")
+                        print(f" {index} {uri}: running")
                     else:
-                        print(f"   {uri}: NOT running")
+                        print(f" {index} {uri}: NOT running")
 
+    async def do_server_status(self, index):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        index = int(index)
+        if index >= len(uris):
+            print(f"Requested server number {index} not found, max is {len(uris)-1}")
+            return
+        uri = uris[index]
+        status = await get_server_status(uri)
+        print(json.dumps(status, indent=4))
+
+    async def do_log_stats(self, index):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        index = int(index)
+        if index >= len(uris):
+            print(f"Requested server number {index} not found, max is {len(uris)-1}")
+            return
+        uri = uris[index]
+        log_stats = await get_log_stats(uri)
+        print(json.dumps(log_stats.__dict__, indent=4))
+
+    async def do_take_snapshot(self, index):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        index = int(index)
+        if index >= len(uris):
+            print(f"Requested server number {index} not found, max is {len(uris)-1}")
+            return
+        uri = uris[index]
+        pre_status = await get_server_status(uri)
+        print("---------- before snapshot -----------")
+        print(json.dumps(pre_status, indent=4))
+        snap = await take_snapshot(uri)
+        print("---------- snapshot -----------")
+        print(json.dumps(snap.__dict__, indent=4))
+        print("---------- after snapshot -----------")
+        post_status = await get_server_status(uri)
+        print(json.dumps(post_status, indent=4))
+        
     async def do_select(self, index):
         if index not in self.clusters:
             print(f"Supplied index {index} not in clusters array {list(self.clusters.keys())}")
             return 
         self.selected = index
         self.prompt = f"cluster->{index} $ "
-
+        
     async def do_update_status(self):
         if not self.selected:
             if len(self.clusters) == 0:
@@ -77,9 +202,10 @@ class MyCLI(aiocmd.PromptToolkitCmd):
             print('No cluster selected')
             return
         cluster = self.clusters[self.selected]
+        new_config = None
         for uri,server in cluster['servers'].items():
             server['status'] = await get_server_status(uri)
-            if server['status'] != None and cluster['config'] == None:
+            if server['status'] != None and new_config == None:
                 cluster['config'] = await get_cluster_config(uri)
         await self.do_list_clusters()
         return
@@ -144,6 +270,49 @@ class MyCLI(aiocmd.PromptToolkitCmd):
                 await stop_server(uri)
         await self.do_update_status()
             
+    async def do_server_exit_cluster(self, index):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        index = int(index)
+        if index >= len(uris):
+            print(f"Requested server number {index} not found, max is {len(uris)-1}")
+            return
+        uri = uris[index]
+        res = await server_exit_cluster(uri)
+        if res.startswith("exited"):
+            await stop_server(uri)
+        print(res)
+        await self.do_update_status()
+        
+            
+    async def do_stop_server(self, index):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        uris = list(cluster['servers'].keys())
+        uris.sort()
+        index = int(index)
+        if index >= len(uris):
+            print(f"Requested server number {index} not found, max is {len(uris)-1}")
+            return
+        uri = uris[index]
+        status = await get_server_status(uri)
+        if not status:
+            print(f"Server {index} {uri} was already stopped")
+        else:
+            await stop_server(uri)
+        await self.do_update_status()
         
         
 if __name__ == "__main__":

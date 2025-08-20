@@ -431,7 +431,6 @@ class Leader(BaseRole):
                 self.elec_logger.info("%s failed quorum check on slow reply, resigning", self.my_uri())
                 await self.notify_pending_commands_on_demotion()
                 await self.deck.demote_and_handle()
-                import ipdb; ipdb.set_trace()
                 return False
         self.logger.debug("%s quorum check passed", self.my_uri())
         return True

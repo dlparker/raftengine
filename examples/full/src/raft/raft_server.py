@@ -65,6 +65,10 @@ class RaftServer:
             config = await self.deck.cluster_ops.get_cluster_config()
             print(f"   config = {json.dumps(config, indent=4, default=lambda o:o.__dict__)}")
             port = self.uri.split(':')[-1]
+            with open(Path(self.working_dir, 'config.json'), 'w') as f:
+                f.write(json.dumps(asdict(config), indent=2))            
+            with open(Path(self.working_dir, 'uri_config.txt'), 'w') as f:
+                f.write(self.deck.get_my_uri())
             self.stopped = False
             self.timers_running = True
             await self.rpc_server.start(port)
@@ -133,7 +137,7 @@ class RaftServer:
         try:
             res = await self.direct_commander.direct_server_command(in_command)
         except:
-            res = traceback.format_exc()
+            res = dict(error=traceback.format_exc())
         return res
 
     
