@@ -1,5 +1,5 @@
 
-1. [] Add logic to raft_server to save cluster config at startup and on every change. Save URI in a file like PID.
+1. [X] Add logic to raft_server to save cluster config at startup and on every change. Save URI in a file like PID.
 2. [] full/ops needs a wait to trigger take power if cluster settings has long timeouts, probably want some kind
    of overall "debug" status somewhere so that we can run do things such as debugging while running. Probably
    means we need a special command to change timeouts between normal and slow. If servers starting when with

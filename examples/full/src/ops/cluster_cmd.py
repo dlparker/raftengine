@@ -2,6 +2,7 @@
 import sys
 import asyncio
 import json
+import argparse
 from pathlib import Path
 from aiocmd import aiocmd
 from subprocess import Popen
@@ -16,47 +17,62 @@ sys.path.insert(0, str(src_dir))
 from admin_common import (find_local_clusters, get_server_status, get_log_stats, send_heartbeats,
                           get_cluster_config, stop_server, take_snapshot, server_exit_cluster)
 
-class MyCLI(aiocmd.PromptToolkitCmd):
+async def main(args):
+    cluster_cli = ClusterCLI()
+    await cluster_cli.setup(args)
+    await cluster_cli.run()
+    
+class ClusterCLI(aiocmd.PromptToolkitCmd):
 
-
-    def __init__(self, my_name="Cluster Commander"):
+    def __init__(self):
         super().__init__()
         self.selected = None
         self.prompt = "no selection $ "
         self.clusters = {}
-    
-    async def do_find_clusters(self, search_dir="/tmp"):
-        """Discover clusters by searching directory for counter raft server working directories"""
-        res = await find_local_clusters(search_dir)
-        for index,key in enumerate(res.keys()):
-            config = None
-            cdict = res[key]
-            rec = dict(discovered=cdict, config=config, discovered_dir=search_dir, cluster_key=key)
-            self.clusters[str(index)] = rec
-            rec['servers'] = servers = dict()
-            for uri,server in cdict.items():
-                servers[uri] = dict()
-                status = await get_server_status(uri)
-                servers[uri]['status'] = status
-                host, port = uri.split('/')[-1].split(':')
-                servers[uri]['working_dir'] = str(Path(search_dir, f"counter_raft_server.{host}.{port}"))
-                if status is not None:
-                    servers[uri]['running'] = True
-                    if config is None:
-                        rec['config']  = await get_cluster_config(uri)
-                else:
-                    servers[uri]['running'] = False
-        await self.do_list_clusters()
-        if len(self.clusters) == 1:
-            await self.do_select(str(0))
 
-    async def do_add_cluster(self, port, host='127.0.0.1'):
+    async def setup(self, args):
+        self.setup_done = False
+        if args.query_connect:
+            host,port = args.query_connect.split(':')
+            await self.do_add_cluster(port, host)
+            return
+        if args.discover:
+            await self.discover_cluster_files(args.discover)
+            return 
+        if args.local_cluster:
+            await self.find_or_create_local()
+            for index, cluster in self.clusters.items():
+                if "127.0.0.1" in cluster['cluster_key']:
+                    await self.do_select(index)
+                    break
+            return
+
+    async def find_or_create_local(self):
+        res = await find_local_clusters("/tmp")
+        if len(res) == 0:
+            init_config = Config(base_port=50100, all_local=True)
+            for uri in init_config.node_uris:
+                host,port = uri.split('/')[-1].split(':')
+                wd = Path(args.working_dir_root, f"counter_raft_server.{host}.{port}")
+                if not wd.exists():
+                    print(f"Creating directory for {uri} at {wd}")
+                    wd.mkdir(parents=True)
+                init_config_file = Path(wd, 'initial_config.json')
+                print(f"Saving init_config  at {init_config_file}")
+                with open(init_config_file, 'w') as f:
+                    f.write(json.dumps(asdict(init_config), indent=2))
+                uri_config_file = Path(wd, 'uri_config.txt')
+                with open(uri_config_file, 'w') as f:
+                    f.write(uri)
+        await self.discover_cluster_files(search_dir="/tmp")
+
+    async def query_cluster(self, port, host='127.0.0.1'):
         uri = f"as_raft://{host}:{port}"
         config  = await get_cluster_config(uri)
         if not config:
             print(f"cannot collect cluster config from uri {uri}, got None response")
-            return
-        c_dict = dict(discovered=None, config=config, discovered_dir=None)
+            return None
+        c_dict = dict(discovered=None, config=config, discovered_dir=None, qurey_uri=uri)
         servers = {}
         uris = list(config.nodes.keys())
         uris.sort()
@@ -81,8 +97,45 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         if not done:
             index = str(len(self.clusters))
             self.clusters[index] = c_dict
-        await self.do_select(index)
-        await self.do_show_cluster(index)
+        return index
+    
+    async def discover_cluster_files(self, search_dir="/tmp"):
+        res = await find_local_clusters(search_dir)
+        self.clusters = {}
+        for index,key in enumerate(res.keys()):
+            config = None
+            cdict = res[key]
+            rec = dict(discovered=cdict, config=config, discovered_dir=search_dir, cluster_key=key, quwery_uri=None)
+            self.clusters[str(index)] = rec
+            rec['servers'] = servers = dict()
+            for uri,server in cdict.items():
+                servers[uri] = dict()
+                status = await get_server_status(uri)
+                servers[uri]['status'] = status
+                host, port = uri.split('/')[-1].split(':')
+                servers[uri]['working_dir'] = str(Path(search_dir, f"counter_raft_server.{host}.{port}"))
+                if status is not None:
+                    servers[uri]['running'] = True
+                    if config is None:
+                        rec['config']  = await get_cluster_config(uri)
+                else:
+                    servers[uri]['running'] = False
+        await self.do_list_clusters()
+        if len(self.clusters) == 1:
+            await self.do_select(str(0))
+            
+    async def do_find_clusters(self, search_dir="/tmp"):
+        await self.discover_cluster_files(search_dir)
+        await self.do_list_clusters()
+        if len(self.clusters) == 1:
+            await self.do_select(str(0))
+            await self.do_show_cluster(index)
+
+    async def do_add_cluster(self, port, host='127.0.0.1'):
+        index = await self.query_cluster(port, host)
+        if index:
+            await self.do_select(index)
+            await self.do_show_cluster(index)
         
     async def do_show_cluster(self, index=None):
         if len(self.clusters) == 0:
@@ -113,18 +166,10 @@ class MyCLI(aiocmd.PromptToolkitCmd):
             print('No clusters found, try find_clusters or add_cluster')
         for index,cluster in self.clusters.items():
             if cluster['config'] is None:
-                print(f"{index}: non-running cluster of servers {','.join(cluster['servers'].keys())}")
+                flag = "non-running"
             else:
-                print(f"{index}: cluster server status list --")
-                uris = list(cluster['servers'].keys())
-                uris.sort()
-                for index,uri in enumerate(uris):
-                    server = cluster['servers'][uri]
-                    status = await get_server_status(uri)
-                    if status:
-                        print(f" {index} {uri}: running")
-                    else:
-                        print(f" {index} {uri}: NOT running")
+                flag = "running"
+            print(f"{index}: {flag} cluster of servers {','.join(cluster['servers'].keys())}")
 
     async def do_server_status(self, index):
         if not self.selected:
@@ -340,4 +385,21 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         
         
 if __name__ == "__main__":
-    asyncio.run(MyCLI().run())
+    
+    parser = argparse.ArgumentParser(description='Counters Raft Cluster Admin')
+
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--discover', '-d', 
+                        help='Filesystem location of where server working directories might be found')
+    
+    group.add_argument('--local_cluster', '-l', action="store_true",
+                        help='Create or manage test cluster with all servers on this machine')
+    
+    parser.add_argument('--query_connect', '-q', 
+                        help='Find cluster by quering provided address data in form host:port')
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    
+    asyncio.run(main(args))
