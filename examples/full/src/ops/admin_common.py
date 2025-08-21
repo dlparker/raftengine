@@ -10,7 +10,7 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.api.types import ClusterConfig, NodeRec, ClusterSettings
 from raftengine_logs.sqlite_log import SqliteLog
 from raft.raft_client import RaftClient
-from raft.ops_support import DirectCommandClient
+from ops.direct import DirectCommandClient
 
 import sys
 
