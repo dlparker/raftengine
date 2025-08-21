@@ -13,7 +13,7 @@ sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 
-from admin_common import (find_local_clusters, get_server_status, get_log_stats,
+from admin_common import (find_local_clusters, get_server_status, get_log_stats, send_heartbeats,
                           get_cluster_config, stop_server, take_snapshot, server_exit_cluster)
 
 class MyCLI(aiocmd.PromptToolkitCmd):
@@ -210,6 +210,30 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         await self.do_list_clusters()
         return
         
+    async def do_send_heartbeats(self):
+        if not self.selected:
+            if len(self.clusters) == 0:
+                print('No clusters found, try find_clusters or add_cluster')
+                return
+            print('No cluster selected')
+            return
+        cluster = self.clusters[self.selected]
+        new_config = None
+        for uri,server in cluster['servers'].items():
+            status = await get_server_status(uri)
+            if status:
+                break
+        if status is None:
+            print('no servers running in selected cluster')
+            return
+        leader = status['leader_uri']
+        if leader is None:
+            print('selected cluster has not elected a leader')
+            return
+        await send_heartbeats(leader)
+        await self.do_list_clusters()
+        return
+        
     async def do_start_servers(self, hostname='127.0.0.1'):
         if not self.selected:
             if len(self.clusters) == 0:
@@ -289,8 +313,8 @@ class MyCLI(aiocmd.PromptToolkitCmd):
         if res.startswith("exited"):
             await stop_server(uri)
         print(res)
+        await send_heartbeats(uri)
         await self.do_update_status()
-        
             
     async def do_stop_server(self, index):
         if not self.selected:

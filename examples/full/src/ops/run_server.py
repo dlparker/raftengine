@@ -27,7 +27,6 @@ async def joiner(base_dir, join_uri, cluster_uri):
     uris = list(config.nodes.keys())
     if join_uri in uris:
         raise Exception(f"URI {join_uri} is already part of cluster")
-    uris.append(join_uri)
     host,port = join_uri.split('/')[-1].split(':')
     wd = Path(base_dir, f"counter_raft_server.{host}.{port}")
     local_config = LocalConfig(uri=join_uri, working_dir=wd)

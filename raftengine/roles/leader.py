@@ -257,15 +257,31 @@ class Leader(BaseRole):
         max_e = await self.max_entries_per_message()
         if send_end_index - send_start_index > max_e:
             send_end_index = send_start_index + max_e
-        tracker.nextIndex = send_end_index + 1
         entries = []
         ids = []
+        # We need to special case any block that has a cluster change record in
+        # it, because there is some funkyness in how they are handled. As soon
+        # as the record is stored at a follower the change becomes active in the
+        # sense that it is recorded as pending. This happens before commit. There
+        # is also a rule that only one change can be pending. SOooooo, if we send
+        # two such messages in a block and the follower records them all without
+        # committing and applying on each save (the standard logic is save them
+        # all, then commit them all, then apply them all), then we can violate
+        # the one at a time rule and get and error. So we make sure we only
+        # ever send one
+        have_cluster_change = False
         for index in range(send_start_index, send_end_index + 1):
             rec = await self.log.read(index)
+            if rec.code == RecordCode.cluster_config:
+                if have_cluster_change:
+                    send_end_index = rec.index
+                    break
+                have_cluster_change = True
             entries.append(rec)
             ids.append(rec.index)
             if not rec.committed:
                 await self.ensure_log_tracker(rec)
+        tracker.nextIndex = send_end_index + 1
         prevLogIndex, prevLogTerm = await self.get_prev_record_id(send_start_index)
         serial_number = SerialNumberGenerator.get_generator().generate()
         message = AppendEntriesMessage(sender=self.my_uri(),

@@ -16,7 +16,7 @@ from raft.raft_client import RaftClient
 class DirectCommander:
 
     direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'exit_cluster',
-                       'start_raft', 'get_config', 'take_power', 'get_logging_dict',
+                       'send_heartbeat', 'start_raft', 'get_config', 'take_power', 'get_logging_dict',
                        'set_logging_level', 'take_snapshot', 'log_stats']
     
     def __init__(self, raft_server, logger):
@@ -88,6 +88,11 @@ class DirectCommander:
             self.raft_server.stopped = True
             self.raft_server.timers_running = False
             return "stopped raft"
+        elif command == "send_heartbeat":
+            if not self.raft_server.deck.is_leader():
+                return "Server is not leader"
+            await self.raft_server.deck.role.send_heartbeats()
+            return "heartbeats sent"
         elif command == "status" or command == "dump_status":
             res = dict(pid=os.getpid(),
                        datetime=datetime.datetime.now().isoformat(),
@@ -173,6 +178,9 @@ class DirectCommandClient:
 
     async def take_power(self):
         return await self.raft_client.direct_server_command('take_power')
+
+    async def send_heartbeats(self):
+        return await self.raft_client.direct_server_command('send_heartbeat')
 
     async def stop_raft(self):
         return await self.raft_client.direct_server_command('stop_raft')

@@ -105,3 +105,9 @@ async def server_exit_cluster(uri):
     await client.close()
     return status
         
+async def send_heartbeats(uri):
+    client = DirectCommandClient(uri)
+    status = await client.send_heartbeats()
+    await client.close()
+    return status
+        

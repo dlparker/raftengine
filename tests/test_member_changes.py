@@ -280,6 +280,115 @@ async def test_add_follower_1(cluster_maker):
 
     assert ts_4.operations.total == 1
 
+async def test_re_add_follower_1(cluster_maker):
+    """
+    Make sure that adding, removing, then re-adding a follower works. This hits a couple of lines
+    of code in leader that are there to ensure that only one cluster membership change is sent
+    in a single catchup block when adding a new follower.
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    await cluster.test_trace.define_test("Testing addition of a follower with a short log", logger=logger)
+    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    await cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
+    
+    command_result = await cluster.run_command("add 1", 1)
+    assert ts_1.operations.total == 1
+    ts_4 = await cluster.add_node()
+    leader = cluster.get_leader()
+    assert await ts_1.deck.get_leader_uri() == leader.uri
+    async def join_done(ok, new_uri):
+        logger.debug(f"Join callback said {ok} joining as {new_uri}")
+        assert ok
+    await ts_4.start_and_join(leader.uri, join_done)
+    start_time = time.time()
+    while time.time() - start_time < 0.1:
+        cc = await ts_1.log.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert ts_4.operations.total == 1
+    await ts_1.send_heartbeats()
+    await cluster.deliver_all_pending()
+    cc = await ts_1.log.get_cluster_config()
+    assert ts_4.uri in cc.nodes
+    cc = await ts_2.log.get_cluster_config()
+    assert ts_4.uri in cc.nodes
+    cc = await ts_3.log.get_cluster_config()
+    assert ts_4.uri in cc.nodes
+    await cluster.test_trace.start_subtest("Node 4 added, now removing it")
+    removed = None
+    done_by_event = None
+    async def cb(success, uri):
+        nonlocal removed
+        removed = success
+
+    class MembershipChangeResultHandler(EventHandler):
+        def __init__(self):
+            super().__init__(event_types=[EventType.membership_change_complete,
+                                          EventType.membership_change_aborted,])
+            
+        async def on_event(self, event):
+            nonlocal done_by_event
+            if event.event_type == EventType.membership_change_complete:
+                done_by_event = True
+                logger.debug('in handler with success = True\n')
+            else:
+                logger.debug('in handler with success = False\n')
+                done_by_event = False
+    await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
+    await ts_4.exit_cluster(callback=cb)
+    await cluster.deliver_all_pending()
+    await ts_1.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and removed is None:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    assert removed is not None
+    await asyncio.sleep(0.0)
+    assert done_by_event is not None
+    assert ts_4.deck.role.stopped
+
+    # now make sure heartbeat send only goes to the two remaining followers
+    await ts_1.send_heartbeats()
+    assert len(ts_1.out_messages) == 2
+    assert ts_1.out_messages[0].receiver in [ts_2.uri, ts_3.uri]
+    assert ts_1.out_messages[1].receiver in [ts_2.uri, ts_3.uri]
+    await cluster.deliver_all_pending()
+    assert ts_4.uri not in (await ts_1.log.get_cluster_config()).nodes
+    assert ts_4.uri not in (await ts_2.log.get_cluster_config()).nodes
+    assert ts_4.uri not in (await ts_3.log.get_cluster_config()).nodes
+    
+    await cluster.test_trace.start_subtest("Node 4 removed, now re-adding it")
+    # not really crashed, but this method does a cleanup of last run elements like
+    # log and ops, so it's good
+    await ts_4.recover_from_crash(deliver=False, save_log=False, save_ops=False)
+    leader = cluster.get_leader()
+    assert await ts_1.deck.get_leader_uri() == leader.uri
+    await ts_4.start_and_join(leader.uri, join_done)
+    start_time = time.time()
+    while time.time() - start_time < 0.1:
+        cc = await ts_1.log.get_cluster_config()
+        if ts_4.uri in cc.nodes:
+            break
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.001)
+
+    assert ts_4.operations.total == 1
+    
+
 async def test_add_follower_2(cluster_maker):
     """
     Adding a follower to the cluster with a long log, filled with a bunch entries. We are

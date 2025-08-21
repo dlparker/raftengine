@@ -466,7 +466,7 @@ class ClusterOps:
             stored_config.settings = ClusterSettings(**cdict['config']['settings'])
             res = await self.log.save_cluster_config(stored_config)
             self.current_config = res
-        self.logger.debug(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
+        self.logger.info(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
             
     async def cluster_config_vote_passed(self, log_record, leader):
         """
@@ -478,8 +478,10 @@ class ClusterOps:
         operand = cdict['operand']
         await self.log.mark_applied(log_record.index)
         if op == "remove_node":
+            self.logger.info(f"%s vote passed on op=%s operand=%s", self.my_uri(), op, operand)
             if operand != self.my_uri():
                 await self.finish_node_remove(operand)
+                self.logger.info(f"%s finished op=%s operand=%s", self.my_uri(), op, operand)
                 # notify the target node directly
                 await self.deck.role.send_heartbeats(target_only=operand)
                 # notify everone else
