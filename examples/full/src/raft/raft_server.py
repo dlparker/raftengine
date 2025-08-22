@@ -29,9 +29,10 @@ logger = log_controller.add_logger("raft.RaftServer","")
 
 class RaftServer:
 
-    def __init__(self, local_config, initial_cluster_config=None):
+    def __init__(self, local_config, initial_cluster_config=None, cluster_name=None):
         self.local_config = local_config
         self.initial_config = initial_cluster_config
+        self.cluster_name = cluster_name # this is only helpfull in development scnearios,
         self.uri = local_config.uri
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
@@ -65,10 +66,6 @@ class RaftServer:
             config = await self.deck.cluster_ops.get_cluster_config()
             print(f"   config = {json.dumps(config, indent=4, default=lambda o:o.__dict__)}")
             port = self.uri.split(':')[-1]
-            with open(Path(self.working_dir, 'config.json'), 'w') as f:
-                f.write(json.dumps(asdict(config), indent=2))            
-            with open(Path(self.working_dir, 'uri_config.txt'), 'w') as f:
-                f.write(self.deck.get_my_uri())
             self.stopped = False
             self.timers_running = True
             await self.rpc_server.start(port)
@@ -90,9 +87,8 @@ class RaftServer:
         
     # local method reachable through local_command RPC
     async def stop(self):
-        async def stopper(delay=2.0):
+        async def stopper():
             await self.rpc_server.stop()
-            await asyncio.sleep(delay)
             await self.deck.stop()
             try:
                 pidfile = Path(self.working_dir, 'server.pid')

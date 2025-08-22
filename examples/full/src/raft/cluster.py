@@ -16,7 +16,7 @@ class Cluster:
         self.node_uris = []
         self.servers = {}
         for port in range(base_port, base_port + 3):
-            uri = f"as_raft://127.0.0.1:{port}"
+            uri = f"full://127.0.0.1:{port}"
             self.node_uris.append(uri)
             
         heartbeat_period=0.01
@@ -47,7 +47,7 @@ class Cluster:
     async def prepare_new_node(self):
         index = len(self.node_uris) + 1
         port = self.base_port + index
-        uri = f"as_raft://127.0.0.1:{port}"
+        uri = f"full://127.0.0.1:{port}"
         leader_uri = await self.find_leader()
         work_dir = Path('/tmp', f"simple_raft_server.{index}")
         if not work_dir.exists():

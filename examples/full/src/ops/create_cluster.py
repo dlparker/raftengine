@@ -4,81 +4,42 @@ import shutil
 import argparse
 import json
 from pathlib import Path
-from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
-
-class Config:
-
-    def __init__(self, base_port=50090, all_local=True, hosts=None, slow_timeouts=False):
-        self.base_port = base_port
-        self.all_local = all_local
-        self.hosts = hosts
-        self.slow_timeouts = slow_timeouts
-        self.initial_cluster_config = None
-        
-        if not all_local and (hosts is None or len(hosts) < 3):
-            raise Exception('if all_local is not true, a list of at least three hosts must be provided')
-        if all_local and hosts is not None:
-            raise Exception('if all_local is true, a list of hosts is not allowed')
-
-        if all_local and base_port == 50090:
-            base_port = 50100
-        self.node_uris = []
-        if all_local:
-            for port in range(base_port, base_port + 3):
-                uri = f"as_raft://127.0.0.1:{port}"
-                self.node_uris.append(uri)
-        else:
-            used_hosts = set()
-            for host in hosts:
-                port = base_port
-                if host in ("127.0.0.1", "localhost"):
-                    raise Exception("Can't use loopback address in real host list")
-                uri = f"as_raft://{host}:{port}"
-                while uri in self.node_uris:
-                    port += 1
-                    uri = f"as_raft://{host}:{port}"
-                self.node_uris.append(uri)
-        
-    
-    def build_config(self, work_dir_base="/tmp"):
-        if self.slow_timeouts:
-            heartbeat_period=10000
-            election_timeout_min=10000
-            election_timeout_max=10000
-        else:
-            heartbeat_period=0.01
-            election_timeout_min=0.25
-            election_timeout_max=0.35
-        self.initial_cluster_config = ClusterInitConfig(node_uris=self.node_uris,
-                                                        heartbeat_period=heartbeat_period,
-                                                        election_timeout_min=election_timeout_min,
-                                                        election_timeout_max=election_timeout_max,
-                                                        use_pre_vote=False,
-                                                        use_check_quorum=True,
-                                                        max_entries_per_message=10,
-                                                        use_dynamic_config=False)
-        for index,uri in enumerate(self.node_uris):
-            work_dir = Path(work_dir_base, f"simple_raft_server.{index}")
-            if not work_dir.exists():
-                work_dir.mkdir()
-        return self.initial_cluster_config
-            
+from pprint import pprint
+import sys
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
+from ops.admin_common import ClusterBuilder, ClusterServerConfig
         
 async def main():
 
     parser = argparse.ArgumentParser(description="Create Counters Raft Server Cluster")
     
-    parser.add_argument('-b', '--base_port', type=int, default=50090,
-                        help='Port number for first node on each host')
-    parser.add_argument('-s', '--slow_timeouts', action='store_true',  help='Very long timeout values easing debug logging load')
+    parser.add_argument('-n', '--cluster-name', required=True, help='Name for the cluster (to allow multiple clusters)')
+    parser.add_argument('-p', '--port', type=int, default=50090,
+                        help='Port number for first node on each host, default 50090 for real cluster, 50100 for local only')
+    parser.add_argument('-b', '--base-directory', type=str, default="/tmp",
+                        help='Parent directory that will contain working directories for any local servers')
+    parser.add_argument('-s', '--slow-timeouts', action='store_true',  help='Very long timeout values easing debug logging load')
+    parser.add_argument('-f', '--force', action='store_true',  help='Force overwrite of existing config and db files')
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-n', '--nodes', nargs='+', type=str, help='List of host names to run nodes')    
-    group.add_argument('-a', '--all_local', action='store_true',  help='All servers on this host')
+    group.add_argument('-H', '--host-names', nargs='+', type=str, help='List of host names to run nodes')    
+    group.add_argument('-a', '--all-local', action='store_true',  help='All servers on this host')
     args = parser.parse_args()
 
-    config = Config(args.base_port, args.all_local, args.nodes, args.slow_timeouts)
-
-    print(json.dumps(config.build_config(), indent=2, default=lambda o:o.__dict__))
+    cb = ClusterBuilder()
+    if args.all_local:
+        if args.port == 50090:
+            port = 50100
+        else:
+            port = args.port
+        local_servers = cb.build_local(name=args.cluster_name, base_port=port, slow_timeouts=args.slow_timeouts)
+        cb.setup_local_files(local_servers, args.base_directory, overwrite=args.force)
+        pprint(local_servers)
+    else:
+        all_servers = cb.build(name=args.cluster_name, base_port=args.port, hosts=args.nodes)
+        cb.setup_local_files(all_servers, args.base_directory, local_host_names=['frame2',], overwrite=args.force)
+        pprint(all_servers)
+    
     
 if __name__=="__main__":
     asyncio.run(main())

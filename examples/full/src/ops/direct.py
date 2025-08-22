@@ -94,20 +94,7 @@ class DirectCommander:
             await self.raft_server.deck.role.send_heartbeats()
             return "heartbeats sent"
         elif command == "status" or command == "dump_status":
-            res = dict(pid=os.getpid(),
-                       datetime=datetime.datetime.now().isoformat(),
-                       working_dir=str(self.raft_server.working_dir),
-                       raft_log_file=str(self.raft_server.raft_log_file),
-                       timers_running=self.raft_server.timers_running,
-                       leader_uri=await self.raft_server.deck.get_leader_uri(),
-                       uri=self.raft_server.deck.get_my_uri(),
-                       is_leader=self.raft_server.deck.is_leader(),
-                       first_log_index=await self.raft_server.deck.log.get_first_index(),
-                       last_log_index=await self.raft_server.deck.log.get_last_index(),
-                       last_log_term=await self.raft_server.deck.log.get_last_term(),
-                       log_commit_index=await self.raft_server.deck.log.get_commit_index(),
-                       log_apply_index=await self.raft_server.deck.log.get_applied_index(),
-                       term=await self.raft_server.deck.log.get_term())
+            res = await self.get_status()
             if command == "dump_status":
                 # write it to standard out
                 print("\n\n-------------- STATUS DUMP BEGINS --------------\n")
@@ -147,7 +134,24 @@ class DirectCommander:
             return res
         return f"unrecognized command '{command}'"
         
-
+    async def get_status(self):
+        res = dict(pid=os.getpid(),
+                   datetime=datetime.datetime.now().isoformat(),
+                   working_dir=str(self.raft_server.working_dir),
+                   raft_log_file=str(self.raft_server.raft_log_file),
+                   timers_running=self.raft_server.timers_running,
+                   leader_uri=await self.raft_server.deck.get_leader_uri(),
+                   uri=self.raft_server.deck.get_my_uri(),
+                   is_leader=self.raft_server.deck.is_leader(),
+                   cluster_name=self.raft_server.cluster_name,
+                   first_log_index=await self.raft_server.deck.log.get_first_index(),
+                   last_log_index=await self.raft_server.deck.log.get_last_index(),
+                   last_log_term=await self.raft_server.deck.log.get_last_term(),
+                   log_commit_index=await self.raft_server.deck.log.get_commit_index(),
+                   log_apply_index=await self.raft_server.deck.log.get_applied_index(),
+                   term=await self.raft_server.deck.log.get_term())
+        return res
+        
     
 class DirectCommandClient:
 

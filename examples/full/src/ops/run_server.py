@@ -15,92 +15,64 @@ log_controller.set_logger_level('Elections', 'info')
 
 import sys
 src_dir = Path(__file__).parent.parent
-logs_dir = Path(src_dir, 'logs')
-sys.path.insert(0, str(logs_dir))
-src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 from raft.raft_server import RaftServer
-from admin_common import get_cluster_config, get_server_status
+from admin_common import ClusterServerConfig, get_cluster_config, get_server_status
 
-async def joiner(base_dir, join_uri, cluster_uri):
-    config = await get_cluster_config(cluster_uri)
+def save_config(uri, working_dir, config, status):
+    cluster_name = status['cluster_name']
     uris = list(config.nodes.keys())
-    if join_uri in uris:
-        raise Exception(f"URI {join_uri} is already part of cluster")
-    host,port = join_uri.split('/')[-1].split(':')
-    wd = Path(base_dir, f"counter_raft_server.{host}.{port}")
-    local_config = LocalConfig(uri=join_uri, working_dir=wd)
     cdict = dict(node_uris=uris)
     cdict.update(asdict(config.settings))
-    init_config = ClusterInitConfig(**cdict)
-    # save config and uri in files for future use
+    initial_config = ClusterInitConfig(**cdict)
+    if "127.0.0.1" in str(uris):
+        all_local = True
+    else:
+        all_local = False
+    csc = ClusterServerConfig(uri, str(working_dir), cluster_name, initial_config, all_local=all_local)
+    with open(Path(working_dir, 'server_config.json'), 'w') as f:
+        f.write(json.dumps(asdict(csc), indent=2))
+    return csc
+    
+async def joiner(base_dir, join_uri, cluster_uri):
+    config = await get_cluster_config(cluster_uri)
+    if join_uri in config.nodes:
+        raise Exception(f"URI {join_uri} is already part of cluster")
+    status = await get_server_status(cluster_uri)
+    host,port = join_uri.split('/')[-1].split(':')
+    wd = Path(base_dir, f"full_raft_server.{host}.{port}")
     if not wd.exists():
         wd.mkdir(parents=True)
-    with open(Path(wd, 'initial_config.json'), 'w') as f:
-        f.write(json.dumps(asdict(init_config), indent=2))
-    uri_config_file = Path(wd, 'uri_config.txt')
-    with open(uri_config_file, 'w') as f:
-        f.write(join_uri)
-    status = await get_server_status(cluster_uri)
-    server = RaftServer(local_config, init_config)
-    await server.start_and_join(status['leader_uri'])
-    return server
-
+    csc = save_config(join_uri, wd, config, status)
+    return csc, status['leader_uri']
+    
 async def starter(working_dir):
     if not working_dir.exists():
         raise Exception(f'specified working directory does not exist: {working_dir}')
-    raft_log_file = Path(working_dir, "raftlog.db")
-    config_file_path = Path(working_dir, "initial_config.json")
-    if not raft_log_file.exists() and not config_file_path.exists():
-        raise Exception(f'specified working directory contains neither raflog.db or initial_config.jason: {working_dir}')
-    config = None
-    uri = None
-    initial_config = None
-    raft_log_file = Path(working_dir, "raftlog.db")
-    if raft_log_file.exists():
-        try:
-            log = SqliteLog(raft_log_file)
-            await log.start()
-            config = await log.get_cluster_config()
-            uri = await log.get_uri()
-            await log.stop()
-            working_dir = working_dir
-            uris = list(config.nodes.keys())
-            cdict = dict(node_uris=uris)
-            cdict.update(asdict(config.settings))
-            initial_config = ClusterInitConfig(**cdict)
-        except Exception as e:
-            print(f'unable to load config from existing log, looking for initial_config file {e}')
-    if config is None:
-        print(f'did not find existing log, looking for initial_config file')
-        config_file_path = Path(working_dir, "initial_config.json")
-        if not config_file_path.exists():
-            raise Exception(f'cannot find "initial_config.json" in "{working_dir}"')
-        try:
-            with open(config_file_path, 'r') as f:
-                config_data = json.load(f)
-                initial_config = ClusterInitConfig(**config_data)
-        except FileNotFoundError:
-            print(f"Error: File '{config_file}' not found")
-            sys.exit(1)
-        except json.JSONDecodeError as e:
-            print(f"Error: Invalid JSON in '{config_file}': {e}")
-            sys.exit(1)
-        uri_file_path = Path(working_dir, "uri_config.txt")
-        with open(uri_file_path, 'r') as f:
-            uri = f.read().strip("\n")
-        if uri and uri not in initial_config.node_uris:
-            raise Exception(f'Specified URI {uri} is not in {initial_config.node_uris}')
-    local_config = LocalConfig(uri=uri, working_dir=working_dir)
-    server = RaftServer(local_config, initial_config)
-    await server.start()
-    return server
+    config_file_path = Path(working_dir, "server_config.json")
+    if not config_file_path.exists():
+        raise Exception(f'specified working directory does not contain server_config.json: {working_dir}')
+    with open(config_file_path, 'r') as f:
+        config_data = json.load(f)
+        config = ClusterServerConfig.from_dict(config_data)
+    return config
     
 async def main(working_dir, join_uri=None, cluster_uri=None):
+    
     if join_uri:
-        server = await joiner(working_dir, join_uri, cluster_uri)
+        config,leader_uri = await joiner(working_dir, join_uri, cluster_uri)
     else:
-        server = await starter(working_dir)
+        config = await starter(working_dir)
+    local_config = LocalConfig(uri=config.uri, working_dir=config.working_dir)
+    server = RaftServer(local_config, config.initial_config, config.cluster_name)
+    if join_uri:
+        await server.start_and_join(leader_uri)
+    else:
+        await server.start()
+    # now save up to date config
+    config = await server.log.get_cluster_config()
+    status = await server.direct_commander.get_status()
+    save_config(server.uri, working_dir, config, status)
     try:
         while not server.stopped:
             try:
