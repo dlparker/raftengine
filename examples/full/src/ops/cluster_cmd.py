@@ -8,6 +8,7 @@ from aiocmd import aiocmd
 from subprocess import Popen
 from pprint import pprint
 from collections import defaultdict
+from dataclasses import asdict
 src_dir = Path(__file__).parent.parent
 logs_dir = Path(src_dir, 'logs')
 sys.path.insert(0, str(logs_dir))
@@ -16,6 +17,8 @@ sys.path.insert(0, str(src_dir))
 
 from admin_common import (find_local_clusters, get_server_status, get_log_stats, send_heartbeats,
                           get_cluster_config, stop_server, take_snapshot, server_exit_cluster)
+
+from ops.create_cluster import Config
 
 async def main(args):
     cluster_cli = ClusterCLI()
@@ -50,10 +53,11 @@ class ClusterCLI(aiocmd.PromptToolkitCmd):
     async def find_or_create_local(self):
         res = await find_local_clusters("/tmp")
         if len(res) == 0:
-            init_config = Config(base_port=50100, all_local=True)
+            config_tool = Config(base_port=50100, all_local=True)
+            init_config = config_tool.build_config()
             for uri in init_config.node_uris:
                 host,port = uri.split('/')[-1].split(':')
-                wd = Path(args.working_dir_root, f"counter_raft_server.{host}.{port}")
+                wd = Path("/tmp", f"counter_raft_server.{host}.{port}")
                 if not wd.exists():
                     print(f"Creating directory for {uri} at {wd}")
                     wd.mkdir(parents=True)
