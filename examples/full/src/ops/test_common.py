@@ -6,6 +6,7 @@ import pickle
 from split_base.collector import Collector
 from ops.admin_common import ClusterBuilder, ClusterFinder, get_client
 from ops.cluster_cmd import ClusterCLI
+from ops.admin_common import get_server_status, take_snapshot 
 
 
 async def main(args, run_class_dict):
@@ -70,7 +71,7 @@ async def main(args, run_class_dict):
 
     for name, item in run_class_dict.items():
         print(f"doing {name}")
-        run_object = item(collector)
+        run_object = item(collector, cli)
         await run_object.run()
         
     if (started_servers and not args.leave_running) or args.stop_cluster:
@@ -97,16 +98,30 @@ def do_run_args():
     args = parser.parse_args()
     return args
 
-async def test_snapshots(cluster, demo_print=False):
+async def test_snapshots(cli, demo_print=True):
 
-    for index in range(3):
-        client = cluster.get_client(index)
-        collector = Collector(client)
-        leader_uri = await cluster.find_leader()
-        if leader_uri == client.get_uri() and demo_print:
-            print(f"target {client.get_uri()} is leader ")
+    # snapshot every server, starting with non-leaders than moving to leader
+    status_dict = await cli.get_status()
+    cluster_ready = True
+    order = []
+    leader_uri = None
+    leader_index = None
+    for index, status in status_dict.items():
+        if status['is_leader']:
+            leader_uri = status['uri']
+            leader_index = index
+            client = get_client(leader_uri)
+            collector = Collector(client)
+            continue
+        order.append(index)
+    order.append(leader_index)
+    for index in order:
+        status = status_dict[index]
+        uri = status['uri']
+        if index == leader_index and demo_print:
+            print(f"target {uri} is leader, will be demoted! ")
         elif demo_print:
-            print(f"target {client.get_uri()} is NOT leader ({leader_uri})")
+            print(f"target {uri} is NOT leader ")
         # the purpose of this call is to ensure that logs propogation
         # completes after any prior pass through the loop. The last
         # counter update call may not have reached the "apply" stage
@@ -123,28 +138,27 @@ async def test_snapshots(cluster, demo_print=False):
         if demo_print:
             print(f"doing snapshot on server {index}")
         pre_snap_a_value = await collector.counter_add('a', 0)
-        pre_stats = await cluster.direct_command(cluster.node_uris[index], 'status')
+        pre_stats = await get_server_status(uri)
         if demo_print:
             print(f"before snapshot last index is {pre_stats['last_log_index']}")
             print(f"before snapshot applied index is {pre_stats['log_apply_index']}")
-        snapshot_dict = await cluster.direct_command(cluster.node_uris[index], 'take_snapshot')
+        snapshot = await take_snapshot(uri)
         if demo_print:
-            print(f"snapshot is {snapshot_dict}")
-        post_stats = await cluster.direct_command(cluster.node_uris[index], 'status')
+            print(f"snapshot is {snapshot}")
+        post_stats = await get_server_status(uri)
         if demo_print:
             print(f"post sanpshot last_log_index = {post_stats['last_log_index']}, first = {post_stats['first_log_index']}")
             print(f"post snapshot applied index is {pre_stats['log_apply_index']}")
-        if snapshot_dict['index'] != pre_stats['log_apply_index']:
+        if snapshot.index != pre_stats['log_apply_index']:
             print(f"pre_stats = \n{pre_stats}")
             print(f"post_stats = \n{post_stats}")
-            raise Exception(f"Expected snapshot index {snapshot_dict['index']} " \
+            raise Exception(f"Expected snapshot index {snapshot.index} " \
                             f"to eqaul {pre_stats['applied']} ")
     
         # now read the snapshot file and make sure it has the pre value
         await asyncio.sleep(0.3) # make sure it has time to save
-        server_props = cluster.get_server_props(index)
         post_snap_a_value = await collector.counter_add('a', 1)
-        wdir = server_props['local_config'].working_dir
+        wdir = status['working_dir']
         with open(Path(wdir, 'counters_snapshot.pickle'), 'rb') as f:
             buff = f.read()
         counts = pickle.loads(buff)
@@ -152,6 +166,10 @@ async def test_snapshots(cluster, demo_print=False):
         assert counts['a'] != post_snap_a_value
         print(f'reading server {index} snapshot file went as expected')
 
+    status_dict = await cli.get_status()
+    for index, status in status_dict.items():
+        print(f"{status['uri']} is_leader={status['is_leader']}")
+        
 async def test_membership(cluster, demo_print=False):
     pass
 

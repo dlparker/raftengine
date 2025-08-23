@@ -21,8 +21,9 @@ from ops.test_common import main, do_run_args
 
 class DemoRun:
     
-    def __init__(self, collector):
+    def __init__(self, collector, cluster_cli):
         self.collector = collector
+        self.cluster_cli = cluster_cli
         self.demo = Demo(self.collector)
         
     async def run(self):
