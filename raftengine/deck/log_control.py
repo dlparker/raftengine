@@ -82,6 +82,8 @@ class LogController:
                 stream="ext://sys.stdout",
                 handler_class="logging.StreamHandler"
             ),
+        }
+        """
             "file": HandlerDef(
                 name="file",
                 description="File output handler",
@@ -94,6 +96,7 @@ class LogController:
                 handler_class="logging.FileHandler"
             )
         }
+        """
         
         # Known logger names from the original logging_ops.py set_levels function
         self.known_loggers = {
