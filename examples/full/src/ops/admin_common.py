@@ -176,6 +176,10 @@ class ClusterFinder:
             servers[str(index)] = csc
         return cluster_name, servers
 
+def get_client(uri):
+    client = RaftClient(uri)
+    return client
+    
 async def get_server_status(uri):
     client = DirectCommandClient(uri)
     status = None

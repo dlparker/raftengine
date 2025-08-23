@@ -213,7 +213,7 @@ class ClusterCLI(MyCommander):
 
     async def discover_cluster_files(self, search_dir="/tmp"):
         f_finder = ClusterFinder(root_dir="/tmp")
-        clusters = f_finder.discover()
+        clusters = await f_finder.discover()
         if len(clusters) > 0:
             self.clusters.update(clusters)
         if len(clusters) == 1:
