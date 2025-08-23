@@ -46,8 +46,8 @@ class RaftServer:
         self.stopped = False
         self.stopping = False
         self.stop_reply_sent = False
-        self.direct_commander = DirectCommander(self, logger)
-        self.direct_commands = DirectCommander.direct_commands
+        self.direct_commander = None
+        self.direct_commands = None
         with open(Path(self.working_dir, 'server.pid'), 'w') as f:
             f.write(f"{os.getpid()}")
         print(f"Raft server on {self.uri} created\n")
@@ -55,6 +55,10 @@ class RaftServer:
         print(f"   nodes = {self.initial_config.node_uris}")
             
 
+    def set_direct_commander(self, direct_commander):
+        self.direct_commander = direct_commander
+        self.direct_commands = self.direct_commander.direct_commands
+        
     # local only method
     async def start(self):
         if not self.timers_running:

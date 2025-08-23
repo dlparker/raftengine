@@ -16,7 +16,8 @@ log_controller.set_logger_level('Elections', 'info')
 import sys
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
-from raft.raft_server import RaftServer
+from raft.raft_server import RaftServer, logger as raft_server_logger
+from ops.direct import DirectCommander
 from admin_common import ClusterServerConfig, get_cluster_config, get_server_status
 
 def save_config(uri, working_dir, config, status):
@@ -65,6 +66,8 @@ async def main(working_dir, join_uri=None, cluster_uri=None):
         config = await starter(working_dir)
     local_config = LocalConfig(uri=config.uri, working_dir=config.working_dir)
     server = RaftServer(local_config, config.initial_config, config.cluster_name)
+    direct = DirectCommander(server, raft_server_logger)
+    server.set_direct_commander(direct)
     if join_uri:
         await server.start_and_join(leader_uri)
     else:

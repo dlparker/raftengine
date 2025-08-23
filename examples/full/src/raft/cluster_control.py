@@ -29,7 +29,7 @@ async def main():
     
     
     parser.add_argument('command', choices=['start', 'stop', 'status', 'getpid', 'dump_status',
-                                            'start_raft', 'take_power', 'get_leader',
+                                            'take_power', 'get_leader',
                                             'get_logging_dict', 'set_debug_logging',
                                             'set_info_logging', 'set_warning_logging', 'set_error_logging'],
                         help='Command to execute')
@@ -77,7 +77,7 @@ async def main():
             res = f"Direct command to {uri} timed out, target probably not running"
         return res
     
-    if args.command in ['stop', 'status', 'getpid', f'dump_status', 'start_raft', 'take_power',
+    if args.command in ['stop', 'status', 'getpid', f'dump_status', 'take_power',
                         'get_logging_dict']:
         for uri in target_nodes:
             result = await direct_command(uri, args.command)
