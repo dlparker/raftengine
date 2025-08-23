@@ -11,7 +11,7 @@ from raft.direct import DirectCommander
 
 class Cluster:
 
-    def __init__(self, base_port=59050):
+    def __init__(self, base_port=50000):
         self.base_port = base_port
         self.node_uris = []
         self.servers = {}
@@ -199,12 +199,6 @@ class Cluster:
         if command not in DirectCommander.direct_commands:
             raise Exception(f'command {command} unknown, should be in RaftServer.direct_commands'
                             ' {RaftServer.direct_commands}')
-        if command == "set_logging_level":
-            full_string = command
-            for arg in args:
-                full_string += f" {arg}"
-        else:
-            full_string = command
         for index,spec in self.servers.items():
             if spec['uri'] == uri:
                 client = self.get_client(index)

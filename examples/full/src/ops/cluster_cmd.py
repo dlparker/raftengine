@@ -192,27 +192,6 @@ class ClusterCLI(MyCommander):
                 return stat_dict
         return None
 
-    async def find_or_create_local(self):
-        f_finder = ClusterFinder(root_dir="/tmp")
-        clusters = f_finder.discover()
-        if len(clusters) > 0:
-            self.clusters.update(clusters)
-        for name,servers in clusters:
-            if servers[0].all_local:
-                target = name
-                break
-        if target is not None:
-            await self.set_selected(target)
-            return
-        target = "local"
-        local_servers = cb.build_local(name=target, base_port=50100)
-        cb.setup_local_files(local_servers, "/tmp", overwrite=args.force)
-        self.clusters[target] = local_servers
-        await self.set_selected(target)
-        for target in self.clusters:
-            await self.get_status(cluster_name=target)
-        return
-
     async def query_discover(self, port, host='127.0.0.1', select=True):
         uri = f"full://{host}:{port}"
         q_finder = ClusterFinder(uri=uri)

@@ -7,8 +7,6 @@ from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
 
 log_controller = LogController.make_controller()
-log_controller.set_default_level('warning')
-log_controller.set_logger_level('Elections', 'info')
 
 import sys
 src_dir = Path(__file__).parent.parent
@@ -16,6 +14,7 @@ logs_dir = Path(src_dir, 'logs')
 sys.path.insert(0, str(logs_dir))
 src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
+from base.counters import Counters
 from raft.raft_server import RaftServer, logger as raft_server_logger
 from raft.direct import DirectCommander
 
@@ -45,7 +44,7 @@ async def main(args):
         
     uri = nodes[args.index]
     local_config = LocalConfig(uri=uri, working_dir=work_dir)
-    server = RaftServer(LocalConfig(uri=uri, working_dir=work_dir),
+    server = RaftServer(Counters, LocalConfig(uri=uri, working_dir=work_dir),
                         initial_cluster_config)
     direct = DirectCommander(server, raft_server_logger)
     server.set_direct_commander(direct)

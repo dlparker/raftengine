@@ -15,9 +15,7 @@ from raft.raft_client import RaftClient
 
 class DirectCommander:
 
-    direct_commands = ['stop', 'status', 'getpid', 'dump_status', 'get_leader',
-                       'start_raft','take_power', 'get_logging_dict',
-                       'set_logging_level', 'take_snapshot']
+    direct_commands = ['stop', 'status', 'getpid', 'get_leader', 'take_power']
     
     def __init__(self, raft_server, logger):
         self.raft_server = raft_server
@@ -58,41 +56,14 @@ class DirectCommander:
             # to get the inital election done.
             await self.raft_server.deck.start_campaign()
             return "started campaign"
-        elif command == "status" or command == "dump_status":
+        elif command == "status":
             res = await self.get_status()
-            if command == "dump_status":
-                # write it to standard out
-                print("\n\n-------------- STATUS DUMP BEGINS --------------\n")
-                for key in res: # get them in the order written
-                    print(f"{key:20s}: {res[key]}")
-                print("\n\n-------------- STATUS DUMP ENDS --------------\n", flush=True)
-            return res
-        elif command == "take_snapshot":
-            snap = await self.raft_server.deck.take_snapshot()
-            if snap:
-                return dict(snap.__dict__)
-            return dict(error="snapshot call returned none!")
-        elif command == "get_logging_dict":
-            return LogController.get_controller().to_dict_config()
-        elif command == "set_logging_level":
-            tmp = in_command.split(' ')
-            if len(tmp) < 2:
-                return "set_logging_level needs at least one argument"
-            lc = LogController.get_controller()
-            if len(tmp) > 2:
-                level = tmp[2]
-                name = tmp[1]
-                lc.set_logger_level(logger, level)
-            else:
-                level = tmp[1]
-                name = ""
-                lc.set_default_level(level)
-            res = f"logging for name '{name}' set to {level}"
             return res
         elif command == "get_leader":
             leader = await self.raft_server.deck.get_leader_uri()
             return leader
         return f"unrecognized command '{command}'"
+
     async def get_status(self):
         res = dict(pid=os.getpid(),
                    datetime=datetime.datetime.now().isoformat(),
@@ -110,73 +81,3 @@ class DirectCommander:
                    log_apply_index=await self.raft_server.deck.log.get_applied_index(),
                    term=await self.raft_server.deck.log.get_term())
         return res
-        
-    
-class DirectCommandClient:
-
-    def __init__(self, uri, raft_client=None):
-        self.uri = uri
-        self.raft_client = raft_client
-        if raft_client is None:
-            self.raft_client = RaftClient(self.uri, timeout=1.0)
-
-    async def close(self):
-        if self.raft_client:
-            await self.raft_client.close()
-            
-    async def ping(self):
-        return await self.raft_client.direct_server_command('ping')
-
-    async def getpid(self):
-        return int(await self.raft_client.direct_server_command('getpid'))
-    
-    async def stop(self):
-        return await self.raft_client.direct_server_command('stop')
-
-    async def exit_cluster(self):
-        res = await self.raft_client.direct_server_command('exit_cluster')
-        if "complete" in res:
-            return "exited"
-        return res
-
-    async def take_power(self):
-        return await self.raft_client.direct_server_command('take_power')
-
-    async def send_heartbeats(self):
-        return await self.raft_client.direct_server_command('send_heartbeat')
-
-    async def stop_raft(self):
-        return await self.raft_client.direct_server_command('stop_raft')
-    
-    async def get_status(self):
-        return await self.raft_client.direct_server_command('status')
-    
-    async def dump_status(self):
-        return await self.raft_client.direct_server_command('dump_status')
-    
-    async def get_logging_dict(self):
-        return await self.raft_client.direct_server_command('get_logging_dict')
-    
-    async def get_cluster_config(self):
-        config_data =  await self.raft_client.direct_server_command('get_config')
-        settings = ClusterSettings(**config_data['settings'])
-        nodes = {}
-        for n_uri,nr in config_data['nodes'].items():
-            nodes[n_uri] = (NodeRec(**nr))
-        config = ClusterConfig(nodes, settings=settings)
-        return config
-    
-    async def set_logging_level(self, logger_name=None, level="error"):
-        cmd  = "set_logging_level"
-        if logger_name is not None:
-            cmd += f" {logger_name}"
-        cmd += f" {level}"
-        return await self.raft_client.direct_server_command(cmd)
-    
-    async def take_snapshot(self):
-        res =  await self.raft_client.direct_server_command('take_snapshot')
-        return SnapShot(**res)
-
-    async def log_stats(self):
-        res = await self.raft_client.direct_server_command('log_stats')
-        return LogStats(**res)

@@ -17,7 +17,6 @@ from raftengine.deck.log_control import LogController
 from raftengine_logs.sqlite_log.sqlite_log import SqliteLog
 
 #from base.counters import Counters
-from raft.raft_counters import RaftCounters
 from raft.pilot import Pilot
 from split_base.dispatcher import Dispatcher
 from rpc.rpc_client import RPCClient
@@ -28,7 +27,8 @@ logger = log_controller.add_logger("raft.RaftServer","")
 
 class RaftServer:
 
-    def __init__(self, local_config, initial_cluster_config=None, cluster_name=None):
+    def __init__(self, counters_class, local_config, initial_cluster_config=None, cluster_name=None):
+        self.counters_class = counters_class
         self.local_config = local_config
         self.initial_config = initial_cluster_config
         self.cluster_name = cluster_name # this is only helpfull in development scnearios,
@@ -36,7 +36,7 @@ class RaftServer:
         self.working_dir = Path(local_config.working_dir)
         self.raft_log_file = Path(self.working_dir, "raftlog.db")
         self.log = SqliteLog(self.raft_log_file)
-        self.counters = RaftCounters(self.working_dir)
+        self.counters = self.counters_class(self.working_dir)
         self.dispatcher = Dispatcher(self.counters)
         self.pilot = Pilot(self.log, self.dispatcher)
         self.deck = Deck(self.initial_config, self.local_config, self.pilot)
