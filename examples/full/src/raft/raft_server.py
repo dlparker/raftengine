@@ -22,7 +22,6 @@ from raft.pilot import Pilot
 from split_base.dispatcher import Dispatcher
 from rpc.rpc_client import RPCClient
 from rpc.rpc_server import RPCServer
-from ops.direct import DirectCommander
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.RaftServer","")
 

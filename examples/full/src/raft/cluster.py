@@ -7,7 +7,7 @@ from subprocess import Popen
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raft.raft_server import RaftServer
 from raft.raft_client import RaftClient
-from ops.direct import DirectCommander
+from raft.direct import DirectCommander
 
 class Cluster:
 
