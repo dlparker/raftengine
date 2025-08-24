@@ -1,0 +1,9 @@
+pytest>=8.3.4
+pytest-asyncio>=0.25.3
+pytest-cov>=6.0.0
+ipdb>=0.13.13
+-e /home/dparker/projects/raft/raftengine
+-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/hybridlog
+-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/lmdblog
+-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/sqlitelog
+-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/memorylog

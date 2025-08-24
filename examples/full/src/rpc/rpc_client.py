@@ -5,7 +5,10 @@ import traceback
 import uuid
 import logging
 from typing import Dict, Optional, Any
-logger = logging.getLogger('rpc.client.astream')
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('rpc.client','')
+
 
 class RPCClient:
     """
@@ -28,11 +31,10 @@ class RPCClient:
         return f"astream://{self.host}:{self.port}"
 
     async def _ensure_connection(self):
-        """Ensure connection is established"""
         async with self.connection_lock:
             if self.reader is None or self.writer is None:
                 try:
-                    logger.debug(f"Establishing connection to {self.host}:{self.port}")
+                    #logger.debug(f"Establishing connection to {self.host}:{self.port}")
                     self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
                     logger.info(f"Connected to {self.host}:{self.port}")
                     # Start response handler task
@@ -202,8 +204,6 @@ class RPCClient:
         return json.loads(response)
 
     async def close(self):
-        """Close the connection and clean up"""
-        logger.debug(f"Closing connection to {self.host}:{self.port}")
         self.closed = True
         
         # Cancel response handler
