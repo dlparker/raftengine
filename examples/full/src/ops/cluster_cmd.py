@@ -101,25 +101,55 @@ async def main(parser, args):
         await cluster_cli.get_status()
     for op in args.run_ops:
         if op == "list_clusters":
-            await cluster_cli.do_list_clusters()
+            if args.json:
+                print(await cluster_cli._logic_list_clusters(return_json=True))
+            else:
+                await cluster_cli.do_list_clusters()
         elif op == "cluster_status":
-            await cluster_cli.do_cluster_status()
+            if args.json:
+                print(await cluster_cli._logic_cluster_status(return_json=True))
+            else:
+                await cluster_cli.do_cluster_status()
         elif op == "start_servers":
-            await cluster_cli.do_start_servers()
+            if args.json:
+                print(await cluster_cli._logic_start_servers(return_json=True))
+            else:
+                await cluster_cli.do_start_servers()
         elif op == "stop_cluster":
-            await cluster_cli.do_stop_cluster()
+            if args.json:
+                print(await cluster_cli._logic_stop_cluster(return_json=True))
+            else:
+                await cluster_cli.do_stop_cluster()
         elif op == "send_heartbeats":
-            await cluster_cli.do_send_heartbeats()
+            if args.json:
+                print(await cluster_cli._logic_send_heartbeats(return_json=True))
+            else:
+                await cluster_cli.do_send_heartbeats()
         elif op == "stop_server":
-            await cluster_cli.do_stop_server(args.index)
+            if args.json:
+                print(await cluster_cli._logic_stop_server(args.index, return_json=True))
+            else:
+                await cluster_cli.do_stop_server(args.index)
         elif op == "server_status":
-            stats = await cluster_cli.do_server_status(args.index)
+            if args.json:
+                print(await cluster_cli._logic_server_status(args.index, return_json=True))
+            else:
+                stats = await cluster_cli.do_server_status(args.index)
         elif op == "log_stats":
-            stats = await cluster_cli.do_log_stats(args.index)
+            if args.json:
+                print(await cluster_cli._logic_log_stats(args.index, return_json=True))
+            else:
+                stats = await cluster_cli.do_log_stats(args.index)
         elif op == "take_snapshot":
-            stats = await cluster_cli.do_take_snapshot(args.index)
+            if args.json:
+                print(await cluster_cli._logic_take_snapshot(args.index, return_json=True))
+            else:
+                stats = await cluster_cli.do_take_snapshot(args.index)
         elif op == "server_exit_cluster":
-            stats = await cluster_cli.do_server_exit_cluster(args.index)
+            if args.json:
+                print(await cluster_cli._logic_server_exit_cluster(args.index, return_json=True))
+            else:
+                stats = await cluster_cli.do_server_exit_cluster(args.index)
 
 
 class MyCommander(aiocmd.PromptToolkitCmd):
@@ -250,53 +280,37 @@ class ClusterCLI(MyCommander):
     async def do_list_clusters(self):
         """
         Show the internal list of clusters.  """
-        if len(self.clusters) == 0:
+        result = await self._logic_list_clusters(return_json=False)
+        
+        if result["total_clusters"] == 0:
             print('No clusters found, try find_clusters or add_cluster')
-        for name,cluster in self.clusters.items():
-            await self.get_status(name)
-            running = False
-            for index, s_config in cluster.items():
-                record = self.status_records[name][index]
-                if record:
-                    running = True
-                    break
-            if running:
-                flag = "running"
-            else:
-                flag = "non-running"
-            uris = [config.uri for config in cluster.values()]
-            print(f"{name}: {flag} cluster of servers {','.join(uris)}")
+            return
+            
+        for name, cluster_data in result["clusters"].items():
+            uris = [server_data["uri"] for server_data in cluster_data["servers"].values()]
+            print(f"{name}: {cluster_data['status']} cluster of servers {','.join(uris)}")
 
     async def do_select(self, name):
         """
         Select the named cluster as the active cluster for future commands"""
-        if name not in self.clusters:
-            print(f"Supplied name {name} not in clusters array {list(self.clusters.keys())}")
-            return 
-        await self.set_selected(name)
+        result = await self._logic_select(name, return_json=False)
+        
+        if not result["success"]:
+            print(result["error"])
+        # Note: _logic_select already calls set_selected internally
 
     async def do_cluster_status(self, name=None):
         """
         Overview of the status of named or currently selected cluster, including basic server status."""
-        if len(self.clusters) == 0:
-            print('No clusters found, try find_clusters or add_cluster')
+        result = await self._logic_cluster_status(name, return_json=False)
+        
+        if "error" in result and result["error"]:
+            print(result["error"])
             return
-        if not self.selected and name is None:
-            print('No cluster selected')
-            return
-        if name is None:
-            name = self.selected
-        if name not in self.clusters:
-            print(f'No cluster with name {name} found')
-            return
-        cluster = self.clusters[name]
-        await self.get_status(name)
-        for index, s_config in cluster.items():
-            record = self.status_records[name][index]
-            if record:
-                print(f" {index} {s_config.uri}: running")
-            else:
-                print(f" {index} {s_config.uri}: NOT running")
+        
+        for index, server_data in result["servers"].items():
+            status_text = "running" if server_data["running"] else "NOT running"
+            print(f" {index} {server_data['uri']}: {status_text}")
                 
     async def do_update_cluster(self, name=None):
         """
@@ -387,19 +401,24 @@ class ClusterCLI(MyCommander):
     async def do_server_status(self, index):
         """
         Get the status dictionary for the the indexed server in the currently selected cluster"""
-        cluster,server,status = self.s_preamble(index)
-        if not cluster:
+        result = await self._logic_server_status(index, return_json=False)
+        
+        if "error" in result and result["error"]:
+            print(result["error"])
             return
-        print(json.dumps(status, indent=4))
+        
+        print(json.dumps(result["status"], indent=4))
 
     async def do_log_stats(self, index):
         """
         Get the LogStats object for the the indexed server in the currently selected cluster"""
-        cluster,server,status = self.s_preamble(index)
-        if not cluster:
+        result = await self._logic_log_stats(index, return_json=False)
+        
+        if "error" in result and result["error"]:
+            print(result["error"])
             return
-        log_stats = await get_log_stats(server.uri)
-        print(json.dumps(log_stats.__dict__, indent=4))
+        
+        print(json.dumps(result["log_stats"], indent=4))
 
     async def do_take_snapshot(self, index):
         """
@@ -537,6 +556,294 @@ class ClusterCLI(MyCommander):
             return None,None,None
         return cluster,cluster[index], self.status_records[self.selected][index]
     
+    def _format_json_response(self, data, return_json=False):
+        """Utility method to format response data as JSON string if requested"""
+        if return_json:
+            return json.dumps(data, indent=4)
+        return data
+    
+    def _create_error_response(self, error_message, return_json=False):
+        """Utility method to create consistent error responses"""
+        error_data = {"success": False, "error": error_message}
+        return self._format_json_response(error_data, return_json)
+    
+    def _validate_cluster_selected(self):
+        """Enhanced helper to validate cluster selection, returns structured data"""
+        if len(self.clusters) == 0:
+            return None, "No clusters found, try find_clusters or add_cluster"
+        if not self.selected:
+            return None, "No cluster selected"
+        return self.clusters[self.selected], None
+    
+    def _validate_server_index(self, index):
+        """Enhanced helper to validate server index, returns structured data"""
+        cluster, error = self._validate_cluster_selected()
+        if cluster is None:
+            return None, None, None, error
+        
+        if index not in cluster:
+            return None, None, None, f"Requested server number {index} not found, valid values are {list(cluster.keys())}"
+        
+        server = cluster[index]
+        status = self.status_records.get(self.selected, {}).get(index)
+        return cluster, server, status, None
+
+    async def _logic_list_clusters(self, return_json=False):
+        """Logic for listing clusters with their running status"""
+        if len(self.clusters) == 0:
+            result = {
+                "clusters": {},
+                "total_clusters": 0
+            }
+            return self._format_json_response(result, return_json)
+        
+        clusters_data = {}
+        for name, cluster in self.clusters.items():
+            await self.get_status(name)
+            running = False
+            servers_data = {}
+            
+            for index, s_config in cluster.items():
+                record = self.status_records[name][index]
+                is_running = record is not None
+                if is_running:
+                    running = True
+                
+                servers_data[index] = {
+                    "uri": s_config.uri,
+                    "running": is_running,
+                    "working_dir": getattr(s_config, 'working_dir', None)
+                }
+            
+            clusters_data[name] = {
+                "status": "running" if running else "non-running",
+                "servers": servers_data
+            }
+        
+        result = {
+            "clusters": clusters_data,
+            "total_clusters": len(clusters_data)
+        }
+        return self._format_json_response(result, return_json)
+
+    async def _logic_select(self, name, return_json=False):
+        """Logic for selecting a cluster as the active cluster"""
+        if name not in self.clusters:
+            result = {
+                "success": False,
+                "selected_cluster": None,
+                "available_clusters": list(self.clusters.keys()),
+                "error": f"Supplied name {name} not in clusters array {list(self.clusters.keys())}"
+            }
+            return self._format_json_response(result, return_json)
+        
+        await self.set_selected(name)
+        result = {
+            "success": True,
+            "selected_cluster": name,
+            "available_clusters": list(self.clusters.keys()),
+            "error": None
+        }
+        return self._format_json_response(result, return_json)
+
+    async def _logic_server_status(self, index, return_json=False):
+        """Logic for getting server status dictionary"""
+        cluster, server, status, error = self._validate_server_index(index)
+        if cluster is None:
+            result = {
+                "server_index": str(index),
+                "server_uri": None,
+                "status": None,
+                "error": error
+            }
+            return self._format_json_response(result, return_json)
+        
+        result = {
+            "server_index": str(index),
+            "server_uri": server.uri,
+            "status": status,
+            "error": None
+        }
+        return self._format_json_response(result, return_json)
+
+    async def _logic_cluster_status(self, name=None, return_json=False):
+        """Logic for getting cluster status overview"""
+        if len(self.clusters) == 0:
+            result = {
+                "cluster_name": None,
+                "servers": {},
+                "total_servers": 0,
+                "running_servers": 0,
+                "error": "No clusters found, try find_clusters or add_cluster"
+            }
+            return self._format_json_response(result, return_json)
+        
+        if not self.selected and name is None:
+            result = {
+                "cluster_name": None,
+                "servers": {},
+                "total_servers": 0,
+                "running_servers": 0,
+                "error": "No cluster selected"
+            }
+            return self._format_json_response(result, return_json)
+        
+        if name is None:
+            name = self.selected
+            
+        if name not in self.clusters:
+            result = {
+                "cluster_name": name,
+                "servers": {},
+                "total_servers": 0,
+                "running_servers": 0,
+                "error": f"No cluster with name {name} found"
+            }
+            return self._format_json_response(result, return_json)
+        
+        cluster = self.clusters[name]
+        await self.get_status(name)
+        
+        servers_data = {}
+        running_count = 0
+        
+        for index, s_config in cluster.items():
+            record = self.status_records[name][index]
+            is_running = record is not None
+            if is_running:
+                running_count += 1
+                
+            servers_data[index] = {
+                "uri": s_config.uri,
+                "running": is_running,
+                "status_details": record
+            }
+        
+        result = {
+            "cluster_name": name,
+            "servers": servers_data,
+            "total_servers": len(servers_data),
+            "running_servers": running_count,
+            "error": None
+        }
+        return self._format_json_response(result, return_json)
+
+    async def _logic_log_stats(self, index, return_json=False):
+        """Logic for getting LogStats object for indexed server"""
+        cluster, server, status, error = self._validate_server_index(index)
+        if cluster is None:
+            result = {
+                "server_index": str(index),
+                "server_uri": None,
+                "log_stats": None,
+                "error": error
+            }
+            return self._format_json_response(result, return_json)
+        
+        try:
+            log_stats = await get_log_stats(server.uri)
+            log_stats_dict = log_stats.__dict__ if log_stats else None
+        except Exception as e:
+            result = {
+                "server_index": str(index),
+                "server_uri": server.uri,
+                "log_stats": None,
+                "error": f"Failed to get log stats: {str(e)}"
+            }
+            return self._format_json_response(result, return_json)
+        
+        result = {
+            "server_index": str(index),
+            "server_uri": server.uri,
+            "log_stats": log_stats_dict,
+            "error": None
+        }
+        return self._format_json_response(result, return_json)
+
+    async def _logic_take_snapshot(self, index, return_json=False):
+        """Logic for taking snapshot on indexed server"""
+        cluster, server, status, error = self._validate_server_index(index)
+        if cluster is None:
+            result = {
+                "server_index": str(index),
+                "server_uri": None,
+                "pre_snapshot_status": None,
+                "snapshot_result": None,
+                "post_snapshot_status": None,
+                "error": error
+            }
+            return self._format_json_response(result, return_json)
+        
+        try:
+            pre_status = await get_server_status(server.uri)
+            snap = await take_snapshot(server.uri)
+            post_status = await get_server_status(server.uri)
+            
+            result = {
+                "server_index": str(index),
+                "server_uri": server.uri,
+                "pre_snapshot_status": pre_status,
+                "snapshot_result": snap.__dict__ if snap else None,
+                "post_snapshot_status": post_status,
+                "error": None
+            }
+        except Exception as e:
+            result = {
+                "server_index": str(index),
+                "server_uri": server.uri,
+                "pre_snapshot_status": None,
+                "snapshot_result": None,
+                "post_snapshot_status": None,
+                "error": f"Failed to take snapshot: {str(e)}"
+            }
+        
+        return self._format_json_response(result, return_json)
+
+    async def _logic_stop_server(self, index, return_json=False):
+        """Logic for stopping indexed server"""
+        cluster, server, status, error = self._validate_server_index(index)
+        if cluster is None:
+            result = {
+                "server_index": str(index),
+                "server_uri": None,
+                "was_running": False,
+                "stop_success": False,
+                "final_cluster_status": {},
+                "error": error
+            }
+            return self._format_json_response(result, return_json)
+        
+        was_running = status is not None
+        stop_success = False
+        
+        if was_running:
+            try:
+                await stop_server(server.uri)
+                stop_success = True
+            except Exception as e:
+                result = {
+                    "server_index": str(index),
+                    "server_uri": server.uri,
+                    "was_running": was_running,
+                    "stop_success": False,
+                    "final_cluster_status": {},
+                    "error": f"Failed to stop server: {str(e)}"
+                }
+                return self._format_json_response(result, return_json)
+        
+        # Get final cluster status
+        final_status_result = await self._logic_cluster_status(return_json=False)
+        
+        result = {
+            "server_index": str(index),
+            "server_uri": server.uri,
+            "was_running": was_running,
+            "stop_success": stop_success,
+            "final_cluster_status": final_status_result,
+            "error": None
+        }
+        return self._format_json_response(result, return_json)
+    
 for name, method in ClusterCLI.__dict__.items():
     if name.startswith("do_"):
         ClusterCLI.method_order.append(name[3:])
@@ -567,6 +874,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--run-ops', choices=command_codes, action="append", default=[], 
                                 help="Run the requested command an exit without starting interactive loop, can be used multiple times")
+    parser.add_argument('--json', '-j',  action="store_true",
+                        help='Output results in json format, only applies to --run-ops commands')
     # Parse arguments
     args = parser.parse_args()
     
