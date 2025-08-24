@@ -3,7 +3,9 @@ import traceback
 import json
 from typing import Set
 import logging
-logger = logging.getLogger('transport.server.astream')
+from raftengine.deck.log_control import LogController
+log_controller = LogController.get_controller()
+logger = log_controller.add_logger('rpc.server','')
 
 class RPCServer:
     """

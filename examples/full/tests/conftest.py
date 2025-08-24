@@ -57,20 +57,8 @@ def configure_breakpoint():
     os.environ['PYTHONBREAKPOINT'] = 'ipdb.set_trace'
     
     # Check for debug logging environment variable and set log level accordingly
-    try:
-        from raftengine.deck.log_control import LogController
-        # Get or create the LogController and set debug level
-        try:
-            controller = LogController.get_controller()
-        except Exception:
-            # If no controller exists, create one
-            controller = LogController.make_controller()
-        controller.add_logger("test_code")
-        if os.environ.get('RAFT_DEBUG_LOGGING') == '1':
-            controller.set_default_level('debug')
-    except ImportError:
-        # If LogController is not available, skip debug logging setup
-        pass
+    from log_control import setup_logging
+    controller = setup_logging()
     
     yield
     # Cleanup after tests (optional)
