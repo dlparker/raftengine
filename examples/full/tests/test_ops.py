@@ -32,6 +32,10 @@ async def test_mgr_ops():
     assert create_result['cluster_name'] == cluster_name
     assert len(create_result['servers_created']) == 3
 
+    # make sure it blows up without force flag
+    with pytest.raises(Exception):
+         await setup_mgr.create_local_cluster(cluster_name, directory=cluster_base_dir, force=False)
+
     from_files_mgr = ClusterMgr()
     # Now make sure that discover finds it
     # get the json version and make sure it doesn't blow up
@@ -59,19 +63,36 @@ async def test_mgr_ops():
             assert f_spec == tmp
             
 
-    logger.info("Checking get_status on non-running cluster")
+    logger.info("Checking some expected errors on non-running cluster")
     await from_files_mgr.select_cluster(cluster_name)
-    # make sure that internal get_status call does not blow up on non-running cluster
-    status_dict = await from_files_mgr.get_status()
+    with pytest.raises(Exception):
+        await from_files_mgr.log_stats('0')
+    with pytest.raises(Exception):
+        await from_files_mgr.send_heartbeats()
+    with pytest.raises(Exception):
+        await from_files_mgr.new_server()
+    with pytest.raises(Exception):
+        await from_files_mgr.server_exit_cluster('0')
+    with pytest.raises(Exception):
+        await from_files_mgr.start_servers(hostnames=['foo', 'bar'])
 
+    status_dict = await from_files_mgr.get_status()
     from_uri_mgr = ClusterMgr()
     find_port = servers['0'].uri.split(':')[-1]
+
+    
     with pytest.raises(Exception):
         await from_uri_mgr.add_cluster(find_port)
+    with pytest.raises(Exception):
+        await from_uri_mgr.require_selection()
+    with pytest.raises(Exception):
+        await from_uri_mgr.cluster_status()
+    with pytest.raises(Exception):
+        await from_uri_mgr.update_cluster()
     
     logger.info(f"Starting servers in {cluster_name} (might be slow since it is first start of cluster)")
     start_res_json = await from_files_mgr.start_servers(return_json=True)
-    logger.info(f"Start servers result \n{start_res_json}")
+    logger.debug(f"Start servers result \n{start_res_json}")
     start_res = json.loads(start_res_json)
     for index, spec_dict in start_res['final_cluster_status'].items():
         config = ClusterServerConfig.from_dict(spec_dict['config'])
@@ -80,6 +101,29 @@ async def test_mgr_ops():
 
     logger.info("Ensuring add_cluster method works in non-json form")
     a_clust = await from_uri_mgr.add_cluster(find_port, return_json=False)
+    logger.info("Testing some error conditions")
+    orig = from_uri_mgr.selected
+    from_uri_mgr.selected = None
+    with pytest.raises(Exception):
+        await from_uri_mgr.require_selection()
+    with pytest.raises(Exception):
+        await from_uri_mgr.get_status()
+    with pytest.raises(Exception):
+        await from_uri_mgr.select_cluster('foo')
+    with pytest.raises(Exception):
+        await from_uri_mgr.cluster_status()
+    with pytest.raises(Exception):
+        await from_uri_mgr.update_cluster()
+    with pytest.raises(Exception):
+        await from_uri_mgr.cluster_status('foo')
+    with pytest.raises(Exception):
+        await from_uri_mgr.update_cluster('foo')
+    
+    from_uri_mgr.selected = orig
+    cluster, server, status =   from_uri_mgr.require_server_at_index('0')
+    with pytest.raises(Exception):
+        cluster, server, status = from_uri_mgr.require_server_at_index('4')
+    
     assert a_clust['search_directory'] is None
     assert a_clust['query_uri'] is not None
     # start from scratch 
@@ -89,6 +133,7 @@ async def test_mgr_ops():
     b_clust = json.loads(b_clust_str)
     assert b_clust['search_directory'] is None
     assert b_clust['query_uri'] is not None
+    update_data = await from_uri_mgr.update_cluster()
     
     logger.info(f"Stopping cluster {cluster_name}")
     stop_res_json = await from_files_mgr.stop_cluster(return_json=True)
@@ -169,13 +214,16 @@ async def test_mgr_ops():
 
     # now put some stuff in the log
     from split_base.collector import Collector
-    from base.demo import Demo
+    from base.validator import Validator
     from ops.admin_common import get_client
     client_0 = get_client(status['uri'])
     collector = Collector(client_0)
-    demo = Demo(collector)
-    res = await demo.do_unknown_state_demo()
-
+    validator = Validator(collector)
+    try:
+        res = await validator.do_test()
+    except:
+        stop_res_json = await from_files_mgr.stop_cluster(return_json=True)
+        raise
 
     # use the json version to make sure it works, do server 0
     snapshot_record_j = await mgr2.take_snapshot('0', return_json=True)

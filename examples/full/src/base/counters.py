@@ -9,9 +9,12 @@ class Counters:
         self.storage_dir = storage_dir
         self.file_path = Path(storage_dir, 'counters.pickle')
         if self.file_path.exists():
-            with open(self.file_path, 'rb') as f:
-                data = f.read()
-                self.counts = pickle.loads(data)
+            try:
+                with open(self.file_path, 'rb') as f:
+                    data = f.read()
+                    self.counts = pickle.loads(data)
+            except:
+                self.counts = defaultdict(int)
         else:
             self.counts = defaultdict(int)
 

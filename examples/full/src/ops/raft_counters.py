@@ -7,9 +7,6 @@ from base.counters import Counters
 
 class RaftCounters(Counters):
 
-    def __init__(self, log):
-        self.log = log
-    
     async def make_snapshot(self):
         fp = Path(self.storage_dir, 'counters_snapshot.pickle')
         with open(fp, 'wb') as f:
@@ -56,4 +53,4 @@ class SnapShotTool(SnapShotToolAPI):
         
     async def apply_snapshot(self):
         self.counters.counts = self.new_counters
-        return self.snapshot()
+        return self.snapshot
