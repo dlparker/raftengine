@@ -1,5 +1,6 @@
 from pathlib import Path
 import pickle
+import base64
 from raftengine.api.snapshot_api import SnapShotToolAPI
 from base.counters import Counters
 
@@ -42,10 +43,14 @@ class SnapShotTool(SnapShotToolAPI):
         self.new_counters = None
         
     async def load_snapshot_chunk(self, chunk) -> None:
-        self.new_counters = pickle.loads(cunk)
+        # this comes in over the wrire, so it is base64
+        self.new_counters = pickle.loads(base64.decode(cunk))
 
     async def get_snapshot_chunk(self, offset=0) -> (str,int,bool):
-        return await self.counters.get_snapshot_chunk(offset=0)
+        chunk,offset,done = await self.counters.get_snapshot_chunk(offset=0)
+        # this is for export so it needs to be a string, not binary, so base64 encode it
+        base64_bytes = base64.b64encode(chunk)
+        return base_64bytes, offset, done
         
     async def apply_snapshot(self):
         self.counters.counts = self.new_counters
