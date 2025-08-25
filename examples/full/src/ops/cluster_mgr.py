@@ -5,6 +5,7 @@ import json
 import argparse
 import shutil
 import time
+import traceback
 from pathlib import Path
 from aiocmd import aiocmd
 from subprocess import Popen
@@ -26,40 +27,52 @@ class ClusterMgr:
         self.status_records = {}
         self.selected = None
         self.json_indent = 4
-        
+
     async def get_status(self, cluster_name=None):
-        # this is a good time to look for servers that have been removed
-        # from the cluster
         if cluster_name is None:
             if self.selected is None:
                 raise Exception('no cluster name provided and no cluster selected')
             cluster_name = self.selected
-        for cname, s_dict in self.clusters.items():
-            config_check = None
-            if cluster_name is None or cname == cluster_name:
-                self.status_records[cname] = stat_dict = {}
-                for index, s_config in s_dict.items():
-                    try:
-                        status = await get_server_status(s_config.uri)
-                    except:
-                        status = None
-                    stat_dict[index] = status
-                    if status is not None and config_check is None:
-                        try:
-                            config_check = await get_cluster_config(s_config.uri)
-                        except:
-                            pass
-                if config_check:
-                    exited = []
-                    for index, s_config in s_dict.items():
-                        #print(f"checking for {s_config.uri} in {config_check.nodes.keys()}")
-                        if s_config.uri not in config_check.nodes:
-                            #print(f"discovery showed {s_config.uri} in cluster {cname} but no longer configured")
-                            exited.append(index)
-                    if len(exited) > 0:
-                        del s_dict[index] 
-                        del stat_dict[index]
-                return stat_dict
+        # this is a good time to look for servers that have been removed
+        # from the or added to the cluster, so lets just update everything
+        # if we can talk to a server
+        config_check = None
+        cluster = self.clusters[cluster_name]
+        for index, s_config in cluster.items():
+            try:
+                status = await get_server_status(s_config.uri)
+                if status is not None:
+                    config_check = s_config
+                    break
+            except:
+                status = None
+        if config_check is not None:
+            try:
+                q_finder = ClusterFinder(uri=config_check.uri)
+                clusters = await q_finder.discover()
+                cluster_data = clusters[cluster_name]
+                for n_index, n_server in cluster_data.items():
+                    if n_index not in cluster:
+                        # server must have been added since last check
+                        cluster[n_index] = n_server
+                for c_index, c_server in cluster.items():
+                    if c_index not in cluster_data:
+                        # server must have been deleted since last check
+                        del cluster[c_index]
+            except Exception as e:
+                #traceback.print_exc()
+                #print(e)
+                pass
+
+        self.status_records[cluster_name] = stat_dict = {}
+        cluster = self.clusters[cluster_name] 
+        for index, s_config in cluster.items():
+            try:
+                status = await get_server_status(s_config.uri)
+            except:
+                status = None
+            stat_dict[index] = status
+        return stat_dict
         return None
 
     async def query_discover(self, port, host='127.0.0.1', select=True):
@@ -77,7 +90,7 @@ class ClusterMgr:
         return cluster_name
 
     async def discover_cluster_files(self, search_dir="/tmp"):
-        f_finder = ClusterFinder(root_dir="/tmp")
+        f_finder = ClusterFinder(root_dir=search_dir)
         clusters = await f_finder.discover()
         if len(clusters) > 0:
             self.clusters.update(clusters)
@@ -130,7 +143,7 @@ class ClusterMgr:
             selected_cluster = cluster_name
             
         result = {
-            "search_directory": search_dir,
+            "search_directory": str(search_dir),
             "query_uri": None,
             "clusters": clusters_dict,
             "selected_cluster": selected_cluster,
@@ -251,13 +264,13 @@ class ClusterMgr:
             process = spec['process']
             if process.poll() is not None:
                 extra = ""
-                stdout = spec['stdout_file']
-                if stdout.exists():
+                stdout_file = spec['stdout_file']
+                if stdout_file.exists():
                     with open(stdout_file, 'r') as f:
                         stdout_content = f.read()
                     extra += f"\n--- stdout ---\n{stdout_content}"
-                stderr = spec['stderr_file']
-                if stderr.exists():
+                stderr_file = spec['stderr_file']
+                if stderr_file.exists():
                     with open(stderr_file, 'r') as f:
                         stderr_content = f.read()
                     extra += f"\n--- stderr ---\n{stderr_content}"
@@ -317,7 +330,7 @@ class ClusterMgr:
     async def create_local_cluster(self, cluster_name, directory="/tmp", force=False, return_json=False):
         """Logic for creating a local cluster"""
         # Check if cluster already exists
-        f_finder = ClusterFinder(root_dir="/tmp")
+        f_finder = ClusterFinder(root_dir=directory)
         clusters = await f_finder.discover()
         removed = False
         if cluster_name in clusters:
@@ -333,7 +346,7 @@ class ClusterMgr:
             else:
                 result = {
                     "cluster_name": cluster_name,
-                    "directory": directory,
+                    "directory": str(directory),
                     "force": force,
                     "success": False,
                     "base_port": None,
@@ -363,7 +376,7 @@ class ClusterMgr:
 
         # Build local cluster
         cb = ClusterBuilder()
-        local_servers = cb.build_local(name=cluster_name, base_port=avail_port)
+        local_servers = cb.build_local(name=cluster_name, base_port=avail_port, base_dir=str(directory))
         cb.setup_local_files(local_servers, directory, overwrite=force)
 
         # Convert to server dictionary
@@ -387,7 +400,7 @@ class ClusterMgr:
 
         result = {
             "cluster_name": cluster_name,
-            "directory": directory,
+            "directory": str(directory),
             "force": force,
             "success": True,
             "base_port": avail_port,
@@ -418,114 +431,91 @@ class ClusterMgr:
         }
         return self.response_or_json(result, return_json)
     
-    # NOT CONVERTED
     async def take_snapshot(self, index, return_json=False):
-        """Logic for taking snapshot on indexed server"""
-        cluster, server, status, error = self.require_server_at_index(index)
-        if cluster is None:
-            result = {
-                "server_index": str(index),
-                "server_uri": None,
-                "pre_snapshot_status": None,
-                "snapshot_result": None,
-                "post_snapshot_status": None,
-                "error": error
-            }
-            return self.response_or_json(result, return_json)
-        
-        try:
-            pre_status = await get_server_status(server.uri)
-            snap = await take_snapshot(server.uri)
-            post_status = await get_server_status(server.uri)
+        cluster, server, status = self.require_server_at_index(index)
+        pre_status = await get_server_status(server.uri)
+        snapshot = await take_snapshot(server.uri)
+        post_status = await get_server_status(server.uri)
             
-            result = {
+        result = {
                 "server_index": str(index),
                 "server_uri": server.uri,
                 "pre_snapshot_status": pre_status,
-                "snapshot_result": snap.__dict__ if snap else None,
+                "snapshot": snapshot,
                 "post_snapshot_status": post_status,
-                "error": None
-            }
-        except Exception as e:
-            result = {
-                "server_index": str(index),
-                "server_uri": server.uri,
-                "pre_snapshot_status": None,
-                "snapshot_result": None,
-                "post_snapshot_status": None,
-                "error": f"Failed to take snapshot: {str(e)}"
-            }
-        
+        }
         return self.response_or_json(result, return_json)
 
+    async def new_server(self, hostname='127.0.0.1',  return_json=False):
+        cluster = self.require_selection()
+        status = None
+        max_port = 0
+        for index, server in cluster.items():
+            port = int(server.uri.split(':')[-1])
+            max_port = max(max_port, port)
+            s = await get_server_status(server.uri)
+            if s:
+                status = s
+        new_port = max_port + 1
+        if status is None:
+            raise Exception(f"Cannot add a server to cluster {self.selected}, no servers are runnig")
+        leader = status['leader_uri']
+        if leader is None:
+            raise Exception(f"Cannot add a server to cluster {self.selected}, no leader has been elected")
+        # find the base working directory from the status
+        base_dir = Path(status['working_dir']).parent
+        this_dir = Path(__file__).parent
+        new_uri = f"full://{hostname}:{new_port}"
+        sfile = Path(this_dir, 'run_server.py')
+        cmd = [str(sfile), "-b", str(base_dir), '--join_uri', new_uri, '--cluster_uri', leader]
+        working_dir = Path(base_dir, f"full_raft_server.{hostname}.{new_port}")
+        if not working_dir.exists():
+            working_dir.mkdir(parents=True)
+        stdout_file = Path(working_dir, 'server.stdout')
+        stderr_file = Path(working_dir, 'server.stderr')
+
+        with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
+            process = Popen(cmd, stdout=stdout_f, stderr=stderr_f, start_new_session=True)
+
+        await asyncio.sleep(0.01)
+        if process.poll() is not None:
+            extra = ""
+            if stdout_file.exists():
+                with open(stdout_file, 'r') as f:
+                    stdout_content = f.read()
+                extra += f"\n--- stdout ---\n{stdout_content}"
+            if stderr_file.exists():
+                with open(stderr_file, 'r') as f:
+                    stderr_content = f.read()
+                extra += f"\n--- stderr ---\n{stderr_content}"
+            raise Exception(f"process for uri {uri} failed to start {extra}")
+        return dict(uri=new_uri, working_dir=working_dir)
+        
     async def server_exit_cluster(self, index, return_json=False):
-        """Logic for server exiting cluster"""
-        cluster, server, status, error = self.require_server_at_index(index)
-        if cluster is None:
-            result = {
-                "server_index": str(index),
-                "server_uri": None,
-                "leader_uri": None,
-                "exit_result": None,
-                "server_stopped": False,
-                "heartbeats_sent": False,
-                "final_cluster_status": {},
-                "error": error
-            }
-            return self.response_or_json(result, return_json)
-        
+        cluster, server, status = self.require_server_at_index(index)
         if not status:
-            result = {
-                "server_index": str(index),
-                "server_uri": server.uri,
-                "leader_uri": None,
-                "exit_result": None,
-                "server_stopped": False,
-                "heartbeats_sent": False,
-                "final_cluster_status": {},
-                "error": f"server {server.uri} is not running, cannot trigger it to exit"
-            }
-            return self.response_or_json(result, return_json)
-        
-        try:
-            leader_uri = status['leader_uri']
-            res = await server_exit_cluster(server.uri)
-            server_stopped = False
-            heartbeats_sent = False
+            raise Exception(f"server {server.uri} cannot be told to exit, it is not running")
+        leader_uri = status['leader_uri']
+        res = await server_exit_cluster(server.uri)
             
-            if res.startswith("exited"):
-                await stop_server(server.uri)
-                server_stopped = True
+        if res.startswith("exited"):
+            await stop_server(server.uri)
+            server_stopped = True
             
-            if leader_uri:
-                await send_heartbeats(leader_uri)
-                heartbeats_sent = True
+        if leader_uri:
+            await send_heartbeats(leader_uri)
+            heartbeats_sent = True
             
-            # Get final cluster status
-            final_status_result = await self.op_cluster_status(return_json=False)
+        # Get final cluster status
+        final_status_result = await self.cluster_status(return_json=False)
             
-            result = {
+        result = {
                 "server_index": str(index),
                 "server_uri": server.uri,
                 "leader_uri": leader_uri,
                 "exit_result": res,
-                "server_stopped": server_stopped,
-                "heartbeats_sent": heartbeats_sent,
                 "final_cluster_status": final_status_result,
-                "error": None
             }
-        except Exception as e:
-            result = {
-                "server_index": str(index),
-                "server_uri": server.uri,
-                "leader_uri": status.get('leader_uri') if status else None,
-                "exit_result": None,
-                "server_stopped": False,
-                "heartbeats_sent": False,
-                "final_cluster_status": {},
-                "error": str(e)
-            }
-        
         return self.response_or_json(result, return_json)
 
     

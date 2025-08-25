@@ -80,13 +80,11 @@ class Pilot(PilotAPI):
         
     # PilotAPI
     async def begin_snapshot_import(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        tool = SnapShotTool(self.counters, snapshot)
-        return tool
+        return self.counters.get_snapshot_tool(snapshot)
 
     # PilotAPI
     async def begin_snapshot_export(self, snapshot:SnapShot) -> SnapShotToolAPI:
-        tool = SnapShotTool(self.counters, snapshot)
-        return tool
+        return self.counters.get_snapshot_tool(snapshot)
 
     # PilotAPI
     async def create_snapshot(self, index:int , term: int) -> SnapShot:

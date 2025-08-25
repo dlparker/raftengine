@@ -38,7 +38,7 @@ class ClusterBuilder:
     def __init__(self):
         pass
 
-    def build_common(self, name, node_uris, slow_timeouts=False, all_local=False):
+    def build_common(self, name, node_uris, slow_timeouts=False, all_local=False, base_dir="/tmp"):
         if slow_timeouts:
             heartbeat_period=10000
             election_timeout_min=10000
@@ -58,18 +58,18 @@ class ClusterBuilder:
         server_configs = []
         for uri in node_uris:
             host,port = uri.split('/')[-1].split(':')
-            work_dir = Path("/tmp", f"full_raft_server.{host}.{port}")
+            work_dir = Path(base_dir, f"full_raft_server.{host}.{port}")
             server_configs.append(ClusterServerConfig(uri, str(work_dir), name,initial_config, all_local=all_local))
         return server_configs
         
-    def build_local(self, name='local', base_port=50100, slow_timeouts=False):
+    def build_local(self, name='local', base_port=50100, slow_timeouts=False, base_dir="/tmp"):
         node_uris = []
         for port in range(base_port, base_port + 3):
             uri = f"full://127.0.0.1:{port}"
             node_uris.append(uri)
-        return self.build_common(name, node_uris, slow_timeouts, all_local=True)
+        return self.build_common(name, node_uris, slow_timeouts, all_local=True, base_dir=base_dir)
 
-    def build(self, name, hosts, base_port=50090, slow_timeouts=False):
+    def build(self, name, hosts, base_port=50090, slow_timeouts=False, base_dir="/tmp"):
         if len(hosts) < 3:
             Exception("At least three host names must be provided so three nodes can be configured. Host name can be repeated")
         node_uris = []
@@ -83,7 +83,7 @@ class ClusterBuilder:
                 port += 1
                 uri = f"full://{host}:{port}"
             node_uris.append(uri)
-        return self.build_common(name, node_uris, slow_timeouts)
+        return self.build_common(name, node_uris, slow_timeouts, base_dir=base_dir)
 
     def setup_local_files(self, server_configs, root_dir, local_host_names=None, overwrite=False):
         for s_config in server_configs:

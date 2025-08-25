@@ -57,7 +57,7 @@ class RaftServer:
     def set_direct_commander(self, direct_commander):
         self.direct_commander = direct_commander
         self.direct_commands = self.direct_commander.direct_commands
-        
+    
     # local only method
     async def start(self):
         if not self.timers_running:

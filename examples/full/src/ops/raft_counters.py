@@ -6,6 +6,10 @@ from base.counters import Counters
 
 class RaftCounters(Counters):
 
+    @classmethod
+    def get_snapshot_tool_class(cls):
+        return SnapShotTool
+    
     async def make_snapshot(self):
         fp = Path(self.storage_dir, 'counters_snapshot.pickle')
         with open(fp, 'wb') as f:
@@ -27,6 +31,9 @@ class RaftCounters(Counters):
             return data,offset,done
         return None,offset,done
 
+    def get_snapshot_tool(self, snapshot):
+        return SnapShotTool(self, snapshot)
+    
 class SnapShotTool(SnapShotToolAPI):
 
     def __init__(self, counters, snapshot):

@@ -4,6 +4,8 @@ import pytest
 import logging
 import json
 import time
+import shutil
+from pathlib import Path
 from typing import Any
 from pprint import pprint, pformat
 from log_control import setup_logging
@@ -11,7 +13,7 @@ from log_control import setup_logging
 controller = setup_logging()
 logger = controller.add_logger("test_code")
 
-import ops
+from raftengine.api.snapshot_api import SnapShot
 from ops.cluster_mgr import ClusterMgr
 from ops.admin_common import ClusterServerConfig
 
@@ -20,7 +22,10 @@ async def test_mgr_ops():
 
     cluster_name = "test_main_ops"
     logger.info(f"Creating cluster {cluster_name}")
-    cr_str = await mgr.create_local_cluster(cluster_name, directory="/tmp", force=True, return_json=True)
+    cluster_base_dir = Path("/tmp/test_mgr_ops_clusters")
+    if not cluster_base_dir.exists():
+        cluster_base_dir.mkdir(parents=True)
+    cr_str = await mgr.create_local_cluster(cluster_name, directory=cluster_base_dir, force=True, return_json=True)
     logger.debug("create_local_cluster result: %s", cr_str)
     create_result = json.loads(cr_str)
     assert create_result['success'] 
@@ -30,11 +35,11 @@ async def test_mgr_ops():
     # now make sure that discover finds it
     # get the json version and make sure it doesn't blow up
     logger.info(f"Doing find_clusters and expecting to find {cluster_name}")
-    cdict_str = await mgr.find_clusters(return_json=True)
+    cdict_str = await mgr.find_clusters(search_dir=cluster_base_dir,return_json=True)
     #logger.debug("find_clusters result: %s", cdict_str)
     tmp = json.loads(cdict_str)
     # get the full objects version 
-    find_res = await mgr.find_clusters()
+    find_res = await mgr.find_clusters(search_dir=cluster_base_dir)
     cdict = find_res['clusters']
     assert cluster_name in cdict
     servers = cdict[cluster_name]
@@ -138,11 +143,55 @@ async def test_mgr_ops():
         else:
             assert status[key] == mgr2_status[key]
 
-
     # now put some stuff in the log
-    
+    from split_base.collector import Collector
+    from base.demo import Demo
+    from ops.admin_common import get_client
+    client_0 = get_client(status['uri'])
+    collector = Collector(client_0)
+    demo = Demo(collector)
+    res = await demo.do_unknown_state_demo()
 
-            
+
+    # use the json version to make sure it works
+    snapshot_record_j = await mgr2.take_snapshot('0', return_json=True)
+    snapshot_record = json.loads(snapshot_record_j)
+    snapshot_1 = SnapShot(**snapshot_record['snapshot'])
+    log_stats = await mgr.log_stats('0')
+    assert log_stats.snapshot_index == snapshot_1.index
+    
+    # use the non json version to make sure it works
+    snapshot_record_2 = await mgr2.take_snapshot('1', return_json=False)
+    snapshot_2 = snapshot_record_2['snapshot']
+    log_stats_2 = await mgr.log_stats('1')
+    assert log_stats_2.snapshot_index == snapshot_2.index
+
+
+    
+    # now add a new server
+    logger.info(f"Adding a new server to cluster")
+    start_result = await mgr.new_server()
+    c_status = await mgr.cluster_status()
+    start_time = time.time()
+    while len(c_status) < 4 and time.time() - start_time < 2:
+        await asyncio.sleep(0.01)
+        c_status = await mgr.cluster_status()
+    assert len(c_status) == 4
+    config = c_status['3']['config']
+    logger.info(f"Added {config.uri} to cluster")
+
+    # now remove that new server
+    logger.info(f"Telling {config.uri} to exit cluster")
+    exit_status = await mgr.server_exit_cluster('3')
+    c_status = await mgr.cluster_status()
+    start_time = time.time()
+    while len(c_status) > 3 and time.time() - start_time < 2:
+        await asyncio.sleep(0.01)
+        c_status = await mgr.cluster_status()
+    assert len(c_status) == 3
+    path = Path(config.working_dir)
+    shutil.rmtree(path)
+    
     logger.info(f"Stopping cluster {cluster_name}")
     stop_res_json = await mgr.stop_cluster(return_json=True)
     logger.debug(stop_res_json)
