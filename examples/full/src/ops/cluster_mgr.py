@@ -172,7 +172,6 @@ class ClusterMgr:
             clusters_data[name] = servers_data
         return self.response_or_json(clusters_data, return_json)
 
-    
     async def server_status(self, index:str, return_json=False):
         cluster, server, status = self.require_server_at_index(index)
         # get an up to date status
@@ -288,6 +287,19 @@ class ClusterMgr:
         }
         return self.response_or_json(result, return_json)
 
+    async def get_server_config(self, index, return_json=False):
+        cluster, server, status = self.require_server_at_index(index)
+        return server
+        
+    async def get_local_server_configs(self, local_host_names, return_json=False):
+        cluster = self.require_selection()
+        servers  = {}
+        for index, config in cluster.items():
+            host = config.uri.split('/')[-1].split(':')[0]
+            if host in local_host_names:
+                servers[index] = config
+        return servers
+        
     async def stop_cluster(self, return_json=False):
         cluster = self.require_selection()
 
@@ -316,8 +328,41 @@ class ClusterMgr:
         await self.get_status(name)
         return await self.cluster_status(name=name, return_json=return_json)
 
+    async def create_cluster(self, cluster_name, local_servers_directory, hosts, local_host_names,
+                             base_port=30000, return_json=False):
+        f_finder = ClusterFinder(root_dir=local_servers_directory)
+        clusters = await f_finder.discover()
+        removed = False
+        if cluster_name in clusters:
+            raise Exception(f"cannot create local cluster {cluster_name}, it already exists locally in {local_servers_directory}")
+
+        cb = ClusterBuilder()
+        all_servers = cb.build(cluster_name, hosts=hosts, base_port=base_port, base_dir=local_servers_directory)
+        cb.setup_local_files(all_servers, local_servers_directory, local_host_names=local_host_names)
+
+        # Update status
+        local_servers = []
+        server_dict = {}
+        for index, server in enumerate(all_servers):
+            idx_str = str(index)
+            server_dict[idx_str] = server
+            host = server.uri.split('/')[-1].split(':')[0]
+            if host in local_host_names:
+                local_servers.append(server)
+
+        self.clusters[cluster_name] = server_dict
+        self.selected = cluster_name
+
+        result = {
+            "cluster_name": cluster_name,
+            "local_servers_directory": str(local_servers_directory),
+            "base_port": base_port,
+            "local_servers": local_servers,
+            "selected": True,
+        }
+        return self.response_or_json(result, return_json)
+        
     async def create_local_cluster(self, cluster_name, directory="/tmp", force=False, return_json=False):
-        """Logic for creating a local cluster"""
         # Check if cluster already exists
         f_finder = ClusterFinder(root_dir=directory)
         clusters = await f_finder.discover()
@@ -363,19 +408,12 @@ class ClusterMgr:
         for index, server in enumerate(local_servers):
             idx_str = str(index)
             server_dict[idx_str] = server
-            servers_created[idx_str] = {
-                "uri": server.uri,
-                "working_dir": getattr(server, 'working_dir', f"{directory}/full_raft_server.{server.uri.split('/')[-1]}")
-            }
+            servers_created[idx_str] = dict(uri=server.uri, working_dir=server.working_dir)
 
         # Add to clusters and select
         self.clusters[cluster_name] = server_dict
         self.selected = cluster_name
-
-        # Update status
-        for name in self.clusters:
-            await self.get_status(cluster_name=cluster_name)
-
+        await self.get_status(cluster_name=cluster_name)
         result = {
             "cluster_name": cluster_name,
             "directory": str(directory),

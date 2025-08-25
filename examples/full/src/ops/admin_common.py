@@ -76,7 +76,7 @@ class ClusterBuilder:
         used_hosts = set()
         for host in hosts:
             port = base_port
-            if host in ("127.0.0.1", "localhost"):
+            if host  == "127.0.0.1":
                 raise Exception("Can't use loopback address in real host list")
             uri = f"full://{host}:{port}"
             while uri in node_uris:

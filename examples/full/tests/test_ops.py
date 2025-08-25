@@ -5,6 +5,7 @@ import logging
 import json
 import time
 import shutil
+import socket
 from pathlib import Path
 from typing import Any
 from pprint import pprint, pformat
@@ -17,7 +18,7 @@ from raftengine.api.snapshot_api import SnapShot
 from ops.cluster_mgr import ClusterMgr
 from ops.admin_common import ClusterServerConfig
 
-async def test_mgr_ops():
+async def test_mgr_ops_full():
 
     setup_mgr = ClusterMgr()
     cluster_name = "test_main_ops"
@@ -272,3 +273,50 @@ async def test_mgr_ops():
     logger.info(f"Stopping cluster {cluster_name}")
     stop_res_json = await from_files_mgr.stop_cluster(return_json=True)
     logger.debug(stop_res_json)
+
+
+async def test_cluster_create():
+
+    mgr = ClusterMgr()
+    cluster_name = "example_cluster"
+    logger.info(f"Creating cluster {cluster_name}")
+    cluster_base_dir = Path("/tmp", cluster_name)
+    if not cluster_base_dir.exists():
+        cluster_base_dir.mkdir(parents=True)
+    else:
+        for item in cluster_base_dir.glob('*'):
+            shutil.rmtree(item)
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    host1 = socket.gethostname()
+    s.connect(("8.8.8.8", 80))
+    host2 = s.getsockname()[0]
+    s.close()
+    host3 = "otherhost"
+    # put host 3 in the middle to mix up the index values on local servrs
+    hosts = [host1, host3, host2]
+    local_host_names = [host1, host2]
+    cr_str = await mgr.create_cluster(cluster_name, local_servers_directory=cluster_base_dir,
+                                            hosts=hosts, local_host_names=local_host_names, return_json=True)
+    logger.debug("create_local_cluster result: %s", cr_str)
+    create_result = json.loads(cr_str)
+    assert create_result['cluster_name'] == cluster_name
+    assert len(create_result['local_servers']) == 2
+
+    local_configs = await mgr.get_local_server_configs(local_host_names)
+    for index, config in local_configs.items():
+        host = config.uri.split('/')[-1].split(':')[0]
+        assert host in local_host_names
+        assert index in ['0', '2']
+        
+    for index in range(3):
+        config = await mgr.get_server_config(str(index))
+        host = config.uri.split('/')[-1].split(':')[0]
+        assert host in hosts
+
+    # make sure we get an error on conflict
+    with pytest.raises(Exception):
+        create_result = await mgr.create_cluster(cluster_name, local_servers_directory=cluster_base_dir,
+                                                 hosts=hosts, local_host_names=local_host_names)
+    for item in cluster_base_dir.glob('*'):
+        shutil.rmtree(item)
