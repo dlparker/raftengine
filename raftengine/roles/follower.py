@@ -301,7 +301,8 @@ class Follower(BaseRole):
             await self.snapshot_tool.load_snapshot_chunk(message.data)
             if message.done:
                 self.logger.info("%s applying imported snapshot %s", self.my_uri(), message)
-                await self.snapshot_tool.apply_snapshot()
+                snapshot = await self.snapshot_tool.apply_snapshot()
+                await self.log.install_snapshot(snapshot)
                 self.snapshot = None
                 self.snapshot_tool = None
             await self.send_snapshot_response_message(message, True)

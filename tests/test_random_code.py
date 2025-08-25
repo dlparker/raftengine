@@ -27,10 +27,6 @@ default_level='error'
 #default_level='debug'
 log_control = setup_logging()
 # Set custom levels for specific loggers
-log_control.set_logger_level("test_code", "debug")
-log_control.set_logger_level("Leader", "debug")
-log_control.set_logger_level("Candidate", "debug")
-log_control.set_logger_level("Follower", "debug")
 logger = logging.getLogger("test_code")
 
 

@@ -134,7 +134,8 @@ async def test_snapshot_1(cluster_maker):
         await tool4.load_snapshot_chunk(chunk)
         offset = new_offset
     await tool4.log.start()
-    await tool4.apply_snapshot()
+    snap = await tool4.apply_snapshot()
+    await ts_4.log.install_snapshot(snap)
     assert ts_4.operations.totals == ts_1.operations.totals
     assert await ts_4.log.get_first_index() == None
     assert await ts_4.log.get_last_index() == await ts_1.log.get_last_index()

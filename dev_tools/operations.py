@@ -65,7 +65,7 @@ class SnapShotTool(SnapShotToolAPI):
         return data, limit + 1, done
 
     async def apply_snapshot(self):
-        await self.log.install_snapshot(self.snapshot)
+        return self.snapshot
 
 
 class SimpleOps: # pragma: no cover

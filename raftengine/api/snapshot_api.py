@@ -17,6 +17,6 @@ class SnapShotToolAPI(abc.ABC):
     async def get_snapshot_chunk(self, offset=0) -> (str,int,bool):# pragma: no cover abstract
         raise NotImplementedError
         
-    async def apply_snapshot(self):# pragma: no cover abstract
+    async def apply_snapshot(self) -> SnapShot:# pragma: no cover abstract
         raise NotImplementedError
 

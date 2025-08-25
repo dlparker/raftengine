@@ -13,5 +13,11 @@ def setup_logging():
     log_control = LogController(additional_loggers=test_loggers)
     if "RAFT_DEBUG_LOGGING" in os.environ:
         log_control.set_default_level('debug')
-    logger = logging.getLogger("test_code")
+    elif "RAFT_INFO_LOGGING" in os.environ:
+        log_control.set_default_level('info')
+    elif "RAFT_WARN_LOGGING" in os.environ:
+        log_control.set_default_level('warning')
+    else:
+        log_control.set_default_level('error')
+        
     return log_control

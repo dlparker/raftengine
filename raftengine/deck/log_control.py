@@ -30,12 +30,6 @@ class LoggerDef:
     handler_names: list[str] = field(default_factory=list, repr=False)
 
 class LogController:
-    """
-    A class-based logging control system that manages logger levels for the Raft engine.
-    
-    This replaces the organic growth of logging_ops.py with a cleaner, more controlled
-    approach to managing logger levels during testing and development.
-    """
     controller = None
 
     @classmethod
@@ -83,20 +77,6 @@ class LogController:
                 handler_class="logging.StreamHandler"
             ),
         }
-        """
-            "file": HandlerDef(
-                name="file",
-                description="File output handler",
-                handler_type="file",
-                level="DEBUG",
-                formatter="standard",
-                filename="test.log",
-                mode="w",
-                encoding="utf-8",
-                handler_class="logging.FileHandler"
-            )
-        }
-        """
         
         # Known logger names from the original logging_ops.py set_levels function
         self.known_loggers = {
@@ -284,8 +264,7 @@ class LogController:
         self._saved_custom_levels = {}
         self._saved_handler_names = {}
         
-    def add_logger(self, logger_name: str, description: str = "", level: Optional[Union[str, int]] = None,
-                   handlers: Optional[List[str]] = None) -> None:
+    def add_logger(self, logger_name: str, description: str = "", level: Optional[Union[str, int]] = None) -> None:
         """
         Add a new logger to the known loggers dictionary.
         
@@ -293,15 +272,8 @@ class LogController:
             logger_name: Name of the logger to add
             description: Optional description of the logger's purpose
             level: Optional logging level to set for this logger
-            handlers: Optional list of handler names (uses default_handlers if not specified)
         """
-        # Use default handlers if none specified
-        handler_names = handlers if handlers is not None else self.default_handlers.copy()
-        
-        # Validate all handlers exist
-        for handler_name in handler_names:
-            if handler_name not in self.known_handlers:
-                raise ValueError(f"Handler '{handler_name}' not found")
+        handler_names = self.default_handlers.copy()
 
         dotted = []
         for sub in logger_name.split('.'):
@@ -364,10 +336,6 @@ class LogController:
             # Add handler-specific configuration
             if handler_def.handler_type == "stream" and handler_def.stream:
                 handler_config["stream"] = handler_def.stream
-            elif handler_def.handler_type == "file" and handler_def.filename:
-                handler_config["filename"] = handler_def.filename
-                handler_config["mode"] = handler_def.mode
-                handler_config["encoding"] = handler_def.encoding
             
             # Add any extra configuration
             handler_config.update(handler_def.extra_config)
@@ -402,266 +370,6 @@ class LogController:
     
     # Handler Management Methods
     
-    def add_handler(self, name: str, handler_type: str, description: str = "", 
-                   level: str = "DEBUG", formatter: str = "standard", **kwargs) -> None:
-        """
-        Add a new handler to the known handlers dictionary.
-        
-        Args:
-            name: Name of the handler
-            handler_type: Type of handler ('stream', 'file', 'custom')
-            description: Description of the handler's purpose
-            level: Logging level for the handler
-            formatter: Formatter name
-            **kwargs: Additional handler-specific configuration
-        """
-        if name in self.known_handlers:
-            raise ValueError(f"Handler '{name}' already exists")
-        
-        # Set handler class based on type
-        if handler_type == "stream":
-            handler_class = "logging.StreamHandler"
-        elif handler_type == "file":
-            handler_class = "logging.FileHandler"
-        else:
-            handler_class = kwargs.pop("handler_class", "logging.Handler")
-        
-        # Extract known fields from kwargs
-        stream = kwargs.pop("stream", None)
-        filename = kwargs.pop("filename", None)
-        mode = kwargs.pop("mode", "a")
-        encoding = kwargs.pop("encoding", "utf-8")
-        
-        self.known_handlers[name] = HandlerDef(
-            name=name,
-            description=description,
-            handler_type=handler_type,
-            level=level,
-            formatter=formatter,
-            handler_class=handler_class,
-            stream=stream,
-            filename=filename,
-            mode=mode,
-            encoding=encoding,
-            extra_config=kwargs
-        )
-    
-    def remove_handler(self, name: str) -> None:
-        """
-        Remove a handler from the known handlers dictionary.
-        
-        Args:
-            name: Name of the handler to remove
-        """
-        if name not in self.known_handlers:
-            raise ValueError(f"Handler '{name}' not found")
-        
-        # Remove handler from all loggers that use it
-        for logger_def in self.known_loggers.values():
-            if name in logger_def.handler_names:
-                logger_def.handler_names.remove(name)
-        
-        del self.known_handlers[name]
-    
-    def list_handlers(self) -> List[str]:
-        """
-        List all available handler names.
-        
-        Returns:
-            List of handler names
-        """
-        return list(self.known_handlers.keys())
-    
-    def get_handler_info(self, name: str) -> HandlerDef:
-        """
-        Get information about a specific handler.
-        
-        Args:
-            name: Name of the handler
-            
-        Returns:
-            HandlerDef instance with handler configuration
-        """
-        if name not in self.known_handlers:
-            raise ValueError(f"Handler '{name}' not found")
-        
-        return self.known_handlers[name]
-    
-    def get_known_handlers(self) -> Dict[str, HandlerDef]:
-        """
-        Get a copy of the known handlers dictionary.
-        
-        Returns:
-            Dictionary mapping handler names to HandlerDef instances
-        """
-        return self.known_handlers.copy()
-    
-    # Logger-Handler Association Methods
-    
-    def assign_handler_to_logger(self, logger_name: str, handler_name: str) -> None:
-        """
-        Associate a handler with a logger.
-        
-        Args:
-            logger_name: Name of the logger
-            handler_name: Name of the handler to assign
-        """
-        if logger_name not in self.known_loggers:
-            raise ValueError(f"Logger '{logger_name}' not found")
-        if handler_name not in self.known_handlers:
-            raise ValueError(f"Handler '{handler_name}' not found")
-        
-        logger_def = self.known_loggers[logger_name]
-        if handler_name not in logger_def.handler_names:
-            logger_def.handler_names.append(handler_name)
-    
-    def remove_handler_from_logger(self, logger_name: str, handler_name: str) -> None:
-        """
-        Remove a handler association from a logger.
-        
-        Args:
-            logger_name: Name of the logger
-            handler_name: Name of the handler to remove
-        """
-        if logger_name not in self.known_loggers:
-            raise ValueError(f"Logger '{logger_name}' not found")
-        
-        logger_def = self.known_loggers[logger_name]
-        if handler_name in logger_def.handler_names:
-            logger_def.handler_names.remove(handler_name)
-    
-    def set_logger_handlers(self, logger_name: str, handler_names: List[str]) -> None:
-        """
-        Set all handlers for a logger, replacing any existing handlers.
-        
-        Args:
-            logger_name: Name of the logger
-            handler_names: List of handler names to assign
-        """
-        if logger_name not in self.known_loggers:
-            raise ValueError(f"Logger '{logger_name}' not found")
-        
-        # Validate all handlers exist
-        for handler_name in handler_names:
-            if handler_name not in self.known_handlers:
-                raise ValueError(f"Handler '{handler_name}' not found")
-        
-        self.known_loggers[logger_name].handler_names = handler_names.copy()
-    
-    def get_logger_handlers(self, logger_name: str) -> List[str]:
-        """
-        Get the list of handlers assigned to a logger.
-        
-        Args:
-            logger_name: Name of the logger
-            
-        Returns:
-            List of handler names assigned to the logger
-        """
-        if logger_name not in self.known_loggers:
-            raise ValueError(f"Logger '{logger_name}' not found")
-        
-        return self.known_loggers[logger_name].handler_names.copy()
-    
-    # Default Handler Management
-    
-    def set_default_handlers(self, handler_names: List[str]) -> None:
-        """
-        Set the default handlers for new loggers.
-        
-        Args:
-            handler_names: List of handler names to use as defaults
-        """
-        # Validate all handlers exist
-        for handler_name in handler_names:
-            if handler_name not in self.known_handlers:
-                raise ValueError(f"Handler '{handler_name}' not found")
-        
-        self.default_handlers = handler_names.copy()
-    
-    def get_default_handlers(self) -> List[str]:
-        """
-        Get the current default handlers.
-        
-        Returns:
-            List of default handler names
-        """
-        return self.default_handlers.copy()
-    
-    # Handler Creation Utilities
-    
-    def create_stdout_handler(self, name: str, level: str = "DEBUG", 
-                             formatter: str = "standard", description: str = "") -> None:
-        """
-        Create a standard output handler.
-        
-        Args:
-            name: Name for the handler
-            level: Logging level for the handler
-            formatter: Formatter name
-            description: Optional description
-        """
-        self.add_handler(
-            name=name,
-            handler_type="stream",
-            description=description or f"Standard output handler '{name}'",
-            level=level,
-            formatter=formatter,
-            stream="ext://sys.stdout"
-        )
-    
-    def create_file_handler(self, name: str, filename: str, level: str = "DEBUG",
-                           formatter: str = "standard", mode: str = "a", 
-                           encoding: str = "utf-8", description: str = "") -> None:
-        """
-        Create a file handler.
-        
-        Args:
-            name: Name for the handler
-            filename: Path to the log file
-            level: Logging level for the handler
-            formatter: Formatter name
-            mode: File mode ('a' for append, 'w' for write)
-            encoding: File encoding
-            description: Optional description
-        """
-        self.add_handler(
-            name=name,
-            handler_type="file",
-            description=description or f"File handler '{name}' -> {filename}",
-            level=level,
-            formatter=formatter,
-            filename=filename,
-            mode=mode,
-            encoding=encoding
-        )
-    
-    def create_custom_handler(self, name: str, handler_class: str, 
-                             level: str = "DEBUG", formatter: str = "standard",
-                             description: str = "", **kwargs) -> None:
-        """
-        Create a custom handler with specified class.
-        
-        Args:
-            name: Name for the handler
-            handler_class: Full class name (e.g., 'logging.handlers.RotatingFileHandler')
-            level: Logging level for the handler
-            formatter: Formatter name
-            description: Optional description
-            **kwargs: Additional handler-specific configuration
-        """
-        # Set handler_class in kwargs to avoid duplicate argument
-        kwargs['handler_class'] = handler_class
-        
-        self.add_handler(
-            name=name,
-            handler_type="custom",
-            description=description or f"Custom handler '{name}' ({handler_class})",
-            level=level,
-            formatter=formatter,
-            **kwargs
-        )
-
 
 class TemporaryLogControl:
     """
@@ -672,8 +380,7 @@ class TemporaryLogControl:
     """
     
     def __init__(self, log_controller: LogController, keep_active: Optional[List[str]] = None, 
-                 silence_level: Optional[Union[str, int]] = None, 
-                 temporary_handlers: Optional[Dict[str, List[str]]] = None):
+                 silence_level: Optional[Union[str, int]] = None):
         """
         Initialize the temporary log control context manager.
         
@@ -681,12 +388,10 @@ class TemporaryLogControl:
             log_controller: LogController instance to work with
             keep_active: List of logger names to keep at current level (not silence)
             silence_level: Level to set for silenced loggers (default: uses controller's default_level)
-            temporary_handlers: Dict mapping logger names to temporary handler lists
         """
         self.log_controller = log_controller
         self.keep_active = keep_active or []
         self.silence_level = silence_level if silence_level is not None else log_controller.default_level
-        self.temporary_handlers = temporary_handlers or {}
         
     def __enter__(self):
         """
@@ -694,11 +399,6 @@ class TemporaryLogControl:
         """
         # Save current state (levels and handlers)
         self.log_controller.save_current_levels()
-        
-        # Apply temporary handler changes
-        for logger_name, handler_names in self.temporary_handlers.items():
-            if logger_name in self.log_controller.known_loggers:
-                self.log_controller.set_logger_handlers(logger_name, handler_names)
         
         # Silence all loggers except those in keep_active list
         for logger_name in self.log_controller.known_loggers:
@@ -715,69 +415,18 @@ class TemporaryLogControl:
         
         
 def create_temporary_log_control(keep_active: Optional[List[str]] = None, 
-                                silence_level: Optional[Union[str, int]] = None,
-                                temporary_handlers: Optional[Dict[str, List[str]]] = None) -> TemporaryLogControl:
+                                silence_level: Optional[Union[str, int]] = None) -> TemporaryLogControl:
     """
     Convenience function to create a TemporaryLogControl context manager with a new LogController.
     
     Args:
         keep_active: List of logger names to keep active (not silence)
         silence_level: Level to set for silenced loggers (default: uses controller's default_level)
-        temporary_handlers: Dict mapping logger names to temporary handler lists
         
     Returns:
         TemporaryLogControl context manager
     """
     log_controller = LogController(temporary=True)
-    return TemporaryLogControl(log_controller, keep_active, silence_level, temporary_handlers)
+    return TemporaryLogControl(log_controller, keep_active, silence_level)
 
 
-class TemporaryHandlerControl:
-    """
-    Context manager for temporarily changing handler assignments only.
-    """
-    
-    def __init__(self, log_controller: LogController, handler_changes: Dict[str, List[str]]):
-        """
-        Initialize the temporary handler control context manager.
-        
-        Args:
-            log_controller: LogController instance to work with
-            handler_changes: Dict mapping logger names to temporary handler lists
-        """
-        self.log_controller = log_controller
-        self.handler_changes = handler_changes
-        
-    def __enter__(self):
-        """
-        Enter the context: save current handlers and apply temporary changes.
-        """
-        # Save current state (levels and handlers)
-        self.log_controller.save_current_levels()
-        
-        # Apply temporary handler changes
-        for logger_name, handler_names in self.handler_changes.items():
-            if logger_name in self.log_controller.known_loggers:
-                self.log_controller.set_logger_handlers(logger_name, handler_names)
-                
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        Exit the context: restore original handler assignments.
-        """
-        self.log_controller.restore_saved_levels()
-
-
-def create_temporary_handler_control(handler_changes: Dict[str, List[str]]) -> TemporaryHandlerControl:
-    """
-    Convenience function to create a TemporaryHandlerControl context manager with a new LogController.
-    
-    Args:
-        handler_changes: Dict mapping logger names to temporary handler lists
-        
-    Returns:
-        TemporaryHandlerControl context manager
-    """
-    log_controller = LogController(temporary=True)
-    return TemporaryHandlerControl(log_controller, handler_changes)

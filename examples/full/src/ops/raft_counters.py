@@ -7,9 +7,8 @@ from base.counters import Counters
 
 class RaftCounters(Counters):
 
-    @classmethod
-    def get_snapshot_tool_class(cls):
-        return SnapShotTool
+    def __init__(self, log):
+        self.log = log
     
     async def make_snapshot(self):
         fp = Path(self.storage_dir, 'counters_snapshot.pickle')
@@ -43,15 +42,18 @@ class SnapShotTool(SnapShotToolAPI):
         self.new_counters = None
         
     async def load_snapshot_chunk(self, chunk) -> None:
-        # this comes in over the wrire, so it is base64
-        self.new_counters = pickle.loads(base64.decode(cunk))
+        # this comes in over the wrire, so it is base64 string
+        msgbytes = chunk.encode('utf-8')
+        chunk_bytes =  base64.b64decode(msgbytes)
+        self.new_counters = pickle.loads(chunk_bytes)
 
     async def get_snapshot_chunk(self, offset=0) -> (str,int,bool):
         chunk,offset,done = await self.counters.get_snapshot_chunk(offset=0)
         # this is for export so it needs to be a string, not binary, so base64 encode it
         base64_bytes = base64.b64encode(chunk)
-        return base_64bytes, offset, done
+        base64_string = base64_bytes.decode('utf-8')
+        return base64_string, offset, done
         
     async def apply_snapshot(self):
         self.counters.counts = self.new_counters
-        await self.log.install_snapshot(self.snapshot)
+        return self.snapshot()

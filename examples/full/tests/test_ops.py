@@ -180,7 +180,7 @@ async def test_mgr_ops():
     # use the json version to make sure it works, do server 0
     snapshot_record_j = await mgr2.take_snapshot('0', return_json=True)
     snapshot_record_0 = json.loads(snapshot_record_j)
-    snapshot_0 = SnapShot(**snapshot_record['snapshot'])
+    snapshot_0 = SnapShot(**snapshot_record_0['snapshot'])
     log_stats = await from_files_mgr.log_stats('0')
     assert log_stats.snapshot_index == snapshot_0.index
     
