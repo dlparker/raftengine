@@ -1,0 +1,253 @@
+
+The code in src/ops/cluster_cmd.py is midway through a major refactoring. The code in the ClusterCLI class is currently broken, so it should
+not be examined or changed during this project. The code that will be used to repair that class is in src/ops/cluster_cmd.py, in the class
+ClusterMgr and it has good code coverage results from test/test_cluster_manager.py.
+
+The code in the async def main() function in src/ops/cluster_cmd.py applies command line arguments to calls the ClusterMgr class when the
+"--json" (or the equivalent "-j") command line argument is supplied. These operations are currently untested.
+
+The test in tests/test_cluster_cmd.py is a slightly modified copy of the code in test/test_cluster_manager.py. The first two operations that
+it performs have been converted from the original calls to a ClusterCLI instance into invocations of the command line tool using the
+unittest mock patch feature to run it in process.
+
+The unittest.mock.path feature is used to setup sys.argv to create an environment that mimics running src/ops/cluster_cmd.py from the
+command line. The main function from that script is run in this environment. The code that does this is found in the "run_command"
+function in tests/test_cluster_cmd.py. 
+
+These operations that have already been converted are:
+
+1. on line 81 of tests/test_cluster_cmd.py, this call:
+   1. await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['stop_cluster'])
+      ensures that any cluster left over from a previous test is stopped before continuing
+   2. There is no direct analog of this line in the original code in tests/test_cluster_manager.py because it uses the
+      "force=True" option in the next operation, which is not available via the command line.
+2. on line 93 of tests/test_cluster_cmd.py, this call:
+   1. cr_str = await run_command(cluster_name, working_parent=cluster_base_dir, create_local=True, run_ops=['cluster_status'])
+      is functionally equivalent to the original call:
+   2. cr_str = await setup_mgr.create_local_cluster(cluster_name, directory=cluster_base_dir, force=True, return_json=True)
+      except that the command line method does not support the "force=True" semantics
+
+The functions to be replaced are all calls to some instance of the ClusterMgr class. There are multiple instances used in the
+current code, and one instance can be used for multiple operations. Once converted to command line operations each instance will
+need to discover the cluster list because it is not persistent when running the at command line. The simplest way to do this is to
+use the file system search method:
+
+await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, ...)
+
+This is simpler than the "query-connect" method because that only works if at least one of the servers in the cluster is running.
+
+When using the --json flag on these command line calls the result should be the same json formatted string that you get when you
+run the equivalent method on a ClusterMgr instance and specify "return_json=True", so the existing test code should mostly work.
+In those cases where the test code uses return_json=False or just omits it, then one of two changes will be needed.
+
+1. If the non-json call is being made to compare the results to the same call made with return_json=True, then just discard the
+   non-json call and the comparison code. That is only relevant to direct ClusterMgr usage.
+2. If the results of the non-json call are being examined for validation, or to prepare for the next step, then the options are:
+   1. just json.loads the result and access the dictionary as needed
+   2. In some cases that objects returned form the non-json original call may not be simple objects. For example some of these
+      cases receive a result that contains ClusterServerConfig instances and then use property access on them. You'll have to
+      json.loads the result  covert these access to dictionary access. For example, you'll see "server.uri" and "config.uri",
+      and these will need to be converted tp "server['uri']" and "config['uri']".
+
+      
+Here is an example output from getting the cluster status in json format:
+-------------- Example starts -----------------------------------------
+src/ops/cluster_cmd.py -l -d /tmp/local_clusters -n local1 --run-ops cluster_status --j
+{
+    "0": {
+        "config": {
+            "uri": "full://127.0.0.1:50100",
+            "working_dir": "/tmp/local_clusters/full_raft_server.127.0.0.1.50100",
+            "cluster_name": "local1",
+            "initial_config": {
+                "node_uris": [
+                    "full://127.0.0.1:50100",
+                    "full://127.0.0.1:50101",
+                    "full://127.0.0.1:50102"
+                ],
+                "heartbeat_period": 0.01,
+                "election_timeout_min": 0.25,
+                "election_timeout_max": 0.35,
+                "max_entries_per_message": 10,
+                "use_pre_vote": false,
+                "use_check_quorum": true,
+                "use_dynamic_config": false,
+                "commands_idempotent": false
+            },
+            "last_config": null,
+            "all_local": true
+        },
+        "status": {
+            "pid": 189329,
+            "datetime": "2025-08-25T17:20:30.235160",
+            "working_dir": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50100",
+            "raft_log_file": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50100/raftlog.db",
+            "timers_running": true,
+            "leader_uri": "full://127.0.0.1:50102",
+            "uri": "full://127.0.0.1:50100",
+            "is_leader": false,
+            "cluster_name": "test_run_ops",
+            "first_log_index": 1,
+            "last_log_index": 2,
+            "last_log_term": 2,
+            "log_commit_index": 2,
+            "log_apply_index": 2,
+            "term": 2
+        }
+    },
+    "1": {
+        "config": {
+            "uri": "full://127.0.0.1:50101",
+            "working_dir": "/tmp/local_clusters/full_raft_server.127.0.0.1.50101",
+            "cluster_name": "local1",
+            "initial_config": {
+                "node_uris": [
+                    "full://127.0.0.1:50100",
+                    "full://127.0.0.1:50101",
+                    "full://127.0.0.1:50102"
+                ],
+                "heartbeat_period": 0.01,
+                "election_timeout_min": 0.25,
+                "election_timeout_max": 0.35,
+                "max_entries_per_message": 10,
+                "use_pre_vote": false,
+                "use_check_quorum": true,
+                "use_dynamic_config": false,
+                "commands_idempotent": false
+            },
+            "last_config": null,
+            "all_local": true
+        },
+        "status": {
+            "pid": 189347,
+            "datetime": "2025-08-25T17:20:30.235548",
+            "working_dir": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50101",
+            "raft_log_file": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50101/raftlog.db",
+            "timers_running": true,
+            "leader_uri": "full://127.0.0.1:50102",
+            "uri": "full://127.0.0.1:50101",
+            "is_leader": false,
+            "cluster_name": "test_run_ops",
+            "first_log_index": 1,
+            "last_log_index": 2,
+            "last_log_term": 2,
+            "log_commit_index": 2,
+            "log_apply_index": 2,
+            "term": 2
+        }
+    },
+    "2": {
+        "config": {
+            "uri": "full://127.0.0.1:50102",
+            "working_dir": "/tmp/local_clusters/full_raft_server.127.0.0.1.50102",
+            "cluster_name": "local1",
+            "initial_config": {
+                "node_uris": [
+                    "full://127.0.0.1:50100",
+                    "full://127.0.0.1:50101",
+                    "full://127.0.0.1:50102"
+                ],
+                "heartbeat_period": 0.01,
+                "election_timeout_min": 0.25,
+                "election_timeout_max": 0.35,
+                "max_entries_per_message": 10,
+                "use_pre_vote": false,
+                "use_check_quorum": true,
+                "use_dynamic_config": false,
+                "commands_idempotent": false
+            },
+            "last_config": null,
+            "all_local": true
+        },
+        "status": {
+            "pid": 189331,
+            "datetime": "2025-08-25T17:20:30.235917",
+            "working_dir": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50102",
+            "raft_log_file": "/tmp/test_run_ops/full_raft_server.127.0.0.1.50102/raftlog.db",
+            "timers_running": true,
+            "leader_uri": "full://127.0.0.1:50102",
+            "uri": "full://127.0.0.1:50102",
+            "is_leader": true,
+            "cluster_name": "test_run_ops",
+            "first_log_index": 1,
+            "last_log_index": 2,
+            "last_log_term": 2,
+            "log_commit_index": 2,
+            "log_apply_index": 0,
+            "term": 2
+        }
+    }
+}
+---------------- Example ends ----------------------
+
+Here is the help text for the command line functions to be used:
+
+---------------- Help text begins ------------------
+src/ops/cluster_cmd.py -h
+usage: cluster_cmd.py [-h] [--local-cluster | --query-connect QUERY_CONNECT | --create-local-cluster] [--files-directory FILES_DIRECTORY] [--name NAME]
+                      [--index INDEX]
+                      [--run-ops {list_clusters,cluster_status,start_servers,stop_cluster,send_heartbeats,stop_server,server_status,log_stats,take_snapshot,server_exit_cluster}]
+                      [--json]
+
+Counters Raft Cluster Admin
+
+options:
+  -h, --help            show this help message and exit
+  --local-cluster, -l   Find a test cluster with servers all on this machine in --files-directory directory or /tmp
+  --query-connect QUERY_CONNECT, -q QUERY_CONNECT
+                        Find cluster by quering provided address data in form host:port
+  --create-local-cluster
+                        Create a test cluster with name '--name vaue' with servers all on this machine in --files-directory directory or /tmp
+  --files-directory FILES_DIRECTORY, -d FILES_DIRECTORY
+                        Filesystem location of where server working directories might be found
+  --name NAME, -n NAME  Name of the cluster, either when finding or creating. Has no effect with --query_connect
+  --index INDEX, -i INDEX
+                        Index of server in name cluster for command (no effect on interactive ops)
+  --run-ops {list_clusters,cluster_status,start_servers,stop_cluster,send_heartbeats,stop_server,server_status,log_stats,take_snapshot,server_exit_cluster}
+                        Run the requested command an exit without starting interactive loop, can be used multiple times
+  --json, -j            Output results in json format, only applies to --run-ops commands
+
+---------------- Help text ends ------------------
+
+The goal of theis project is to update the rest of this test to use this command line approach to perform all the functions that are currently
+performed by direct access to ClusterMgr instance methods. If any part of the existing test uses or tests an instance of this class, then that
+use or test needs to be replaced by a command inline operation.
+
+
+Rules for this project:
+
+1. You are a test developer working under my supervision.
+2. Do not modify the code being tested, any of the code in the src tree. If some step in modifying the test runs into a barrier that
+   requires changes to code under test, stop and request assistance from me. The only test utility or helper functions that you can
+   modify are those located in the target test file tests/test_cluster_cmd.py
+3. Do not use any other Mock features to complete the test updates. Only test the code by using the actual features.
+   
+Project steps:
+
+1. Write a PRD for the required changes and
+   1. save it in a file in this directory and
+   2. Wait for my approval before moving to the next step.
+2. Write an implememtation plan save it in a file in this directory.
+   1. breaking the changes down into the smallest possible change
+      1. A single call if possible
+      2. A small number of related calls if the input to one call requires the
+         output of another. I imagine that it could be true but I don't know of
+         any cases.
+   2. Creating a checklist that is separate from the implementation plan document
+      and save it in this directory.
+   3. Wait for my approval before moving to the next step.
+3. Start this cycle:
+   1. Pick the next incomplete item from the checklist, then:
+      1. Make the code changes
+      2. Run the test
+      3. Analyze the results
+      4. If test failed, explain your explaination for the failure and ask
+         me to help resolve the issue. Once resoved start run and analyze again.
+      5. Once the test passes, request approval from me to mark the task complete
+      6. Upon approval, update the checklist and proceed to the next item.
+
+
+
+
+
+

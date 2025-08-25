@@ -195,6 +195,11 @@ async def test_mgr_ops_full():
     start_res = await from_files_mgr.start_servers()
     status = await from_files_mgr.server_status(index)
     assert status is not None
+    start_time = time.time()
+    while time.time() - start_time < 2 and status['leader_uri'] is None:
+        await asyncio.sleep(0.01)
+        status = await from_files_mgr.server_status(index)
+    assert status['leader_uri'] is not None
 
     # No way to check if this works, but lets make sure it doesn't blow up
     res = await from_files_mgr.send_heartbeats()

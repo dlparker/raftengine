@@ -32,7 +32,37 @@ def run_ops_error(msg):
     print(msg)
     raise SystemExit(1)
 
-async def main(parser, args):
+async def main():
+    
+    parser = argparse.ArgumentParser(description='Counters Raft Cluster Admin')
+
+    group = parser.add_mutually_exclusive_group(required=False)
+    
+    group.add_argument('--local-cluster', '-l', action="store_true",
+                        help='Find a test cluster with servers all on this machine in --files-directory directory or /tmp')
+    
+    group.add_argument('--query-connect', '-q', 
+                        help='Find cluster by quering provided address data in form host:port')
+
+    group.add_argument('--create-local-cluster', action="store_true",
+                        help="Create a test cluster with name '--name vaue' with servers all on this machine in --files-directory directory or /tmp")
+    
+    parser.add_argument('--files-directory', '-d', 
+                        help='Filesystem location of where server working directories might be found')
+    
+    parser.add_argument('--name', '-n', 
+                        help='Name of the cluster, either when finding or creating. Has no effect with --query_connect')
+
+    parser.add_argument('--index', '-i', 
+                        help='Index of server in name cluster for command (no effect on interactive ops)')
+
+    parser.add_argument('--run-ops', choices=command_codes, action="append", default=[], 
+                                help="Run the requested command an exit without starting interactive loop, can be used multiple times")
+    parser.add_argument('--json', '-j',  action="store_true",
+                        help='Output results in json format, only applies to --run-ops commands')
+    # Parse arguments
+    args = parser.parse_args()
+    
 
     clusters = None
     manager = ClusterMgr()
@@ -1382,34 +1412,4 @@ for name, method in ClusterCLI.__dict__.items():
         
 if __name__ == "__main__":
     
-    parser = argparse.ArgumentParser(description='Counters Raft Cluster Admin')
-
-    group = parser.add_mutually_exclusive_group(required=False)
-    
-    group.add_argument('--local-cluster', '-l', action="store_true",
-                        help='Find a test cluster with servers all on this machine in --files-directory directory or /tmp')
-    
-    group.add_argument('--query-connect', '-q', 
-                        help='Find cluster by quering provided address data in form host:port')
-
-    group.add_argument('--create-local-cluster', action="store_true",
-                        help="Create a test cluster with name '--name vaue' with servers all on this machine in --files-directory directory or /tmp")
-    
-    parser.add_argument('--files-directory', '-d', 
-                        help='Filesystem location of where server working directories might be found')
-    
-    parser.add_argument('--name', '-n', 
-                        help='Name of the cluster, either when finding or creating. Has no effect with --query_connect')
-
-    parser.add_argument('--index', '-i', 
-                        help='Index of server in name cluster for command (no effect on interactive ops)')
-
-    parser.add_argument('--run-ops', choices=command_codes, action="append", default=[], 
-                                help="Run the requested command an exit without starting interactive loop, can be used multiple times")
-    parser.add_argument('--json', '-j',  action="store_true",
-                        help='Output results in json format, only applies to --run-ops commands')
-    # Parse arguments
-    args = parser.parse_args()
-    
-    
-    asyncio.run(main(parser, args))
+    asyncio.run(main())

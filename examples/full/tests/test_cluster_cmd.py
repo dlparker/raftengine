@@ -6,10 +6,12 @@ import json
 import time
 import shutil
 import socket
-from subprocess import Popen
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from pprint import pprint, pformat
+from unittest.mock import patch
+from raftengine.deck.log_control import LogController
 from log_control import setup_logging
 
 controller = setup_logging()
@@ -25,8 +27,9 @@ ops_dir = Path(root_dir, "src", "ops")
 cmdr_path = Path(ops_dir, "cluster_cmd.py")
 
 
-def run_command(cluster_name, working_parent=None, find_local=False, create_local=False,
+async def run_command(cluster_name, working_parent=None, find_local=False, create_local=False,
                 query_addr=None, server_index=None, run_ops=None, json_output=True):
+
 
     if run_ops is None:
         raise Exception('cannot run command loop here, must provide --run-ops value(s)')
@@ -54,10 +57,17 @@ def run_command(cluster_name, working_parent=None, find_local=False, create_loca
     for op in run_ops:
         cmd.append('--run-ops')
         cmd.append(op)
-        
-    process = Popen(cmd)
-    result = process.communicate()
-    return process
+
+    saved_log_controller = LogController.controller
+    LogController.controller = None
+    from ops.cluster_cmd import main 
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        with patch('sys.argv', cmd):
+            await main()
+            outvalue = fake_out.getvalue()
+
+    LogController.controller = saved_log_controller 
+    return outvalue
     
 async def test_run_ops_full():
 
@@ -65,17 +75,22 @@ async def test_run_ops_full():
     cluster_name = "test_run_ops"
     logger.info(f"Creating cluster {cluster_name}")
     cluster_base_dir = Path("/tmp", cluster_name)
-    if not cluster_base_dir.exists():
-        cluster_base_dir.mkdir(parents=True)
-    if False:
-        cr_str = await setup_mgr.create_local_cluster(cluster_name, directory=cluster_base_dir, force=True, return_json=True)
-        logger.debug("create_local_cluster result: %s", cr_str)
-        create_result = json.loads(cr_str)
-        assert create_result['success'] 
-        assert create_result['cluster_name'] == cluster_name
-        assert len(create_result['servers_created']) == 3
+
+    
+    if cluster_base_dir.exists():
+        try:
+            await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['stop_cluster'])
+        except:
+            pass
+        for sub in cluster_base_dir.glob('*'):
+            if sub.is_dir():
+                shutil.rmtree(sub)
+            else:
+                sub.unlink()
     else:
-        cr_str = run_command(cluster_name, working_parent=cluster_base_dir, create_local=True, run_ops=['cluster_status'])
+        cluster_base_dir.mkdir(parents=True)
+
+    cr_str = await run_command(cluster_name, working_parent=cluster_base_dir, create_local=True, run_ops=['cluster_status'])
 
     from_files_mgr = ClusterMgr()
     # Now make sure that discover finds it
@@ -235,8 +250,14 @@ async def test_run_ops_full():
     start_res = await from_files_mgr.start_servers()
     status = await from_files_mgr.server_status(index)
     assert status is not None
+    start_time = time.time()
+    while time.time() - start_time < 2 and status['leader_uri'] is None:
+        await asyncio.sleep(0.01)
+        status = await from_files_mgr.server_status(index)
+    assert status['leader_uri'] is not None
 
     # No way to check if this works, but lets make sure it doesn't blow up
+    
     res = await from_files_mgr.send_heartbeats()
 
     mgr2 = ClusterMgr()
@@ -315,48 +336,3 @@ async def test_run_ops_full():
     logger.debug(stop_res_json)
 
 
-async def test_cluster_create():
-
-    mgr = ClusterMgr()
-    cluster_name = "example_cluster"
-    logger.info(f"Creating cluster {cluster_name}")
-    cluster_base_dir = Path("/tmp", cluster_name)
-    if not cluster_base_dir.exists():
-        cluster_base_dir.mkdir(parents=True)
-    else:
-        for item in cluster_base_dir.glob('*'):
-            shutil.rmtree(item)
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    host1 = socket.gethostname()
-    s.connect(("8.8.8.8", 80))
-    host2 = s.getsockname()[0]
-    s.close()
-    host3 = "otherhost"
-    # put host 3 in the middle to mix up the index values on local servrs
-    hosts = [host1, host3, host2]
-    local_host_names = [host1, host2]
-    cr_str = await mgr.create_cluster(cluster_name, local_servers_directory=cluster_base_dir,
-                                            hosts=hosts, local_host_names=local_host_names, return_json=True)
-    logger.debug("create_local_cluster result: %s", cr_str)
-    create_result = json.loads(cr_str)
-    assert create_result['cluster_name'] == cluster_name
-    assert len(create_result['local_servers']) == 2
-
-    local_configs = await mgr.get_local_server_configs(local_host_names)
-    for index, config in local_configs.items():
-        host = config.uri.split('/')[-1].split(':')[0]
-        assert host in local_host_names
-        assert index in ['0', '2']
-        
-    for index in range(3):
-        config = await mgr.get_server_config(str(index))
-        host = config.uri.split('/')[-1].split(':')[0]
-        assert host in hosts
-
-    # make sure we get an error on conflict
-    with pytest.raises(Exception):
-        create_result = await mgr.create_cluster(cluster_name, local_servers_directory=cluster_base_dir,
-                                                 hosts=hosts, local_host_names=local_host_names)
-    for item in cluster_base_dir.glob('*'):
-        shutil.rmtree(item)
