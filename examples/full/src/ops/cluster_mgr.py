@@ -123,27 +123,6 @@ class ClusterMgr:
         self.selected = cluster_name
         await self.get_status()
         
-    async def find_clusters(self, search_dir="/tmp", return_json=False):
-        await self.discover_cluster_files(search_dir)
-        
-        # Get current cluster list
-        clusters_dict = await self.list_clusters(return_json=False)
-        
-        # Check if we auto-selected a single cluster
-        selected_cluster = None
-        if len(self.clusters) == 1:
-            cluster_name = next(iter(self.clusters))
-            self.selected = cluster_name
-            selected_cluster = cluster_name
-            
-        result = {
-            "search_directory": str(search_dir),
-            "query_uri": None,
-            "clusters": clusters_dict,
-            "selected_cluster": selected_cluster,
-        }
-        return self.response_or_json(result, return_json)
-        
     async def add_cluster(self, port, host='127.0.0.1', return_json=False):
         cluster_name = await self.query_discover(port, host, True)
         clusters_dict = await self.list_clusters(return_json=False)
@@ -334,7 +313,7 @@ class ClusterMgr:
         clusters = await f_finder.discover()
         removed = False
         if cluster_name in clusters:
-            raise Exception(f"cannot create local cluster {cluster_name}, it already exists locally in {local_servers_directory}")
+            raise Exception(f"cannot create cluster {cluster_name}, it already exists locally in {local_servers_directory}")
 
         cb = ClusterBuilder()
         all_servers = cb.build(cluster_name, hosts=hosts, base_port=base_port, base_dir=local_servers_directory)

@@ -40,12 +40,12 @@ async def test_mgr_ops_full():
     from_files_mgr = ClusterMgr()
     # Now make sure that discover finds it
     # get the json version and make sure it doesn't blow up
-    logger.info(f"Doing find_clusters and expecting to find {cluster_name}")
-    cdict_str = await from_files_mgr.find_clusters(search_dir=cluster_base_dir,return_json=True)
-    #logger.debug("find_clusters result: %s", cdict_str)
+    logger.info(f"Doing discover_cluster_files and expecting to find {cluster_name}")
+    cdict_str = await from_files_mgr.discover_cluster_files(search_dir=cluster_base_dir,return_json=True)
+    #logger.debug("discover_cluster_files result: %s", cdict_str)
     tmp = json.loads(cdict_str)
     # get the full objects version 
-    find_res = await from_files_mgr.find_clusters(search_dir=cluster_base_dir)
+    find_res = await from_files_mgr.discover_cluster_files(search_dir=cluster_base_dir)
     cdict = find_res['clusters']
     assert cluster_name in cdict
     servers = cdict[cluster_name]
