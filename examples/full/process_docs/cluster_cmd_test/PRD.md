@@ -103,7 +103,7 @@ The current test file `tests/test_cluster_cmd.py` has:
 - **Scope Limitation**: Changes confined to single test file
 
 #### Medium Risk
-- **Complex Object Conversions**: Some operations return nested objects requiring careful dictionary conversion
+- **Complex Object Conversions**: Some operations return nested objects requiring careful dictionary conversion (Note: If this becomes problematic for system administrator usability, document issues in `possible_upgrades.md` with improvement suggestions)
 - **Error Condition Mapping**: Ensuring command line operations produce equivalent exceptions
 - **Timing Dependencies**: Some operations have timing requirements that may need adjustment
 
@@ -111,6 +111,7 @@ The current test file `tests/test_cluster_cmd.py` has:
 - **Incremental Approach**: Convert operations one at a time with immediate testing
 - **JSON Validation**: Use provided JSON examples to verify correct data handling
 - **Error Testing**: Explicitly test that command line operations fail appropriately
+- **Usability Documentation**: Track any complex object handling issues that could impact system administrator effectiveness in `possible_upgrades.md`
 
 ### Acceptance Criteria
 

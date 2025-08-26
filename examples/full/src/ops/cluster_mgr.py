@@ -177,7 +177,7 @@ class ClusterMgr:
         # get an up to date status
         status_dict = await self.get_status(self.selected)
         if status_dict[index] is None:
-            return None
+            return ""
         return self.response_or_json(status_dict[index], return_json)
 
     async def cluster_status(self, name=None, return_json=False):
@@ -436,7 +436,7 @@ class ClusterMgr:
                 break
             
         if status is None:
-            raise Exception(f"Cannot send heartbeat in cluster {self.selected}, no servers are runnig")
+            raise Exception(f"Cannot send heartbeat in cluster {self.selected}, no servers are running")
         leader = status['leader_uri']
         if leader is None:
             raise Exception(f"Cannot send heartbeat in cluster {self.selected}, no leader has been elected")
@@ -474,7 +474,7 @@ class ClusterMgr:
                 status = s
         new_port = max_port + 1
         if status is None:
-            raise Exception(f"Cannot add a server to cluster {self.selected}, no servers are runnig")
+            raise Exception(f"Cannot add a server to cluster {self.selected}, no servers are running")
         leader = status['leader_uri']
         if leader is None:
             raise Exception(f"Cannot add a server to cluster {self.selected}, no leader has been elected")
@@ -505,7 +505,8 @@ class ClusterMgr:
                     stderr_content = f.read()
                 extra += f"\n--- stderr ---\n{stderr_content}"
             raise Exception(f"process for uri {uri} failed to start {extra}")
-        return dict(uri=new_uri, working_dir=working_dir)
+        result = dict(uri=new_uri, working_dir=str(working_dir))
+        return self.response_or_json(result, return_json)
         
     async def server_exit_cluster(self, index:str, return_json=False):
         cluster, server, status = self.require_server_at_index(index)

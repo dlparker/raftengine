@@ -24,7 +24,7 @@ from ops.admin_common import ClusterBuilder, ClusterFinder
 
 
 base_command_codes = ['list_clusters',]
-selected_command_codes = ['cluster_status', 'start_servers', 'stop_cluster', 'send_heartbeats']
+selected_command_codes = ['cluster_status', 'start_servers', 'stop_cluster', 'send_heartbeats', 'new_server']
 indexed_command_codes = ['stop_server', 'server_status', 'log_stats', 'take_snapshot','server_exit_cluster']
 command_codes = base_command_codes + selected_command_codes + indexed_command_codes
 
@@ -58,6 +58,14 @@ async def main():
 
     parser.add_argument('--run-ops', choices=command_codes, action="append", default=[], 
                                 help="Run the requested command an exit without starting interactive loop, can be used multiple times")
+    
+    parser.add_argument('-H', '--host-names', nargs='+', type=str, help='List of host names for cluster')
+    
+    parser.add_argument('-L', '--local-hosts', nargs='+', type=str, help='List of host names that address this host')
+
+    parser.add_argument('-a', '--add-server', help="When given with '--run-ops new_server' will add a server at the" \
+                        " given hostname, will be configured for local machine, started and told to join cluster")
+    
     parser.add_argument('--json', '-j',  action="store_true",
                         help='Output results in json format, only applies to --run-ops commands')
     # Parse arguments
@@ -75,7 +83,7 @@ async def main():
     else:
         target = None
     if args.query_connect:
-        host, port = args.query_connect.split(':')[0]
+        host, port = args.query_connect.split(':')
         await manager.add_cluster(port=port, host=host)
     elif args.local_cluster:
         await manager.find_clusters(search_dir=root_dir)
@@ -151,6 +159,11 @@ async def main():
                 print(await manager.server_exit_cluster(args.index, return_json=True))
             else:
                 stats = await cluster_cli.do_server_exit_cluster(args.index)
+        elif op == "new_server":
+            if args.json:
+                print(await manager.new_server(args.add_server, return_json=True))
+            else:
+                stats = await cluster_cli.do_new_server(args.add_server)
 
 
         
