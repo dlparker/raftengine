@@ -83,18 +83,29 @@ class ClusterMgr:
         self.selected = cluster_name
         return cluster_name
 
-    async def discover_cluster_files(self, search_dir="/tmp"):
+    async def discover_cluster_files(self, search_dir="/tmp", return_json=False):
         f_finder = ClusterFinder(root_dir=search_dir)
         clusters = await f_finder.discover()
         if len(clusters) > 0:
             self.clusters.update(clusters)
-        if len(clusters) == 1:
-            target = next(iter(clusters))
-            self.selected = target
-            
+        selected_cluster = None
+        if len(self.clusters) == 1:
+            cluster_name = next(iter(self.clusters))
+            self.selected = cluster_name
+            selected_cluster = cluster_name
+        result = {
+            "search_directory": str(search_dir),
+            "query_uri": None,
+            "clusters": clusters,
+            "selected_cluster": selected_cluster,
+        }
+        return self.response_or_json(result, return_json)
+    
     def response_or_json(self, data, return_json=False):
         """Utility method to format response data as JSON string if requested"""
         if return_json:
+            if data is None:
+                return ""
             return json.dumps(data, indent=self.json_indent, default=lambda o:o.__dict__)
         return data
     
@@ -106,7 +117,7 @@ class ClusterMgr:
             raise Exception("Must select a cluster first")
         return self.clusters[self.selected]
     
-    def require_server_at_index(self, index:str):
+    async def require_server_at_index(self, index:str):
         """Enhanced helper to validate server index, returns structured data"""
         cluster = self.require_selection()
         
@@ -114,7 +125,8 @@ class ClusterMgr:
             raise Exception(f"Requested server number {index} not found, valid values are {list(cluster.keys())}")
         
         server = cluster[index]
-        status = self.status_records.get(self.selected, {}).get(index)
+        status_dict = await self.get_status() 
+        status = status_dict[index]
         return cluster, server, status
 
     async def select_cluster(self, cluster_name):
@@ -152,11 +164,9 @@ class ClusterMgr:
         return self.response_or_json(clusters_data, return_json)
 
     async def server_status(self, index:str, return_json=False):
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         # get an up to date status
         status_dict = await self.get_status(self.selected)
-        if status_dict[index] is None:
-            return ""
         return self.response_or_json(status_dict[index], return_json)
 
     async def cluster_status(self, name=None, return_json=False):
@@ -183,7 +193,7 @@ class ClusterMgr:
 
     async def stop_server(self, index:str, return_json=False):
         """Logic for stopping indexed server"""
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         was_running = status is not None
         if was_running:
             await stop_server(server.uri)
@@ -191,7 +201,7 @@ class ClusterMgr:
         return self.response_or_json(result, return_json)
 
     async def log_stats(self, index:str, return_json=False):
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         if not status:
             raise Exception(f"Server {server.uri} is not running, can't get log_stats")
         log_stats = await get_log_stats(server.uri)
@@ -267,7 +277,7 @@ class ClusterMgr:
         return self.response_or_json(result, return_json)
 
     async def get_server_config(self, index, return_json=False):
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         return server
         
     async def get_local_server_configs(self, local_host_names, return_json=False):
@@ -427,7 +437,7 @@ class ClusterMgr:
         return self.response_or_json(result, return_json)
     
     async def take_snapshot(self, index:str, return_json=False):
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         pre_status = await get_server_status(server.uri)
         snapshot = await take_snapshot(server.uri)
         post_status = await get_server_status(server.uri)
@@ -488,7 +498,7 @@ class ClusterMgr:
         return self.response_or_json(result, return_json)
         
     async def server_exit_cluster(self, index:str, return_json=False):
-        cluster, server, status = self.require_server_at_index(index)
+        cluster, server, status = await self.require_server_at_index(index)
         if not status:
             raise Exception(f"server {server.uri} cannot be told to exit, it is not running")
         leader_uri = status['leader_uri']

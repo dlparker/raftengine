@@ -80,7 +80,6 @@ async def run_command(cluster_name, working_parent=None, find_local=False, creat
     finally:
         LogController.controller = saved_log_controller
         saved_log_controller.apply_config()
-        
     logger.debug(outvalue)
     if outvalue.strip() == "":
         outvalue = None
@@ -195,7 +194,6 @@ async def test_run_ops_full():
     logger.info(f"Re-starting servers in {cluster_name} ")
     restart_res_json = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
                       run_ops=['start_servers'])
-    logger.debug(pformat(restart_res_json))
     restart_res = json.loads(restart_res_json)
     saved_servers = {}
     for index, spec_dict in restart_res['final_cluster_status'].items():
@@ -248,7 +246,6 @@ async def test_run_ops_full():
     logger.info(f"starting servers in {cluster_name} should start currently stopped index {index}")
     restart_res_json = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
                       run_ops=['start_servers'])
-    logger.debug(pformat(restart_res_json))
     restart_res = json.loads(restart_res_json)
     status_json = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
                                     run_ops=['server_status'], server_index=index)

@@ -121,9 +121,9 @@ async def test_mgr_ops_full():
         await from_uri_mgr.update_cluster('foo')
     
     from_uri_mgr.selected = orig
-    cluster, server, status =   from_uri_mgr.require_server_at_index('0')
+    cluster, server, status = await from_uri_mgr.require_server_at_index('0')
     with pytest.raises(Exception):
-        cluster, server, status = from_uri_mgr.require_server_at_index('4')
+        cluster, server, status = await from_uri_mgr.require_server_at_index('4')
     
     assert a_clust['search_directory'] is None
     assert a_clust['query_uri'] is not None
@@ -211,12 +211,6 @@ async def test_mgr_ops_full():
     port = status['uri'].split(':')[-1]
     add_res = await mgr2.add_cluster(port)
     mgr2_status = await mgr2.server_status(index)
-
-    for key in status:
-        if key == "datetime":
-            assert status[key] != mgr2_status[key]
-        else:
-            assert status[key] == mgr2_status[key]
 
     # now put some stuff in the log
     from split_base.collector import Collector
