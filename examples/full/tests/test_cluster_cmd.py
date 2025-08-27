@@ -20,6 +20,7 @@ logger = logging.getLogger("test_code")
 
 from raftengine.api.snapshot_api import SnapShot
 from ops.cluster_mgr import ClusterMgr
+from ops.command_loop import ClusterCLI
 from ops.admin_common import ClusterServerConfig
 
 this_dir = Path(__file__).parent
@@ -80,12 +81,12 @@ async def run_command(cluster_name, working_parent=None, find_local=False, creat
     finally:
         LogController.controller = saved_log_controller
         saved_log_controller.apply_config()
-    logger.debug(outvalue)
+    logger.debug("\n"+outvalue)
     if outvalue.strip() == "":
         outvalue = None
     return outvalue
     
-async def test_run_ops_full():
+async def test_run_ops_json():
 
     setup_mgr = ClusterMgr()
     cluster_name = "test_run_ops"
@@ -321,3 +322,338 @@ async def test_run_ops_full():
     logger.debug(stop_res_json)
 
 
+async def test_cmd_ops():
+
+    setup_mgr = ClusterMgr()
+    cluster_name = "test_run_ops"
+    logger.info(f"Creating cluster {cluster_name}")
+    cluster_base_dir = Path("/tmp", cluster_name)
+
+    
+    if cluster_base_dir.exists():
+        try:
+            await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['stop_cluster'])
+        except:
+            pass
+        for sub in cluster_base_dir.glob('*'):
+            if sub.is_dir():
+                shutil.rmtree(sub)
+            else:
+                sub.unlink()
+    else:
+        cluster_base_dir.mkdir(parents=True)
+
+    logger.info("Creating cluster")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, create_local=True, run_ops=['cluster_status'],
+                            json_output=False)
+    for expected in ["index=0", "index=1", "index=2", "not running"]:
+        assert expected in res
+
+    mgr = ClusterMgr()
+    find_res = await mgr.discover_cluster_files(search_dir=cluster_base_dir)
+    mgr.selected = cluster_name
+    start_cluster = await mgr.cluster_status()
+
+    
+    logger.info("Listing clusters")
+    list_res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['list_clusters'],
+                                  json_output=False)
+    found = False
+    for line in list_res.split('\n'):
+        line=line.strip()
+        if line.startswith(cluster_name):
+            found  = True
+            for index, spec in start_cluster.items():
+                assert spec['config'].uri in line
+    assert found
+
+    # the above call does not call do_find_clusters as it pre-initializes the cluster manager, so we need to do it
+    # directly
+    cluster_cli = ClusterCLI(manager=ClusterMgr())
+    # just make sure help doesn't crash
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        cluster_cli.do_help()
+        res = fake_out.getvalue()
+    logger.info("Direct call to find_clusters")
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_find_clusters()
+        res = fake_out.getvalue()
+    logger.debug(res)
+    assert "No clusters" in res
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_find_clusters(search_dir=cluster_base_dir)
+        res = fake_out.getvalue()
+    logger.debug(res)
+    assert cluster_name in res
+    shutil.rmtree(cluster_base_dir)
+    cluster_base_dir.mkdir()
+    logger.info("Direct call to create_local_cluster")
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_create_local_cluster(cluster_name=cluster_name, directory=cluster_base_dir.parent, force=False)
+        res = fake_out.getvalue()
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    for line in res.split('\n'):
+        line = line.strip()
+        if line == '':
+            continue
+        assert line.startswith('index=')
+    # now in case something changed, save this newer config
+    start_cluster = await cluster_cli.manager.cluster_status()
+
+        
+    logger.info("Getting cluster status")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    
+    logger.info("Checking some expected errors on non-running cluster")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                          server_index='0', run_ops=['log_stats'], json_output=False)
+    assert "Error"  in res
+    assert "not running" in res
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['send_heartbeats'], json_output=False)
+    
+    assert "Error"  in res
+    assert "no servers are running" in res
+
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            add_server="127.0.0.1:29999", run_ops=['new_server'], json_output=False)
+
+    assert "Error"  in res
+    assert "no servers are running" in res
+    
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            server_index='0', run_ops=['server_exit_cluster'], json_output=False)
+    
+    assert "Error"  in res
+    assert "not running" in res
+
+    logger.info("Starting servers")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            server_index='0', run_ops=['start_servers'], json_output=False)
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    for line in res.split('\n'):
+        line = line.strip()
+        if line == '':
+            continue
+        assert line.startswith('index=')
+    
+    logger.info("Getting status")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    for line in res.split('\n'):
+        line = line.strip()
+        if line == '':
+            continue
+        assert line.startswith('index=')
+        assert "running as" in line
+        assert "not running" not in line
+
+    logger.info("Waiting for leader")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                                       run_ops=['server_status'], server_index=index, json_output=False)
+        
+    status = json.loads(res)
+    start_time = time.time()
+    while status['leader_uri'] is None and time.time() - start_time < 2:
+        await asyncio.sleep(0.1)
+        res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                                       run_ops=['server_status'], server_index=index, json_output=False)
+        status = json.loads(res)
+    assert status['leader_uri'] is not None
+
+    logger.info("Ensuring do_add_cluster works")
+    cluster_cli_2 = ClusterCLI(manager=ClusterMgr())
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        host, port = status['leader_uri'].split('/')[-1].split(':')
+        await cluster_cli_2.do_add_cluster(port=port, host=host)
+        res = fake_out.getvalue()
+    logger.debug(res)
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli_2.do_select(cluster_name)
+        res = fake_out.getvalue()
+    logger.debug(res)
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli_2.do_cluster_status()
+        res = fake_out.getvalue()
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    for line in res.split('\n'):
+        line = line.strip()
+        if line == '':
+            continue
+        assert line.startswith('index=')
+        assert "running as" in line
+        assert "not running" not in line
+    
+    
+    logger.info("Sending Heartbeats")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                                       run_ops=['send_heartbeats'], json_output=False)
+    assert "Heartbeats Sent" in res
+
+    logger.info("Getting log stats")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                                       run_ops=['log_stats'], server_index=index, json_output=False)
+    stats = json.loads(res)
+    assert stats['first_index'] is not None
+
+
+    logger.info("Adding server to cluster")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            add_server='127.0.0.1',
+                            run_ops=['new_server'], json_output=False)
+
+
+    logger.info("Waiting for new server to show up")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    start_time = time.time()
+    while "index=3" not in res and time.time() - start_time < 2:
+        await asyncio.sleep(0.1)
+        res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['server_status'], server_index='3', json_output=False)
+    status = json.loads(res)
+    new_server_uri = status['uri']
+
+    logger.info("Telling new server to take snapshot")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['take_snapshot'], server_index='3', json_output=False)
+    assert "SnapShot(" in res
+    
+    logger.info("Stopping new server")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['stop_server'], server_index='3', json_output=False)
+
+    for line in res.split('\n'):
+        line = line.strip()
+        if line.startswith("index=3"):
+            assert "not running" in line
+            
+    logger.info("Restarting")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['start_servers'], json_output=False)
+
+    logger.info("Telling new server to exit cluster")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            run_ops=['server_exit_cluster'], server_index='3', json_output=False)
+
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    assert new_server_uri not in res
+    
+    logger.info("Stopping cluster")
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True,
+                            server_index='0', run_ops=['stop_cluster'], json_output=False)
+    
+    res = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'],
+                                  json_output=False)
+    for index, spec in start_cluster.items():
+        assert spec['config'].uri in res
+    for line in res.split('\n'):
+        line = line.strip()
+        if line == '':
+            continue
+        assert line.startswith('index=')
+        assert "running as" not in line
+        assert "not running" in line
+
+    return
+
+
+
+
+async def test_cmd_ops_errors():
+    logger.info("Direct call to find_clusters on")
+    tdir = Path("/tmp/foo_bar_bee")
+    if tdir.exists():
+        shutil.rmtree(tdir)
+    tdir.mkdir()
+    
+    cluster_cli = ClusterCLI(manager=ClusterMgr())
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_find_clusters(tdir)
+        res = fake_out.getvalue()
+    assert "No clusters found" in res
+    assert str(tdir) in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_add_cluster(port=9999)
+        res = fake_out.getvalue()
+    assert "is it running" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_list_clusters()
+        res = fake_out.getvalue()
+    assert "No clusters found" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_cluster_status()
+        res = fake_out.getvalue()
+    assert "supply" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_start_servers()
+        res = fake_out.getvalue()
+    assert "Error starting" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_stop_cluster()
+        res = fake_out.getvalue()
+    assert "Error stopping" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_server_status('0')
+        res = fake_out.getvalue()
+    assert "Error getting status" in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_log_stats('0')
+        res = fake_out.getvalue()
+    assert "Error getting log stats" in res
+    
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_stop_server('0')
+        res = fake_out.getvalue()
+    assert "Error stopping server" in res
+    
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_take_snapshot('0')
+        res = fake_out.getvalue()
+    assert "Error taking snapshot" in res
+    
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_server_exit_cluster('0')
+        res = fake_out.getvalue()
+    assert "Error trying" in res
+    assert "exit cluster" in res
+    
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_send_heartbeats()
+        res = fake_out.getvalue()
+    assert "Error sending heartbeats" in res
+
+    tdir = Path("/tmp/foo")
+    if tdir.exists():
+        shutil.rmtree(tdir)
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_create_local_cluster('foo', '/tmp/foo')
+        res = fake_out.getvalue()
+    assert "Error" not in res
+
+    with patch('sys.stdout', new=StringIO()) as fake_out:
+        await cluster_cli.do_create_local_cluster('foo', '/tmp/foo')
+        res = fake_out.getvalue()
+    assert "already exists" in res    
+    if tdir.exists():
+        shutil.rmtree(tdir)
