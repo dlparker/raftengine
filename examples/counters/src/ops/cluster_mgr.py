@@ -70,7 +70,7 @@ class ClusterMgr:
         return None
 
     async def query_discover(self, port, host='127.0.0.1', select=True):
-        target_uri = f"full://{host}:{port}"
+        target_uri = f"sum://{host}:{port}"
         q_finder = ClusterFinder(uri=target_uri)
         try:
             clusters = await q_finder.discover()
@@ -138,7 +138,7 @@ class ClusterMgr:
     async def add_cluster(self, port, host='127.0.0.1', return_json=False):
         cluster_name = await self.query_discover(port, host, True)
         clusters_dict = await self.list_clusters(return_json=False)
-        target_uri = f"full://{host}:{port}"
+        target_uri = f"sum://{host}:{port}"
         result = {
             "search_directory": None,
             "query_uri": target_uri,
@@ -470,10 +470,10 @@ class ClusterMgr:
         # find the base working directory from the status
         base_dir = Path(status['working_dir']).parent
         this_dir = Path(__file__).parent
-        new_uri = f"full://{hostname}:{new_port}"
+        new_uri = f"sum://{hostname}:{new_port}"
         sfile = Path(this_dir, 'run_server.py')
         cmd = [str(sfile), "-b", str(base_dir), '--join_uri', new_uri, '--cluster_uri', leader]
-        working_dir = Path(base_dir, f"full_raft_server.{hostname}.{new_port}")
+        working_dir = Path(base_dir, f"sum_raft_server.{hostname}.{new_port}")
         if not working_dir.exists():
             working_dir.mkdir(parents=True)
         stdout_file = Path(working_dir, 'server.stdout')

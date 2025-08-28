@@ -35,7 +35,7 @@ async def joiner(base_dir, join_uri, cluster_uri):
         raise Exception(f"URI {join_uri} is already part of cluster")
     status = await get_server_status(cluster_uri)
     host,port = join_uri.split('/')[-1].split(':')
-    wd = Path(base_dir, f"full_raft_server.{host}.{port}")
+    wd = Path(base_dir, f"sum_raft_server.{host}.{port}")
     if not wd.exists():
         wd.mkdir(parents=True)
     csc = save_config(join_uri, wd, config, status)

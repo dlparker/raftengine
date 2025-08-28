@@ -22,7 +22,7 @@ from raft.direct import DirectCommander
 async def main(args):
     nodes = []
     for pnum in range(args.base_port, args.base_port + 3):
-        nodes.append(f"full://127.0.0.1:{pnum}")
+        nodes.append(f"sum://127.0.0.1:{pnum}")
 
     heartbeat_period=0.01
     election_timeout_min=0.10

@@ -54,7 +54,7 @@ class ClusterCLI(MyCommander):
     async def do_find_clusters(self, search_dir="/tmp"):
         """
         Search for existing clusters by examining directories and files in the "search_dir"
-        using the convention that a server's working directory is named "full_raft_server.host.port".
+        using the convention that a server's working directory is named "sum_raft_server.host.port".
         Any directory matching that pattern will be examined to see if there is a server_config.json
         file that describes the server and the cluster it belongs to. Any clusters found this way
         will be added to the internal list of clusters.

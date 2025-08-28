@@ -174,7 +174,7 @@ async def test_one():
     leader_port = leader_uri.split(':')[-1]
     tmp = int(leader_port) // 10
     new_port = tmp * 10 + 3
-    new_uri = f"full://127.0.0.1:{new_port}"
+    new_uri = f"sum://127.0.0.1:{new_port}"
     logger.info(f"adding new server at {new_uri}")
     server_tasks['3'] = asyncio.create_task(add_and_run_server(cluster_base_dir, new_uri, leader_uri))
     c_status = await mgr.cluster_status(cluster_name)

@@ -58,14 +58,14 @@ class ClusterBuilder:
         server_configs = []
         for uri in node_uris:
             host,port = uri.split('/')[-1].split(':')
-            work_dir = Path(base_dir, f"full_raft_server.{host}.{port}")
+            work_dir = Path(base_dir, f"sum_raft_server.{host}.{port}")
             server_configs.append(ClusterServerConfig(uri, str(work_dir), name,initial_config, all_local=all_local))
         return server_configs
         
     def build_local(self, name='local', base_port=50100, slow_timeouts=False, base_dir="/tmp"):
         node_uris = []
         for port in range(base_port, base_port + 3):
-            uri = f"full://127.0.0.1:{port}"
+            uri = f"sum://127.0.0.1:{port}"
             node_uris.append(uri)
         return self.build_common(name, node_uris, slow_timeouts, all_local=True, base_dir=base_dir)
 
@@ -78,10 +78,10 @@ class ClusterBuilder:
             port = base_port
             if host  == "127.0.0.1":
                 raise Exception("Can't use loopback address in real host list")
-            uri = f"full://{host}:{port}"
+            uri = f"sum://{host}:{port}"
             while uri in node_uris:
                 port += 1
-                uri = f"full://{host}:{port}"
+                uri = f"sum://{host}:{port}"
             node_uris.append(uri)
         return self.build_common(name, node_uris, slow_timeouts, base_dir=base_dir)
 
@@ -127,7 +127,7 @@ class ClusterFinder:
     async def file_discover(self, root_working_dir):
         root = Path(root_working_dir)
         clusters = defaultdict(dict)
-        for wd in root.glob('full_raft_server.*'):
+        for wd in root.glob('sum_raft_server.*'):
             config_file_path = Path(wd, "server_config.json")
             if not config_file_path.exists():
                 continue

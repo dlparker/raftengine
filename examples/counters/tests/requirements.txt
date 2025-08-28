@@ -1,0 +1,8 @@
+pytest>=8.3.4
+pytest-asyncio>=0.25.3
+pytest-cov>=6.0.0
+ipdb>=0.13.13
+# the following should be installed from src/raft/dev_requirements.txt, or the released
+# equivalents from src/raft/requirements.txt
+#-e /home/dparker/projects/raft/raftengine
+#-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/sqlitelog
