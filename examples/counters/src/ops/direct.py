@@ -15,7 +15,7 @@ from raft.raft_client import RaftClient
 
 class DirectCommander:
 
-    direct_commands = ['ping', 'stop', 'status', 'getpid', 'dump_status', 'exit_cluster',
+    direct_commands = ['stop', 'status', 'getpid', 'dump_status', 'exit_cluster',
                        'send_heartbeat', 'start_raft', 'get_config', 'take_power', 'get_logging_dict',
                        'set_logging_level', 'take_snapshot', 'log_stats']
     
@@ -28,9 +28,7 @@ class DirectCommander:
         command = in_command.split(' ')[0]
         if command not in self.direct_commands:
             return f"Error, command {command} unknown, should be one of {self.direct_commands}"
-        if command == "ping":
-            return "pong"
-        elif command == "getpid":
+        if command == "getpid":
             return os.getpid()
         elif command == "stop":
             async def shutter():
@@ -113,7 +111,7 @@ class DirectCommander:
             if len(tmp) > 2:
                 level = tmp[2]
                 name = tmp[1]
-                lc.set_logger_level(logger, level)
+                lc.set_logger_level(name, level)
             else:
                 level = tmp[1]
                 name = ""
@@ -164,11 +162,8 @@ class DirectCommandClient:
         if self.raft_client:
             await self.raft_client.close()
             
-    async def ping(self):
-        return await self.raft_client.direct_server_command('ping')
-
     async def getpid(self):
-        return int(await self.raft_client.direct_server_command('getpid'))
+        return str(await self.raft_client.direct_server_command('getpid'))
     
     async def stop(self):
         return await self.raft_client.direct_server_command('stop')

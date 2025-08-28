@@ -45,6 +45,15 @@ async def test_one():
     mgr = ClusterMgr()
     cluster_name = "cluster_one"
     #logger.setLevel('INFO')
+
+
+    # We want to first start the servers with normal operations so that
+    # we can do a restart on them to hit those code paths. Trying to restart
+    # when they are running in process as task does not work, they can't get
+    # their ports, so probably some kind of cleanup is missing on shutdown.
+    # After a couple of hours trying to find it I decided to ignore the problem
+    # as it causes no issues for actual server processes, just this funky test only
+    # single process technique.
     logger.info(f"Creating cluster {cluster_name}")
     cluster_base_dir = Path("/tmp/test_clusters")
     if not cluster_base_dir.exists():
@@ -54,7 +63,6 @@ async def test_one():
 
     logger.info(f"Starting servers normally")
     await mgr.start_servers()
-    
 
     logger.info(f"Waiting for start")
     start_time = time.time()
@@ -90,6 +98,37 @@ async def test_one():
     except:
         await mgr.stop_cluster()
         raise
+    logger.info("trying some direct operations")
+    res = await client_0.direct_server_command('getpid')
+    logging_dict = await client_0.direct_server_command('get_logging_dict')
+    old_value = logging_dict['loggers']['raft.RaftServer']['level']
+    if old_value.upper == "INFO":
+        new_value = "DEBUG"
+    else:
+        new_value = "INFO"
+    await client_0.direct_server_command(f'set_logging_level raft.RaftServer {new_value}')
+    logging_dict = await client_0.direct_server_command('get_logging_dict')
+    assert logging_dict['loggers']['raft.RaftServer']['level'] == new_value
+    await client_0.direct_server_command(f'set_logging_level raft.RaftServer {old_value}')
+    
+    res = await client_0.direct_server_command('dump_status')
+    wdir = Path(server_0['config'].working_dir)
+    stdout_file = Path(wdir, "server.stdout")
+    with open(stdout_file, 'r') as f:
+        buff = f.read()
+    do_capture = False
+    status_lines = []
+    for line in buff.split('\n'):
+        if "STATUS DUMP ENDS" in line:
+            break
+        if "STATUS DUMP BEGINS" in line:
+            do_capture = True
+        status_lines.append(line)
+    data = '\n'.join(status_lines)
+    assert "pid" in data
+    logger.debug(f"Status from dump file\n{data}\n")
+    assert len(status_lines) > 0
+
     
     logger.info(f"Stopping servers normally")
     await mgr.stop_cluster()

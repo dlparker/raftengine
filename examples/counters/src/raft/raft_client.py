@@ -81,6 +81,8 @@ class RaftClient:
         if self.rpc_client is None:
             await self.connect()
         res = await self.rpc_client.direct_server_command(command)
+        if isinstance(res, int):
+            return res
         if "error" in res:
             raise Exception("Server error:\n" +  res['error'])
         return res

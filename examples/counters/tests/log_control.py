@@ -13,12 +13,11 @@ def setup_logging(reuse=False):
                         ('rpc.client',''),
                         ('raft.RaftServer',''),
                         ('raft.RaftClient',''),
-                        ('test_code', 'Test code logger')]
+                        ('test_code','')]
         log_control = LogController(additional_loggers=test_loggers)
-        
-    if "TEST_DEBUG_LOGGING" in os.environ:
+    if os.environ.get("TEST_DEBUG_LOGGING", None):
         log_control.set_default_level('debug')
-    if "TEST_INFO_LOGGING" in os.environ:
+    if os.environ.get("TEST_INFO_LOGGING", None):
         log_control.set_default_level('info')
     log_control.set_logger_level('rpc.client', 'warning')
     return log_control

@@ -212,7 +212,7 @@ class LogController:
             # Only set level if logger doesn't have a custom level
             if logger_def.custom_level is None:
                 self._set_logger_level_without_custom_flag(logger_name, level)
-            
+        
     def get_logger_level(self, logger_name: str) -> int:
         """
         Get the current logging level for a specific logger.
