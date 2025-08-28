@@ -13,10 +13,9 @@ from pprint import pprint, pformat
 from unittest.mock import patch
 from raftengine.deck.log_control import LogController
 from raftengine.api.log_api import LogStats
-from log_control import setup_logging
 
-controller = setup_logging()
 logger = logging.getLogger("test_code")
+
 
 from raftengine.api.snapshot_api import SnapShot
 from ops.cluster_mgr import ClusterMgr

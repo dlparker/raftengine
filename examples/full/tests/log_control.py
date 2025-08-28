@@ -2,13 +2,15 @@ import os
 import logging
 from raftengine.deck.log_control import LogController
 
-def setup_logging():
+def setup_logging(reuse=False):
 
     if LogController.controller:
-        log_control = LogController.controller
+        if reuse:
+            log_control = LogController.controller
+        raise Exception('log controller already set up')
     else:
-        test_loggers = [('rpc.client',''),
-                        ('rpc.server',''),
+        test_loggers = [('rpc.server',''),
+                        ('rpc.client',''),
                         ('raft.RaftServer',''),
                         ('raft.RaftClient',''),
                         ('test_code', 'Test code logger')]

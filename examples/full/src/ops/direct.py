@@ -43,7 +43,6 @@ class DirectCommander:
                     traceback.print_exc()
                 await asyncio.sleep(0.1)  # Additional safety margin
                 self.logger.warning("Got signal to shutdown, exiting")
-                raise SystemExit(0)
             asyncio.create_task(shutter())
             print(f'server {self.raft_server.uri} shutting down', flush=True)
             return "shutting down"

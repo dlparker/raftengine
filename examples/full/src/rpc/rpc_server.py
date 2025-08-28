@@ -42,16 +42,47 @@ class RPCServer:
             finally:
                 if self.sock_server:
                     self.sock_server.close()
-                    try:
-                        await self.sock_server.wait_closed()
-                        self.sock_server = None
-                    except asyncio.CancelledError:
-                        pass
-                    finally:
-                        self.sock_server = None
+                    self.sock_server = None
                 self.server_task = None
         self.server_task = asyncio.create_task(serve())
-                
+
+    async def handle_client(self, reader, writer):
+        """Handle a new client connection"""
+        info = writer.get_extra_info("peername")
+        logger.debug(f"New client connection from {info}")
+        cf = ClientFollower(self, reader, writer)
+        
+        # Track this connection
+        self.active_connections.add(cf)
+        
+        try:
+            await cf.run()
+        finally:
+            # Remove from tracking
+            self.active_connections.discard(cf)
+            logger.debug(f"Client connection from {info} closed (my port={self.port})")
+    
+    async def shutdown(self):
+        """Gracefully shutdown the server"""
+        logger.warning("Server shutdown initiated")
+        self.shutdown_event.set()
+        
+        # Close all active connections
+        connection_count = len(self.active_connections)
+        if connection_count > 0:
+            logger.info(f"Closing {connection_count} active connections")
+        
+        for connection in list(self.active_connections):
+            try:
+                logger.info(f"Closing connection {connection.info}")
+                await connection.cleanup()
+            except Exception:
+                pass  # Ignore errors during shutdown
+        
+        self.active_connections.clear()
+        logger.info("Server shutdown complete")
+
+    """    
     async def stop(self):
         if self.server_task:
             self.server_task.cancel()
@@ -67,42 +98,7 @@ class RPCServer:
             except asyncio.CancelledError:
                 pass
             self.sock_server = None
-    
-    async def handle_client(self, reader, writer):
-        """Handle a new client connection"""
-        info = writer.get_extra_info("peername")
-        logger.info(f"New client connection from {info}")
-        cf = ClientFollower(self, reader, writer)
-        
-        # Track this connection
-        self.active_connections.add(cf)
-        
-        try:
-            await cf.run()
-        finally:
-            # Remove from tracking
-            self.active_connections.discard(cf)
-            logger.debug(f"Client connection from {info} closed")
-    
-    async def shutdown(self):
-        """Gracefully shutdown the server"""
-        logger.warning("Server shutdown initiated")
-        self.shutdown_event.set()
-        
-        # Close all active connections
-        connection_count = len(self.active_connections)
-        if connection_count > 0:
-            logger.info(f"Closing {connection_count} active connections")
-        
-        for connection in list(self.active_connections):
-            try:
-                await connection.cleanup()
-            except Exception:
-                pass  # Ignore errors during shutdown
-        
-        self.active_connections.clear()
-        logger.info("Server shutdown complete")
-
+    """
 
 class ClientFollower:
     """

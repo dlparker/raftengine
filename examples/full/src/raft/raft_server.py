@@ -91,7 +91,8 @@ class RaftServer:
     # local method reachable through local_command RPC
     async def stop(self):
         async def stopper():
-            await self.rpc_server.stop()
+            await self.rpc_server.shutdown()
+            await self.pilot.stop_commanded()
             await self.deck.stop()
             try:
                 pidfile = Path(self.working_dir, 'server.pid')
@@ -99,7 +100,9 @@ class RaftServer:
                     pidfile.unlink()
             except Exception as e:
                 traceback.print_exc()
-        if self.stopping:
+            self.stopped = True
+            self.stopping = False
+        if self.stopping or self.stopped:
             return
         self.stopping = True
         asyncio.create_task(stopper())
@@ -124,7 +127,7 @@ class RaftServer:
         reply = None
         try:
             msg = self.deck.decode_message(message)
-            logger.info(f"Got raft message {msg.code} from {msg.sender}")
+            logger.debug(f"Got raft message {msg.code} from {msg.sender}")
             reply = await self.deck.on_message(message)
         except Exception as e:
             logger.error(traceback.format_exc())

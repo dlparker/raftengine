@@ -102,9 +102,8 @@ class LogController:
         
         if additional_loggers:
             for logger_name, description in additional_loggers:
-                self.known_loggers[logger_name] = LoggerDef(
-                    logger_name, description, handler_names=self.default_handlers.copy()
-                )
+                self.add_logger(logger_name, description)
+
         
         # Storage for saved levels during temporary changes
         self._saved_levels: Dict[str, int] = {}
@@ -282,9 +281,11 @@ class LogController:
             desc = ""
             if l_name == logger_name:
                 desc = description
-                self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=handler_names)
+                if l_name not in self.known_loggers:
+                    self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=handler_names)
             else:
-                self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=self.default_handlers.copy())
+                if l_name not in self.known_loggers:
+                    self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=self.default_handlers.copy())
             logging.getLogger(l_name)
         
             if l_name != logger_name:

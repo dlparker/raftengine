@@ -9,10 +9,8 @@ import socket
 from pathlib import Path
 from typing import Any
 from pprint import pprint, pformat
-from log_control import setup_logging
 
-controller = setup_logging()
-logger = controller.add_logger("test_code")
+logger = logging.getLogger("test_code")
 
 from raftengine.api.snapshot_api import SnapShot
 from ops.cluster_mgr import ClusterMgr

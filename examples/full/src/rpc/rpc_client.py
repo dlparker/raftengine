@@ -5,10 +5,8 @@ import traceback
 import uuid
 import logging
 from typing import Dict, Optional, Any
-from raftengine.deck.log_control import LogController
-log_controller = LogController.get_controller()
-logger = log_controller.add_logger('rpc.client','')
 
+logger = logging.getLogger('rpc.client')
 
 class RPCClient:
     """
@@ -86,8 +84,9 @@ class RPCClient:
                     # Connection was reset/broken, break the loop
                     # Only log if we're not closing
                     if not self.closed:
-                        logger.debug("Connection was reset by peer")
-                    break
+                        logger.info(f"Connection was reset by peer (to port={self.port})")
+                    await self.close()
+                    return
                 except json.JSONDecodeError as e:
                     logger.error(f"Invalid JSON in response: {e}")
                     continue  # Try to continue processing other responses

@@ -23,9 +23,8 @@ class Pilot(PilotAPI):
         self.other_node_clients = {}
         self.msg_index = 0
         self.replies = {}
-        self.deck = None
         self.shutdown_flag = False
-            
+
     # PilotAPI
     def get_log(self) -> LogAPI: 
         return self.log
@@ -48,7 +47,7 @@ class Pilot(PilotAPI):
             return None
         try:
             msg = MessageCodec.decode_message(message)
-            logger.info(f"pilot told to send message {msg.code} to {msg.receiver}")
+            logger.debug(f"pilot told to send message {msg.code} to {msg.receiver}")
             cli = await self.ensure_node_connection(target_uri)
             msgstr = message.decode()
             result = await cli.raft_message(msgstr)
@@ -67,7 +66,7 @@ class Pilot(PilotAPI):
             return None
         try:
             msg = MessageCodec.decode_message(reply)
-            logger.info(f"pilot told to reply {msg.code} to {msg.receiver}")
+            logger.debug(f"pilot told to reply {msg.code} to {msg.receiver}")
             cli = await self.ensure_node_connection(target_uri)
             result = await cli.raft_message(reply.decode())
         except Exception as e:
@@ -100,9 +99,10 @@ class Pilot(PilotAPI):
         # Close all client connections
         for uri, client in list(self.other_node_clients.items()):
             try:
+                logger.info(f"closing connection to {uri}")
                 await client.close()
             except Exception as e:
-                logger.debug(f"Error closing connection to {uri}: {e}")
+                logger.warning(f"Error closing connection to {uri}: {e}")
         
         self.other_node_clients.clear()
         
