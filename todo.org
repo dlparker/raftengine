@@ -1,11 +1,9 @@
 
-1. [] Add configuration for lmdb to control key parameters such as memory
-2. [] See if using jsonpickle makes lmdb faster
-3. [] Both sqlite and lmdb currently re-read the log rec after saving, see if removing
-   that speeds things up.
-4. [] Add timeout control to all the rpc and raft clients in examples/simple
-5. [] Test example/simple with regular timings. Ensure it has no effect on performance numbers
-      (heartbeats should not happend in busy system, timeouts either).
+1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in
+2. [] Need to reject node exit if only two nodes left. Really? Maybe we can allow a single node to lead
+   a cluster for extreme circumstances? Yes, let's make that work. This would be especially usefull when
+   constructing a new node. Imagine starting a server on one maching, going to the next and starting another
+   and having it add itself to the cluster. Probably a good plan.
    
    
 

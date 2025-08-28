@@ -96,7 +96,7 @@ async def main():
                         help="Increase in client count per step", default=1)
     parser.add_argument("-l", "--loops", type=int, default=100, help="Total loops for each run, distributed across clients")
     parser.add_argument("-w", "--warmup", type=int, default=10, help="Number of warmup loops per client (default: 10)")
-    parser.add_argument("-j", "--json-output", type=str, help="Export results to JSON file", required=True)
+    parser.add_argument("-j", "--json-output", type=bool, help="Export results to JSON file")
     parser.add_argument('--transport', '-t', 
                         choices=['astream', 'aiozmq', 'grpc'],
                         default='aiozmq',
