@@ -1,3 +1,0 @@
-git+https://github.com/dlparker/raftengine.git@v0.9.0#egg=raftengine
-
-uvloop==0.21.0
