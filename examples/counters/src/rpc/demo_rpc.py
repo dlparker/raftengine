@@ -1,7 +1,19 @@
 #!/usr/bin/env python
+import asyncio
+from pathlib import Path
+import sys
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
+from raftengine.deck.log_control import LogController
+log_controller = LogController.make_controller()
+from base.counters import Counters
+from base.demo import Demo
+from split_base.collector import Collector
+from split_base.dispatcher import Dispatcher
+from run_tools import RunTools
 
 
-async def main(RunTools, args):
+async def main():
     rt = RunTools()
     server = await rt.make_server()
     collector,client = await rt.make_client()
@@ -28,28 +40,11 @@ async def main(RunTools, args):
     
 
     shut_res = await client.direct_server_command("shutdown")
-    print(f"shutdown request got {shut_res}")
+    print(f"shutdown request got '{shut_res}'")
 
     print('closing client')
     await client.close()
     
     
 if __name__=="__main__":
-    import asyncio
-    from pathlib import Path
-    import sys
-    import argparse
-    src_dir = Path(__file__).parent.parent
-    sys.path.insert(0, str(src_dir))
-    from base.counters import Counters
-    from base.demo import Demo
-    from split_base.collector import Collector
-    from split_base.dispatcher import Dispatcher
-    parser = argparse.ArgumentParser(description='RPC simple test tool')
-    parser.add_argument('--transport', '-t', 
-                        choices=['astream', 'aiozmq', 'grpc'],
-                        default='aiozmq',
-                        help='Transport mechanism to use')
-    args = parser.parse_args()
-    from run_tools import RunTools
-    asyncio.run(main(RunTools, args))
+    asyncio.run(main())

@@ -2,11 +2,216 @@
 
 * Raft Enablement Process
 
-These examples are built to retain all the stages of development so that they can serve as
+The two examples directories share a common ancester and a lot of the code is 
+identical or near to it. Here are the differences:
+
+** Two examples
+*** The "counters" example
+
+This example is structured to serve as a living guide for how to add
+raft consensus to an application. It is also intended to have a decent chance
+of serving well as a skeleton on which to build your own application, especially
+the early stages of trying things out. In particular,there are tools to help
+create and manage clusters, especially test clusters running on a single machine
+as would typically be desireable while doing development tasks.
+
+*** The "options" example
+This example is pretty much the same application as the "counters" example,
+but it is organized to use different RPC mechanisms and Raft log implementations. This
+might be helpful if you want to develop your own log or rpc mechanism, you should be
+able to follow the pattern for choosing among the existing "options" and add your own.
+You could do this separately from developing your actual application "state machine"
+(as the raft documents call it).
+
+This example is more cumbersome to operate than the "counters" example, as it branched
+off from an earlier common ancestor and fails to benefit from later refinements.
+However, in addition to offering the log and rpc
+choices, it also has support for performance testing including tools to compare the
+effect of the available choices. That could be especially useful for measuring your
+own log or rpc components.
+
+
+*** Structure of examples
+
+If you imagine that you are starting out with some code that already works in a single process,
+where you have some core functionality that is available through an internal API, maybe the
+methods on a class, and you want to turn this into a replicated cluster with Raft guarantees,
+this is a process that you could use and which is exemplifed by the code here.
+
+1. Write some kind of validator code to run against the "target" API. Maybe a demo too
+   if you like that sort of thing (I do).  
+2. Write a mechanism that duplicates the "target" API as a "proxy" API and places
+   serialize/deserialize tools between Them. Why this is necessary is described below.
+3. Build and RPC or message passing mechanism that wraps the serialize and deserialize tools
+   and makes it possible for the "proxy" API and the "target" API live in different processes
+   or even on different machines.
+4. Build a Raft Server and Raft Client layer that is based on the Raftengine library
+   that implements the required APIs and uses the library's components to add
+   raft consensus and replication between the "proxy" and "target" APIs.
+
+These examples are built to retain all these stages of development so that they can serve as
 examples of how this stepwise layering of functionality could work. It turns out that
 it can be usefull to retain the structure of the earlier stages for debugging and
-performance analisys, so you might want to do the same when building your raft system.
+performance analysis, so you might want to do the same when building your raft system.
 
+
+** Example "Base" Code
+
+In each example the src/base directory contains this code, broken up into
+these components
+
+*** Application Components:
+
+The main application component is *"counters.py"*. This is the home of
+the target API for these applications. This is a trivial mechanism for
+maintaining a dictionary of counters, where each key in the dictionary
+is restricted to a single characther from the python
+string.ascii_letters set and each value in the dictionary is an
+integer, initialized to 0. The entire API implementation is as
+follows:
+ 
+#+BEGIN_SRC python
+    async def counter_add(self, name, value):
+        if len(name) != 1 or name[0] not in string.ascii_letters:
+            raise Exception('Counter names must be a single ascii letter')
+        self.counts[name] += value
+        self.save()
+        return self.counts[name]
+
+    async def get_counters(self):
+        return dict(self.counts)
+#+END_SRC
+
+The "self.save()" call saves a pickled copy of the "counts" dictionary to disk,
+thus making this a persistent state machine.
+
+*** Test and Demo Components
+
+1. demo.py -  This does a simple demo of the counters functions. Since it is coded to accept
+   an object that implements the API without regard to the details of that object,
+   it should continue to work as a demo as additional layers of functionality
+   are added in later steps.
+
+2. validator.py - Whereas the demo code does very little checking of the provided
+   functions, and produces output that is not always desireable, this component
+   provides some basic functional validation of the API implementaion and avoids output.
+   Just like the demo code, is coded to accept an object that implements the API
+   without regard to the details of that object, so it should continue to work as
+   a demo as additional layers of functionality are added in later steps.
+
+*** Executable components
+
+These executable tools run the code from the demo and validator components,
+doing the housekeeping needed to support them. This is pretty thin on functionality,
+but the analogs in future steps will have more to do.
+
+1. demo_counters.py - runs the demo code
+2. test_counters.py - runs the validator code
+
+You can run either of these with no command line options. They require no libraries not provided by python.
+   
+** Example "Split Base" Code
+
+This code, in src/split_base, adds the serializer/deserializer functions that are
+needed to enable your application API to participate in Raft consensus and replication.
+You application operations that need to be Rafted must be accessible via a serialized
+"state machine command" as explained in the Raft Protocol definition. There a probably
+a very large number of ways you can do this. These examples us a very simple JSON
+based scheme with simple string "command" names. Whatever method you want to use, this
+is the place to build it, so you can build fetures iteratively if you need to, easily
+debug the code, etc.
+
+These examples use this terminolgy:
+
+1. The "Collector" implements that "target" API as a "proxy" API. In these examples
+   the two are identical, which helps enable clean progression from one development
+   stage to the next. You don't have to do it this way, if you need additional
+   functions at the "proxy" level, but such functions probably belong in a layer
+   added later.
+2. The "Dispatcher" accepts an implementation of the actual "target" API and
+   translates the serialized commands into calls to the "state machine" portion
+   of the app.
+
+*** Layer Components
+
+1. collector.py contains the Collector for these examples
+2. dispatcher.py contains the Dispatcher for these examples
+
+*** Support Components
+
+1. "pipe.py" The connection between the Collector and Dispatcher in this layer is called
+   a "pipe", and it serves as a scaffold for connecting the two prior to adding RPC functionality.
+
+*** Executable components
+
+These executable tools run the code from the base demo and validator components but with
+the Collector and Dispatcher (and pipe) components inserted between the demo and test components
+and the target API implemention. The construct all the application components, the layer components
+and the support components and wire them up. The demo and test components should run without change.
+
+1. demo_split.py - runs the demo code
+2. test_split.py - runs the validator code
+   
+You can run either of these with no command line options. They require no libraries not provided by python.
+   
+** Example "RPC" Code
+
+Both the "counters" and "options" examples have a src/rpc directory, and they serve
+the same purpose and have some overlapping features. However, the "counters" example
+uses only one RPC mechanism, and the "options" example supports three different ones.
+This section will describe the general structure and features that are common.
+Additional detail about the "options" is described in a different section.
+
+The "counter" RPC mechanism is one built for these examples. It uses python async
+socket operations directly rather than using an external library. It is also one
+of the RPC options available in the "options" example, where it is labeled "astream"
+for async streams. The other RPC components available the "options" example are
+aiozrpc and gRPC, more about them in their specific section.
+
+All the RPC components share the same basic API, with some additions in some cases.
+
+*** Layer Components
+
+1. rpc_client.py - supports the basic RPC API:
+   1. Initialized with a host and port, will connect to a server when the first async call is made
+   2. async closer() method that closes any open socket and cleans up any resources
+   3. issue_command - This is the transport for an application state machine command. This mirrors
+      the method used in the "FakeRPCPipe" in the src/split_base code. So this will become a
+      Raft mediated request in the final stage.
+   4. raft_message - This is the RPC method that the Raft servers will use to send each other messages
+      for the Raft protocol. 
+   5. direct_server_command - This is a helper RPC that lets admin clients request that the server do things
+      such as reporting status, shut down, etc. You don't have to have this RPC in your app, but you
+      will probably need something like this.
+2. rpc_server.py - Implements the server side of the issue_command, raft_message and direct_server_command RPC,
+   along with doing all the needed housekeeping to support clients. Passes issue_command, raft_message
+   and direct_server_command messages on to the "raft_server" instance that is supplied to its init function.
+      
+*** Support Components
+
+The RaftServerStub component in "raft_stub.py" is the target of the RPCServer class issue_command,
+raft_message and direct_server_command messages, in lieu of the RaftServer class that will be used in the
+next stage. It has an instance of a Dispatcher class, which in turn has a Counters instance, so
+it can complete the serialized operations passed in issue_command. It stubs out the raft_message
+calls with an echo of the incomming message. It implements the actual direct commands that the
+direct_server_command RPC targets.
+
+The "RunTools" class in "run_tools" provides helper functions that create client and server instances
+for testing in the test and demo executables. They are not used outside this purpose.
+
+
+*** Executable components
+
+These executable tools use the RunTools class from "run_tools.py" to setup a server and a client
+and wire everything together so that the base Demo and Validator classes can run over the RPC
+connection between the two.
+
+1. demo_rpc.py - Creates an RPCServer instance, and an RPCClient instance and runs the base Demo code
+2. test_rpc.py - Creates an RPCServer instance, and an RPCClient instance and runs the base Validator code
+
+
+
+*** 
 
 ** Primary operations
 
@@ -15,8 +220,8 @@ might be called the "operations". The Raft thesis refers to this as the "state m
 but when thinking about the actual application that feels uncomfortable to me, so
 I use "operations". Your mileage may vary.
 
-In the examples the operations are to be found in the creatively named "src/base/operations.py".
-You may need more than a single file for your application, but it is good to place all the
+In the examples the operations are to be found in directory "src/base". You may need
+more than a single file for your application, but it is good to place all the
 API elements that will be Raft enabled in a single file, or even a single class.
 
 
