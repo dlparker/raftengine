@@ -4,6 +4,27 @@
    a cluster for extreme circumstances? Yes, let's make that work. This would be especially usefull when
    constructing a new node. Imagine starting a server on one maching, going to the next and starting another
    and having it add itself to the cluster. Probably a good plan.
+3. [] Need to add event monitoring to examples code
+4. [] Need to try RPC mode again now that we have message serials
+5. [] Need to add support in deck for periodic (timed? by record added?) events to track log
+   usage for snapshot trigger, something like "add event snapshot trigger lesser of 50000 records or 1 hour)"
+6. [] Need to test re-adding a server that has exited and still has log hanging around. Usefull for moving
+   a server from one machine to another, so need to allow startup to change URI
+7. [] Need to add change cluster settings to example
+8. [] Need to restructure package. Ideal would be:
+   1. [] Installation of raftengine means no log or RPC impl
+   2. [] raftengine[min]  adds SqliteLog and Astream RPC (no external requirements)
+   3. [] raftengine[lmdb] adds LmdbLog and HybridLog
+   4. [] raftengine[aiozmq] adds (and selects, have to think about additions to cluster init config) aiozmq
+   5. [] raftengine[grpc] adds (and selects, have to think about additions to cluster init config) grpc
+   6. [] raftengine[bi_min] (batteries included) adds counters example with stubs for
+      base.state_machine (counters), base.validator, base.demo, split_base.collector, split_base.dispatcher
+   7. [] raftengine[bi_lmdb] same as bi_min but adds lmdb
+   8. [] raftengine[bi_lmdb_aiozmq] same as bi_min but adds lmdb and aiozmq
+   9. [] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
+
+   
+   
    
    
 
