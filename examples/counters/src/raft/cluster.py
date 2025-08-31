@@ -31,7 +31,7 @@ class Cluster:
                                                         max_entries_per_message=10,
                                                         use_dynamic_config=False)
         for index,uri in enumerate(self.node_uris):
-            work_dir = Path('/tmp', f"simple_raft_server.{index}")
+            work_dir = Path('/tmp', f"sum_raft_server.{index}")
             if not work_dir.exists():
                 work_dir.mkdir()
             
@@ -49,7 +49,7 @@ class Cluster:
         port = self.base_port + index
         uri = f"sum://127.0.0.1:{port}"
         leader_uri = await self.find_leader()
-        work_dir = Path('/tmp', f"simple_raft_server.{index}")
+        work_dir = Path('/tmp', f"sum_raft_server.{index}")
         if not work_dir.exists():
             work_dir.mkdir()
             

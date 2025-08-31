@@ -37,7 +37,7 @@ async def main(args):
                                                max_entries_per_message=10,
                                                use_dynamic_config=False)
 
-    work_dir = Path('/tmp', f"simple_raft_server.{args.index}")
+    work_dir = Path('/tmp', f"sum_raft_server.{args.index}")
     if not work_dir.exists():
         work_dir.mkdir()
 

@@ -1,4 +1,4 @@
-
+,
 
 * Raft Enablement Process
 
@@ -36,7 +36,7 @@ own log or rpc components.
 If you imagine that you are starting out with some code that already works in a single process,
 where you have some core functionality that is available through an internal API, maybe the
 methods on a class, and you want to turn this into a replicated cluster with Raft guarantees,
-this is a process that you could use and which is exemplifed by the code here.
+this is a process that you could use and which is exemplifed by the code here. 
 
 1. Write some kind of validator code to run against the "target" API. Maybe a demo too
    if you like that sort of thing (I do).  
@@ -132,7 +132,7 @@ These examples use this terminolgy:
    translates the serialized commands into calls to the "state machine" portion
    of the app.
 
-*** Layer Components
+*** Layer Main Components
 
 1. collector.py contains the Collector for these examples
 2. dispatcher.py contains the Dispatcher for these examples
@@ -170,9 +170,9 @@ aiozrpc and gRPC, more about them in their specific section.
 
 All the RPC components share the same basic API, with some additions in some cases.
 
-*** Layer Components
+*** Layer Main Components
 
-1. rpc_client.py - supports the basic RPC API:
+1. RPCCLient in rpc_client.py - supports the basic RPC API:
    1. Initialized with a host and port, will connect to a server when the first async call is made
    2. async closer() method that closes any open socket and cleans up any resources
    3. issue_command - This is the transport for an application state machine command. This mirrors
@@ -183,7 +183,7 @@ All the RPC components share the same basic API, with some additions in some cas
    5. direct_server_command - This is a helper RPC that lets admin clients request that the server do things
       such as reporting status, shut down, etc. You don't have to have this RPC in your app, but you
       will probably need something like this.
-2. rpc_server.py - Implements the server side of the issue_command, raft_message and direct_server_command RPC,
+2. RPCServer in rpc_server.py - Implements the server side of the issue_command, raft_message and direct_server_command RPC,
    along with doing all the needed housekeeping to support clients. Passes issue_command, raft_message
    and direct_server_command messages on to the "raft_server" instance that is supplied to its init function.
       
@@ -209,23 +209,166 @@ connection between the two.
 1. demo_rpc.py - Creates an RPCServer instance, and an RPCClient instance and runs the base Demo code
 2. test_rpc.py - Creates an RPCServer instance, and an RPCClient instance and runs the base Validator code
 
+** Example "Raft" Code
+
+The "src/raft" directory contains the components needed to add Raft support to the RPC level of code.
+This includes an implementation of the Raftengine PilotAPI and a layer of client and server. 
+
+*** Layer Main Components
+
+1. RaftClient in "raft_client.py", provides a thin layer on top of RPCClient. The main purpose
+   of this layer is to automatically deal with the "redirct" and "retry" responses andthat can occur when
+   making "issue_command" calls. This "redirect" response happens when the server to which the RPC
+   client is connected is not the cluster Leader, in which case the RaftClient will use the redirect
+   information to connect to the leader and resend the issue_command request. The "retry" response
+   happens when the cluster is currently leaderless, which almost always means that an election is in
+   progress. Upon "retry" the RaftClient will wait a bit, then retry the issue_command call and repeat
+   until there is a leader or the retry count reaches max_retries.
+2. RaftServer in "raft_server.py", connects Raftengine components together with a Pilot instance (below)
+   to construct the Raft enablement for state machine commands accepted from issue_command RPCs, and
+   Raft support by connecting message received via the raft_message RPCs to the Raftengine. It includes
+   initialization of:
+   1. The RPCserver
+   2. The SqliteLog, a Raftengine LogAPI implementation found in the raftengine_logs repo
+   3. The Dispatcher, same dance as in the src/rpc and src/split_base layers.
+   4. A Counters implementation, though in this case it relies on external code to provide a reference
+      to the class instead of importing it, which will make more sense with details the "ops" layer.
+   5. The Pilot class (see below), which requires a reference to the SqliteLog and Dispatcher instances
+   6. The Raftengine Deck class, which requires a refeverence to the Pilot class as it makes calls to
+      the PilotAPI
+3. Pilot in "pilot.py", implements that PilotAPI with operations which include:
+   1. Routing commands to the Dispatcher when called by the Raftengine upon commit of command containg
+      log records.
+   2. Accepting raft messages and messages replies and routing them to other raft servers via RPCClient
+      (note, not RaftClient) instance that it manages automatically.
+   3. SnapShot operations by calls to the Counters class (see executables below)
 
 
-*** 
+*** Support Components
 
-** Primary operations
-
-The part of your application that you intend to protect with Raft consensus logic
-might be called the "operations". The Raft thesis refers to this as the "state machine"
-but when thinking about the actual application that feels uncomfortable to me, so
-I use "operations". Your mileage may vary.
-
-In the examples the operations are to be found in directory "src/base". You may need
-more than a single file for your application, but it is good to place all the
-API elements that will be Raft enabled in a single file, or even a single class.
+The DirectCommander class in "direct.py" provides the lookup and execution of
+direct_server_command operations. The DirectCommander it provided to the RPCServer
+on startup. The available commands include "status", "getpid", "stop", "get_leader"
+and "take_power". The last command is only needed when the user decides to start
+the cluster with slow timeouts to aid in development tasks, an will then need
+to trigger an election by sending this command to a server.
 
 
+*** Executable Components
 
+Servers at this layer require a cluster definition to start up so that they know how many
+servers are in the cluster, as needed for Raft consensus. The executable components in
+this directory assume that you will only configure three servers for the cluster, and that
+all of them will run on the local machine. Additional choices are available in the next
+layer.
+
+Note that none of the code in this layer attempts to do snapshot operations. The executables
+wire the src/base/counters.py Counters class into the RaftServer, and this Counter
+class does not implement snapshot API elements. The next layer adds this feature.
+
+**** Cluster Configuration Options
+
+There are two methods of configuring a cluster available. One method is used when you want
+to run servers directly in a terminal, and the other is when you want to run the servers
+in the background. In either event, a working directory is created in /tmp for each
+server and the cluster configuration is written to a file in that directory. When the server
+starts it will create (or reload) its SqliteLog file in that directory. 
+
+1. Direct server run, using "run_server.py". When you start a server this way, it creates a
+   server configuration based on the command line options "--base_port" and "--index". The
+   base_port option determines the port used for the uri of the first server in the cluster.
+   A cluster config is created starting with that port and then two more servers are configured
+   with the next two port numbers. So "--base_port 40000" would yield a cluster with uris:
+   sum://127.0.0.1:40000, sum://127.0.0.1:40001 and sum://127.0.0.1:40002.
+   The --index value tell the server which of those uris it should use.
+2. Backround run of a cluster, using the Cluster class in "cluster.py", a cluster can be configured,
+   the working directory set up, and the run_server.py executable started for each configured
+   server. There is no command line tool to do this. The demo_raft.py and test_raft.py tools
+   use these features. Should you want to do this directly, you could build a command line
+   tool that uses the Cluster class, but there is extensive support for cluster management
+   via single command line operations and an interactive command loop available at the next
+   layer, which also includes the full range of cluster operations such as membership changes
+   and snapshots.
+
+**** Test/Demo components
+
+Each of these create and start a three server cluster, run their ops, then stop the cluster.
+   
+1. demo_raft.py - Runs the existing Demo code against a Collector that uses the RaftClient class.
+2. test_ratt.py - Runs the existing Validator code against a Collector that uses the RaftClient class.
+
+   
+
+
+** Example "Ops" Code
+
+This layer adds the support you would need in the "operations" role, managing a cluster of
+Raft enabled servers. The core Raft related features it adds are cluster membership change
+operations and snapshot operations.
+
+Actual runtime management of a cluster of servers requires at least a few administrative
+tools, and this layer adds the minimum required set of those. This includes tools
+to query the status of a cluster, find, use and modify clusters configurations on a machine,
+find clusters on other machines, start and stop servers in a cluster, add and remove
+servers, manage snapshots.
+
+The tools provided by this layer are by no means a complete and finished set, but they
+are adequate for most development and testing scenarios. A true production level toolset
+would need to do more, but could be based on what is provided here.
+
+
+*** Layer Main Components
+
+The "raft_counters.py" file contains an extension of the base Counters class. This extension
+adds support for creating and loading snapshots and sharing them between servers. This
+example application is so simple that the snapshot process is dead simple and does not
+provide much of a guide to more complicated snapshot scenarios, but then that is probably
+not possible to usefully discusss without reference to the application design. The basic
+idea is, save whatever is needed in order to restore the current state of the application.
+
+The details of the snapshot process supported by the Raftengine snapshot propogation
+logic is documented in the library's docs.
+
+*** Support Components
+
+1. DirectCommander in "direct.py" provides the actions needed to manage a server in the
+   cluster, including the commands from the previous level, plus commands to collect more
+   information such as the LogStats value accessible via the LogAPI. It also adds
+   access to features in the Raftengine Deck class such as join and exiting a cluster.
+   There is also a DirectComamndClient class in this file that provides an API to
+   send the direct command requests and handle the results, in some cases converting
+   dictionaries to dataclass instances.
+2. A variety of cluster and server administration utilities are found in "admin_common.py"
+3. The setup and run portions of a server exectuable are found in "server_procs.py".
+   
+
+
+*** App/Test Executable Components
+
+The usual demo and test operations are here as from other layers, and the both use
+the "test_common.py" contents to perform some of their functions, since cluster creation
+and control operations are complex and common needs of each.
+
+1. In "demo_ops.hy" the usual "Demo" class operations are run against a Collector that
+   works via a RaftClient, but the main function (literally "main") is in "test_common.py"
+2. In "test_ops.py" the Validator operations run just like Demo above, but after the normal
+   test run a snapshot test is also run.
+3. Should you wish to run a server directly from the command line, the "run_server.py" tool
+   does that in a way that is compatible with the configuration methods in this directory.
+  
+   
+
+*** Cluster Management Executable Components
+
+A set of operations that conduct cluster configuration and operations tasks are
+encapsulated in the ClusterMgr class in "cluster_mgr.py". There is a command line
+interface in "cluster_cmd.py" that allows execution of these operations by single command
+line invocation. Some of the options to this tool specify how to find and select a
+cluster configuration before performing the requested operation(s). This tool can also
+be used to launch and interactive command lopp, found in "command_loop.py".
+
+Although the above tool can create cluster configurations, it is sometimes desirable
+to create them directly, and "create_cluster.py" fills that requirement.
 
 
 As such it has
