@@ -140,10 +140,7 @@ class Records:
         with self.env.begin(write=True) as txn:
             # Handle index assignment like SQLite implementation
             if (entry.index is None or entry.index == 0):
-                if self.max_index is None:
-                    entry.index = 0
-                else:
-                    entry.index = self.max_index + 1
+                entry.index = self.max_index + 1
             key = entry.index.to_bytes(8, 'big')
             value = self._serialize_rec(entry)
             txn.put(key, value, db=self.records_db)

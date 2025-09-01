@@ -4,7 +4,7 @@ from statistics import mean, stdev
 
 import pytest
 
-from common import inner_log_perf_run
+from log_common import inner_log_perf_run
 from test_lmdb import log_create as lmdb_log_create
 from test_memlog import log_create as memory_log_create
 from test_sqlite import log_create as sqlite_log_create

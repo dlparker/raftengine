@@ -155,10 +155,7 @@ class Records:
         params = []
         values = "("
         if entry.index is None or entry.index == 0:
-            if self.max_index is None:
-                entry.index = 1
-            else:
-                entry.index = self.max_index + 1
+            entry.index = self.max_index + 1
             sql = f"insert into records ("
         else:
             params.append(entry.index)

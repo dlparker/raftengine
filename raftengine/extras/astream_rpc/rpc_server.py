@@ -80,7 +80,6 @@ class RPCServer:
         self.active_connections.clear()
         logger.info("Server shutdown complete")
 
-    """    
     async def stop(self):
         if self.server_task:
             self.server_task.cancel()
@@ -96,7 +95,6 @@ class RPCServer:
             except asyncio.CancelledError:
                 pass
             self.sock_server = None
-    """
 
 class ClientFollower:
     """
