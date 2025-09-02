@@ -101,39 +101,39 @@ class RPCServer:
         self.server_task = asyncio.create_task(serve())
                 
     async def stop(self):
-        logger.warning("TEMP DEBUG: gRPC stop() called")
+        logger.warning(" gRPC stop() called")
         
         # First cancel the server task to stop accepting new connections
         if hasattr(self, 'server_task') and self.server_task:
-            logger.warning("TEMP DEBUG: cancelling server_task first")
+            logger.warning(" cancelling server_task first")
             if not self.server_task.done():
                 self.server_task.cancel()
                 try:
                     await self.server_task
-                    logger.warning("TEMP DEBUG: server_task cancelled and awaited")
+                    logger.warning(" server_task cancelled and awaited")
                 except asyncio.CancelledError:
-                    logger.warning("TEMP DEBUG: server_task cancelled")
+                    logger.warning(" server_task cancelled")
                     pass
             self.server_task = None
             
         # Then stop the gRPC server with extended grace period
         if self.server:
             logger.info(f"Shutting down gRPC server on port {self.port}")
-            logger.warning("TEMP DEBUG: calling server.stop(grace=5.0)")
+            logger.warning(" calling server.stop(grace=5.0)")
             
             try:
                 # Use longer grace period and ensure proper cleanup
                 await self.server.stop(grace=5.0)
-                logger.warning("TEMP DEBUG: server.stop() completed")
+                logger.warning(" server.stop() completed")
                 
                 # Explicitly wait a moment for internal cleanup
                 await asyncio.sleep(0.1)
-                logger.warning("TEMP DEBUG: post-stop sleep completed")
+                logger.warning(" post-stop sleep completed")
                 
             except Exception as e:
-                logger.error(f"TEMP DEBUG: Error during server.stop(): {e}")
+                logger.error(f" Error during server.stop(): {e}")
             finally:
                 self.server = None
-                logger.warning("TEMP DEBUG: server set to None")
+                logger.warning(" server set to None")
                 
-        logger.warning("TEMP DEBUG: gRPC stop() completed")
+        logger.warning(" gRPC stop() completed")

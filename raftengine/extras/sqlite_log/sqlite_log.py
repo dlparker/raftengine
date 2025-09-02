@@ -154,13 +154,9 @@ class Records:
         cursor = self.db.cursor()
         params = []
         values = "("
-        if entry.index is None or entry.index == 0:
-            entry.index = self.max_index + 1
-            sql = f"insert into records ("
-        else:
-            params.append(entry.index)
-            sql = f"replace into records (rec_index, "
-            values += "?,"
+        params.append(entry.index)
+        sql = f"replace into records (rec_index, "
+        values += "?,"
 
         sql += "code, command, term, serial, leader_id, timestamp) values "
         values += "?,?,?,?,?,?)"
@@ -183,10 +179,6 @@ class Records:
                              self.broken, self.max_commit, self.max_apply, self.uri])
         self.db.commit()
         cursor.close()
-        if self.max_commit >= entry.index:
-            entry.committed = True
-        if self.max_apply >= entry.index:
-            entry.applied = True
         return entry
 
     def read_entry(self, index=None):
@@ -264,10 +256,6 @@ class Records:
             return None
         return self.read_entry(index)
 
-    def insert_entry(self, rec: LogRec) -> LogRec:
-        rec = self.save_entry(rec)
-        return rec
-
     def set_commit_index(self, index):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
@@ -283,6 +271,11 @@ class Records:
             self.save_stats()
 
     def delete_all_from(self, index: int):
+        if self.snapshot and index < self.snapshot.index + 1:
+            raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
+        if self.max_index < index:
+            raise Exception(f"cannot delete record {index}, max is {self.max_index}")
+            
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
         cursor = self.db.cursor()
@@ -376,7 +369,13 @@ class Records:
             return self.max_index
         return max(self.max_index, self.snapshot.index)
     
-    async def install_snapshot(self, snapshot):
+    async def special_install_snapshot(self, snapshot):
+        # This is a non validating version that allows snapshots
+        # to be stored even when they do not make sense based
+        # on available records and snapshot index. The HybridLog
+        # uses this call to persist snapshots when they are
+        # created, and sometimes the target records are in the
+        # lmdb log it maintains, not this sqlite log.
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
         cursor = self.db.cursor()
@@ -390,6 +389,25 @@ class Records:
         self.db.commit()
         self.max_index = max(snapshot.index, self.max_index)
         self.snapshot = snapshot
+        self.save_stats()
+        
+    async def install_snapshot(self, snapshot):
+        if self.db is None: # pragma: no cover
+            self.open() # pragma: no cover
+        if snapshot.index > self.max_index or snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.max_index}")
+        cursor = self.db.cursor()
+        sql = "delete from snapshot"
+        cursor.execute(sql)
+        sql = "insert into snapshot (snap_id, s_index, term) values (?,?,?)"
+        cursor.execute(sql, [1, snapshot.index, snapshot.term])
+        sql = "delete from records where rec_index <= ?"
+        cursor.execute(sql, [snapshot.index,])
+        cursor.close()
+        self.db.commit()
+        self.max_index = max(snapshot.index, self.max_index)
+        self.snapshot = snapshot
+        self.save_stats()
 
     def get_snapshot(self):
         if self.db is None: # pragma: no cover
@@ -444,23 +462,16 @@ class SqliteLog(LogAPI):
         self.records.set_term(self.records.term + 1)
         return self.records.term
 
-    async def append(self, entry: LogRec) -> None:
+    async def insert(self, entry: LogRec) -> None:
         save_rec = LogRec.from_dict(entry.__dict__)
+        if save_rec.index == 0 or save_rec.index is None:
+            save_rec.index = self.records.max_index + 1
+        elif save_rec.index > self.records.max_index + 1:
+            raise Exception('cannont insert past last index')
+        elif save_rec.index < 1:
+            raise Exception('cannont insert at index less that one')
         return_rec = self.records.save_entry(save_rec)
-        #self.logger.debug("new log record %s", return_rec.index)
         return return_rec
-
-    async def replace(self, entry:LogRec) -> LogRec:
-        if entry.index is None:
-            raise Exception("api usage error, call append for new record")
-        if entry.index < 1:
-            raise Exception("api usage error, cannot insert at index less than 1")
-        save_rec = LogRec.from_dict(entry.__dict__)
-        next_index = self.records.max_index + 1
-        if save_rec.index > next_index:
-            raise Exception("cannot replace record with index greater than max record index")
-        self.records.insert_entry(save_rec)
-        return LogRec.from_dict(save_rec.__dict__)
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
@@ -567,6 +578,11 @@ class SqliteLog(LogAPI):
             last_record_timestamp=last_record_timestamp
         )
 
-    # not part of API
+    # not part of API, needed for HybridLog
     async def refresh_stats(self):
         self.records.refresh_stats()
+
+    # not part of API, needed for HybridLog
+    async def special_install_snapshot(self, snapshot:SnapShot):
+        return await self.records.special_install_snapshot(snapshot)
+

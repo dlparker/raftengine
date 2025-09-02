@@ -51,11 +51,13 @@ class MemoryLog(LogAPI):
         self.last_record_time = None
         
     def insert_entry(self, rec: LogRec) -> LogRec:
-        if rec.index > self.last_index + 1:
-            raise Exception('cannont insert past last index')
-        orig_index = rec.index
         if rec.index == 0 or rec.index is None:
             rec.index = self.last_index + 1
+        elif rec.index > self.last_index + 1:
+            raise Exception('cannont insert past last index')
+        elif rec.index < 1:
+            raise Exception('cannont insert at index less that one')
+        orig_index = rec.index
         self.entries[rec.index] = rec
         self.last_index = max(rec.index, self.last_index)
         self.last_term = max(rec.term, self.last_term)
@@ -156,22 +158,13 @@ class MemoryLog(LogAPI):
     async def get_applied_index(self):
         return self.max_apply
 
-    async def append(self, record: LogRec) -> None:
+    async def insert(self, record: LogRec) -> None:
         save_rec = LogRec.from_dict(record.__dict__)
         self.insert_entry(save_rec)
         return_rec = LogRec.from_dict(save_rec.__dict__)
         logger.debug("new log record %s", return_rec.index)
         return return_rec
     
-    async def replace(self, entry:LogRec) -> LogRec:
-        if entry.index is None:
-            raise Exception("api usage error, call append for new record")
-        if entry.index < 1:
-            raise Exception("api usage error, cannot insert at index less than 1")
-        save_rec = LogRec.from_dict(entry.__dict__)
-        self.insert_entry(save_rec)
-        return LogRec.from_dict(save_rec.__dict__)
-
     async def mark_committed(self, index:int) -> None:
         self.max_commit = max(index, self.max_commit)
 
@@ -200,6 +193,9 @@ class MemoryLog(LogAPI):
         return LogRec(**rec.__dict__)
     
     async def delete_all_from(self, index: int):
+        if self.snapshot and index < self.snapshot.index + 1:
+            raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
+            
         if index == 0 or self.snapshot and index == self.snapshot.index + 1:
             self.entries = {}
             self.first_entry = 0

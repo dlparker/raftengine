@@ -138,9 +138,6 @@ class Records:
             self.open() # pragma: no cover
             
         with self.env.begin(write=True) as txn:
-            # Handle index assignment like SQLite implementation
-            if (entry.index is None or entry.index == 0):
-                entry.index = self.max_index + 1
             key = entry.index.to_bytes(8, 'big')
             value = self._serialize_rec(entry)
             txn.put(key, value, db=self.records_db)
@@ -219,11 +216,6 @@ class Records:
             return None
         return self.read_entry(index)
 
-    def insert_entry(self, rec: LogRec) -> LogRec:
-        """Insert entry at specific index (replace)."""
-        rec = self.save_entry(rec)
-        return rec
-
     def set_commit_index(self, index):
         if self.env is None:
             self.open() # pragma: no cover
@@ -240,6 +232,8 @@ class Records:
 
     def delete_all_from(self, index: int):
         """Delete all entries from specified index onwards."""
+        if self.snapshot and index < self.snapshot.index + 1:
+            raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
         if self.env is None:
             self.open() # pragma: no cover
             
@@ -373,6 +367,8 @@ class Records:
         """Install snapshot and prune old log entries."""
         if self.env is None:
             self.open() # pragma: no cover
+        if snapshot.index > self.max_index or snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.max_index}")
 
         # installing the snapshot in a separate transactions is fine,
         # when it is done before pruning the records
@@ -390,6 +386,7 @@ class Records:
             # Update state
             self.max_index = max(snapshot.index, self.max_index)
             self.snapshot = snapshot
+            self._save_stats(txn)
 
         # limit the number of deletes done in one transaction
         async def delete_100():
@@ -473,33 +470,15 @@ class LmdbLog(LogAPI):
         self.records.set_term(self.records.term + 1)
         return self.records.term
 
-    async def append(self, entry: LogRec) -> LogRec:
+    async def insert(self, entry: LogRec) -> LogRec:
         save_rec = LogRec.from_dict(entry.__dict__)
-        return_rec = self.records.insert_entry(save_rec)
-        #self.logger.debug("new log record %s", return_rec.index)
+        if save_rec.index == 0 or save_rec.index is None:
+            save_rec.index = self.records.max_index + 1
+        elif save_rec.index > self.records.max_index + 1:
+            raise Exception('cannont insert past last index')
+        return_rec = self.records.save_entry(save_rec)
         log_rec = LogRec.from_dict(return_rec.__dict__)
-        if return_rec.index <= self.records.max_commit:
-            return_rec.committed = True
-        if return_rec.index <= self.records.max_apply:
-            return_rec.applied = True
         return return_rec
-
-    async def replace(self, entry: LogRec) -> LogRec:
-        if entry.index is None:
-            raise Exception("api usage error, call append for new record")
-        if entry.index < 1:
-            raise Exception("api usage error, cannot insert at index less than 1")
-        save_rec = LogRec.from_dict(entry.__dict__)
-        next_index = self.records.max_index + 1
-        if save_rec.index > next_index:
-            raise Exception("cannot replace record with index {save_rec.index} greater than max record index {next_index}")
-        self.records.insert_entry(save_rec)
-        log_rec = LogRec.from_dict(save_rec.__dict__)
-        if log_rec.index <= self.records.max_commit:
-            log_rec.committed = True
-        if log_rec.index <= self.records.max_apply:
-            log_rec.applied = True
-        return log_rec
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
@@ -624,3 +603,14 @@ class LmdbLog(LogAPI):
                 snapshot_index=snapshot_index if snapshot_index > 0 else None,
                 last_record_timestamp=last_record_timestamp
             )
+
+    # Don't call this! It is only to be used by the HybridLog logic
+    # because that code uses snapshots in this log as a way of tracking
+    # archiving to a sqlite log, so there are times when a snapshot is
+    # no longer valid. If you use this it will break things, guaranteed
+    async def clear_despite_snapshot(self) -> None:
+        self.records.snapshot = None
+        self.records.first_index = None
+        self.records.max_index = 0
+
+        

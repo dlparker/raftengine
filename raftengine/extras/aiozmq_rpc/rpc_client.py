@@ -25,7 +25,11 @@ class RPCClient:
         """
         if self.aiozmq_conn is None:
             await self.connect()
-        return await self.aiozmq_conn.call.issue_command(command, timeout)
+        res = await self.aiozmq_conn.call.issue_command(command, timeout)
+        if isinstance(res, dict):
+            if "rpc_error" in res:
+                raise Exception(res['rpc_error'])
+        return res
 
     async def raft_message(self, message):
         """
@@ -35,8 +39,12 @@ class RPCClient:
         """
         if self.aiozmq_conn is None:
             await self.connect()
-        return await self.aiozmq_conn.call.raft_message(message)
-
+        res = await self.aiozmq_conn.call.raft_message(message)
+        if isinstance(res, dict):
+            if "rpc_error" in res:
+                raise Exception(res['rpc_error'])
+        return res
+    
     async def direct_server_command(self, message):
         """
         This is an optional RPC that allows user clients to perform operations
@@ -48,8 +56,12 @@ class RPCClient:
         """
         if self.aiozmq_conn is None:
             await self.connect()
-        return await self.aiozmq_conn.call.direct_server_command(message)
-
+        res = await self.aiozmq_conn.call.direct_server_command(message)
+        if isinstance(res, dict):
+            if "rpc_error" in res:
+                raise Exception(res['rpc_error'])
+        return res
+    
     async def close(self):
         """Close the client connection"""
         if self.aiozmq_conn is not None:

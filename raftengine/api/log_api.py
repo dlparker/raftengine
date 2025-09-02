@@ -143,10 +143,10 @@ class LogAPI(abc.ABC):
     - `get_voted_for()`: Returns node ID voted for in current term, or None
     
     ### Entry Operations
-    - `append(entry)`: Assigns next sequential index, stores entry, updates last_index
+    - `insert(entry)`: If entry has an index, inserts record at that index, replacing if needed. Otherwise,
+                       Assigns next sequential index, stores entry, updates last_index
     - `read(index)`: Returns entry at index, or None if index invalid/not found
     - `read()`: Returns entry at last_index, or None if log empty
-    - `replace(entry)`: Overwrites entry at entry.index, maintains same index
     - `delete_all_from(index)`: Removes all entries with index ≥ specified index
     
     ### State Updates
@@ -247,11 +247,7 @@ class LogAPI(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def append(self, record: LogRec) -> LogRec:  # pragma: no cover abstract
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def replace(self, entry: LogRec) -> LogRec:  # pragma: no cover abstract
+    async def insert(self, record: LogRec) -> LogRec:  # pragma: no cover abstract
         raise NotImplementedError
 
     @abc.abstractmethod

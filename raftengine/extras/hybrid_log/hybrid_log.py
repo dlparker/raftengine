@@ -115,41 +115,6 @@ class HybridStats:
     upstream_apply_lag: int
     copy_blocks_per_minute: float
     
-    # Backward compatibility properties
-    @property
-    def record_count(self) -> int:
-        """Backward compatibility: delegate to LMDB record count"""
-        return self.lmdb_stats.record_count
-    
-    @property
-    def records_since_snapshot(self) -> int:
-        """Backward compatibility: delegate to LMDB records since snapshot"""
-        return self.lmdb_stats.records_since_snapshot
-    
-    @property
-    def records_per_minute(self) -> float:
-        """Backward compatibility: delegate to LMDB records per minute"""
-        return self.lmdb_stats.records_per_minute
-    
-    @property
-    def percent_remaining(self) -> float:
-        """Backward compatibility: delegate to LMDB percent remaining"""
-        return self.lmdb_stats.percent_remaining
-    
-    @property
-    def total_size_bytes(self) -> int:
-        """Backward compatibility: delegate to LMDB total size"""
-        return self.lmdb_stats.total_size_bytes
-    
-    @property
-    def snapshot_index(self) -> int:
-        """Backward compatibility: delegate to LMDB snapshot index"""
-        return getattr(self.lmdb_stats, 'snapshot_index', 0)
-    
-    @property
-    def last_record_timestamp(self) -> float:
-        """Backward compatibility: delegate to LMDB last record timestamp"""
-        return getattr(self.lmdb_stats, 'last_record_timestamp', 0.0)
 
 
 LMDB_MAP_SIZE=10**9 * 2
@@ -178,10 +143,17 @@ class HybridLog(LogAPI):
     def set_hold_count(self, value):
         self.hold_count = value
 
+    def set_push_trigger(self, value):
+        self.push_trigger = value
+
+    async def set_copy_size(self, value):
+        self.copy_block_size = value
+        await self.sqlwriter.set_copy_block_size(value)
+
     async def set_snap_size(self, value):
         self.push_snap_size = value
-        await self.sqlwriter.send_snap_size(value)
-
+        await self.sqlwriter.set_snap_size(value)
+        
     # BEGIN API METHODS
     async def start(self):
         await self.lmdb_log.start()
@@ -253,20 +225,16 @@ class HybridLog(LogAPI):
     async def get_applied_index(self):
         return await self.lmdb_log.get_applied_index()
         
-    async def append(self, record: LogRec) -> None:
+    async def insert(self, record: LogRec) -> None:
         async def relieve_pressure(new_limit):
             await self.sqlwriter.send_limit(new_limit,
                                             await self.lmdb_log.get_commit_index(),
                                             await self.lmdb_log.get_applied_index())
             self.last_pressure_sent = new_limit
             logger.debug("Sent limit %d to sqlite_writer, last_pressue now equals new_limit", new_limit)
-        rec = await self.lmdb_log.append(record)
-        if record.index and record.index != rec.index:
-            print(f'\n\nRequested index == {record.index} but got {rec.index}\n\n')
+        rec = await self.lmdb_log.insert(record)
         last = await self.lmdb_log.get_last_index()
-        first = await self.lmdb_log.get_first_index()
-        if first is None:
-            first = 0
+        first = await self.lmdb_log.get_first_index() 
         local_count = last - first
         # The last_pressure_sent value is either is or will become
         # the first index. So if we have enough records in local
@@ -280,14 +248,6 @@ class HybridLog(LogAPI):
             new_limit = rec.index - self.hold_count
             asyncio.create_task(relieve_pressure(new_limit))
         await asyncio.sleep(0.0)
-        return rec
-
-    async def replace(self, entry:LogRec) -> LogRec:
-        lmdb_first = await self.lmdb_log.get_first_index()
-        if lmdb_first and entry.index > lmdb_first:
-            rec = await self.lmdb_log.replace(entry)
-            return rec
-        await self.sqlite_log.replace(rec)
         return rec
 
     async def mark_committed(self, index:int) -> None:
@@ -304,8 +264,36 @@ class HybridLog(LogAPI):
         return await self.lmdb_log.read(index)
     
     async def delete_all_from(self, index: int):
-        await self.sqlite_log.delete_all_from(index)
-        return await self.lmdb_log.delete_all_from(index)
+        snapshot = await self.sqlite_log.get_snapshot()
+        if snapshot and index < snapshot.index + 1:
+            raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
+        s_first = await self.sqlite_log.get_first_index()
+        if s_first is not None:
+            if index < s_first:
+                target = max(s_first, index)
+            else:
+                target = index
+            if target > 0:
+                s_last = await self.sqlite_log.get_last_index()
+                target = min(s_last, index)
+                await self.sqlite_log.delete_all_from(target)
+                await self.sqlwriter.send_note_delete(target - 1)
+        if index == 1:
+            self.last_pressure_sent = 0
+        else:
+            self.last_pressure_sent = min(index, self.last_pressure_sent)
+        # if it didn't blow up from a sqlite snapshot, then make sure our lmdb snapshot
+        # does't interfere cause it isn't 'real'
+        lm_snap = await self.lmdb_log.get_snapshot()
+        if not lm_snap or lm_snap.index < index:
+            # all okay, just call delete
+            await self.lmdb_log.delete_all_from(index)
+            return
+        # our delete index looks like it is in the
+        # snapshot on lmdb log, so we can't delete
+        # from there, so clear everything
+        await self.lmdb_log.clear_despite_snapshot()
+        return
 
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         await self.sqlite_log.save_cluster_config(config)
@@ -315,19 +303,17 @@ class HybridLog(LogAPI):
         return await self.lmdb_log.get_cluster_config()
     
     async def install_snapshot(self, snapshot:SnapShot):
-        await self.sqlite_log.install_snapshot(snapshot)
+        await self.sqlite_log.refresh_stats()
+        await self.sqlite_log.special_install_snapshot(snapshot)
         lm_snap = await self.lmdb_log.get_snapshot()
-        if lm_snap and lm_snap.index > snapshot.index:
+        if lm_snap and lm_snap.index >= snapshot.index:
             # sqlite write snapshot already cleared records
-            # past the end of the new "real" snapshot,
+            # at or past the end of the new "real" snapshot,
             # so lmdb does not change
-            return
+            return snapshot
         lmdb_first = await self.lmdb_log.get_first_index()
         lmdb_last = await self.lmdb_log.get_last_index()
-        if lmdb_first is None and lmdb_last == 0:
-            # empty log, install in lmdb too
-            await self.lmdb_log.install_snapshot(snapshot)
-        elif lmdb_first and snapshot.index > lmdb_first:
+        if lmdb_first and snapshot.index > lmdb_first:
             await self.lmdb_log.install_snapshot(snapshot)
         return snapshot
             
@@ -391,7 +377,10 @@ class HybridLog(LogAPI):
         else:
             record_count = lmdb_last - sqlite_first + 1
             first_index = sqlite_first
-        snap_index =  sqlite_stats.snapshot_index
+        snap_index = None
+        snapshot = await self.sqlite_log.get_snapshot()
+        if snapshot:
+            snap_index = snapshot.index
         if snap_index is not None:
             records_since = lmdb_last - snap_index 
         else:
@@ -405,7 +394,7 @@ class HybridLog(LogAPI):
             records_per_minute=lmdb_stats.records_per_minute,
             percent_remaining=None,  # SQLite has unlimited storage
             total_size_bytes=lmdb_stats.total_size_bytes + sqlite_stats.total_size_bytes,
-            snapshot_index=sqlite_stats.snapshot_index,
+            snapshot_index=snap_index,
             last_record_timestamp=lmdb_stats.last_record_timestamp,
             extra_stats=await self.get_hybrid_stats()
         )

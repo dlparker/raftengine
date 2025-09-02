@@ -99,7 +99,18 @@ class SqliteWriterControl:
         
     async def set_snap_size(self, size):
         self.snap_size = size
-        command = dict(command='snap_size', size=size)
+        if self.writer:
+            command = dict(command='snap_size', size=size)
+            await self.send_command(command)
+        
+    async def set_copy_block_size(self, size):
+        self.copy_block_size = size
+        if self.writer:
+            command = dict(command='copy_block_size', size=size)
+            await self.send_command(command)
+        
+    async def send_note_delete(self, new_last):
+        command = dict(command='note_delete', new_last=new_last)
         await self.send_command(command)
         
     async def send_quit(self):
@@ -201,6 +212,21 @@ class SqliteWriter:
     async def set_snap_size(self, size):
         self.snap_size = size
         
+    async def adjust_to_new_last(self, new_last):
+        await self.sqlite.refresh_stats()
+        new_pending = []
+        self.last_snap_index = min(new_last, self.last_snap_index)
+        for pending in self.pending_snaps:
+            if pending.index > new_last:
+                new_pending.append(pending)
+                if self.last_snap_index < pending.index:
+                    self.last_snap_index = pending.index
+        self.pending_snaps = new_pending
+        self.upstream_commit_index = min(new_last, self.upstream_commit_index)
+        self.upstream_apply_index = min(new_last, self.upstream_apply_index)
+        logger.debug("after note delete last_snap_index = %d, pending_count = %d, last_commit = %d, last_apply = %d",
+                     self.last_snap_index, len(new_pending), self.upstream_commit_index, self.upstream_apply_index)
+        
     async def set_copy_limit(self, props):
         limit = props['limit']
         self.upstream_commit_index = props['commit_index']
@@ -208,6 +234,7 @@ class SqliteWriter:
         self.copy_limit = limit
         if not self.copy_task_handle:
             self.copy_task_handle = asyncio.create_task(self.copy_task())
+            logger.debug("Started copy task with limit %d", limit)
         if self.pending_snaps:
             return self.pending_snaps.pop(0)
         return None
@@ -235,7 +262,10 @@ class SqliteWriter:
     
     async def copy_task(self):
         try:
-            my_last = await self.sqlite.get_last_index() 
+            await self.sqlite.refresh_stats()
+            my_last = await self.sqlite.get_last_index()
+            logger.debug("SqliteWriterService copy task starting with last index %d, limit = %d copy_block_size %d",
+                         my_last, self.copy_limit, self.copy_block_size)
             while my_last < self.copy_limit:
                 if self.copy_limit - my_last < self.copy_block_size:
                     await asyncio.sleep(0.001)
@@ -258,11 +288,12 @@ class SqliteWriter:
                     if rec.term > local_term:
                         local_term = rec.term
                         await self.sqlite.set_term(local_term)
-                    await self.sqlite.append(rec)
-                logger.debug("SqliteWriterService copy task finished copying from %d to %d", my_last, limit_index)
+                    await self.sqlite.insert(rec)
                 # update local stats from new record efects
                 max_index = await self.sqlite.get_last_index()
                 max_term = await self.sqlite.get_last_term()
+                logger.debug("SqliteWriterService copy task finished copying from %d to %d, max_index = %d, last snap = %d",
+                             my_last, limit_index, max_index, self.last_snap_index)
                 await self.sqlite.set_term(max_term)
                 local_commit = await self.sqlite.get_commit_index()
                 local_apply = await self.sqlite.get_applied_index()
@@ -400,7 +431,17 @@ class SqliteWriterService:
                         await asyncio.sleep(0.1)
                         break
                     elif request['command'] == 'snap_size':
-                        await self.sqlwriter.set_snap_size(request['size'])
+                        new_size = int(request['size'])
+                        logger.debug("SqliteWriterService got new snap_size %d", new_size)
+                        await self.sqlwriter.set_snap_size(new_size)
+                    elif request['command'] == 'copy_block_size':
+                        new_size = int(request['size'])
+                        logger.debug("SqliteWriterService got new copy_block_size %d", new_size)
+                        self.sqlwriter.copy_block_size(new_size)
+                    elif request['command'] == 'note_delete':
+                        new_last = int(request['new_last'])
+                        logger.debug("SqliteWriterService got new last index %d after delete", new_last)
+                        await self.sqlwriter.adjust_to_new_last(new_last)
                     elif request['command'] == 'pop_snap':
                         # really just for testing:
                         #logger.debug('looking for snap to pop')
@@ -410,6 +451,7 @@ class SqliteWriterService:
                             await self.send_message(code="snapshot", message=snapshot)
                     elif request['command'] == 'copy_limit':
                         res = await self.sqlwriter.set_copy_limit(request)
+                        logger.debug("SqliteWriterService got copy limit")
                         if res:
                             # this will be a snapshot if anything
                             logger.debug('sending %s', str(res))

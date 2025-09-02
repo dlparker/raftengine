@@ -27,9 +27,9 @@ async def inner_log_test_basic(log_create, log_close_and_reopen):
     assert await log.read() is None
     await log.set_term(1)
     rec_1 = LogRec(term=1, command="add 1")
-    res_rec_1 = await log.append(rec_1)
+    res_rec_1 = await log.insert(rec_1)
     rec_2 = LogRec(term=1, command="add 2")
-    res_rec_2 = await log.append(rec_2)
+    res_rec_2 = await log.insert(rec_2)
     assert await log.get_first_index() == 1
     assert await log.get_last_index() == 2
     assert await log.get_last_term() == 1
@@ -61,7 +61,7 @@ async def inner_log_test_basic(log_create, log_close_and_reopen):
         if i == 19:
             await log.set_term(5)
         rec = LogRec(term=await log.get_term(), command=f"add {i}", serial=i)
-        rec = await log.append(rec)
+        rec = await log.insert(rec)
         last_rec = rec
 
         if i == 19:
@@ -79,24 +79,21 @@ async def inner_log_test_basic(log_create, log_close_and_reopen):
     last_rec = await log.read()
     assert last_rec.index == 3
 
-    # now change something about it and call replace
+    # now change something about it and call insert again
     last_rec.command = "foobar"
-    await log.replace(last_rec)
+    await log.insert(last_rec)
     last_rec_re_read = await log.read(last_rec.index)
     assert last_rec_re_read.command == "foobar"
     
     
     with pytest.raises(Exception):
         await log.read(-3)
-    bad_rec = LogRec(index=None, term=await log.get_term(), command=f"add -1", serial=0)
+    bad_rec = LogRec(index=-1, term=await log.get_term(), command=f"add -1", serial=0)
     with pytest.raises(Exception):
-        await log.replace(bad_rec)
-    bad_rec.index = -1
-    with pytest.raises(Exception):
-        await log.replace(bad_rec)
+        await log.insert(bad_rec)
     bad_rec.index = 100
     with pytest.raises(Exception):
-        await log.replace(bad_rec)
+        await log.insert(bad_rec)
 
     await log.set_voted_for('uri:1')
     await log.set_broken()
@@ -141,9 +138,6 @@ async def inner_log_test_basic(log_create, log_close_and_reopen):
     xx = await reopened_log.read(1)
     assert xx.applied
 
-
-    
-    
     await reopened_log.stop()
 
 async def inner_log_test_deletes(log_create, log_close_and_reopen):
@@ -154,7 +148,7 @@ async def inner_log_test_deletes(log_create, log_close_and_reopen):
     next_i = 1
     while next_i < 11:
         rec = LogRec(command=f"add {next_i}", serial=next_i)
-        new_rec = await log.append(rec)
+        new_rec = await log.insert(rec)
         assert new_rec.index == next_i
         next_i += 1
     assert await log.get_last_index() == 10
@@ -169,6 +163,18 @@ async def inner_log_test_deletes(log_create, log_close_and_reopen):
     x = await log.get_last_index() 
     assert await log.get_last_index() == 0
 
+    next_i = 1
+    while next_i < 11:
+        rec = LogRec(command=f"add {next_i}", serial=next_i)
+        new_rec = await log.insert(rec)
+        assert new_rec.index == next_i
+        next_i += 1
+    assert await log.get_last_index() == 10
+    # the code path is different than for delete from 0
+    await log.delete_all_from(1)
+    x = await log.get_last_index() 
+    assert await log.get_last_index() == 0
+    
     await log.stop()
 
 async def inner_log_test_snapshots(log_create, log_close_and_reopen):
@@ -179,7 +185,7 @@ async def inner_log_test_snapshots(log_create, log_close_and_reopen):
     next_i = 1
     while next_i < 101:
         rec = LogRec(command=f"add {next_i}", serial=next_i)
-        new_rec = await log.append(rec)
+        new_rec = await log.insert(rec)
         assert new_rec.index == next_i
         next_i += 1
 
@@ -227,13 +233,17 @@ async def inner_log_test_snapshots(log_create, log_close_and_reopen):
     assert await log.get_last_term() == 2 # should be read from shapshot term
     
     rec = LogRec(command=f"add {pre_snap_index + 1}", serial=pre_snap_index)
-    await log.append(rec)
+    await log.insert(rec)
     assert await log.get_last_index() == pre_snap_index + 1
     assert await log.get_first_index() == pre_snap_index + 1
-    
 
-    await log.delete_all_from(await log.get_first_index())
-    assert await log.get_first_index() is None
+    with pytest.raises(Exception):
+        await log.delete_all_from(1)
+
+    first = await log.get_first_index()
+    await log.delete_all_from(first)
+    new_first = await log.get_first_index()
+    assert new_first is None
     assert await log.get_last_index() == snapshot3.index
 
 
@@ -307,7 +317,7 @@ async def inner_log_perf_run(log_create, loops=10000):
 
     times = {
         'loop': [],
-        'append': [],
+        'insert': [],
         'read': [],
         'commit': [],
         'apply': [],
@@ -321,9 +331,9 @@ async def inner_log_perf_run(log_create, loops=10000):
         #   4. apply it
         loop_start = time.perf_counter()
         rec = LogRec(command=f"add {loop_count}", serial=loop_count)
-        append_start = time.perf_counter()
-        save_rec = await log.append(rec)
-        append_end = time.perf_counter()
+        insert_start = time.perf_counter()
+        save_rec = await log.insert(rec)
+        insert_end = time.perf_counter()
         read_start = time.perf_counter()
         read_rec = await log.read(save_rec.index)
         read_end = time.perf_counter()
@@ -337,7 +347,7 @@ async def inner_log_perf_run(log_create, loops=10000):
         assert await log.get_applied_index() == read_rec.index
         loop_end = time.perf_counter()
         times['loop'].append(loop_end-loop_start)
-        times['append'].append(append_end-append_start)
+        times['insert'].append(insert_end-insert_start)
         times['read'].append(read_end-read_start)
         times['commit'].append(commit_end-commit_start)
         times['apply'].append(apply_end-apply_start)

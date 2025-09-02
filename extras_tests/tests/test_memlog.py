@@ -42,10 +42,10 @@ async def test_memory_specific():
 
     for i in range(log.max_timestamps):
         rec = LogRec(command=f"add {i}", serial=i)
-        await log.append(rec)
+        await log.insert(rec)
     assert len(log.record_timestamps) == log.max_timestamps
     for i in range(1000, 1010):
         rec = LogRec(command=f"add {i}", serial=i)
-        await log.append(rec)
+        await log.insert(rec)
     assert len(log.record_timestamps) == log.max_timestamps
         

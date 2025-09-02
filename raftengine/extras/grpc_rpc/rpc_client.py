@@ -75,7 +75,8 @@ class RPCClient:
         
         # Fire-and-forget: spawn task and return immediately
         asyncio.create_task(send_message())
-        return
+        return None
+
 
     async def direct_server_command(self, command):
         """

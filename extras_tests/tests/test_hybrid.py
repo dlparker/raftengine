@@ -7,7 +7,7 @@ import time
 
 import pytest
 from raftengine.api.log_api import LogRec
-from raftengine.api.log_api import LogRec
+from raftengine.api.snapshot_api import SnapShot
 from raftengine.extras.hybrid_log import HybridLog
 from log_common import (inner_log_test_basic, inner_log_perf_run,
                     inner_log_test_deletes, inner_log_test_snapshots,
@@ -60,59 +60,95 @@ async def seq1(use_in_process=False):
     
     # Use controlled tuning parameters for predictable behavior
     if use_in_process:
-        log = HL(path, hold_count=10, push_trigger=5, push_snap_size=5, copy_block_size=3)
+        log = HL(path) 
     else:
-        log = HybridLog(path, hold_count=10, push_trigger=5, push_snap_size=5, copy_block_size=3)
+        log = HybridLog(path)
+
+    hold_count = 10
+    push_trigger = 5
+    copy_size = 3
+    snap_size = 5
+    log.set_hold_count(hold_count)
+    log.set_push_trigger(push_trigger)
+    await log.set_copy_size(copy_size)
+    await log.set_snap_size(snap_size)
     await log.start()
 
+    stats = await log.get_stats()
+    assert stats.extra_stats.current_pressure == -hold_count
     try:
         await log.set_term(1)
-        
-        # Write records to trigger archiving
-        # We need to write enough records so that:
-        # local_count - last_pressure_sent - hold_count >= push_trigger
-        # Starting with last_pressure_sent = 0, we need local_count >= hold_count + push_trigger = 15
-        
-        for i in range(1, 20):  # Write 19 records
-            new_rec = LogRec(command=f"add {i}", serial=i, term=1)
-            rec = await log.append(new_rec)
-            await log.mark_committed(i)
-            await log.mark_applied(i)
-            
-            # Check if archiving has been triggered by monitoring first_index change
-            if i >= 15:  # After we've written enough to trigger archiving
-                await asyncio.sleep(0.1)  # Give time for async processing
-                
-        # Wait for snapshot processing to complete
-        start_time = time.time()
-        original_first_index = await log.get_first_index()
-        while time.time() - start_time < 2.0:
-            await asyncio.sleep(0.05)
-            current_first_index = await log.get_first_index()
-            if current_first_index != original_first_index:
-                break
-            # Trigger snapshot processing if needed
-            await log.sqlwriter.send_command(dict(command="pop_snap"))
-        
-        # Verify that archiving occurred
-        final_first_index = await log.get_first_index()
-        assert final_first_index != original_first_index, f"First index should have changed from {original_first_index}"
-        
-        # Verify snapshot was created in LMDB
-        snap = await log.lmdb_log.get_snapshot()
+
+        trigger_offset = hold_count + push_trigger
+        needed_index = None
+        async def fill_to_snap():
+            # Write just enough records to trigger archiving
+            # local_count - last_pressure_sent - hold_count >= push_trigger
+            # Starting with last_pressure_sent = 0, we need local_count > hold_count + push_trigger = 16
+            start_index = await log.get_last_index() + 1
+            needed_index = start_index + trigger_offset
+            #print(f"\n\nadding records from {start_index} to {needed_index}\n\n")
+            for i in range(start_index, needed_index+1):  
+                new_rec = LogRec(index=i, command=f"add {i}", serial=i, term=1)
+                rec = await log.insert(new_rec)
+                #print(f"added rec {rec}")
+                await log.mark_committed(i)
+                await log.mark_applied(i)
+
+            # Wait for snapshot processing to complete
+            start_time = time.time()
+            while time.time() - start_time < 0.5 and await log.lmdb_log.get_snapshot() is None:
+                await asyncio.sleep(0.05)
+                # Normally snapshots are returned when new data is sent to the sqlwriter,
+                # but we may have stopped right on the boarder for that, so let's
+                # use the test support mechanism for triggering snapshot delivery.
+                await log.sqlwriter.send_command(dict(command="pop_snap"))
+
+        await fill_to_snap()
+        snap = await log.lmdb_log.get_snapshot() 
+        assert snap is not None, "Snapshot should exist in LMDB"
+        assert snap.index == snap_size, f"Snapshot index {snap.index} should be {snap_size}"
+
+        # Verify that we can read a record that is prior to the snapshot, will get it from sqlite
+        assert await log.read(snap.index - 1) is not None
+
+        # Clear the log, make sure both sub logs are clear, should not have trouble due to archive snapshot
+        await log.delete_all_from(1)
+        assert await log.lmdb_log.get_last_index() == 0
+        assert await log.lmdb_log.get_first_index() is None
+
+        assert await log.sqlite_log.get_last_index() == 0
+        assert await log.sqlite_log.get_first_index() is None
+
+        # fill it up again
+        await fill_to_snap()
+        snap = await log.lmdb_log.get_snapshot() 
         assert snap is not None, "Snapshot should exist in LMDB"
         
-        # Verify snapshot index is reasonable (should be around push_snap_size records)
-        expected_snap_index = original_first_index + log.push_snap_size - 1
-        assert snap.index == expected_snap_index, f"Snapshot index {snap.index} should be {expected_snap_index}"
-        
-        # The key assertion is that archiving occurred - snapshot exists and first_index changed
-        print(f"Success: Archiving triggered. First index changed from {original_first_index} to {final_first_index}")
-        print(f"Snapshot created with index {snap.index}")
-        
-        # Note: sqlite_log commit/apply indices may be different from snapshot index
-        # as they track different aspects of the system state
+        # If we do a snapshot for the index that matches the last internal snapshot, meaning that the
+        # lmdb_log already has a snapshot to sqlite that convers it, then the lmdb_log first should not
+        # change
+        internal_snap = await log.lmdb_log.get_snapshot()
+        first_index = await log.lmdb_log.get_first_index()
+        snsh = SnapShot(index=internal_snap.index, term=1)
+        await log.install_snapshot(snsh)
+        assert first_index == await log.lmdb_log.get_first_index()
 
+
+        # install a snapshot that empties the actual records in both logs
+        last_index = await log.get_last_index()
+        empty_snap = SnapShot(index=last_index, term=1)
+        await log.install_snapshot(empty_snap)
+        assert await log.lmdb_log.get_first_index() is None
+        assert await log.sqlite_log.get_first_index() is None
+        assert await log.get_first_index() is None
+
+        assert await log.lmdb_log.get_last_index() == last_index
+        assert await log.sqlite_log.get_last_index()  == last_index
+        assert await log.get_last_index()  == last_index
+        
+
+  
     finally:
         await log.stop()
     
@@ -139,7 +175,7 @@ async def test_enhanced_stats():
         # Add records to generate some statistics
         for i in range(1, 15):
             new_rec = LogRec(command=f"stats_test {i}", serial=i, term=1)
-            await log.append(new_rec)
+            await log.insert(new_rec)
             await log.mark_committed(i)
             await log.mark_applied(i)
             await asyncio.sleep(0.05)  # Small delay to allow processing

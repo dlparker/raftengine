@@ -43,7 +43,7 @@ async def test_mp_clients():
         # write one record first to bypass annoying first_index = None problem
         for index in range(1, 10000+1):
             new_rec = LogRec(command=f"add {index}", serial=index)
-            rec = await log.append(new_rec)
+            rec = await log.insert(new_rec)
         
         # make sure commit and apply get updated properly in sqlite
         await asyncio.sleep(0.01)
@@ -133,7 +133,7 @@ class LogServer:
                 value = command.get('value', 0)
                 client_id = command.get('client_id', 'unknown')
                 log_rec = LogRec(command=f"add {value}", serial=value)
-                result = await self.log.append(log_rec)
+                result = await self.log.insert(log_rec)
                 
                 # Send success response
                 response = {'status': 'success', 'index': result.index}

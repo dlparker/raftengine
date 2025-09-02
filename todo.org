@@ -22,6 +22,13 @@
    7. [] raftengine[bi_lmdb] same as bi_min but adds lmdb
    8. [] raftengine[bi_lmdb_aiozmq] same as bi_min but adds lmdb and aiozmq
    9. [] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
+9. Once example is fixed to use new rpc setup, see if restarting servers in process works
+   because the client close was commented out, which is probably why the servers couldn't
+   open their ports. Figure out why I commented out the close and fix the real problem.
+
+       
+
+
 
    
    

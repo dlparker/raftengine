@@ -1,5 +1,6 @@
 import asyncio
 import aiozmq.rpc
+import traceback
 
 class RPCServer(aiozmq.rpc.AttrHandler):
 
@@ -40,17 +41,26 @@ class RPCServer(aiozmq.rpc.AttrHandler):
 
     @aiozmq.rpc.method
     async def issue_command(self, command, timeout):
-        result = await self.raft_server.issue_command(command, timeout)
+        try:
+            result = await self.raft_server.issue_command(command, timeout)
+        except:
+            result = dict(rpc_error=traceback.format_exc())
         return result
 
     @aiozmq.rpc.method
     async def raft_message(self, message):
-        result = await self.raft_server.raft_message(message)
+        try:
+            result = await self.raft_server.raft_message(message)
+        except:
+            result = dict(rpc_error=traceback.format_exc())
         return result
 
     @aiozmq.rpc.method
     async def direct_server_command(self, command):
-        result = await self.raft_server.direct_server_command(command)
+        try:
+            result = await self.raft_server.direct_server_command(command)
+        except:
+            result = dict(rpc_error=traceback.format_exc())
         return result
 
 
