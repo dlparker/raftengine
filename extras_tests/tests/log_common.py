@@ -191,6 +191,17 @@ async def inner_log_test_snapshots(log_create, log_close_and_reopen):
 
     pre_snap_index = await log.get_last_index()
     assert pre_snap_index == 100
+    with pytest.raises(Exception):
+        bad_snap = SnapShot(pre_snap_index +1, 1)
+        await log.install_snapshot(bad_snap)
+        
+    with pytest.raises(Exception):
+        bad_snap = SnapShot(0, 1)
+        await log.install_snapshot(bad_snap)
+        
+    with pytest.raises(Exception):
+        await log.delete_all_from(pre_snap_index + 2)
+        
     snapshot = SnapShot(pre_snap_index - 50, 1)
     await log.install_snapshot(snapshot)
     rs = await log.get_snapshot()

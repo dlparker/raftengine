@@ -75,9 +75,9 @@ class SqliteWriterControl:
         if self.writer_task:
             try:
                 self.writer_task.cancel()
-            except asyncio.CancelledError:
+            except asyncio.CancelledError: # pragma: no cover   almost impossible to test
                 pass
-            except ConnectionResetError:
+            except ConnectionResetError: # pragma: no cover   almost impossible to test
                 pass
 
     async def send_command(self, command):
@@ -88,13 +88,17 @@ class SqliteWriterControl:
             self.writer.write(f"{count:20s}".encode())
             self.writer.write(msg_bytes)
             await self.writer.drain()
-        except asyncio.CancelledError:
+        except asyncio.CancelledError: # pragma: no cover   almost impossible to test
             pass
         except ConnectionResetError:
             logger.warning(traceback.format_exc())
         
     async def send_limit(self, limit, commit_index, apply_index):  
         command = dict(command='copy_limit', limit=limit, commit_index=commit_index, apply_index=apply_index)
+        await self.send_command(command)
+        
+    async def send_hard_push(self, last_index, commit_index, apply_index):  
+        command = dict(command='hard_push', last_index=last_index, commit_index=commit_index, apply_index=apply_index)
         await self.send_command(command)
         
     async def set_snap_size(self, size):
@@ -145,11 +149,14 @@ class SqliteWriterControl:
                         snap = msg_wrapper['message']
                         snapshot = SnapShot(snap['index'], snap['term'])
                         logger.debug('\n--------------------\nhandling reply snapshot %s\n----------------------\b', str(snapshot))
-                        asyncio.create_task(self.callback("snapshot", snapshot))
+                        await self.callback("snapshot", snapshot)
                     elif msg_wrapper['code'] == "stats":
                         stats = msg_wrapper['message']
                         logger.debug('handling reply stats %s', stats)
                         asyncio.create_task(self.callback("stats", stats))
+                    elif msg_wrapper['code'] == "fatal_error":
+                        logger.debug("Got error in backchannel \n%s", msg_wrapper['message'])
+                        raise Exception(f"Error from sqlwriter \n {msg_wrapper['message']}")
                     else:
                         logger.error('\n--------------------\nhandling reply message code unknown %s\n----------------------\b',
                                      msg_wrapper['code'])
@@ -239,6 +246,9 @@ class SqliteWriter:
             return self.pending_snaps.pop(0)
         return None
     
+    async def hard_push(self, props):
+        return await self.hard_push_task()
+    
     async def get_stats(self) -> dict:
         """Get writer-side statistics"""
         import time
@@ -260,40 +270,43 @@ class SqliteWriter:
             'copy_blocks_per_minute': copy_blocks_per_minute
         }
     
+    async def copy_block(self, first_index, last_index):
+        logger.debug("SqliteWriterService copy task copying from %d to %d", first_index, last_index)
+        recs = []
+        for index in range(first_index, last_index+1):
+            rec = await self.lmdb.read(index)
+            if rec:
+                recs.append(rec)
+        local_term = await self.sqlite.get_term()
+        for rec in recs:
+            if rec.term > local_term:
+                local_term = rec.term
+                await self.sqlite.set_term(local_term)
+            await self.sqlite.insert(rec)
+        # update local stats from new record efects
+        logger.debug("SqliteWriterService copy block finished copying from %d to %d",
+                     first_index, last_index)
+        return 
+        
     async def copy_task(self):
         try:
+            if self.lmdb.records is not None: 
+                await self.lmdb.stop()
+            await self.lmdb.start()
             await self.sqlite.refresh_stats()
             my_last = await self.sqlite.get_last_index()
+            if my_last == 0:
+                my_last = 1
             logger.debug("SqliteWriterService copy task starting with last index %d, limit = %d copy_block_size %d",
                          my_last, self.copy_limit, self.copy_block_size)
             while my_last < self.copy_limit:
+                # something to copy, but we  honor setting to only copy when enough pending
                 if self.copy_limit - my_last < self.copy_block_size:
                     await asyncio.sleep(0.001)
                     continue
-                if self.lmdb.records is not None:  # Avoid error on first call
-                    await self.lmdb.stop()
-                    await self.lmdb.start()
-                limit_index = my_last + self.copy_block_size
-                recs = []
-                logger.debug("SqliteWriterService copy task copying from %d to %d", my_last, limit_index)
-                for index in range(my_last, limit_index+1):
-                    if index == 0:
-                        continue # indices start from 1
-                    rec = await self.lmdb.read(index)
-                    if rec:
-                        recs.append(rec)
-                await self.lmdb.stop()
-                local_term = await self.sqlite.get_term()
-                for rec in recs:
-                    if rec.term > local_term:
-                        local_term = rec.term
-                        await self.sqlite.set_term(local_term)
-                    await self.sqlite.insert(rec)
-                # update local stats from new record efects
+                await self.copy_block(my_last, self.copy_limit)
                 max_index = await self.sqlite.get_last_index()
                 max_term = await self.sqlite.get_last_term()
-                logger.debug("SqliteWriterService copy task finished copying from %d to %d, max_index = %d, last snap = %d",
-                             my_last, limit_index, max_index, self.last_snap_index)
                 await self.sqlite.set_term(max_term)
                 local_commit = await self.sqlite.get_commit_index()
                 local_apply = await self.sqlite.get_applied_index()
@@ -323,11 +336,54 @@ class SqliteWriter:
                 
                 my_last = await self.sqlite.get_last_index()
         except Exception as e:
-            logger.error(traceback.format_exc())
-            raise e
-
+            await self.writer_service.report_fatal_error(traceback.format_exc())
+            self.copy_task_handle = None
+            await self.stop()
+            
         self.copy_task_handle = None
-    
+                    
+    async def hard_push_task(self):
+        try:
+            if self.lmdb.records is not None: 
+                await self.lmdb.stop()
+            await self.lmdb.start()
+            await self.sqlite.refresh_stats()
+            sqlite_last = await self.sqlite.get_last_index()
+            lmdb_last = await self.lmdb.get_last_index()
+            if sqlite_last == lmdb_last:
+                return
+            copied = 0
+            start_index = sqlite_last + 1
+            end_index = lmdb_last
+            logger.debug("Starting hard push loop for index %d to %d", start_index, end_index)
+            copied = 0
+            while start_index < end_index:
+                to_copy = end_index - start_index 
+                if to_copy > self.copy_limit:
+                    to_copy = self.copy_limit
+                await self.copy_block(start_index, start_index + to_copy)
+                copied += to_copy
+                # We have to restart lmdb because there is some issue
+                # with multiprocess access, our copy gets stale
+                await self.lmdb.stop() 
+                await self.lmdb.start()
+                end_index = await self.lmdb.get_last_index()
+                start_index = await self.sqlite.get_last_index() + 1
+            if copied > 0:
+                snap_index = end_index
+                snap_rec = await self.sqlite.read(snap_index)
+                snapshot = SnapShot(snap_rec.index, snap_rec.term)
+                self.pending_snaps.append(snapshot)
+                self.last_snap_index = snap_rec.index
+                logger.debug('appended pending snapshot %s', str(snapshot))
+            while self.pending_snaps:
+                snap = self.pending_snaps.pop(0)
+                logger.debug('sending %s', str(snap))
+                await self.writer_service.send_message(code="snapshot", message=snap)
+            return 
+        except:
+            logger.error("Hard push task got error\n%s", traceback.format_exc())
+            
 
 def writer_process(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
     # this is the main function of the writer process
@@ -360,7 +416,7 @@ class SqliteWriterService:
         self.shutdown_event = asyncio.Event()
         self.running = False
         self.writer = None
-        self.writer = None
+        self.reader = None
 
     async def start(self):
         self.running = True
@@ -387,6 +443,21 @@ class SqliteWriterService:
         
     async def stop(self):
         self.shutdown_event.set()
+
+    async def report_fatal_error(self, error):
+        try:
+            await self.send_message('fatal_error', error)
+            logger.error('Reporting fatal error \n%s', error)
+        except:
+            logger.error('Trying to report fatal error got %s', traceback.format_exc())
+        try:
+            await self.stop()
+        except:
+            if self.sock_server:
+                try:
+                    self.sock_server.close()
+                except:
+                    pass
                 
     async def send_message(self, code, message):
         wrapper = dict(code=code, message=message)
@@ -397,74 +468,91 @@ class SqliteWriterService:
         self.writer.write(msg)
         await self.writer.drain()
         
+    async def get_request(self):
+        len_data = await self.reader.read(20)
+        if not len_data:
+            logger.debug("SqliteWriterService got None on initial read")
+            return None
+        msg_len = int(len_data.decode().strip())
+        # Read message data
+        data = await self.reader.read(msg_len)
+        if not data:
+            logger.debug("SqliteWriterService got None on length read")
+            return None
+        request = json.loads(data.decode())
+        return request
+
+    async def handle_request(self, request):
+        if request['command'] == 'quit':
+            logger.info("quitting on command")
+            await self.send_message(code="quitting", message="")
+            await asyncio.sleep(0.1)
+            return False
+        elif request['command'] == 'snap_size':
+            new_size = int(request['size'])
+            logger.debug("SqliteWriterService got new snap_size %d", new_size)
+            await self.sqlwriter.set_snap_size(new_size)
+            return True
+        elif request['command'] == 'copy_block_size':
+            new_size = int(request['size'])
+            logger.debug("SqliteWriterService got new copy_block_size %d", new_size)
+            self.sqlwriter.copy_block_size = int(new_size)
+            return True
+        elif request['command'] == 'note_delete':
+            new_last = int(request['new_last'])
+            logger.debug("SqliteWriterService got new last index %d after delete", new_last)
+            await self.sqlwriter.adjust_to_new_last(new_last)
+            return True
+        elif request['command'] == 'pop_snap':
+            # really just for testing:
+            #logger.debug('looking for snap to pop')
+            if self.sqlwriter.pending_snaps:
+                snapshot = self.sqlwriter.pending_snaps.pop(0)
+                logger.debug('sending popped snap %s', str(snapshot))
+                await self.send_message(code="snapshot", message=snapshot)
+            return True
+        elif request['command'] == 'copy_limit':
+            res = await self.sqlwriter.set_copy_limit(request)
+            logger.debug("SqliteWriterService got copy limit")
+            if res:
+                # this will be a snapshot if anything
+                logger.debug('sending %s', str(res))
+                await self.send_message(code="snapshot", message=res)
+            return True
+        elif request['command'] == 'hard_push':
+            logger.debug("SqliteWriterService got hard push")
+            res = await self.sqlwriter.hard_push(request)
+            if res:
+                # this will be a snapshot if anything
+                logger.debug('sending %s', str(res))
+                await self.send_message(code="snapshot", message=res)
+            return True
+        elif request['command'] == 'get_stats':
+            stats = await self.sqlwriter.get_stats()
+            await self.send_message(code="stats", message=stats)
+            return True
+        raise Exception(f'Got request of unknown type {request}')
+        
     async def handle_client(self, reader, writer):
         # intended to handle exactly one connection, more is improper usage
         logger.debug("SqliteWriterService connection from %s", writer.get_extra_info("peername"))
         self.writer = writer
+        self.reader = reader
         while self.running:
             try:
-                #logger.debug("SqliteWriterService reading for length")
-                len_data = await reader.read(20)
-                #logger.debug("SqliteWriterService got length data %s", len_data)
-                if not len_data:
-                    logger.debug("SqliteWriterService got None on read")
-                    break
-                msg_len = int(len_data.decode().strip())
-                #logger.debug("SqliteWriterService got length msg_len %d", msg_len)
-                
-                # Read message data
-                data = await reader.read(msg_len)
-                #logger.debug("SqliteWriterService got msg data %s", data)
-                if not data:
-                    logger.debug("SqliteWriterService got None on read")
-                    break
                 try:
-                    request = json.loads(data.decode())
-                except:
-                    logger.error(f'JSON failure on data {data.decode()}')
-                    break
-                try:
-                    #logger.debug("SqliteWriterService got request %s", request)
-                    if request['command'] == 'quit':
-                        logger.info("quitting on command")
-                        await self.send_message(code="quitting", message="")
-                        await asyncio.sleep(0.1)
+                    # Doing the work via these methods makes it much
+                    # easier to write tests for the code in them..
+                    request = await self.get_request()
+                    if request is None:
                         break
-                    elif request['command'] == 'snap_size':
-                        new_size = int(request['size'])
-                        logger.debug("SqliteWriterService got new snap_size %d", new_size)
-                        await self.sqlwriter.set_snap_size(new_size)
-                    elif request['command'] == 'copy_block_size':
-                        new_size = int(request['size'])
-                        logger.debug("SqliteWriterService got new copy_block_size %d", new_size)
-                        self.sqlwriter.copy_block_size(new_size)
-                    elif request['command'] == 'note_delete':
-                        new_last = int(request['new_last'])
-                        logger.debug("SqliteWriterService got new last index %d after delete", new_last)
-                        await self.sqlwriter.adjust_to_new_last(new_last)
-                    elif request['command'] == 'pop_snap':
-                        # really just for testing:
-                        #logger.debug('looking for snap to pop')
-                        if self.sqlwriter.pending_snaps:
-                            snapshot = self.sqlwriter.pending_snaps.pop(0)
-                            logger.debug('sending popped snap %s', str(snapshot))
-                            await self.send_message(code="snapshot", message=snapshot)
-                    elif request['command'] == 'copy_limit':
-                        res = await self.sqlwriter.set_copy_limit(request)
-                        logger.debug("SqliteWriterService got copy limit")
-                        if res:
-                            # this will be a snapshot if anything
-                            logger.debug('sending %s', str(res))
-                            await self.send_message(code="snapshot", message=res)
-                    elif request['command'] == 'get_stats':
-                        stats = await self.sqlwriter.get_stats()
-                        await self.send_message(code="stats", message=stats)
-                    else:
-                        # never heard of itn
-                        logger.warning(f'Got request of unknown type {request}')
+                    go_flag = await self.handle_request(request)
+                    if not go_flag:
+                        break
+                    #logger.debug("SqliteWriterService got request %s", request)
                 except:
-                    logger.error("Error processing request %s\n%s", request, traceback.format_exc())
-                    break
+                    msg = f"Error processing request {request}\n{traceback.format_exc()}"
+                    return await self.report_fatal_error(msg)
             except asyncio.CancelledError:
                 logger.warning("SqliteWriterService handler canceled")
                 break
@@ -472,8 +560,8 @@ class SqliteWriterService:
                 logger.error("SqliteWriterService handler error \n%s", traceback.format_exc())
                 break
             except Exception:
-                logger.error("SqliteWriterService handler error \n%s", traceback.format_exc())
-                break
+                msg = f"SqliteWriterService handler error\n{traceback.format_exc()}"
+                return await self.report_fatal_error(msg)
         await self.stop()
         logger.warning("SqliteWriterService handler exiting")
     

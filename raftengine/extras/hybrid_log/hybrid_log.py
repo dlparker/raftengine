@@ -102,7 +102,6 @@ class HybridStats:
     copy_lag: int        # LMDB last_index - Sqlite last_index
     lmdb_record_count: int
     sqlite_record_count: int
-    pending_snaps_count: int     # len(self.pending_snaps)
     current_pressure: int        # Calculated pressure value
     last_limit_sent: int         # self.last_pressure_sent
     lmdb_percent_remaining: float
@@ -135,10 +134,10 @@ class HybridLog(LogAPI):
         self.last_lmdb_snap = None # this will be snapshot to sqlite, not "real" one
         self.sqlwriter = SqliteWriterControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
                                              copy_block_size=self.copy_block_size)
-        self.pending_snaps = []
         self.running = True
         self.writer_stats = {}  # Storage for writer stats
         self.stats_request_event = None  # Event for async stats collection
+        self.fatal_error = None
 
     def set_hold_count(self, value):
         self.hold_count = value
@@ -155,12 +154,14 @@ class HybridLog(LogAPI):
         await self.sqlwriter.set_snap_size(value)
         
     # BEGIN API METHODS
+    #API Method
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
         await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error)
         self.running = True
         
+    #API Method
     async def stop(self):
         self.running = False
         if self.lmdb_log:
@@ -173,58 +174,74 @@ class HybridLog(LogAPI):
             await self.sqlwriter.stop()
             self.sqlwriter = None
             
+    #API Method
     async def get_broken(self) -> bool:
         return  await self.sqlite_log.get_broken() or await self.lmdb_log.get_broken()
     
+    #API Method
     async def set_broken(self) -> None:
         await self.sqlite_log.set_broken()
         return await self.lmdb_log.set_broken()
     
+    #API Method
     async def set_fixed(self) -> None:
         await self.sqlite_log.set_fixed()
         return await self.lmdb_log.set_fixed()
 
+    #API Method
     async def get_uri(self) -> Union[str, None]:
         return await self.lmdb_log.get_uri()
     
+    #API Method
     async def set_uri(self, uri: str):
         await self.lmdb_log.set_uri(uri)
 
+    #API Method
     async def get_term(self) -> Union[int, None]:
         return await self.lmdb_log.get_term()
     
+    #API Method
     async def set_term(self, value: int):
         await self.sqlite_log.set_term(value)
         return await self.lmdb_log.set_term(value)
 
+    #API Method
     async def incr_term(self):
         return await self.set_term(await self.get_term() + 1)
 
+    #API Method
     async def get_voted_for(self) -> Union[str, None]:
         return await self.lmdb_log.get_voted_for()
     
+    #API Method
     async def set_voted_for(self, value: str):
         await self.sqlite_log.set_voted_for(value)
         return await self.lmdb_log.set_voted_for(value)
 
+    #API Method
     async def get_last_index(self):
         return await self.lmdb_log.get_last_index()
 
+    #API Method
     async def get_first_index(self):
         lfirst = await self.lmdb_log.get_first_index()
         if lfirst is None:
             return await self.sqlite_log.get_first_index()
         return lfirst
     
+    #API Method
     async def get_last_term(self):
         return await self.lmdb_log.get_last_term()
     
+    #API Method
     async def get_commit_index(self):
         return await self.lmdb_log.get_commit_index()
 
+    #API Method
     async def get_applied_index(self):
         return await self.lmdb_log.get_applied_index()
         
+    #API Method
     async def insert(self, record: LogRec) -> None:
         async def relieve_pressure(new_limit):
             await self.sqlwriter.send_limit(new_limit,
@@ -250,12 +267,15 @@ class HybridLog(LogAPI):
         await asyncio.sleep(0.0)
         return rec
 
+    #API Method
     async def mark_committed(self, index:int) -> None:
         return await self.lmdb_log.mark_committed(index)
 
+    #API Method
     async def mark_applied(self, index:int) -> None:
         return await self.lmdb_log.mark_applied(index)
     
+    #API Method
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
             return await self.lmdb_log.read(index)
@@ -263,21 +283,17 @@ class HybridLog(LogAPI):
             return await self.sqlite_log.read(index)
         return await self.lmdb_log.read(index)
     
+    #API Method
     async def delete_all_from(self, index: int):
         snapshot = await self.sqlite_log.get_snapshot()
         if snapshot and index < snapshot.index + 1:
             raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
         s_first = await self.sqlite_log.get_first_index()
         if s_first is not None:
-            if index < s_first:
-                target = max(s_first, index)
-            else:
-                target = index
-            if target > 0:
-                s_last = await self.sqlite_log.get_last_index()
-                target = min(s_last, index)
-                await self.sqlite_log.delete_all_from(target)
-                await self.sqlwriter.send_note_delete(target - 1)
+            s_last = await self.sqlite_log.get_last_index()
+            if index < s_last:
+                await self.sqlite_log.delete_all_from(index)
+                await self.sqlwriter.send_note_delete(index - 1)
         if index == 1:
             self.last_pressure_sent = 0
         else:
@@ -295,15 +311,22 @@ class HybridLog(LogAPI):
         await self.lmdb_log.clear_despite_snapshot()
         return
 
+    #API Method
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         await self.sqlite_log.save_cluster_config(config)
         return await self.lmdb_log.save_cluster_config(config)
     
+    #API Method
     async def get_cluster_config(self):
         return await self.lmdb_log.get_cluster_config()
     
+    #API Method
     async def install_snapshot(self, snapshot:SnapShot):
         await self.sqlite_log.refresh_stats()
+        max_index = await self.lmdb_log.get_last_index()
+        if snapshot.index > max_index or snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {max_index}")
+        
         await self.sqlite_log.special_install_snapshot(snapshot)
         lm_snap = await self.lmdb_log.get_snapshot()
         if lm_snap and lm_snap.index >= snapshot.index:
@@ -317,44 +340,14 @@ class HybridLog(LogAPI):
             await self.lmdb_log.install_snapshot(snapshot)
         return snapshot
             
+    #API Method
     async def get_snapshot(self):
         # always get it from sqlite, that way we can use
         # the one in lmdb to track snapshost to sqlite
         # instead of "real" snapshots
         return await self.sqlite_log.get_snapshot()
 
-    async def _calculate_pressure(self) -> int:
-        """Calculate current pressure value for tuning analysis"""
-        last = await self.lmdb_log.get_last_index()
-        first = await self.lmdb_log.get_first_index()
-        if first is None:
-            first = 0
-        local_count = last - first
-        # Replicate the logic from append() method
-        current_pressure = local_count - self.last_pressure_sent - self.hold_count
-        return current_pressure
-
-    async def get_writer_stats(self) -> dict:
-        """Get stats from writer process via socket"""
-        self.stats_request_event = asyncio.Event()
-        await self.sqlwriter.send_command({'command': 'get_stats'})
-        
-        # Wait for response with timeout
-        try:
-            await asyncio.wait_for(self.stats_request_event.wait(), timeout=2.0)
-            return self.writer_stats.copy()
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for writer stats")
-            return {
-                'writer_pending_snaps_count': 0,
-                'current_copy_limit': 0,
-                'upstream_commit_lag': 0,
-                'upstream_apply_lag': 0,
-                'copy_blocks_per_minute': 0.0
-            }
-        finally:
-            self.stats_request_event = None
-
+    #API Method
     async def get_stats(self) -> LogStats:
         lmdb_stats = await self.lmdb_log.get_stats()
         sqlite_stats = await self.sqlite_log.get_stats()
@@ -366,15 +359,20 @@ class HybridLog(LogAPI):
         sqlite_first = await self.sqlite_log.get_first_index()
         last_index = lmdb_last
         if sqlite_first is None and lmdb_first is None:
+            # all empty or just after snapshot
             record_count = 0
             first_index = None
-        elif sqlite_first is None:
-            record_count = lmdb_stats.record_count
-            first_index = lmdb_first
         elif lmdb_first is None:
+            # sqlite has records (first test failed) but lmdb does not
+            # unlikely in practice, but possible
             record_count = sqlite_stats.record_count
             first_index = sqlite_first
+        elif sqlite_first is None:
+            # lmdb has records but sqlite doesn't
+            record_count = lmdb_stats.record_count
+            first_index = lmdb_first
         else:
+            # both have records
             record_count = lmdb_last - sqlite_first + 1
             first_index = sqlite_first
         snap_index = None
@@ -398,6 +396,38 @@ class HybridLog(LogAPI):
             last_record_timestamp=lmdb_stats.last_record_timestamp,
             extra_stats=await self.get_hybrid_stats()
         )
+
+    async def push_all(self):
+        # Force all the current records to sqlite. This has value for testing,
+        # and it may have value for adminstrative purposes. For example, you
+        # could stop a server, open the log and push, close the log, then make
+        # a copy of the sqlite log for offline analysis of activity.
+        last_index = await self.lmdb_log.get_last_index()
+        await self.sqlwriter.send_hard_push(last_index,
+                                            await self.lmdb_log.get_commit_index(),
+                                            await self.lmdb_log.get_applied_index())
+        
+        
+    async def get_writer_stats(self) -> dict:
+        """Get stats from writer process via socket"""
+        self.stats_request_event = asyncio.Event()
+        await self.sqlwriter.send_command({'command': 'get_stats'})
+        
+        # Wait for response with timeout
+        try:
+            await asyncio.wait_for(self.stats_request_event.wait(), timeout=2.0)
+            return self.writer_stats.copy()
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for writer stats")
+            return {
+                'writer_pending_snaps_count': 0,
+                'current_copy_limit': 0,
+                'upstream_commit_lag': 0,
+                'upstream_apply_lag': 0,
+                'copy_blocks_per_minute': 0.0
+            }
+        finally:
+            self.stats_request_event = None
     
     async def get_hybrid_stats(self) -> HybridStats:
         """Get comprehensive hybrid log statistics"""
@@ -423,7 +453,6 @@ class HybridLog(LogAPI):
             copy_lag=lmdb_last - sqlite_last,
             lmdb_record_count=lmdb_stats.record_count,
             sqlite_record_count=sqlite_stats.record_count,
-            pending_snaps_count=len(self.pending_snaps),
             current_pressure=current_pressure,
             last_limit_sent=self.last_pressure_sent,
             lmdb_percent_remaining=lmdb_stats.percent_remaining,
@@ -449,25 +478,32 @@ class HybridLog(LogAPI):
                 logger.debug(f"after installing sqlite snap {curr_snapshot}, "\
                              f"lmdb_last_index = {last_index}, lmdb_first_index = {first_index}")
                 self.last_lmdb_snap = curr_snapshot
-                if self.pending_snaps:
-                    next_snapshot = self.pending_snaps.pop(0)
-                    await asyncio.sleep(0.001)
-                    asyncio.create_task(process_snapshot(next_snapshot))
             except:
-                logger.error(f"sqlwriter snashot {snapshot} caused error {traceback.format_exc()}")
+                logger.error(f"sqlwriter snapshot {snapshot} caused error {traceback.format_exc()}")
                 await self.stop()
         if code == "snapshot":
-            self.pending_snaps.append(data)
             logger.debug("got sqlitewriter snapshot %s", str(data))
-            next_snapshot = self.pending_snaps.pop(0)
-            asyncio.create_task(process_snapshot(next_snapshot))
+            await process_snapshot(data)
         elif code == "stats":
             self.writer_stats = data
             logger.debug("got sqlitewriter stats %s", data)
             if self.stats_request_event:
                 self.stats_request_event.set()
-            
+        else:
+             logger.error("got unknown code from sqlitewriter %s", code)
+        
+    async def _calculate_pressure(self) -> int:
+        """Calculate current pressure value for tuning analysis"""
+        last = await self.lmdb_log.get_last_index()
+        first = await self.lmdb_log.get_first_index()
+        if first is None:
+            first = 0
+        local_count = last - first
+        # Replicate the logic from append() method
+        current_pressure = local_count - self.last_pressure_sent - self.hold_count
+        return current_pressure
 
     async def handle_writer_error(self, error):
         logger.error(f"sqlwriter got error {error}")
+        self.fatal_error = error
         await self.stop()

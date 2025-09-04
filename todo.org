@@ -25,6 +25,9 @@
 9. Once example is fixed to use new rpc setup, see if restarting servers in process works
    because the client close was commented out, which is probably why the servers couldn't
    open their ports. Figure out why I commented out the close and fix the real problem.
+10. Need an error propogation mechanism that lets low level errors bubble up to error events and even
+    deck shutdown
+   
 
        
 

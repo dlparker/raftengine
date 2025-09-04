@@ -195,6 +195,8 @@ class MemoryLog(LogAPI):
     async def delete_all_from(self, index: int):
         if self.snapshot and index < self.snapshot.index + 1:
             raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
+        if self.last_index < index:
+            raise Exception(f"cannot delete record {index}, max is {self.last_index}")
             
         if index == 0 or self.snapshot and index == self.snapshot.index + 1:
             self.entries = {}
@@ -240,6 +242,9 @@ class MemoryLog(LogAPI):
                              settings=deepcopy(self.cluster_settings))
     
     async def install_snapshot(self, snapshot:SnapShot):
+        if snapshot.index > self.last_index or snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.last_index}")
+        
         self.snapshot = snapshot
         end_index = self.snapshot.index
         await self.delete_ending_with(end_index)

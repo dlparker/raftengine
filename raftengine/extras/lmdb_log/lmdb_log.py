@@ -234,6 +234,8 @@ class Records:
         """Delete all entries from specified index onwards."""
         if self.snapshot and index < self.snapshot.index + 1:
             raise Exception(f"cannot delete record {index}, snapshot happened after record stored")
+        if self.max_index < index:
+            raise Exception(f"cannot delete record {index}, max is {self.max_index}")
         if self.env is None:
             self.open() # pragma: no cover
             
@@ -610,7 +612,7 @@ class LmdbLog(LogAPI):
     # no longer valid. If you use this it will break things, guaranteed
     async def clear_despite_snapshot(self) -> None:
         self.records.snapshot = None
+        await self.delete_all_from(1)
         self.records.first_index = None
-        self.records.max_index = 0
 
         
