@@ -415,17 +415,8 @@ class HybridLog(LogAPI):
         
         # Wait for response with timeout
         try:
-            await asyncio.wait_for(self.stats_request_event.wait(), timeout=2.0)
+            await asyncio.wait_for(self.stats_request_event.wait(), timeout=0.1)
             return self.writer_stats.copy()
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for writer stats")
-            return {
-                'writer_pending_snaps_count': 0,
-                'current_copy_limit': 0,
-                'upstream_commit_lag': 0,
-                'upstream_apply_lag': 0,
-                'copy_blocks_per_minute': 0.0
-            }
         finally:
             self.stats_request_event = None
     

@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import shutil
+import traceback
 from random import randint
 from pathlib import Path
 import time
@@ -105,10 +106,6 @@ async def seq1(use_in_process=False):
             start_time = time.time()
             while time.time() - start_time < 0.5 and await log.lmdb_log.get_snapshot() is None:
                 await asyncio.sleep(0.05)
-                # Normally snapshots are returned when new data is sent to the sqlwriter,
-                # but we may have stopped right on the boarder for that, so let's
-                # use the test support mechanism for triggering snapshot delivery.
-                await log.sqlwriter.send_command(dict(command="pop_snap"))
 
         await fill_to_snap()
         snap = await log.lmdb_log.get_snapshot() 
@@ -254,23 +251,13 @@ async def test_enhanced_stats():
         await log.stop()
 
 
-
-class ErrorInsertLog(HybridLog):
-
-    def __init__(self, *args, **kwargs):
-        self.task_function = kwargs.pop('task_function')
-        self.test_error_callback = kwargs.pop('test_error_callback', None)
-        super().__init__(*args, **kwargs)
-       
-    async def start(self):
-        await self.lmdb_log.start()
-        await self.sqlite_log.start()
-        self.sqlwriter = InsertableControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
-                                             copy_block_size=self.copy_block_size,
-                                             task_function=self.task_function, test_error_callback=self.test_error_callback)
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
-
 class InsertableControl(SqliteWriterControl):
+    # Replaces SqliteWriterControl when wired up properly, allowing specific
+    # error insertion tools to be configured via the extra "task_function" and
+    # "test_error_callback" args. The task_function argument replaces
+    # the real code's use of the "writer_task" function for in_process SqliteWriter
+    # an SqliteWriterService operations. In this way it becomes possible to
+    # configure patched versions of those classes that do error insertion for testing.
         
     def __init__(self, *args, **kwargs):
         self.task_function = kwargs.pop('task_function')
@@ -301,27 +288,41 @@ class InsertableControl(SqliteWriterControl):
         self.running = True
         self.reader, self.writer = await asyncio.open_connection('localhost', self.port)
         asyncio.create_task(self.read_backchannel())
-            
+
+class ErrorInsertLog(HybridLog):
+    # Adds support for wiring InsertableControl in to replaces SqliteWriterControl.
+    # Passes "task_function" and "test_error_callback" arguments through to
+    # InsertableControl
+
+    def __init__(self, *args, **kwargs):
+        self.task_function = kwargs.pop('task_function')
+        self.test_error_callback = kwargs.pop('test_error_callback', None)
+        super().__init__(*args, **kwargs)
+       
+    async def start(self):
+        await self.lmdb_log.start()
+        await self.sqlite_log.start()
+        self.sqlwriter = InsertableControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
+                                             copy_block_size=self.copy_block_size,
+                                             task_function=self.task_function, test_error_callback=self.test_error_callback)
+        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+
+
+sqlite_writer_in_use = None
+
 async def regular_writer_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
-    # This is just for testing support, having it run
-    # in process helps with debugging and coverage.
-    # It is not appropriate for actual use as you'll
-    # lose all the benifit of the hybrid approach
+    # This is a direct replacement for the writer_task function in sqlite_writer.py, just
+    # makes it possible to get at the writer class. It is wired up by using
+    # ErrorInsertLog and passing "task_function=reqular_writer_task"
     writer = SqliteWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
+    global sqlite_writer_in_use
+    sqlite_writer_in_use = writer
     await writer.start()
     await writer.serve()
 
-async def break_copy_block_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
-    # This is just for testing support, having it run
-    # in process helps with debugging and coverage.
-    # It is not appropriate for actual use as you'll
-    # lose all the benifit of the hybrid approach
-    writer = BreakCopyBlock(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
-    await writer.start()
-    await writer.serve()
-
-class BreakCopyBlock(SqliteWriter):
-
+class BreakCopyBlockWriter(SqliteWriter):
+    # arranges to raise an exception in the copy_block method of SqliteWriter if explode == True
+    
     explode = True
 
     async def copy_block(self, first_index, last_index):
@@ -330,32 +331,26 @@ class BreakCopyBlock(SqliteWriter):
             raise Exception("inserted error in copy_block")
         return await super().copy_block(first_index, last_index)
 
-class InsertServiceWriter(SqliteWriter):
+async def break_copy_block_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
+    # Configures copy block breaker. It is wired up by using
+    # ErrorInsertLog and passing "task_function=break_copy_block_task"
+    writer = BreakCopyBlockWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
+    global sqlite_writer_in_use
+    sqlite_writer_in_use = writer
+    await writer.start()
+    await writer.serve()
 
-    def __init__(self, *args, **kwargs):
-        self.service_class = kwargs.pop('service_class')
-        super().__init__(*args, **kwargs)
-    
-    
-class InsertService(SqliteWriterService):
 
-
-    async def blow_up(self):
-        await self.reader.close()
-        await self.writer.close()
-
-    async def handle_client(self, reader, writer):
-        self.reader = reader
-        self.writer = writer
-        return await super().handle_client(reader, writer)
-    
-    
 async def test_writer_errors_1():
-    
+
     path = Path('/tmp', f"test_log_errors")
     if path.exists():
         shutil.rmtree(path)
     path.mkdir()
+
+    # The first part here is mainly just to ensure that the testing tools, wrappers, replacements, etc
+    # do not unintentionally break the functions under test.
+
     log = ErrorInsertLog(path, task_function=regular_writer_task)
     hold_count = 10
     push_trigger = 5
@@ -393,21 +388,20 @@ async def test_writer_errors_1():
         start_time = time.time()
         while time.time() - start_time < 0.5 and await log.lmdb_log.get_snapshot() is None:
             await asyncio.sleep(0.05)
-            # Normally snapshots are returned when new data is sent to the sqlwriter,
-            # but we may have stopped right on the boarder for that, so let's
-            # use the test support mechanism for triggering snapshot delivery.
-            await log.sqlwriter.send_command(dict(command="pop_snap"))
 
     await fill_to_snap()
     snap = await log.lmdb_log.get_snapshot() 
     assert snap is not None, "Snapshot should exist in LMDB"
     assert snap.index == snap_size, f"Snapshot index {snap.index} should be {snap_size}"
 
-
     await log.stop()
     shutil.rmtree(path)
     path.mkdir()
 
+    # Now we want to repeat the log insert process so that we trigger copy_block as we did
+    # above, but now we do it with stuff wired up to cause the copy_block function to get
+    # and error.
+    
     error_value = None
     async def error_callback(error):
         nonlocal error_value
@@ -427,3 +421,386 @@ async def test_writer_errors_1():
         await asyncio.sleep(0.05)
 
     assert error_value is not None
+    assert "error in copy_block" in error_value
+
+    
+class InsertServiceWriter(SqliteWriter):
+
+    def __init__(self, *args, **kwargs):
+        self.service_class = kwargs.pop('service_class')
+        super().__init__(*args, **kwargs)
+        self.writer_service = self.service_class(self, port=self.port)
+        self.hang_copy_task = False
+
+    async def copy_task(self):
+        save_handle = self.copy_task_handle
+        await super().copy_task()
+        if not self.hang_copy_task:
+            return
+        self.copy_task_handle = save_handle
+        try:
+            while self.copy_task_handle:
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError as e:
+            self.hang_copy_task = False
+            raise
+        self.copy_task_handle = None
+        
+        
+class StreamReaderWrapper:
+
+    def __init__(self, real):
+        self.real = real
+        self.read_no_length = False
+        self.read_no_message = False
+        self.explode_on_length = False
+        self.have_length = False
+            
+    async def read(self, length):
+        try:
+            res = await self.real.read(length)
+            if length == 20 and not self.have_length:
+                if self.read_no_length:
+                    logger.debug(f"Wrapper returning None on length read")
+                    return None
+                if self.explode_on_length:
+                    raise Exception('Exploding in inserted error reading length from command channel')
+                self.have_length = True
+                logger.debug(f"Wrapper returning from length read with {res}")
+            else:
+                self.have_length = False
+                if self.read_no_message:
+                    logger.debug(f"Wrapper returning None on message read length {length}")
+                    return None
+        except:
+            res = None
+            logger.debug(traceback.format_exc())
+            raise
+        logger.debug(f"Read of length {length} got res={res}")
+        return res
+        
+class StreamWriterWrapper:
+
+    def __init__(self, real):
+        self.real = real
+        self.explode_on_send = False
+
+    def get_extra_info(self, *args, **kwargs):
+        return self.real.get_extra_info(*args, **kwargs)
+    
+    def write(self, data):
+        if self.explode_on_send:
+            raise Exception('Exploding on inserted error in stream send')
+        return self.real.write(data)
+
+    def drain(self):
+        return self.real.drain()
+    
+class InsertService(SqliteWriterService):
+    # this class allows error insertion in the SqliteWriterService operations
+    # Set it up like this:
+    #    sql_writer = InsertService
+    #    log = ErrorInsertLog(path, task_function=insert_service_task)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.step_to_break = None
+        self.break_exception = None
+        self.handle_exit_callback = None
+        self.explode_on_stop = False
+        self.explode_on_sock_close = False
+        self.sim_request = None
+        self.real_reader = None
+        self.real_writer = None
+
+    async def stop(self):
+        if self.explode_on_stop:
+            if self.explode_on_sock_close:
+                class ssss:
+                    def close(self):
+                        raise Exception("Exception: inserted error on sock_server close")
+                self.sock_server = ssss()
+            raise Exception('Exception: inserted error on stop')
+        return await super().stop()
+
+    async def get_request(self):
+        # when we are running test code and trying to set up
+        # to mess with the return value, the call to read
+        # has already been made by SqliteWriterService.handle_client
+        # so we have to catch it on the way out.
+        if self.step_to_break == "get_request":
+            if self.break_exception:
+                raise self.break_exception
+            else:
+                return None
+        elif self.sim_request:
+            data = self.sim_request
+            self.sim_request = None
+            return data
+        logger.debug(f"get_request wrapper calling super")
+        real_res = await super().get_request()
+        return real_res
+    
+    async def handle_client(self, reader, writer):
+        self.real_reader = reader
+        reader_wrapper = StreamReaderWrapper(reader)
+        self.real_writer = writer
+        writer_wrapper = StreamWriterWrapper(writer)
+        res = await super().handle_client(reader_wrapper, writer_wrapper)
+        if self.handle_exit_callback:
+            await self.handle_exit_callback(res)
+            self.handle_exit_callback = None
+        return res
+
+    async def report_fatal_error(self, msg):
+        if self.handle_exit_callback:
+            await self.handle_exit_callback(msg)
+            self.handle_exit_callback = None
+        return await super().report_fatal_error(msg) 
+
+        
+async def insert_service_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
+    # Configures error insert writer and service. It is wired up by using
+    # ErrorInsertLog and passing "task_function=insert_service_task"
+
+    writer = InsertServiceWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size,
+                                 service_class=InsertService)
+    global sqlite_writer_in_use
+    sqlite_writer_in_use = writer
+    await writer.start()
+    await writer.serve()
+
+async def errors_2_log_setup():
+
+    # Sets up the scafolding and wrappers for a number of error tests
+    # by creating a log instance that is wrapped to for error insertion,
+    # with touchpoints by using InsertServiceWriter and InsertService
+    # wrappers for SqliteWriter and SqliteWriterService
+    
+    path = Path('/tmp', f"test_log_errors")
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir()
+
+    sql_writer = InsertService
+    log = ErrorInsertLog(path, task_function=insert_service_task)
+    hold_count = 10
+    push_trigger = 5
+    copy_size = 3
+    snap_size = 5
+    log.set_hold_count(hold_count)
+    log.set_push_trigger(push_trigger)
+    await log.set_copy_size(copy_size)
+    await log.set_snap_size(snap_size)
+    await log.start()
+
+    await log.set_term(1)
+    global sqlite_writer_in_use
+    assert isinstance(sqlite_writer_in_use, InsertServiceWriter)
+    assert isinstance(sqlite_writer_in_use.writer_service, InsertService)
+    return log
+
+async def test_writer_errors_2():
+    
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    # make SqliteWriterService experience errors in the main read loop by rasing
+    # exceptions in the wrapper for get_request()
+
+    for exc in (asyncio.CancelledError('Cancel'), ConnectionResetError('Reset'), Exception('Exc')):
+        log = await errors_2_log_setup()
+
+        i_service = sqlite_writer_in_use.writer_service
+        i_service.step_to_break = "get_request"
+        i_service.break_exception = exc
+        i_service.handle_exit_callback = cb
+        exit_reason = None
+        try:
+            await log.get_stats()
+        except:
+            pass
+        start_time = time.time()
+        while exit_reason is None and time.time() - start_time < 0.5:
+            await asyncio.sleep(0.001)
+        if "Exc" == str(exc):
+            assert "Exception: Exc" in exit_reason
+        else:
+            assert exit_reason == exc
+
+
+    # Make get_request() wrapper return None, which looks like socket closed.
+    # Not an error, but follows some of the same path, this catches the differences.
+
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    i_service.step_to_break = "get_request"
+    i_service.break_exception = None
+    i_service.handle_exit_callback = cb
+    exit_reason = None
+    
+    await log.get_stats()
+    assert "socket_closed" in exit_reason
+
+    # Make get_request() wrapper return  a quit command.
+    # Not an error, but follows some of the same path, this catches the differences.
+    
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    i_service.sim_request = dict(command="quit")
+    i_service.break_exception = None
+    i_service.handle_exit_callback = cb
+    exit_reason = None
+    await log.get_stats()
+
+    start_time = time.time()
+    while exit_reason is None and time.time() - start_time < 0.5:
+        await asyncio.sleep(0.001)
+    assert "on_request" in exit_reason
+
+
+async def test_writer_errors_3():
+    
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    # Arrage to have get_request receive a None instead of a length from reader.read(20)
+    logger.info("checking command channel length not present")
+    
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    wrapper = i_service.reader 
+    wrapper.read_no_length = True
+    i_service.handle_exit_callback = cb
+    exit_reason = None
+    with pytest.raises(asyncio.TimeoutError) as excinfo:
+        await log.get_stats()
+    assert "socket_close" in exit_reason
+
+    # Arrage to have get_request receive a None instead of a the message it expects after reading the length
+    logger.info("checking command channel length present but no message")
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    wrapper = i_service.reader 
+    wrapper.read_no_message = True
+    i_service.handle_exit_callback = cb
+    exit_reason = None
+    with pytest.raises(asyncio.TimeoutError) as excinfo:
+        await log.get_stats()
+    assert "socket_close" in exit_reason
+
+async def test_writer_errors_4():
+
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    
+    # When an exception is raised in get_request, SqliteWriterService.report_fatal_error should
+    # be called. It is supposed to send a message on the back channel reporting the error, but
+    # that could get an error. Here we simulate that situation and check that the related error handling
+    # logic does it's thing
+    logger.info("checking send error on fatal report")
+    
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    reader_wrapper = i_service.reader 
+    reader_wrapper.explode_on_length = True
+    writer_wrapper = i_service.writer 
+    writer_wrapper.explode_on_send = True
+    i_service.explode_on_stop = True
+    i_service.explode_on_sock_close = True
+    i_service.handle_exit_callback = cb
+    exit_reason = None
+    with pytest.raises(asyncio.TimeoutError) as excinfo:
+        await log.get_stats()
+
+    assert "inserted error" in exit_reason
+    assert "reading length" in  exit_reason
+    #print(f"\n\n-------------------------------\n\n{i_service.fatal_error}\n---------------------------\n\n")
+    assert "inserted error in stream send" in i_service.fatal_error
+    assert "inserted error on stop" in i_service.fatal_error
+    assert "inserted error on sock_server close" in i_service.fatal_error
+
+
+
+async def test_writer_copy_task():
+
+    # We want to fire off the copy_task but modify it to enter a wait loop
+    # instead of exiting then ensure that it the stop sequence actually stops it.
+
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+    i_service.sqlwriter.hang_copy_task = True
+
+
+    i_service.sqlwriter.max_timestamps = 2
+
+    hold_count = 10
+    push_trigger = 5
+    copy_size = 3
+    snap_size = 5
+    trigger_offset = hold_count + push_trigger
+    async def some_records():
+        # Write enough records to make a snapshot
+        start_index = await log.get_last_index() + 1
+        needed_index = start_index + push_trigger + hold_count
+        for i in range(start_index, needed_index+1):
+            new_rec = LogRec(index=i, command=f"add {i}", serial=i, term=1)
+            rec = await log.insert(new_rec)
+            await log.mark_committed(i)
+            await log.mark_applied(i)
+        # Wait for snapshot processing to complete
+        start_time = time.time()
+        while time.time() - start_time < 0.5 and await log.lmdb_log.get_snapshot() is None:
+            await asyncio.sleep(0.05)
+
+    await some_records()
+    snap = await log.lmdb_log.get_snapshot() 
+    assert snap is not None, "Snapshot should exist in LMDB"
+    assert snap.index == snap_size, f"Snapshot index {snap.index} should be {snap_size}"
+
+    await log.stop()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and i_service.sqlwriter.copy_task_handle:
+        await asyncio.sleep(0.05)
+    assert not i_service.sqlwriter.hang_copy_task 
+    
+    
+async def test_short_stats():
+
+    log = await errors_2_log_setup()
+    i_service = sqlite_writer_in_use.writer_service
+
+    i_service.sqlwriter.max_timestamps = 4
+
+    hold_count = 10
+    push_trigger = 5
+    copy_size = 3
+    snap_size = 5
+    trigger_offset = hold_count + push_trigger
+    # Write enough records to overrun timestamps storage, which means a bunch of copy_blocks
+    start_index = await log.get_last_index() + 1
+    index = start_index
+    while len(i_service.sqlwriter.copy_block_timestamps) < 4:
+        new_rec = LogRec(index=index, command=f"add {index}", serial=index, term=1)
+        rec = await log.insert(new_rec)
+        index += 1
+        await asyncio.sleep(0.0001) # time for socket and writer ops
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and len(i_service.sqlwriter.copy_block_timestamps) == 4:
+        new_rec = LogRec(index=index, command=f"add {index}", serial=index, term=1)
+        rec = await log.insert(new_rec)
+        index += 1
+        await asyncio.sleep(0.0001) # time for socket and writer ops
+
+    assert len(i_service.sqlwriter.copy_block_timestamps) < 4
+    await log.stop()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and i_service.sqlwriter.copy_task_handle:
+        await asyncio.sleep(0.05)

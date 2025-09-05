@@ -188,6 +188,7 @@ class SqliteWriter:
         self.sqlite = SqliteLog(self.sqlite_db_path, enable_wal=True)
         self.lmdb = LmdbLog(self.lmdb_db_path, map_size=LMDB_MAP_SIZE)
         self.started = False
+        self.stopped = False
         self.last_snap_index = 0
         self.copy_limit = 0
         self.copy_task_handle = None
@@ -196,6 +197,7 @@ class SqliteWriter:
         self.upstream_apply_index = 0
         # Rate tracking fields for statistics
         self.copy_block_timestamps = []  # For blocks_per_minute calculation
+        self.max_timestamps = 1000
         self.copy_blocks_count = 0
 
     async def start(self):
@@ -211,10 +213,19 @@ class SqliteWriter:
         await self.stop()
 
     async def stop(self):
-        if self.copy_task_handle:
-            self.copy_task_handle.cancel()
+        if not self.stopped:
+            if self.copy_task_handle:
+                self.copy_task_handle.cancel()
+                try:
+                    await self.copy_task_handle
+                except asyncio.CancelledError:
+                    pass
+                self.copy_task_handle = None
             await self.sqlite.stop()
             await self.lmdb.stop()
+            self.sqlite = None
+            self.lmdb = None
+            self.stopped = True
         
     async def set_snap_size(self, size):
         self.snap_size = size
@@ -242,8 +253,6 @@ class SqliteWriter:
         if not self.copy_task_handle:
             self.copy_task_handle = asyncio.create_task(self.copy_task())
             logger.debug("Started copy task with limit %d", limit)
-        if self.pending_snaps:
-            return self.pending_snaps.pop(0)
         return None
     
     async def hard_push(self, props):
@@ -300,11 +309,10 @@ class SqliteWriter:
             logger.debug("SqliteWriterService copy task starting with last index %d, limit = %d copy_block_size %d",
                          my_last, self.copy_limit, self.copy_block_size)
             while my_last < self.copy_limit:
-                # something to copy, but we  honor setting to only copy when enough pending
-                if self.copy_limit - my_last < self.copy_block_size:
-                    await asyncio.sleep(0.001)
-                    continue
-                await self.copy_block(my_last, self.copy_limit)
+                if self.copy_limit - my_last > self.copy_block_size:
+                    await self.copy_block(my_last, my_last + self.copy_block_size)
+                else:
+                    await self.copy_block(my_last, self.copy_limit)
                 max_index = await self.sqlite.get_last_index()
                 max_term = await self.sqlite.get_last_term()
                 await self.sqlite.set_term(max_term)
@@ -327,14 +335,17 @@ class SqliteWriter:
                     logger.debug('appended pending snapshot %s', str(snapshot))
                 
                 # Track copy block rate for statistics
-                import time
                 self.copy_blocks_count += 1
                 self.copy_block_timestamps.append(time.time())
                 # Limit list size for memory efficiency
-                if len(self.copy_block_timestamps) > 1000:
-                    self.copy_block_timestamps = self.copy_block_timestamps[-500:]
+                if len(self.copy_block_timestamps) > self.max_timestamps:
+                    self.copy_block_timestamps = self.copy_block_timestamps[self.max_timestamps//2:]
                 
                 my_last = await self.sqlite.get_last_index()
+            while self.pending_snaps:
+                snap = self.pending_snaps.pop(0)
+                logger.debug('sending %s', str(snap))
+                await self.writer_service.send_message(code="snapshot", message=snap)
         except Exception as e:
             await self.writer_service.report_fatal_error(traceback.format_exc())
             self.copy_task_handle = None
@@ -385,9 +396,13 @@ class SqliteWriter:
             logger.error("Hard push task got error\n%s", traceback.format_exc())
             
 
-def writer_process(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
+def writer_process(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size): # pragma: no cover can't get coverage on mp
     # this is the main function of the writer process
-    asyncio.run(writer_runner(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size))
+    async def run():
+        writer = SqliteWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
+        await writer.start()
+        await writer.serve()
+    asyncio.run(run())
     logger.debug("writer process exiting")
 
 async def writer_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
@@ -395,17 +410,10 @@ async def writer_task(sqlite_file_path, lmdb_db_path, port, snap_size, copy_bloc
     # in process helps with debugging and coverage.
     # It is not appropriate for actual use as you'll
     # lose all the benifit of the hybrid approach
-    await writer_runner(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
+    writer = SqliteWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
+    await writer.start()
+    await writer.serve()
 
-async def writer_runner(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size):
-    try:
-        writer = SqliteWriter(sqlite_file_path, lmdb_db_path, port, snap_size, copy_block_size)
-        await writer.start()
-        await writer.serve()
-    except:
-        traceback.print_exc()
-        
-    
 class SqliteWriterService:
 
     def __init__(self, sqlwriter, port):
@@ -417,9 +425,11 @@ class SqliteWriterService:
         self.running = False
         self.writer = None
         self.reader = None
+        self.fatal_error = None # tracking what happens for test support only
 
     async def start(self):
         self.running = True
+        logger.info("starting server on port %d", self.port)
         self.sock_server = await asyncio.start_server(
             self.handle_client, '127.0.0.1', self.port
         )
@@ -446,17 +456,21 @@ class SqliteWriterService:
 
     async def report_fatal_error(self, error):
         try:
+            self.fatal_error = f"{error}"
             await self.send_message('fatal_error', error)
             logger.error('Reporting fatal error \n%s', error)
         except:
             logger.error('Trying to report fatal error got %s', traceback.format_exc())
+            self.fatal_error += f" {traceback.format_exc()}"
         try:
             await self.stop()
         except:
+            self.fatal_error += f" {traceback.format_exc()}"
             if self.sock_server:
                 try:
                     self.sock_server.close()
                 except:
+                    self.fatal_error += f" {traceback.format_exc()}"
                     pass
                 
     async def send_message(self, code, message):
@@ -486,7 +500,7 @@ class SqliteWriterService:
         if request['command'] == 'quit':
             logger.info("quitting on command")
             await self.send_message(code="quitting", message="")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.001)
             return False
         elif request['command'] == 'snap_size':
             new_size = int(request['size'])
@@ -503,31 +517,16 @@ class SqliteWriterService:
             logger.debug("SqliteWriterService got new last index %d after delete", new_last)
             await self.sqlwriter.adjust_to_new_last(new_last)
             return True
-        elif request['command'] == 'pop_snap':
-            # really just for testing:
-            #logger.debug('looking for snap to pop')
-            if self.sqlwriter.pending_snaps:
-                snapshot = self.sqlwriter.pending_snaps.pop(0)
-                logger.debug('sending popped snap %s', str(snapshot))
-                await self.send_message(code="snapshot", message=snapshot)
-            return True
         elif request['command'] == 'copy_limit':
-            res = await self.sqlwriter.set_copy_limit(request)
+            await self.sqlwriter.set_copy_limit(request)
             logger.debug("SqliteWriterService got copy limit")
-            if res:
-                # this will be a snapshot if anything
-                logger.debug('sending %s', str(res))
-                await self.send_message(code="snapshot", message=res)
             return True
         elif request['command'] == 'hard_push':
             logger.debug("SqliteWriterService got hard push")
-            res = await self.sqlwriter.hard_push(request)
-            if res:
-                # this will be a snapshot if anything
-                logger.debug('sending %s', str(res))
-                await self.send_message(code="snapshot", message=res)
+            await self.sqlwriter.hard_push(request)
             return True
         elif request['command'] == 'get_stats':
+            logger.debug("SqliteWriterService got get stats")
             stats = await self.sqlwriter.get_stats()
             await self.send_message(code="stats", message=stats)
             return True
@@ -538,31 +537,34 @@ class SqliteWriterService:
         logger.debug("SqliteWriterService connection from %s", writer.get_extra_info("peername"))
         self.writer = writer
         self.reader = reader
+        exit_reason = None
         while self.running:
             try:
-                try:
-                    # Doing the work via these methods makes it much
-                    # easier to write tests for the code in them..
-                    request = await self.get_request()
-                    if request is None:
-                        break
-                    go_flag = await self.handle_request(request)
-                    if not go_flag:
-                        break
-                    #logger.debug("SqliteWriterService got request %s", request)
-                except:
-                    msg = f"Error processing request {request}\n{traceback.format_exc()}"
-                    return await self.report_fatal_error(msg)
-            except asyncio.CancelledError:
+                # Doing the work via these methods makes it much
+                # easier to write tests for the code in them..
+                request = await self.get_request()
+                if request is None:
+                    exit_reason = "socket_closed"
+                    break
+                go_flag = await self.handle_request(request)
+                if not go_flag:
+                    exit_reason = "on_request"
+                    break
+                #logger.debug("SqliteWriterService got request %s", request)
+            except asyncio.CancelledError as e:
                 logger.warning("SqliteWriterService handler canceled")
+                exit_reason = e
                 break
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
                 logger.error("SqliteWriterService handler error \n%s", traceback.format_exc())
+                exit_reason = e
                 break
-            except Exception:
+            except Exception as e:
                 msg = f"SqliteWriterService handler error\n{traceback.format_exc()}"
+                exit_reason = e
                 return await self.report_fatal_error(msg)
         await self.stop()
         logger.warning("SqliteWriterService handler exiting")
+        return exit_reason
     
     

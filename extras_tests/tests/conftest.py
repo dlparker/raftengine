@@ -69,8 +69,10 @@ def configure_breakpoint():
             controller = LogController.make_controller(additional_loggers=extras)
         if os.environ.get('EXTRA_TESTS_DEBUG_LOGGING') == '1':
             controller.set_default_level('debug')
+            controller.set_logger_level('test_code', 'debug')
         elif os.environ.get('EXTRA_TESTS_INFO_LOGGING') == '1':
-            controller.set_default_level('debug')
+            controller.set_default_level('info')
+            controller.set_logger_level('test_code', 'info')
             #from pprint import pprint
             #pprint(controller.to_dict_config())
     except ImportError:
