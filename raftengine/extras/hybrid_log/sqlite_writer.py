@@ -189,10 +189,9 @@ class SqliteWriter:
         self.lmdb = LmdbLog(self.lmdb_db_path, map_size=LMDB_MAP_SIZE)
         self.started = False
         self.stopped = False
-        self.last_snap_index = 0
         self.copy_limit = 0
+        self.last_snap_index = 0
         self.copy_task_handle = None
-        self.pending_snaps = []
         self.upstream_commit_index = 0
         self.upstream_apply_index = 0
         # Rate tracking fields for statistics
@@ -230,20 +229,14 @@ class SqliteWriter:
     async def set_snap_size(self, size):
         self.snap_size = size
         
-    async def adjust_to_new_last(self, new_last):
-        await self.sqlite.refresh_stats()
-        new_pending = []
-        self.last_snap_index = min(new_last, self.last_snap_index)
-        for pending in self.pending_snaps:
-            if pending.index > new_last:
-                new_pending.append(pending)
-                if self.last_snap_index < pending.index:
-                    self.last_snap_index = pending.index
-        self.pending_snaps = new_pending
+    async def handle_deletes(self, new_last):
+        if self.lmdb.records is not None: 
+            await self.lmdb.stop()
+        await self.lmdb.start()
         self.upstream_commit_index = min(new_last, self.upstream_commit_index)
         self.upstream_apply_index = min(new_last, self.upstream_apply_index)
-        logger.debug("after note delete last_snap_index = %d, pending_count = %d, last_commit = %d, last_apply = %d",
-                     self.last_snap_index, len(new_pending), self.upstream_commit_index, self.upstream_apply_index)
+        logger.debug("after note delete last_commit = %d, last_apply = %d",
+                     self.upstream_commit_index, self.upstream_apply_index)
         
     async def set_copy_limit(self, props):
         limit = props['limit']
@@ -272,7 +265,6 @@ class SqliteWriter:
         sqlite_apply = await self.sqlite.get_applied_index()
         
         return {
-            'writer_pending_snaps_count': len(self.pending_snaps),
             'current_copy_limit': self.copy_limit,
             'upstream_commit_lag': self.upstream_commit_index - sqlite_commit,
             'upstream_apply_lag': self.upstream_apply_index - sqlite_apply,
@@ -288,9 +280,6 @@ class SqliteWriter:
                 recs.append(rec)
         local_term = await self.sqlite.get_term()
         for rec in recs:
-            if rec.term > local_term:
-                local_term = rec.term
-                await self.sqlite.set_term(local_term)
             await self.sqlite.insert(rec)
         # update local stats from new record efects
         logger.debug("SqliteWriterService copy block finished copying from %d to %d",
@@ -308,6 +297,7 @@ class SqliteWriter:
                 my_last = 1
             logger.debug("SqliteWriterService copy task starting with last index %d, limit = %d copy_block_size %d",
                          my_last, self.copy_limit, self.copy_block_size)
+            start_index = my_last
             while my_last < self.copy_limit:
                 if self.copy_limit - my_last > self.copy_block_size:
                     await self.copy_block(my_last, my_last + self.copy_block_size)
@@ -326,14 +316,6 @@ class SqliteWriter:
                     max_apply = min(self.upstream_apply_index, max_index)
                     await self.sqlite.mark_applied(max_apply)
                     logger.debug("updated sqlite applied to %d", max_apply)
-                while max_index - self.last_snap_index >= self.snap_size:
-                    snap_index = self.last_snap_index + self.snap_size
-                    snap_rec = await self.sqlite.read(snap_index)
-                    snapshot = SnapShot(snap_rec.index, snap_rec.term)
-                    self.pending_snaps.append(snapshot)
-                    self.last_snap_index = snap_rec.index
-                    logger.debug('appended pending snapshot %s', str(snapshot))
-                
                 # Track copy block rate for statistics
                 self.copy_blocks_count += 1
                 self.copy_block_timestamps.append(time.time())
@@ -342,10 +324,32 @@ class SqliteWriter:
                     self.copy_block_timestamps = self.copy_block_timestamps[self.max_timestamps//2:]
                 
                 my_last = await self.sqlite.get_last_index()
-            while self.pending_snaps:
-                snap = self.pending_snaps.pop(0)
-                logger.debug('sending %s', str(snap))
-                await self.writer_service.send_message(code="snapshot", message=snap)
+
+            # Figure out how much to snapshot. Relevant points:
+            # The last snapshot in lmdb, if any, tells us the low
+            # water mark. If none, then low water is 1. The
+            # Sqlite max index is high water mark. The limit
+            # for snapshot size is defined. So, if high water
+            # minus low water is greater than or equal to snap_size,
+            # we snap up to snap_size. We keep doing that if necessary
+            # until we catch up with copy_limit. Copy limit is
+            # determined by the HybridLog main class based on
+            # current record count and the hold_count configuration
+            lmdb_snap = await self.lmdb.get_snapshot()
+            low_water = 1 if lmdb_snap is None else lmdb_snap.index + 1
+            high_water = my_last
+            logger.debug("Snapshot check low_water = %d, high_water = %d, snap_size = %d",
+                         low_water, high_water, self.snap_size)
+            while high_water - low_water >= self.snap_size:
+                to_send = min(high_water-low_water, self.snap_size)
+                logger.debug("Doing snapshot for low_water = %d, high_water = %d, snap_size = %d, to_send = %d",
+                             low_water, high_water, self.snap_size, to_send)
+                snap_index = low_water - 1 + to_send # we are snapping from low_water inclusive
+                snap_rec = await self.sqlite.read(snap_index)
+                snapshot = SnapShot(snap_rec.index, snap_rec.term)
+                logger.debug('sending %s', str(snapshot))
+                await self.writer_service.send_message(code="snapshot", message=snapshot)
+                low_water = snap_index + 1
         except Exception as e:
             await self.writer_service.report_fatal_error(traceback.format_exc())
             self.copy_task_handle = None
@@ -384,13 +388,8 @@ class SqliteWriter:
                 snap_index = end_index
                 snap_rec = await self.sqlite.read(snap_index)
                 snapshot = SnapShot(snap_rec.index, snap_rec.term)
-                self.pending_snaps.append(snapshot)
-                self.last_snap_index = snap_rec.index
-                logger.debug('appended pending snapshot %s', str(snapshot))
-            while self.pending_snaps:
-                snap = self.pending_snaps.pop(0)
-                logger.debug('sending %s', str(snap))
-                await self.writer_service.send_message(code="snapshot", message=snap)
+                logger.debug('sending %s', str(snapshot))
+                await self.writer_service.send_message(code="snapshot", message=snapshot)
             return 
         except:
             logger.error("Hard push task got error\n%s", traceback.format_exc())
@@ -515,7 +514,7 @@ class SqliteWriterService:
         elif request['command'] == 'note_delete':
             new_last = int(request['new_last'])
             logger.debug("SqliteWriterService got new last index %d after delete", new_last)
-            await self.sqlwriter.adjust_to_new_last(new_last)
+            await self.sqlwriter.handle_deletes(new_last)
             return True
         elif request['command'] == 'copy_limit':
             await self.sqlwriter.set_copy_limit(request)
@@ -546,6 +545,10 @@ class SqliteWriterService:
                 if request is None:
                     exit_reason = "socket_closed"
                     break
+                # there is some logic that implicitly expexts
+                # requests to be handled sequentially (such
+                # as deleting records expecting copy to be done first)
+                # so don't do anything to allow that to change
                 go_flag = await self.handle_request(request)
                 if not go_flag:
                     exit_reason = "on_request"

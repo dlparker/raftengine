@@ -108,7 +108,6 @@ class HybridStats:
     total_hybrid_size_bytes: int
     
     # Writer-side metrics (from SqliteWriter)
-    writer_pending_snaps_count: int
     current_copy_limit: int
     upstream_commit_lag: int
     upstream_apply_lag: int
@@ -448,7 +447,6 @@ class HybridLog(LogAPI):
             last_limit_sent=self.last_pressure_sent,
             lmdb_percent_remaining=lmdb_stats.percent_remaining,
             total_hybrid_size_bytes=lmdb_stats.total_size_bytes + sqlite_stats.total_size_bytes,
-            writer_pending_snaps_count=writer_stats['writer_pending_snaps_count'],
             current_copy_limit=writer_stats['current_copy_limit'],
             upstream_commit_lag=writer_stats['upstream_commit_lag'],
             upstream_apply_lag=writer_stats['upstream_apply_lag'],

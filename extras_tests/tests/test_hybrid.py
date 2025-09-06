@@ -231,7 +231,6 @@ async def test_enhanced_stats():
         assert hasattr(stats, 'copy_rate'), "Should have copy_rate field"
         assert hasattr(stats, 'copy_lag'), "Should have copy_lag field"
         assert hasattr(stats, 'current_pressure'), "Should have current_pressure field"
-        assert hasattr(stats, 'writer_pending_snaps_count'), "Should have writer_pending_snaps_count field"
         
         # Basic sanity checks
         assert stats.lmdb_record_count >= 0, f"LMDB record count should be non-negative: {stats.lmdb_record_count}"
@@ -420,6 +419,25 @@ async def test_writer_errors_1():
     while time.time() - start_time < 0.5 and error_value is None:
         await asyncio.sleep(0.05)
 
+    assert error_value is not None
+    assert "error in copy_block" in error_value
+
+    # now make the copy blow up in push all
+    log = ErrorInsertLog(path, task_function=break_copy_block_task, test_error_callback=error_callback)
+    log.set_hold_count(hold_count)
+    log.set_push_trigger(push_trigger)
+    await log.set_copy_size(copy_size)
+    await log.set_snap_size(snap_size)
+    await log.start()
+    for i in range(1, 3):
+        new_rec = LogRec(index=i, command=f"add {i}", serial=i, term=1)
+        rec = await log.insert(new_rec)
+
+
+    await log.push_all()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and error_value is None:
+        await asyncio.sleep(0.05)
     assert error_value is not None
     assert "error in copy_block" in error_value
 
@@ -613,10 +631,10 @@ async def test_writer_errors_2():
     for exc in (asyncio.CancelledError('Cancel'), ConnectionResetError('Reset'), Exception('Exc')):
         log = await errors_2_log_setup()
 
-        i_service = sqlite_writer_in_use.writer_service
-        i_service.step_to_break = "get_request"
-        i_service.break_exception = exc
-        i_service.handle_exit_callback = cb
+        service = sqlite_writer_in_use.writer_service
+        service.step_to_break = "get_request"
+        service.break_exception = exc
+        service.handle_exit_callback = cb
         exit_reason = None
         try:
             await log.get_stats()
@@ -635,10 +653,10 @@ async def test_writer_errors_2():
     # Not an error, but follows some of the same path, this catches the differences.
 
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    i_service.step_to_break = "get_request"
-    i_service.break_exception = None
-    i_service.handle_exit_callback = cb
+    service = sqlite_writer_in_use.writer_service
+    service.step_to_break = "get_request"
+    service.break_exception = None
+    service.handle_exit_callback = cb
     exit_reason = None
     
     await log.get_stats()
@@ -648,10 +666,10 @@ async def test_writer_errors_2():
     # Not an error, but follows some of the same path, this catches the differences.
     
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    i_service.sim_request = dict(command="quit")
-    i_service.break_exception = None
-    i_service.handle_exit_callback = cb
+    service = sqlite_writer_in_use.writer_service
+    service.sim_request = dict(command="quit")
+    service.break_exception = None
+    service.handle_exit_callback = cb
     exit_reason = None
     await log.get_stats()
 
@@ -672,10 +690,10 @@ async def test_writer_errors_3():
     logger.info("checking command channel length not present")
     
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    wrapper = i_service.reader 
+    service = sqlite_writer_in_use.writer_service
+    wrapper = service.reader 
     wrapper.read_no_length = True
-    i_service.handle_exit_callback = cb
+    service.handle_exit_callback = cb
     exit_reason = None
     with pytest.raises(asyncio.TimeoutError) as excinfo:
         await log.get_stats()
@@ -684,10 +702,10 @@ async def test_writer_errors_3():
     # Arrage to have get_request receive a None instead of a the message it expects after reading the length
     logger.info("checking command channel length present but no message")
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    wrapper = i_service.reader 
+    service = sqlite_writer_in_use.writer_service
+    wrapper = service.reader 
     wrapper.read_no_message = True
-    i_service.handle_exit_callback = cb
+    service.handle_exit_callback = cb
     exit_reason = None
     with pytest.raises(asyncio.TimeoutError) as excinfo:
         await log.get_stats()
@@ -699,7 +717,6 @@ async def test_writer_errors_4():
     async def cb(reason):
         nonlocal exit_reason
         exit_reason = reason
-
     
     # When an exception is raised in get_request, SqliteWriterService.report_fatal_error should
     # be called. It is supposed to send a message on the back channel reporting the error, but
@@ -708,24 +725,24 @@ async def test_writer_errors_4():
     logger.info("checking send error on fatal report")
     
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    reader_wrapper = i_service.reader 
+    service = sqlite_writer_in_use.writer_service
+    reader_wrapper = service.reader 
     reader_wrapper.explode_on_length = True
-    writer_wrapper = i_service.writer 
+    writer_wrapper = service.writer 
     writer_wrapper.explode_on_send = True
-    i_service.explode_on_stop = True
-    i_service.explode_on_sock_close = True
-    i_service.handle_exit_callback = cb
+    service.explode_on_stop = True
+    service.explode_on_sock_close = True
+    service.handle_exit_callback = cb
     exit_reason = None
     with pytest.raises(asyncio.TimeoutError) as excinfo:
         await log.get_stats()
 
     assert "inserted error" in exit_reason
     assert "reading length" in  exit_reason
-    #print(f"\n\n-------------------------------\n\n{i_service.fatal_error}\n---------------------------\n\n")
-    assert "inserted error in stream send" in i_service.fatal_error
-    assert "inserted error on stop" in i_service.fatal_error
-    assert "inserted error on sock_server close" in i_service.fatal_error
+    #print(f"\n\n-------------------------------\n\n{service.fatal_error}\n---------------------------\n\n")
+    assert "inserted error in stream send" in service.fatal_error
+    assert "inserted error on stop" in service.fatal_error
+    assert "inserted error on sock_server close" in service.fatal_error
 
 
 
@@ -735,11 +752,11 @@ async def test_writer_copy_task():
     # instead of exiting then ensure that it the stop sequence actually stops it.
 
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
-    i_service.sqlwriter.hang_copy_task = True
+    service = sqlite_writer_in_use.writer_service
+    service.sqlwriter.hang_copy_task = True
 
 
-    i_service.sqlwriter.max_timestamps = 2
+    service.sqlwriter.max_timestamps = 2
 
     hold_count = 10
     push_trigger = 5
@@ -767,17 +784,17 @@ async def test_writer_copy_task():
 
     await log.stop()
     start_time = time.time()
-    while time.time() - start_time < 0.5 and i_service.sqlwriter.copy_task_handle:
+    while time.time() - start_time < 0.5 and service.sqlwriter.copy_task_handle:
         await asyncio.sleep(0.05)
-    assert not i_service.sqlwriter.hang_copy_task 
+    assert not service.sqlwriter.hang_copy_task 
     
-    
+
 async def test_short_stats():
 
     log = await errors_2_log_setup()
-    i_service = sqlite_writer_in_use.writer_service
+    service = sqlite_writer_in_use.writer_service
 
-    i_service.sqlwriter.max_timestamps = 4
+    service.sqlwriter.max_timestamps = 4
 
     hold_count = 10
     push_trigger = 5
@@ -787,20 +804,46 @@ async def test_short_stats():
     # Write enough records to overrun timestamps storage, which means a bunch of copy_blocks
     start_index = await log.get_last_index() + 1
     index = start_index
-    while len(i_service.sqlwriter.copy_block_timestamps) < 4:
+    while len(service.sqlwriter.copy_block_timestamps) < 4:
         new_rec = LogRec(index=index, command=f"add {index}", serial=index, term=1)
         rec = await log.insert(new_rec)
         index += 1
         await asyncio.sleep(0.0001) # time for socket and writer ops
     start_time = time.time()
-    while time.time() - start_time < 0.5 and len(i_service.sqlwriter.copy_block_timestamps) == 4:
+    while time.time() - start_time < 0.5 and len(service.sqlwriter.copy_block_timestamps) == 4:
         new_rec = LogRec(index=index, command=f"add {index}", serial=index, term=1)
         rec = await log.insert(new_rec)
         index += 1
         await asyncio.sleep(0.0001) # time for socket and writer ops
 
-    assert len(i_service.sqlwriter.copy_block_timestamps) < 4
+    assert len(service.sqlwriter.copy_block_timestamps) < 4
     await log.stop()
     start_time = time.time()
-    while time.time() - start_time < 0.5 and i_service.sqlwriter.copy_task_handle:
+    while time.time() - start_time < 0.5 and service.sqlwriter.copy_task_handle:
         await asyncio.sleep(0.05)
+
+async def test_bad_command():
+    
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    logger.info("checking bad command to sqlitewriter")
+    
+    log = await errors_2_log_setup()
+    writer = sqlite_writer_in_use
+    service = writer.writer_service
+    service.handle_exit_callback = cb
+    exit_reason = None
+    command = dict(command="explode")
+    await log.sqlwriter.send_command(command)
+    
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and exit_reason is None:
+        await asyncio.sleep(0.05)
+    assert "unknown" in exit_reason
+    assert "explode" in exit_reason
+    
+
+        

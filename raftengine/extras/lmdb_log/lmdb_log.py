@@ -409,11 +409,20 @@ class Records:
             
 
     def get_snapshot(self):
-        """Get current snapshot."""
         if self.env is None:
             self.open() # pragma: no cover
         return self.snapshot
 
+    def delete_snapshot(self):
+        # Should only be called in special cases, such as HybridLog's usage
+        # of snapshots here to track archiving to sqlite
+        self.snapshot = None
+        with self.env.begin(write=True) as txn:
+            cursor = txn.cursor(db=self.snapshots_db) 
+            cursor.first()
+            while cursor.delete():
+                pass
+            
 
 class LmdbLog(LogAPI):
     """LMDB implementation of the LogAPI interface."""
@@ -611,7 +620,7 @@ class LmdbLog(LogAPI):
     # archiving to a sqlite log, so there are times when a snapshot is
     # no longer valid. If you use this it will break things, guaranteed
     async def clear_despite_snapshot(self) -> None:
-        self.records.snapshot = None
+        self.records.delete_snapshot()
         await self.delete_all_from(1)
         self.records.first_index = None
 
