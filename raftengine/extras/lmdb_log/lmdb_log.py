@@ -91,7 +91,7 @@ class Records:
                 self.uri = None
                 with self.env.begin(write=True) as write_txn:
                     self._save_stats(write_txn)
-            
+
             # Load snapshot if exists
             snapshot_bytes = txn.get(b'snapshot', db=self.snapshots_db)
             if snapshot_bytes:

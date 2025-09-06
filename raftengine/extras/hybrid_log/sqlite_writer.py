@@ -72,26 +72,21 @@ class SqliteWriterControl:
         if self.writer_proc:
             self.writer_proc.join()
             self.writer_proc = None
-        if self.writer_task:
+        if self.writer_task: # pragma: no cover   this is test only code, production uses proc
             try:
                 self.writer_task.cancel()
-            except asyncio.CancelledError: # pragma: no cover   almost impossible to test
+            except asyncio.CancelledError:
                 pass
-            except ConnectionResetError: # pragma: no cover   almost impossible to test
+            except ConnectionResetError:
                 pass
 
     async def send_command(self, command):
         msg_str = json.dumps(command)
         msg_bytes = msg_str.encode()
         count = str(len(msg_bytes))
-        try:
-            self.writer.write(f"{count:20s}".encode())
-            self.writer.write(msg_bytes)
-            await self.writer.drain()
-        except asyncio.CancelledError: # pragma: no cover   almost impossible to test
-            pass
-        except ConnectionResetError:
-            logger.warning(traceback.format_exc())
+        self.writer.write(f"{count:20s}".encode())
+        self.writer.write(msg_bytes)
+        await self.writer.drain()
         
     async def send_limit(self, limit, commit_index, apply_index):  
         command = dict(command='copy_limit', limit=limit, commit_index=commit_index, apply_index=apply_index)
@@ -120,59 +115,62 @@ class SqliteWriterControl:
     async def send_quit(self):
         command = dict(command='quit')
         await self.send_command(command)
-        
+
+    async def get_message(self):
+        len_data = await self.reader.read(20)
+        if not len_data:
+            logger.warning("Connection closed by sqlwriter while reading length")
+            return None
+        msg_len = int(len_data.decode().strip())
+        data = await self.reader.read(msg_len)
+        if not data:
+            logger.warning("No data received, sqlwriter connection closed while reading message")
+            return None
+        msg_wrapper = json.loads(data.decode())
+        logger.debug("read_backchannel message %s", msg_wrapper)
+        return msg_wrapper
+                    
     async def read_backchannel(self):
         logger.debug('read_backchannel started')
-        while self.running:
-            try:
-                try:
-                    len_data = await self.reader.read(20)
-                    if not len_data:
-                        logger.warning("Connection closed by server")
-                        break
-                    msg_len = int(len_data.decode().strip())
-                    data = await self.reader.read(msg_len)
-                    if not data:
-                        logger.warning("No data received, connection closed")
-                        break
-                    msg_wrapper = json.loads(data.decode())
-                    if not self.running:
-                        break
-                    logger.debug("read_backchannel message %s", msg_wrapper)
-                    if msg_wrapper['code'] == "quitting":
-                        logger.warning(f'writer process sent quitting signal, shutting down')
-                        self.running = False
-                        break
-                    elif msg_wrapper['code'] == "command_error":
-                        logger.error(f'reply shows serror {msg_wrapper["message"]}')
-                    elif msg_wrapper['code'] == "snapshot":
-                        snap = msg_wrapper['message']
-                        snapshot = SnapShot(snap['index'], snap['term'])
-                        logger.debug('\n--------------------\nhandling reply snapshot %s\n----------------------\b', str(snapshot))
-                        await self.callback("snapshot", snapshot)
-                    elif msg_wrapper['code'] == "stats":
-                        stats = msg_wrapper['message']
-                        logger.debug('handling reply stats %s', stats)
-                        asyncio.create_task(self.callback("stats", stats))
-                    elif msg_wrapper['code'] == "fatal_error":
-                        logger.debug("Got error in backchannel \n%s", msg_wrapper['message'])
-                        raise Exception(f"Error from sqlwriter \n {msg_wrapper['message']}")
-                    else:
-                        logger.error('\n--------------------\nhandling reply message code unknown %s\n----------------------\b',
-                                     msg_wrapper['code'])
-                except Exception as e:
-                    logger.error('read_backchannel got error \n%s', traceback.format_exc())
-                    asyncio.create_task(self.error_callback(traceback.format_exc()))
-            except asyncio.CancelledError:
-                logger.warning('read_backchannel got cancelled')
-                await self.stop()
-                break
-            except ConnectionResetError:
-                logger.warning('read_backchannel got dropped socket')
-                await self.stop()
-                break
-        self.running = False
-        
+        exit_reason = None
+        try:
+            while self.running:
+                msg_wrapper = await self.get_message()
+                if msg_wrapper is None:
+                    exit_reason = "socket_closed"
+                    break
+                if msg_wrapper['code'] == "quitting":
+                    logger.warning(f'writer process sent quitting signal, shutting down')
+                    exit_reason = "quitting"
+                    break
+                elif msg_wrapper['code'] == "snapshot":
+                    snap = msg_wrapper['message']
+                    snapshot = SnapShot(snap['index'], snap['term'])
+                    logger.debug('\n--------------------\nhandling reply snapshot %s\n----------------------\b', str(snapshot))
+                    await self.callback("snapshot", snapshot)
+                elif msg_wrapper['code'] == "stats":
+                    stats = msg_wrapper['message']
+                    logger.debug('handling reply stats %s', stats)
+                    asyncio.create_task(self.callback("stats", stats))
+                elif msg_wrapper['code'] == "fatal_error":
+                    logger.debug("Got error in backchannel \n%s", msg_wrapper['message'])
+                    raise Exception(f"Error from sqlwriter \n {msg_wrapper['message']}")
+                else:
+                    logger.error('\n--------------------\nhandling reply message code unknown %s\n----------------------\b',
+                                 msg_wrapper['code'])
+                    raise Exception(f"Error from sqlwriter, unknown message code {msg_wrapper['code']}")
+        except asyncio.CancelledError as e:
+            logger.warning('read_backchannel got cancelled')
+            exit_reason = e
+        except ConnectionResetError as e:
+            logger.warning('read_backchannel got dropped socket')
+            exit_reason = e
+        except Exception as e:
+            logger.error('read_backchannel got error \n%s', traceback.format_exc())
+            exit_reason = e
+            asyncio.create_task(self.error_callback(traceback.format_exc()))
+        await self.stop()
+        return exit_reason
 
 
 class SqliteWriter:

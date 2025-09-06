@@ -25,7 +25,7 @@ class HL(HybridLog):
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        await self.sw_control.start(self.sw_control_callback, self.handle_writer_error, inprocess=True)
 
 async def test_mp_clients():
 

@@ -131,7 +131,7 @@ class HybridLog(LogAPI):
         self.lmdb_db_path = Path(dirpath, 'hybrid_log.lmdb')
         self.lmdb_log = LmdbLog(self.lmdb_db_path, map_size=LMDB_MAP_SIZE)
         self.last_lmdb_snap = None # this will be snapshot to sqlite, not "real" one
-        self.sqlwriter = SqliteWriterControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
+        self.sw_control = SqliteWriterControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
                                              copy_block_size=self.copy_block_size)
         self.running = True
         self.writer_stats = {}  # Storage for writer stats
@@ -146,18 +146,18 @@ class HybridLog(LogAPI):
 
     async def set_copy_size(self, value):
         self.copy_block_size = value
-        await self.sqlwriter.set_copy_block_size(value)
+        await self.sw_control.set_copy_block_size(value)
 
     async def set_snap_size(self, value):
         self.push_snap_size = value
-        await self.sqlwriter.set_snap_size(value)
+        await self.sw_control.set_snap_size(value)
         
     # BEGIN API METHODS
     #API Method
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error)
+        await self.sw_control.start(self.sw_control_callback, self.handle_writer_error)
         self.running = True
         
     #API Method
@@ -169,9 +169,9 @@ class HybridLog(LogAPI):
         if self.sqlite_log:
             await self.sqlite_log.stop()
             self.sqlite_log = None
-        if self.sqlwriter:
-            await self.sqlwriter.stop()
-            self.sqlwriter = None
+        if self.sw_control:
+            await self.sw_control.stop()
+            self.sw_control = None
             
     #API Method
     async def get_broken(self) -> bool:
@@ -243,7 +243,7 @@ class HybridLog(LogAPI):
     #API Method
     async def insert(self, record: LogRec) -> None:
         async def relieve_pressure(new_limit):
-            await self.sqlwriter.send_limit(new_limit,
+            await self.sw_control.send_limit(new_limit,
                                             await self.lmdb_log.get_commit_index(),
                                             await self.lmdb_log.get_applied_index())
             self.last_pressure_sent = new_limit
@@ -292,7 +292,7 @@ class HybridLog(LogAPI):
             s_last = await self.sqlite_log.get_last_index()
             if index < s_last:
                 await self.sqlite_log.delete_all_from(index)
-                await self.sqlwriter.send_note_delete(index - 1)
+                await self.sw_control.send_note_delete(index - 1)
         if index == 1:
             self.last_pressure_sent = 0
         else:
@@ -402,7 +402,7 @@ class HybridLog(LogAPI):
         # could stop a server, open the log and push, close the log, then make
         # a copy of the sqlite log for offline analysis of activity.
         last_index = await self.lmdb_log.get_last_index()
-        await self.sqlwriter.send_hard_push(last_index,
+        await self.sw_control.send_hard_push(last_index,
                                             await self.lmdb_log.get_commit_index(),
                                             await self.lmdb_log.get_applied_index())
         
@@ -410,7 +410,7 @@ class HybridLog(LogAPI):
     async def get_writer_stats(self) -> dict:
         """Get stats from writer process via socket"""
         self.stats_request_event = asyncio.Event()
-        await self.sqlwriter.send_command({'command': 'get_stats'})
+        await self.sw_control.send_command({'command': 'get_stats'})
         
         # Wait for response with timeout
         try:
@@ -453,7 +453,7 @@ class HybridLog(LogAPI):
             copy_blocks_per_minute=writer_stats['copy_blocks_per_minute']
         )
 
-    async def sqlwriter_callback(self, code, data):
+    async def sw_control_callback(self, code, data):
         async def process_snapshot(curr_snapshot):
             try:
                 await self.sqlite_log.refresh_stats()
@@ -481,6 +481,11 @@ class HybridLog(LogAPI):
         else:
              logger.error("got unknown code from sqlitewriter %s", code)
         
+    async def handle_writer_error(self, error):
+        logger.error(f"sqlwriter got error {error}")
+        self.fatal_error = error
+        await self.set_broken()
+        
     async def _calculate_pressure(self) -> int:
         """Calculate current pressure value for tuning analysis"""
         last = await self.lmdb_log.get_last_index()
@@ -492,7 +497,3 @@ class HybridLog(LogAPI):
         current_pressure = local_count - self.last_pressure_sent - self.hold_count
         return current_pressure
 
-    async def handle_writer_error(self, error):
-        logger.error(f"sqlwriter got error {error}")
-        self.fatal_error = error
-        await self.stop()

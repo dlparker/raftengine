@@ -49,7 +49,7 @@ class HL(HybridLog):
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        await self.sw_control.start(self.sw_control_callback, self.handle_writer_error, inprocess=True)
         
 async def seq1(use_in_process=False):
 
@@ -262,6 +262,10 @@ class InsertableControl(SqliteWriterControl):
         self.task_function = kwargs.pop('task_function')
         self.test_error_callback = kwargs.pop('test_error_callback', None)
         super().__init__(*args, **kwargs)
+        self.step_to_break = None
+        self.break_exception = None
+        self.sim_request = None
+        self.handle_exit_callback = None
 
     async def start(self, callback, error_callback, port=None, inprocess=False):
         self.callback = callback
@@ -285,9 +289,36 @@ class InsertableControl(SqliteWriterControl):
         await asyncio.sleep(0.01)
         logger.warning("sqlwriter Task started")
         self.running = True
-        self.reader, self.writer = await asyncio.open_connection('localhost', self.port)
+        reader, self.writer = await asyncio.open_connection('localhost', self.port)
+        self.real_reader = reader
+        self.reader = StreamReaderWrapper(reader)
         asyncio.create_task(self.read_backchannel())
 
+    async def get_message(self):
+        # when we are running test code and trying to set up
+        # to mess with the return value, the call to read
+        # has already been made by SqliteWriterControl.read_backchannel()
+        # so we have to catch it on the way out.
+        if self.step_to_break == "get_message":
+            if self.break_exception:
+                raise self.break_exception
+            else:
+                return None
+        elif self.sim_request:
+            data = self.sim_request
+            self.sim_request = None
+            return data
+        logger.debug(f"get_message wrapper calling super")
+        real_res = await super().get_message()
+        return real_res
+
+    async def read_backchannel(self):
+        res = await super().read_backchannel()
+        if self.handle_exit_callback:
+            await self.handle_exit_callback(res)
+            self.handle_exit_callback = None
+        return res
+        
 class ErrorInsertLog(HybridLog):
     # Adds support for wiring InsertableControl in to replaces SqliteWriterControl.
     # Passes "task_function" and "test_error_callback" arguments through to
@@ -301,10 +332,10 @@ class ErrorInsertLog(HybridLog):
     async def start(self):
         await self.lmdb_log.start()
         await self.sqlite_log.start()
-        self.sqlwriter = InsertableControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
+        self.sw_control = InsertableControl(self.sqlite_db_file, self.lmdb_db_path, snap_size=self.push_snap_size,
                                              copy_block_size=self.copy_block_size,
                                              task_function=self.task_function, test_error_callback=self.test_error_callback)
-        await self.sqlwriter.start(self.sqlwriter_callback, self.handle_writer_error, inprocess=True)
+        await self.sw_control.start(self.sw_control_callback, self.handle_writer_error, inprocess=True)
 
 
 sqlite_writer_in_use = None
@@ -473,7 +504,7 @@ class StreamReaderWrapper:
         self.read_no_message = False
         self.explode_on_length = False
         self.have_length = False
-            
+        
     async def read(self, length):
         try:
             res = await self.real.read(length)
@@ -678,7 +709,6 @@ async def test_writer_errors_2():
         await asyncio.sleep(0.001)
     assert "on_request" in exit_reason
 
-
 async def test_writer_errors_3():
     
     exit_reason = None
@@ -743,8 +773,6 @@ async def test_writer_errors_4():
     assert "inserted error in stream send" in service.fatal_error
     assert "inserted error on stop" in service.fatal_error
     assert "inserted error on sock_server close" in service.fatal_error
-
-
 
 async def test_writer_copy_task():
 
@@ -837,7 +865,7 @@ async def test_bad_command():
     service.handle_exit_callback = cb
     exit_reason = None
     command = dict(command="explode")
-    await log.sqlwriter.send_command(command)
+    await log.sw_control.send_command(command)
     
     start_time = time.time()
     while time.time() - start_time < 0.1 and exit_reason is None:
@@ -846,4 +874,106 @@ async def test_bad_command():
     assert "explode" in exit_reason
     
 
+async def test_back_channel_errors_1():
+    
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    logger.info("checking unknown response to sqlitecontrol")
+    log = await errors_2_log_setup()
+    writer = sqlite_writer_in_use
+    service = writer.writer_service
+    sw_control = log.sw_control
+    sw_control.handle_exit_callback = cb
+    
+    await service.send_message(code="foo", message="")
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and exit_reason is None:
+        await asyncio.sleep(0.05)
+    assert "unknown" in str(exit_reason)
+
+    logger.info("checking get_request returns None at sqlitecontrol")
+    log = await errors_2_log_setup()
+    writer = sqlite_writer_in_use
+    service = writer.writer_service
+    sw_control = log.sw_control
+    sw_control.step_to_break = "get_message"
+    sw_control.handle_exit_callback = cb
+    exit_reason = None
+    
+    await service.send_message(code="stats", message="")
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and exit_reason is None:
+        await asyncio.sleep(0.05)
+    assert "socket_closed" in exit_reason
+
+    logger.info("checking get_request returns None at sqlitecontrol")
+    log = await errors_2_log_setup()
+    sw_control = log.sw_control
+    sw_control.step_to_break = "get_message"
+    sw_control.handle_exit_callback = cb
+    exit_reason = None
+    
+    await service.send_message(code="stats", message="")
+    start_time = time.time()
+    while time.time() - start_time < 0.1 and exit_reason is None:
+        await asyncio.sleep(0.05)
+    assert "socket_closed" in exit_reason
         
+    for exc in (asyncio.CancelledError('Cancel'), ConnectionResetError('Reset'), Exception('Exc')):
+        log = await errors_2_log_setup()
+        sw_control = log.sw_control
+        sw_control.step_to_break = "get_message"
+        sw_control.handle_exit_callback = cb
+        sw_control.break_exception = exc
+        exit_reason = None
+        try:
+            await log.get_stats()
+        except:
+            pass
+        start_time = time.time()
+        while exit_reason is None and time.time() - start_time < 0.5:
+            await asyncio.sleep(0.001)
+        if "Exc" == str(exc):
+            assert "Exc" in str(exit_reason)
+        else:
+            assert exit_reason == exc
+    
+async def test_back_channel_errors_2():
+    
+    exit_reason = None
+    async def cb(reason):
+        nonlocal exit_reason
+        exit_reason = reason
+
+    # When an exception is raised in get_request, SqliteWriterService.report_fatal_error should
+    # be called. It is supposed to send a message on the back channel reporting the error, but
+    # that could get an error. Here we simulate that situation and check that the related error handling
+    # logic does it's thing
+    
+    log = await errors_2_log_setup()
+
+    logger.info("checking no length on get_message")
+    sw_control = log.sw_control
+    sw_control.handle_exit_callback = cb
+    wrapper = sw_control.reader
+    wrapper.read_no_length = True
+    exit_reason = None
+    with pytest.raises(asyncio.TimeoutError) as excinfo:
+        await log.get_stats()
+    assert "socket_closed" in exit_reason
+
+    log = await errors_2_log_setup()
+
+    logger.info("checking no message on get_message")
+    sw_control = log.sw_control
+    sw_control.handle_exit_callback = cb
+    wrapper = sw_control.reader
+    wrapper.read_no_message = True
+    exit_reason = None
+    with pytest.raises(asyncio.TimeoutError) as excinfo:
+        await log.get_stats()
+    assert "socket_closed" in exit_reason
+
