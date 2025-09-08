@@ -468,8 +468,9 @@ class HybridLog(LogAPI):
                              f"lmdb_last_index = {last_index}, lmdb_first_index = {first_index}")
                 self.last_lmdb_snap = curr_snapshot
             except:
-                logger.error(f"sqlwriter snapshot {snapshot} caused error {traceback.format_exc()}")
+                logger.error(f"sqlwriter snapshot {curr_snapshot} caused error {traceback.format_exc()}")
                 await self.stop()
+                raise
         if code == "snapshot":
             logger.debug("got sqlitewriter snapshot %s", str(data))
             await process_snapshot(data)
@@ -479,8 +480,9 @@ class HybridLog(LogAPI):
             if self.stats_request_event:
                 self.stats_request_event.set()
         else:
-             logger.error("got unknown code from sqlitewriter %s", code)
-        
+            logger.error("got unknown code from sqlitewriter %s", code)
+            await self.stop()
+            raise Exception(f"got unknown code from sqlitewriter {code}")
     async def handle_writer_error(self, error):
         logger.error(f"sqlwriter got error {error}")
         self.fatal_error = error

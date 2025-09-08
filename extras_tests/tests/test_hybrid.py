@@ -977,3 +977,82 @@ async def test_back_channel_errors_2():
         await log.get_stats()
     assert "socket_closed" in exit_reason
 
+    
+class SnapBreakHL(HybridLog):
+    
+    bad_code = False
+    bad_op = False
+    error_capture = None
+    async def sw_control_callback(self, code, data):
+        if self.bad_code:
+            code = "foo"
+        if self.bad_op:
+            save_log = self.sqlite_log
+            self.sqlite_log = None
+        try:
+            res = await super().sw_control_callback(code, data)
+        except Exception as e:
+            self.error_capture = e
+            raise
+        finally:
+            if self.bad_op:
+                self.sqlite_log = save_log 
+        return res
+        
+async def test_callback_errors():
+        
+    path = Path('/tmp', f"test_log_errors")
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir()
+
+    hold_count = 10
+    push_trigger = 5
+    copy_size = 3
+    snap_size = 5
+    trigger_offset = hold_count + push_trigger
+    
+    async def setup():
+        log = SnapBreakHL(path)
+        log.set_hold_count(hold_count)
+        log.set_push_trigger(push_trigger)
+        await log.set_copy_size(copy_size)
+        await log.set_snap_size(snap_size)
+        await log.start()
+
+        await log.set_term(1)
+        return log
+
+    async def some_records(log):
+        # Write enough records to make a snapshot
+        start_index = await log.get_last_index() + 1
+        needed_index = start_index + push_trigger + hold_count
+        for i in range(start_index, needed_index+1):
+            new_rec = LogRec(index=i, command=f"add {i}", serial=i, term=1)
+            rec = await log.insert(new_rec)
+            await log.mark_committed(i)
+            await log.mark_applied(i)
+        # Wait for snapshot processing to complete
+        start_time = time.time()
+        while time.time() - start_time < 0.5 and log.error_capture is None:
+            await asyncio.sleep(0.05)
+
+    log = await setup()
+
+    # setup to get a bad op code in the snapshot callback
+    log.bad_code = True
+    await some_records(log)
+
+    assert log.error_capture is not None
+    assert "unknown" in str(log.error_capture)
+
+
+    # setup to get an error processing the snapshot in the snapshot callback
+    log = await setup()
+
+    log.bad_op = True
+    await some_records(log)
+
+    assert log.error_capture is not None
+    assert "NoneType" in str(log.error_capture)
+    
