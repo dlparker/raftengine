@@ -3,7 +3,6 @@ import traceback
 import json
 from typing import Set
 import logging
-logger = logging.getLogger('rpc.server')
 
 class RPCServer:
     """
@@ -11,13 +10,16 @@ class RPCServer:
 
     """
 
-    def __init__(self, raft_server):
+    def __init__(self, raft_server, rm_wait_for_result=False):
         self.raft_server = raft_server
+        self.rm_wait_for_result = rm_wait_for_result 
         self.active_connections = set()
         self.shutdown_event = asyncio.Event()
         self.port = None
         self.server_task = None
         self.sock_server = None
+        # done this way so that test code can wrap it
+        self.logger = logging.getLogger('rpc.server')
 
     def get_raft_server(self):
         return self.raft_server
@@ -29,25 +31,25 @@ class RPCServer:
         self.sock_server = await asyncio.start_server(
             self.handle_client, '0.0.0.0', self.port
         )
-        async def serve():
-            logger.info(f"server running on port {self.port}")
-            try:
-                # Keep the server running
-                await asyncio.Event().wait()
-            except asyncio.CancelledError:
-                # Server is being shut down
-                pass
-            finally:
-                if self.sock_server:
-                    self.sock_server.close()
-                    self.sock_server = None
-                self.server_task = None
-        self.server_task = asyncio.create_task(serve())
+        self.server_task = asyncio.create_task(self.serve())
+
+    async def serve(self):
+        self.logger.info(f"server running on port {self.port}")
+        try:
+            # Keep the server running
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            # Server is being shut down
+            pass
+        finally:
+            if self.sock_server:
+                self.sock_server.close()
+                self.sock_server = None
+            self.server_task = None
 
     async def handle_client(self, reader, writer):
-        """Handle a new client connection"""
         info = writer.get_extra_info("peername")
-        logger.debug(f"New client connection from {info}")
+        self.logger.debug(f"New client connection from {info}")
         cf = ClientFollower(self, reader, writer)
         
         # Track this connection
@@ -58,30 +60,31 @@ class RPCServer:
         finally:
             # Remove from tracking
             self.active_connections.discard(cf)
-            logger.debug(f"Client connection from {info} closed (my port={self.port})")
+            self.logger.debug(f"Client connection from {info} closed (my port={self.port})")
     
     async def shutdown(self):
         """Gracefully shutdown the server"""
-        logger.warning("Server shutdown initiated")
+        self.logger.warning("Server shutdown initiated")
         self.shutdown_event.set()
         
         # Close all active connections
         connection_count = len(self.active_connections)
         if connection_count > 0:
-            logger.info(f"Closing {connection_count} active connections")
+            self.logger.info(f"Closing {connection_count} active connections")
         
         for connection in list(self.active_connections):
             try:
-                logger.info(f"Closing connection {connection.info}")
+                self.logger.info(f"Closing connection {connection.info}")
                 await connection.cleanup()
             except Exception:
                 pass  # Ignore errors during shutdown
         
         self.active_connections.clear()
-        logger.info("Server shutdown complete")
+        self.logger.info("Server shutdown complete")
 
     async def stop(self):
         if self.server_task:
+            await self.shutdown()
             self.server_task.cancel()
             try:
                 await self.server_task
@@ -108,12 +111,14 @@ class ClientFollower:
         self.rpc_server = rpc_server
         self.reader = reader
         self.writer = writer
+        self.logger = rpc_server.logger
         self.raft_server = rpc_server.get_raft_server()
         self.info = writer.get_extra_info("peername")
         
         # Track active request tasks for proper cleanup
         self.active_tasks: Set[asyncio.Task] = set()
         self.write_lock = asyncio.Lock()  # Protect concurrent writes to the same connection
+        self.broken = False
 
     async def send_response(self, response_data: dict):
         """Send a response back to the client"""
@@ -126,42 +131,45 @@ class ClientFollower:
                 self.writer.write(response)
                 await self.writer.drain()
             except Exception as e:
-                logger.error(f"Error sending response to {self.info}: {e}")
-                logger.debug(traceback.format_exc())
-
+                self.logger.error(f"Error sending response to {self.info}: {e}")
+                self.logger.debug(traceback.format_exc())
+                self.broken = True
+                
     async def process_request(self, request: dict, request_id: str):
         """Process a single request in its own task"""
         try:
             mtype = request.get('mtype')
             message = request.get('message')
             timeout = request.get('timeout', 10.0)
-            if mtype == "command":
-                result = await self.issue_command(message, timeout)
-            elif mtype == "direct_server_command":
-                result = await self.direct_server_command(message)
-            elif mtype == "raft_message":
-                result = await self.raft_message(message)
-            else:
-                result = json.dumps({"result": None, "error": f"Unknown message type: {mtype}"})
-            
-            # Send response with request ID
-            response_data = {
-                "result": result,
-                "request_id": request_id
-            }
-            await self.send_response(response_data)
-            
+            try:
+                if mtype == "command":
+                    result = await self.issue_command(message, timeout)
+                elif mtype == "direct_server_command":
+                    result = await self.direct_server_command(message)
+                elif mtype == "raft_message":
+                    result = await self.raft_message(message)
+                else:
+                    result = json.dumps({"result": None, "error": f"Unknown message type: {mtype}"})
+                # Send response with request ID
+                response_data = {
+                    "result": result,
+                    "request_id": request_id
+                }
+                await self.send_response(response_data)
+            except Exception as e:
+                # Send error response with request ID
+                error_response = {
+                    "result": None,
+                    "error": traceback.format_exc(),
+                    "request_id": request_id
+                }
+                await self.send_response(error_response)
         except Exception as e:
-            # Send error response with request ID
-            error_response = {
-                "result": None,
-                "error": traceback.format_exc(),
-                "request_id": request_id
-            }
-            await self.send_response(error_response)
+            self.broken = True
+            self.logger.error("Cannot continue handling client {self.info}: {e}")
+            
 
     async def issue_command(self, command, timeout):
-        """Process a command request"""
         raw_result = await self.raft_server.issue_command(command, timeout)
         result = json.dumps(raw_result, default=lambda o: o.__dict__)
         return result
@@ -172,125 +180,84 @@ class ClientFollower:
         return result
 
     async def raft_message(self, message):
-        """Process a raft message request"""
-        # We don't wait for the response, gets tricky with overlapping calls
-        asyncio.create_task(self.raft_server.raft_message(message))
-        result = json.dumps(dict(result=None))
+        if self.rpc_server.rm_wait_for_result:
+            raw_result = await self.raft_server.raft_message(message)
+            r_dict = dict(result=raw_result)
+            result = json.dumps(r_dict, default=lambda o: o.__dict__)
+        else:
+            asyncio.create_task(self.raft_server.raft_message(message))
+            result = json.dumps(dict(result=None))
         return result
 
     def cleanup_task(self, task: asyncio.Task):
         """Clean up completed tasks"""
         self.active_tasks.discard(task)
-
+        
     async def run(self):
         """Main connection handling loop"""
-        counter = 0
+        #counter = 0
         try:
-            while not self.rpc_server.shutdown_event.is_set():
-                try:
-                    # Use a timeout for read operations to check shutdown periodically
-                    try:
-                        len_data = await asyncio.wait_for(self.reader.read(20), timeout=1.0)
-                    except asyncio.TimeoutError:
-                        # Timeout - check if we should shutdown
-                        continue
-                    counter += 1 
-                    if not len_data:
-                        break  # Connection closed
-                    
-                    msg_len = int(len_data.decode().strip())
-                    
-                    # Read message data
-                    data = await self.reader.read(msg_len)
-                    if not data:
-                        break  # Connection closed
-                    
-                    # Parse the request
-                    request = json.loads(data.decode())
-                    request_id = request.get('request_id')
-                    
-                    # Handle backward compatibility for messages without request IDs
-                    if request_id is None:
-                        # Generate a request ID for backward compatibility
-                        import uuid
-                        request_id = str(uuid.uuid4())
-                    
-                    # Process request concurrently
-                    task = asyncio.create_task(self.process_request(request, request_id))
-                    self.active_tasks.add(task)
-                    
-                    # Set up task cleanup
-                    task.add_done_callback(self.cleanup_task)
-                    
-                except asyncio.CancelledError:
-                    # Server is shutting down, exit gracefully
-                    break
-                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
-                    # Connection was reset by peer, exit gracefully without error logging
-                    break
-                except Exception as e:
-                    # Log error but continue processing other requests
-                    # Be careful with traceback.print_exc() during shutdown
-                    try:
-                        if not self.rpc_server.shutdown_event.is_set():
-                            logger.error(f"Error processing request from {self.info}: {e}")
-                            if "Unterminated" in str(e):
-                                with open(f'/tmp/error_{counter}.txt', 'w') as f:
-                                    f.write(data)
-                            if not asyncio.current_task().cancelled():
-                                logger.debug(traceback.format_exc())
-                    except:
-                        # If even error logging fails (e.g., during shutdown), just break
-                        break
-                    
-        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            while not self.rpc_server.shutdown_event.is_set() and not self.broken:
+                len_data = await self.reader.read(20)
+                if not len_data:
+                    break  # Connection closed
+
+                msg_len = int(len_data.decode().strip())
+
+                # Read message data
+                data = await self.reader.read(msg_len)
+                if not data:
+                    break  # Connection closed
+
+                # Parse the request
+                request = json.loads(data.decode())
+                request_id = request.get('request_id')
+
+                # Process request concurrently
+                task = asyncio.create_task(self.process_request(request, request_id))
+                self.active_tasks.add(task)
+                task.add_done_callback(self.cleanup_task)
+                
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, asyncio.CancelledError):
             # Connection errors during shutdown are expected, exit gracefully
             pass
         except Exception as e:
             # Only log if we're not being cancelled or shutting down
-            try:
-                if not asyncio.current_task().cancelled() and not self.rpc_server.shutdown_event.is_set():
-                    logger.error(f"Connection error with {self.info}: {e}")
-                    logger.debug(traceback.format_exc())
-            except:
-                # Ignore errors during error logging
-                pass
+            self.logger.error(f"Connection error with {self.info}: {e}")
+            self.logger.debug(traceback.format_exc())
+            raise
         finally:
+            self.logger.debug("Dropping connection to {self.info}")
             await self.cleanup()
 
+        
     async def cleanup(self):
         """Clean up the connection and cancel active tasks"""
         # Cancel all active tasks
-        for task in list(self.active_tasks):
-            if not task.done():
-                task.cancel()
-        
-        # Wait for tasks to complete cancellation
-        if self.active_tasks:
-            try:
+        try:
+            for task in list(self.active_tasks):
+                if not task.done():
+                    task.cancel()
+            if self.active_tasks:
                 await asyncio.wait(self.active_tasks, timeout=1.0)
-            except asyncio.TimeoutError:
-                pass  # Some tasks might not cancel cleanly
-            except Exception:
-                pass  # Ignore errors during cleanup
-        
+        except Exception:
+            # when cleaning up, keep going no matter what
+            pass
         # Close the writer
         try:
-            if not self.writer.is_closing():
-                self.writer.close()
-                try:
-                    await self.writer.wait_closed()
-                except asyncio.CancelledError:
-                    pass
-                except Exception:
-                    pass  # Ignore errors during connection closing
+            self.writer.close()
         except Exception:
-            pass  # Ignore all errors during writer cleanup
+            # when cleaning up, keep going no matter what
+            pass  
 
     def __del__(self):
         """Ensure cleanup on garbage collection"""
         if hasattr(self, 'active_tasks') and self.active_tasks:
             # Cancel any remaining tasks
-            for task in self.active_tasks:
+            tasks = list(self.active_tasks)
+            for task in tasks:
                 if not task.done():
                     task.cancel()
+            # cleanup so tests can validate 
+            self.active_tasks = set()
+                    

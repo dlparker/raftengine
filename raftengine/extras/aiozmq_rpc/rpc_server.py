@@ -4,8 +4,9 @@ import traceback
 
 class RPCServer(aiozmq.rpc.AttrHandler):
 
-    def __init__(self, raft_server, timeout=10.0):
+    def __init__(self, raft_server, timeout=10.0, rm_wait_for_result=False):
         self.raft_server = raft_server
+        self.rm_wait_for_result = rm_wait_for_result 
         self.zmq_server = None
         self.server_port = None
         self.timeout = timeout
@@ -49,10 +50,14 @@ class RPCServer(aiozmq.rpc.AttrHandler):
 
     @aiozmq.rpc.method
     async def raft_message(self, message):
-        try:
-            result = await self.raft_server.raft_message(message)
-        except:
-            result = dict(rpc_error=traceback.format_exc())
+        if self.rm_wait_for_result:
+            try:
+                result = await self.raft_server.raft_message(message)
+            except:
+                result = dict(rpc_error=traceback.format_exc())
+        else:
+            asyncio.create_task(self.raft_server.raft_message(message))
+            result = None
         return result
 
     @aiozmq.rpc.method

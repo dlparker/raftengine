@@ -65,17 +65,14 @@ class RPCClient:
         
         request = raft_service_pb2.MessageRequest(message=message)
         
-        async def send_message():
-            try:
-                response = await self.stub.RaftMessage(request, timeout=self.timeout)
-                return response.result
-            except grpc.RpcError as e:
-                # Raft messages are fire-and-forget, so don't propagate errors
-                logger.debug(f"Raft message send failed (expected): {e}")
-        
-        # Fire-and-forget: spawn task and return immediately
-        asyncio.create_task(send_message())
-        return None
+        try:
+            response = await self.stub.RaftMessage(request, timeout=self.timeout)
+            if response.result == '':
+                return None
+            return response.result
+        except Exception as e:
+            logger.error(f"Raft message send failed: {e}")
+            raise
 
 
     async def direct_server_command(self, command):
@@ -105,11 +102,13 @@ class RPCClient:
             self.channel = None
             self.stub = None
             logger.debug(f"gRPC channel to {self.host}:{self.port} closed")
-            
-    async def __aenter__(self):
-        """Async context manager entry"""
-        return self
+
+    # Not sure why I have these context manager elements, prolly something claude code did,
+    # disabling for now to see if I really need them
+    #async def __aenter__(self):
+    #   """Async context manager entry"""
+    #    return self
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
-        await self.close()
+    #async def __aexit__(self, exc_type, exc_val, exc_tb):
+    #    """Async context manager exit"""
+    #    await self.close()

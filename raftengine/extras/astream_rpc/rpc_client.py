@@ -178,23 +178,10 @@ class RPCClient:
     async def raft_message(self, message) -> None:
         wrapped = {"mtype": "raft_message", "message": message}
         # For raft messages, we send but don't wait for response
-        try:
-            request_id = await self._send_request(wrapped)
-            # Create a task to wait for the response but don't await it
-            # This ensures proper cleanup of the request tracking
-            async def cleanup_raft_response():
-                try:
-                    await self._wait_for_response(request_id, timeout=1.0)  # Shorter timeout
-                except:
-                    pass  # Raft messages are fire-and-forget
-            
-            asyncio.create_task(cleanup_raft_response())
-        except Exception:
-            # Raft messages are fire-and-forget, so we don't propagate errors
-            # Don't log connection errors for raft messages during shutdown
-            pass
-        
-        return None
+        request_id = await self._send_request(wrapped)
+        response = await self._wait_for_response(request_id, timeout=1.0)  # Shorter timeout
+        result = json.loads(response)['result']
+        return result
 
     async def direct_server_command(self, command) -> str:
         wrapped = {"mtype": "direct_server_command", "message": command}
