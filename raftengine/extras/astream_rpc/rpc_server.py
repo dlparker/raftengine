@@ -43,7 +43,10 @@ class RPCServer:
             pass
         finally:
             if self.sock_server:
-                self.sock_server.close()
+                try:
+                    self.sock_server.close()
+                except Exception as e:
+                    self.logger.warning("serve exit processing closing sock_server got error {%s}", str(e))
                 self.sock_server = None
             self.server_task = None
 
@@ -76,11 +79,12 @@ class RPCServer:
             try:
                 self.logger.info(f"Closing connection {connection.info}")
                 await connection.cleanup()
-            except Exception:
-                pass  # Ignore errors during shutdown
+            except Exception as e:
+                self.logger.warning(f"Closing connection {connection.info} got error {e}, ignoring")
+                # Ignore errors during shutdown
         
         self.active_connections.clear()
-        self.logger.info("Server shutdown complete")
+        self.logger.info("Server shutdown method complete")
 
     async def stop(self):
         if self.server_task:
@@ -89,14 +93,17 @@ class RPCServer:
             try:
                 await self.server_task
             except asyncio.CancelledError:
-                pass
+                self.logger.warning("awaiting server_task got cancelled")
             self.server_task = None
         if self.sock_server:
-            self.sock_server.close()
             try:
-                await self.sock_server.wait_closed()
-            except asyncio.CancelledError:
-                pass
+                self.sock_server.close()
+                try:
+                    await self.sock_server.wait_closed()
+                except asyncio.CancelledError:
+                    self.logger.warning("awaiting sock_server.closed got cancelled")
+            except Exception as e:
+                self.logger.warning("closing sock_server got error {%s}", str(e))
             self.sock_server = None
 
 class ClientFollower:
@@ -136,7 +143,6 @@ class ClientFollower:
                 self.broken = True
                 
     async def process_request(self, request: dict, request_id: str):
-        """Process a single request in its own task"""
         try:
             mtype = request.get('mtype')
             message = request.get('message')
@@ -164,6 +170,7 @@ class ClientFollower:
                     "request_id": request_id
                 }
                 await self.send_response(error_response)
+                raise
         except Exception as e:
             self.broken = True
             self.logger.error("Cannot continue handling client {self.info}: {e}")
@@ -227,9 +234,8 @@ class ClientFollower:
             self.logger.debug(traceback.format_exc())
             raise
         finally:
-            self.logger.debug("Dropping connection to {self.info}")
+            self.logger.debug("Dropping connection to %s", self.info)
             await self.cleanup()
-
         
     async def cleanup(self):
         """Clean up the connection and cancel active tasks"""

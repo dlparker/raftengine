@@ -1,5 +1,8 @@
 import asyncio
+import json
 import logging
+import traceback
+import types
 import pytest
 
 from rpc_common import RaftServerSim, seq_1, error_seq_1
@@ -47,7 +50,7 @@ class InsertServer(RPCServer):
         self.client_follower_class = kwargs.pop('client_follower_class', None)
         super().__init__(*args, **kwargs)
         self.logger = LoggerWrapper(actual_logger=self.logger)
-
+        self.skip_close = False
 
     async def serve(self):
         self.logger.info(f"server running on port {self.port}")
@@ -55,10 +58,12 @@ class InsertServer(RPCServer):
             # Keep the server running
             await asyncio.Event().wait()
         except asyncio.CancelledError:
-            # Server is being shut down
-            pass
+            self.logger.warning(f'astream server cancelled')
+            if self.re_raise_cancel:
+                self.logger.warning('re-rasing')
+                raise
         finally:
-            if self.sock_server:
+            if self.sock_server and not self.skip_close:
                 self.sock_server.close()
                 self.sock_server = None
             self.server_task = None
@@ -148,10 +153,34 @@ class StreamReaderWrapper:
         self.read_no_message = False
         self.explode_on_length = False
         self.have_length = False
+        self.bogus_message = None
         
     async def read(self, length):
         try:
+            if self.bogus_message:
+                if length == 20:
+                    mlen = len(self.bogus_message)
+                    logger.debug(f"Wrapper returning length {mlen} of bogus message on length read")
+                    return str(mlen).encode()
+                else:
+                    logger.debug(f"Wrapper returning bogus message {self.bogus_message}")
+                    msg = self.bogus_message
+                    self.bogus_message = None
+                    return msg
             res = await self.real.read(length)
+            if self.bogus_message:
+                if length == 20:
+                    # read and discard the triggering message
+                    msg_len = int(res.decode().strip())
+                    msg = await self.real.read(msg_len)
+                    mlen = len(self.bogus_message)
+                    logger.debug(f"Wrapper returning length {mlen} of bogus message on length read (already pending)")
+                    return str(mlen).encode()
+                else:
+                    logger.debug(f"Wrapper returning bogus message (already pending) {self.bogus_message}")
+                    msg = self.bogus_message
+                    self.bogus_message = None
+                    return msg
             if length == 20 and not self.have_length:
                 if self.read_no_length:
                     logger.debug(f"Wrapper returning None on length read")
@@ -177,11 +206,15 @@ class StreamWriterWrapper:
     def __init__(self, real):
         self.real = real
         self.explode_on_send = False
+        self.catch_outgoing = False
+        self.parts = []
 
     def get_extra_info(self, *args, **kwargs):
         return self.real.get_extra_info(*args, **kwargs)
     
     def write(self, data):
+        if self.catch_outgoing:
+            self.parts.append(data)
         if self.explode_on_send:
             raise Exception('Exploding on inserted error in stream send')
         return self.real.write(data)
@@ -189,6 +222,31 @@ class StreamWriterWrapper:
     def drain(self):
         return self.real.drain()
     
+class LoggerWrapper(logging.Logger):
+
+    def __init__(self, *args, **kwargs):
+        self.actual_logger = kwargs.pop('actual_logger')
+        self.error_lines = []
+        self.warning_lines = []
+        self.info_lines = []
+        self.debug_lines = []
+        
+    def error(self, *args, **kwargs):
+        self.error_lines.append(args[0])
+        self.actual_logger.error(*args, **kwargs)
+        
+    def warning(self, *args, **kwargs):
+        self.warning_lines.append(args[0])
+        self.actual_logger.warning(*args, **kwargs)
+
+    def info(self, *args, **kwargs):
+        self.info_lines.append(args[0])
+        self.actual_logger.info(*args, **kwargs)
+
+    def debug(self, *args, **kwargs):
+        self.debug_lines.append(args[0])
+        self.actual_logger.debug(*args, **kwargs)
+
     
 class BreakingFollower(ClientFollower):
 
@@ -197,7 +255,8 @@ class BreakingFollower(ClientFollower):
         self.writer = StreamWriterWrapper(self.writer)
         self.reader = StreamReaderWrapper(self.reader)
         self.explode_locally = False
-            
+        self.logger = LoggerWrapper(actual_logger=self.logger)
+        
     async def process_request(self, request, request_id):
         mtype = request.get('mtype')
         message = request.get('message')
@@ -206,6 +265,11 @@ class BreakingFollower(ClientFollower):
             # break the writer so that sending the response fails
             self.writer.real.close()
         return await super().process_request(request, request_id)
+
+    async def cleanup(self):
+        if self.explode_in_cleanup:
+            raise Exception("inserted error in cleanup")
+        return await super().cleanup()
 
 async def test_astream_cf_explodes():
 
@@ -263,5 +327,200 @@ async def test_astream_server_short_reads():
     assert "closed" in str(excinfo)
 
     await server.stop()
+    await client.close()
+
+async def test_astream_server_read_explodes():
+    
+    logger.info("Check that server read exception closes the listener")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer),client_follower_class=BreakingFollower)
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.issue_command('foo')
+    conn = list(server.active_connections)[0]
+
+    conn.reader.explode_on_length = True
+    with pytest.raises(Exception) as excinfo:
+        await client.issue_command('foo')
+    assert "closed" in str(excinfo)
+
+    found = False
+    for elem in conn.logger.error_lines:
+        if "Exploding" in elem:
+            found = True
+            break
+    assert found
+
+    await server.stop()
+    await client.close()
+    
+async def test_astream_server_bad_command():
+    
+    logger.info("Check that server read of a bad command sends an error reply")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer),client_follower_class=BreakingFollower)
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    conn = list(server.active_connections)[0]
+
+    conn.reader.bogus_message = json.dumps(dict(mtype="badtype", message="foo", timeout=1.0, request_id=1111)).encode()
+    conn.writer.catch_outgoing = True
+    with pytest.raises(Exception) as excinfo:
+        await client.issue_command('foo', timeout=0.01)
+    assert "timed out" in str(excinfo)
+    out_len = conn.writer.parts[0]
+    out_msg_raw = conn.writer.parts[1]
+    out_msg = json.loads(out_msg_raw.decode())
+    assert "badtype" in out_msg['result']
+    await server.stop()
+    await client.close()
+    
+async def test_astream_server_cleanup_explodes():
+    
+    logger.info("Check that server shutdown succeeds when error happens in client follower cleanup")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer),client_follower_class=BreakingFollower)
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    server.logger = LoggerWrapper(actual_logger=server.logger)
+    conn = list(server.active_connections)[0]
+    conn.explode_in_cleanup = True
+    await server.stop()
+
+    found = False
+    for elem in server.logger.warning_lines:
+        if "Closing connection" in elem and "got error" in elem:
+            found = True
+            break
+    assert found
+
+    await client.close()
+    
+async def test_astream_server_stop_errors(monkeypatch):
+
+    logger.info("Check that serve method re-raising cancelled does not break server stop method")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer))
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    server.logger = LoggerWrapper(actual_logger=server.logger)
+
+    server.re_raise_cancel = True
+    await server.stop()
+    found = False
+    for line in server.logger.warning_lines:
+        if "server_task got cancelled" in line:
+            found = True
+            break
+    assert found
+
+    await client.close()
+
+    logger.info("Check that server serve exit logic does not break due to exception on sock_server.close")
+
+    server = RPCServer(raft_server=RaftServerSim(rpc_server_class=RPCServer))
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    server.logger = LoggerWrapper(actual_logger=server.logger)
+
+    original_close = server.sock_server.close
+    server.skip_close = True
+
+    def mock_close(self):
+        raise Exception("Forced error on sock_server.close during serve exit!")
+
+    # Bind the mock to the instance to make it an instance method
+    bound_mock = types.MethodType(mock_close, server.sock_server)
+
+    # Monkeypatch with the bound mock
+    monkeypatch.setattr(server.sock_server, 'close', bound_mock)
+
+    await server.stop()
+    found = False
+    for elem in server.logger.warning_lines:
+        if "serve exit" in elem and "closing sock_server got error" in elem:
+            found = True
+            break
+    assert found
+    original_close()
+    await client.close()
+
+    logger.info("Check that server stop succeeds when errors happen stopping socket server during stop method")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer))
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    server.logger = LoggerWrapper(actual_logger=server.logger)
+
+
+    original_close = server.sock_server.close
+    server.skip_close = True
+
+    def mock_close(self):
+        raise Exception("Forced error during server close!")
+
+    # Bind the mock to the instance to make it an instance method
+    bound_mock = types.MethodType(mock_close, server.sock_server)
+
+    # Monkeypatch with the bound mock
+    monkeypatch.setattr(server.sock_server, 'close', bound_mock)
+
+    await server.stop()
+    found = False
+    for elem in server.logger.warning_lines:
+        if "closing sock_server got error" in elem:
+            found = True
+            break
+    assert found
+    original_close()
+    
+    await client.close()
+
+    logger.info("Check that server stop succeeds when wait closed gets cancelled")
+
+    server = InsertServer(raft_server=RaftServerSim(rpc_server_class=RPCServer))
+    port = 55555
+
+    await server.start(port=port)
+    client = RPCClient(host='127.0.0.1', port=port, timeout=0.1)
+    print(await client.issue_command('foo'))
+    server.logger = LoggerWrapper(actual_logger=server.logger)
+
+    original_wait_close = server.sock_server.wait_closed
+    server.skip_close = True
+
+    async def mock_wait_closed(self):
+        raise asyncio.CancelledError('inserted cancel')
+
+    # Bind the mock to the instance to make it an instance method
+    bound_mock = types.MethodType(mock_wait_closed, server.sock_server)
+
+    # Monkeypatch with the bound mock
+    monkeypatch.setattr(server.sock_server, 'wait_closed', bound_mock)
+
+    await server.stop()
+    found = False
+    for elem in server.logger.warning_lines:
+        if "sock_server.closed got cancelled" in elem:
+            found = True
+            break
+    assert found
     await client.close()
     
