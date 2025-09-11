@@ -419,7 +419,6 @@ class SqliteLog(LogAPI):
     def __init__(self, filepath: os.PathLike, enable_wal=False):
         self.records = None
         self.filepath = filepath
-        self.logger = logging.getLogger(__name__)
         self.enable_wal = enable_wal
 
     async def start(self):

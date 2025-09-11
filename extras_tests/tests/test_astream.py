@@ -206,6 +206,8 @@ class StreamWriterWrapper:
     def __init__(self, real):
         self.real = real
         self.explode_on_send = False
+        self.explode_on_close = False
+        self.explode_on_wait_closed = False
         self.catch_outgoing = False
         self.parts = []
 
@@ -221,6 +223,16 @@ class StreamWriterWrapper:
 
     def drain(self):
         return self.real.drain()
+
+    def close(self):
+        if self.explode_on_close:
+            raise Exception("Inserted error")
+        return self.real.close()
+
+    async def wait_closed(self):
+        if self.explode_on_wait_closed:
+            raise Exception("Inserted error")
+        return await self.real.wait_closed()
     
 class LoggerWrapper(logging.Logger):
 
@@ -523,4 +535,124 @@ async def test_astream_server_stop_errors(monkeypatch):
             break
     assert found
     await client.close()
+    
+class InsertClient(RPCClient):
+    
+    async def ensure_connection(self):
+        if self.reader is None or self.writer is None:
+            self.logger = LoggerWrapper(actual_logger=self.logger)
+            reader, writer = await asyncio.open_connection(self.host, self.port)
+            self.reader = StreamReaderWrapper(reader)
+            self.writer = StreamWriterWrapper(writer)
+            self.response_handler_task = asyncio.create_task(self.response_handler())
+        
+async def test_astream_client_stop_errors():
+    
+    logger.info("Check that exception on client close raises no error")
+
+    server = RaftServerSim(RPCServer)
+    port = 55555
+
+    await server.start(port=port)
+
+    client = InsertClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.ensure_connection()
+    client.writer.explode_on_close = True
+
+    await client.close()
+    found = False
+    for elem in client.logger.warning_lines:
+        if "writer close got error" in elem.lower():
+            found = True
+            break
+    assert found
+    await server.stop()
+
+    
+    logger.info("Check that exception on client wait_closed raises no error")
+
+    server = RaftServerSim(RPCServer)
+    port = 55555
+
+    await server.start(port=port)
+
+    client = InsertClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.ensure_connection()
+    client.writer.explode_on_wait_closed = True
+
+    await client.close()
+    found = False
+    for elem in client.logger.warning_lines:
+        if "writer wait_closed got error" in elem.lower():
+            found = True
+            break
+    assert found
+    await server.stop()
+
+async def test_astream_client_short_reads():
+
+    
+    logger.info("Check that client exception on read of raises error")
+
+    server = RaftServerSim(RPCServer)
+    port = 55555
+
+    await server.start(port=port)
+
+    client = InsertClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.ensure_connection()
+    client.reader.explode_on_length = True
+    with pytest.raises(Exception) as excinfo:
+        await client.issue_command('foo', timeout=0.05)
+    assert "inserted error" in str(excinfo)
+    await client.close()
+    await server.stop()
+
+    
+    logger.info("Check that client short read of length from server closes raises error")
+
+    server = RaftServerSim(RPCServer)
+    port = 55555
+
+    await server.start(port=port)
+
+    client = InsertClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.ensure_connection()
+    client.reader.read_no_length = True
+    with pytest.raises(Exception) as excinfo:
+        await client.issue_command('foo', timeout=0.05)
+    assert "closed" in str(excinfo)
+    found = False
+    for elem in client.logger.debug_lines:
+        if "closed by server" in elem:
+            found = True
+            break
+    assert found
+    await client.close()
+    await server.stop()
+
+    logger.info("Check that client short read of message from server closes raises error")
+
+    server = RaftServerSim(RPCServer)
+    port = 55555
+
+    await server.start(port=port)
+        
+    client = InsertClient(host='127.0.0.1', port=port, timeout=0.1)
+    await client.ensure_connection()
+    client.reader.read_no_message = True
+    with pytest.raises(Exception) as excinfo:
+        await client.issue_command('foo', timeout=0.05)
+    assert "closed" in str(excinfo)
+    found = False
+    for elem in client.logger.debug_lines:
+        if "no data" in elem.lower():
+            found = True
+            break
+    assert found
+    await client.close()
+    await server.stop()
+    
+
+
     
