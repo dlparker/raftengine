@@ -1,0 +1,1135 @@
+.
+├── CHANGELOG.md
+├── CLAUDE.md
+├── claude_plans
+│   ├── raft_compliance_instrumentation_plan.md
+│   ├── raft_feature_identification_methodology.md
+│   ├── request_2.org
+│   └── test_feature_definitions_checklist.md
+├── coverage.cfg
+├── cover_tools.cfg
+├── design_docs
+│   ├── raft.pdf
+│   └── thesis.pdf
+├── dev_tools
+│   ├── build_docs.py
+│   ├── doc_plan.org
+│   ├── feature_db.py
+│   ├── features.py
+│   ├── log_control.py
+│   ├── make_trace_pdf.py
+│   ├── network_sim.py
+│   ├── operations.py
+│   ├── pausing_cluster.py
+│   ├── pausing_server.py
+│   ├── readable_message_formatters.py
+│   ├── roam2doc
+│   ├── sequences.py
+│   ├── table_legend.org
+│   ├── table_legend.rst
+│   ├── tests
+│   │   └── test_doc_builds.py
+│   ├── test_trace.py
+│   ├── trace_data.py
+│   ├── trace_formatters.py
+│   ├── trace_output.py
+│   ├── trace_shorthand.py
+│   └── triggers.py
+├── docs
+│   ├── make.bat
+│   ├── Makefile
+│   ├── requirements.txt
+│   └── source
+│       ├── conf.py
+│       ├── developer
+│       │   ├── index.rst
+│       │   ├── simulation_tools.rst
+│       │   ├── tests
+│       │   │   ├── commands
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_command_1.rst
+│       │   │   │   ├── test_command_2_leaders_1.rst
+│       │   │   │   ├── test_command_2_leaders_2.rst
+│       │   │   │   ├── test_command_2_leaders_3.rst
+│       │   │   │   ├── test_command_after_heal_1.rst
+│       │   │   │   ├── test_command_after_heal_2.rst
+│       │   │   │   ├── test_command_sqlite_1.rst
+│       │   │   │   ├── test_follower_explodes_in_command.rst
+│       │   │   │   ├── test_follower_rewrite_1.rst
+│       │   │   │   ├── test_follower_run_error.rst
+│       │   │   │   ├── test_full_catchup.rst
+│       │   │   │   ├── test_leader_explodes_in_command.rst
+│       │   │   │   └── test_long_catchup.rst
+│       │   │   ├── diagrams
+│       │   │   │   ├── test_commands_1
+│       │   │   │   │   ├── test_command_1_1.puml
+│       │   │   │   │   ├── test_command_1_2.puml
+│       │   │   │   │   ├── test_command_1_3.puml
+│       │   │   │   │   ├── test_command_1_4.puml
+│       │   │   │   │   ├── test_command_1_5.puml
+│       │   │   │   │   ├── test_command_1_6.puml
+│       │   │   │   │   ├── test_command_1_7.puml
+│       │   │   │   │   ├── test_command_1_8.puml
+│       │   │   │   │   ├── test_command_2_leaders_1_1.puml
+│       │   │   │   │   ├── test_command_2_leaders_1_2.puml
+│       │   │   │   │   ├── test_command_2_leaders_1_3.puml
+│       │   │   │   │   ├── test_command_2_leaders_1_4.puml
+│       │   │   │   │   ├── test_command_2_leaders_1_5.puml
+│       │   │   │   │   ├── test_command_2_leaders_2_1.puml
+│       │   │   │   │   ├── test_command_2_leaders_2_2.puml
+│       │   │   │   │   ├── test_command_2_leaders_2_3.puml
+│       │   │   │   │   ├── test_command_2_leaders_2_4.puml
+│       │   │   │   │   ├── test_command_2_leaders_2_5.puml
+│       │   │   │   │   ├── test_command_2_leaders_3_1.puml
+│       │   │   │   │   ├── test_command_2_leaders_3_2.puml
+│       │   │   │   │   ├── test_command_2_leaders_3_3.puml
+│       │   │   │   │   ├── test_command_2_leaders_3_4.puml
+│       │   │   │   │   ├── test_command_after_heal_1_1.puml
+│       │   │   │   │   ├── test_command_after_heal_1_2.puml
+│       │   │   │   │   ├── test_command_after_heal_1_3.puml
+│       │   │   │   │   ├── test_command_after_heal_2_1.puml
+│       │   │   │   │   ├── test_command_after_heal_2_2.puml
+│       │   │   │   │   ├── test_command_after_heal_2_3.puml
+│       │   │   │   │   ├── test_command_sqlite_1_1.puml
+│       │   │   │   │   ├── test_command_sqlite_1_2.puml
+│       │   │   │   │   ├── test_follower_explodes_in_command_1.puml
+│       │   │   │   │   ├── test_follower_explodes_in_command_2.puml
+│       │   │   │   │   ├── test_follower_explodes_in_command_3.puml
+│       │   │   │   │   ├── test_follower_rewrite_1_1.puml
+│       │   │   │   │   ├── test_follower_rewrite_1_2.puml
+│       │   │   │   │   ├── test_follower_rewrite_1_3.puml
+│       │   │   │   │   ├── test_follower_rewrite_1_4.puml
+│       │   │   │   │   ├── test_follower_rewrite_1_5.puml
+│       │   │   │   │   ├── test_follower_run_error_1.puml
+│       │   │   │   │   ├── test_follower_run_error_2.puml
+│       │   │   │   │   ├── test_follower_run_error_3.puml
+│       │   │   │   │   ├── test_follower_run_error_4.puml
+│       │   │   │   │   ├── test_full_catchup_1.puml
+│       │   │   │   │   ├── test_full_catchup_2.puml
+│       │   │   │   │   ├── test_full_catchup_3.puml
+│       │   │   │   │   ├── test_leader_explodes_in_command_1.puml
+│       │   │   │   │   ├── test_leader_explodes_in_command_2.puml
+│       │   │   │   │   ├── test_leader_explodes_in_command_3.puml
+│       │   │   │   │   ├── test_leader_explodes_in_command_4.puml
+│       │   │   │   │   ├── test_long_catchup_1.puml
+│       │   │   │   │   ├── test_long_catchup_2.puml
+│       │   │   │   │   └── test_long_catchup_3.puml
+│       │   │   │   ├── test_elections_1
+│       │   │   │   │   ├── test_election_1_1.puml
+│       │   │   │   │   ├── test_election_1_2.puml
+│       │   │   │   │   ├── test_election_1_3.puml
+│       │   │   │   │   ├── test_election_2_1.puml
+│       │   │   │   │   ├── test_election_2_2.puml
+│       │   │   │   │   ├── test_pre_election_1_1.puml
+│       │   │   │   │   ├── test_pre_election_1_2.puml
+│       │   │   │   │   ├── test_pre_election_1_3.puml
+│       │   │   │   │   ├── test_pre_vote_reject_1_1.puml
+│       │   │   │   │   ├── test_pre_vote_reject_1_2.puml
+│       │   │   │   │   ├── test_reelection_1_1.puml
+│       │   │   │   │   ├── test_reelection_1_2.puml
+│       │   │   │   │   ├── test_reelection_2_1.puml
+│       │   │   │   │   ├── test_reelection_2_2.puml
+│       │   │   │   │   ├── test_reelection_3_1.puml
+│       │   │   │   │   └── test_reelection_3_2.puml
+│       │   │   │   ├── test_elections_2
+│       │   │   │   │   ├── test_election_candidate_log_too_old_1_1.puml
+│       │   │   │   │   ├── test_election_candidate_log_too_old_1_2.puml
+│       │   │   │   │   ├── test_election_candidate_log_too_old_1_3.puml
+│       │   │   │   │   ├── test_election_candidate_log_too_old_2_1.puml
+│       │   │   │   │   ├── test_election_candidate_log_too_old_2_2.puml
+│       │   │   │   │   ├── test_election_candidate_log_too_old_2_3.puml
+│       │   │   │   │   ├── test_election_candidate_term_too_old_1_1.puml
+│       │   │   │   │   ├── test_election_candidate_term_too_old_1_2.puml
+│       │   │   │   │   ├── test_election_candidate_term_too_old_1_3.puml
+│       │   │   │   │   ├── test_election_candidate_too_slow_1_1.puml
+│       │   │   │   │   ├── test_election_candidate_too_slow_1_2.puml
+│       │   │   │   │   ├── test_election_candidate_too_slow_1_3.puml
+│       │   │   │   │   ├── test_election_candidate_too_slow_1_4.puml
+│       │   │   │   │   ├── test_election_candidate_too_slow_1_5.puml
+│       │   │   │   │   ├── test_election_timeout_1_1.puml
+│       │   │   │   │   ├── test_election_timeout_1_2.puml
+│       │   │   │   │   ├── test_election_timeout_1_3.puml
+│       │   │   │   │   ├── test_election_vote_once_1_1.puml
+│       │   │   │   │   ├── test_election_vote_once_1_2.puml
+│       │   │   │   │   ├── test_election_vote_once_1_3.puml
+│       │   │   │   │   ├── test_election_vote_once_1_4.puml
+│       │   │   │   │   ├── test_election_vote_once_1_5.puml
+│       │   │   │   │   ├── test_failed_first_election_1_1.puml
+│       │   │   │   │   ├── test_failed_first_election_1_2.puml
+│       │   │   │   │   ├── test_failed_first_election_2_1.puml
+│       │   │   │   │   ├── test_failed_first_election_2_2.puml
+│       │   │   │   │   ├── test_power_transfer_1_1.puml
+│       │   │   │   │   ├── test_power_transfer_1_2.puml
+│       │   │   │   │   ├── test_power_transfer_2_1.puml
+│       │   │   │   │   ├── test_power_transfer_2_2.puml
+│       │   │   │   │   ├── test_power_transfer_fails_1_1.puml
+│       │   │   │   │   ├── test_power_transfer_fails_1_2.puml
+│       │   │   │   │   ├── test_power_transfer_fails_1_3.puml
+│       │   │   │   │   ├── test_run_to_election_1_1.puml
+│       │   │   │   │   ├── test_run_to_election_1_2.puml
+│       │   │   │   │   ├── test_run_to_election_1_3.puml
+│       │   │   │   │   ├── test_stepwise_election_1_1.puml
+│       │   │   │   │   └── test_stepwise_election_1_2.puml
+│       │   │   │   ├── test_events
+│       │   │   │   │   ├── test_event_handlers_1.puml
+│       │   │   │   │   └── test_message_errors_1.puml
+│       │   │   │   ├── test_log_fiddles
+│       │   │   │   │   ├── test_empty_log_1_1.puml
+│       │   │   │   │   ├── test_empty_log_1_2.puml
+│       │   │   │   │   ├── test_empty_log_1_3.puml
+│       │   │   │   │   ├── test_empty_log_2_1.puml
+│       │   │   │   │   └── test_empty_log_2_2.puml
+│       │   │   │   ├── test_member_changes
+│       │   │   │   │   ├── test_add_follower_1_1.puml
+│       │   │   │   │   ├── test_add_follower_1_2.puml
+│       │   │   │   │   ├── test_add_follower_2_1.puml
+│       │   │   │   │   ├── test_add_follower_2_2.puml
+│       │   │   │   │   ├── test_add_follower_2_3.puml
+│       │   │   │   │   ├── test_add_follower_2_rounds_1_1.puml
+│       │   │   │   │   ├── test_add_follower_2_rounds_1_2.puml
+│       │   │   │   │   ├── test_add_follower_2_rounds_1_3.puml
+│       │   │   │   │   ├── test_add_follower_3_rounds_1_1.puml
+│       │   │   │   │   ├── test_add_follower_3_rounds_1_2.puml
+│       │   │   │   │   ├── test_add_follower_3_rounds_1_3.puml
+│       │   │   │   │   ├── test_add_follower_3_rounds_1_4.puml
+│       │   │   │   │   ├── test_add_follower_errors_1_1.puml
+│       │   │   │   │   ├── test_add_follower_errors_1_2.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_1.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_2.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_3.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_4.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_5.puml
+│       │   │   │   │   ├── test_add_follower_round_2_timeout_1_6.puml
+│       │   │   │   │   ├── test_add_follower_timeout_1_1.puml
+│       │   │   │   │   ├── test_add_follower_timeout_1_2.puml
+│       │   │   │   │   ├── test_add_follower_too_many_rounds_1_1.puml
+│       │   │   │   │   ├── test_add_follower_too_many_rounds_1_2.puml
+│       │   │   │   │   ├── test_add_follower_too_many_rounds_1_3.puml
+│       │   │   │   │   ├── test_remove_candidate_1_1.puml
+│       │   │   │   │   ├── test_remove_candidate_1_2.puml
+│       │   │   │   │   ├── test_remove_follower_1_1.puml
+│       │   │   │   │   ├── test_remove_follower_1_2.puml
+│       │   │   │   │   ├── test_remove_leader_1_1.puml
+│       │   │   │   │   ├── test_remove_leader_1_2.puml
+│       │   │   │   │   ├── test_reverse_add_follower_1_1.puml
+│       │   │   │   │   ├── test_reverse_add_follower_1_2.puml
+│       │   │   │   │   ├── test_reverse_add_follower_1_3.puml
+│       │   │   │   │   ├── test_reverse_add_follower_1_4.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_1_1.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_1_2.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_1_3.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_1_4.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_1_5.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_2_1.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_2_2.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_2_3.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_2_4.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_3_1.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_3_2.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_3_3.puml
+│       │   │   │   │   ├── test_reverse_remove_follower_3_4.puml
+│       │   │   │   │   ├── test_update_settings_1.puml
+│       │   │   │   │   └── test_update_settings_2.puml
+│       │   │   │   ├── test_msg_edges
+│       │   │   │   │   ├── test_message_errors_1.puml
+│       │   │   │   │   ├── test_slow_voter_1.puml
+│       │   │   │   │   ├── test_slow_voter_2.puml
+│       │   │   │   │   ├── test_slow_voter_3.puml
+│       │   │   │   │   ├── test_slow_voter_4.puml
+│       │   │   │   │   └── test_slow_voter_5.puml
+│       │   │   │   ├── test_partition_1
+│       │   │   │   │   ├── test_partition_1_1.puml
+│       │   │   │   │   ├── test_partition_1_2.puml
+│       │   │   │   │   ├── test_partition_1_3.puml
+│       │   │   │   │   ├── test_partition_1_4.puml
+│       │   │   │   │   ├── test_partition_1_5.puml
+│       │   │   │   │   ├── test_partition_1_6.puml
+│       │   │   │   │   ├── test_partition_2_leader_1.puml
+│       │   │   │   │   ├── test_partition_2_leader_2.puml
+│       │   │   │   │   ├── test_partition_2_leader_3.puml
+│       │   │   │   │   ├── test_partition_2_leader_4.puml
+│       │   │   │   │   ├── test_partition_2_leader_5.puml
+│       │   │   │   │   ├── test_partition_2_leader_6.puml
+│       │   │   │   │   ├── test_partition_2_leader_7.puml
+│       │   │   │   │   ├── test_partition_2_leader_8.puml
+│       │   │   │   │   ├── test_partition_3_follower_1.puml
+│       │   │   │   │   ├── test_partition_3_follower_2.puml
+│       │   │   │   │   ├── test_partition_3_follower_3.puml
+│       │   │   │   │   ├── test_partition_3_leader_1.puml
+│       │   │   │   │   ├── test_partition_3_leader_2.puml
+│       │   │   │   │   ├── test_partition_3_leader_3.puml
+│       │   │   │   │   ├── test_partition_3_leader_4.puml
+│       │   │   │   │   └── test_partition_3_leader_5.puml
+│       │   │   │   ├── test_random_code
+│       │   │   │   │   ├── test_feature_defs_1_1.puml
+│       │   │   │   │   ├── test_feature_defs_1.puml
+│       │   │   │   │   ├── test_feature_defs_2_1.puml
+│       │   │   │   │   ├── test_feature_defs_2.puml
+│       │   │   │   │   ├── test_feature_defs_3_1.puml
+│       │   │   │   │   ├── test_feature_defs_3_2.puml
+│       │   │   │   │   ├── test_feature_defs_3_3.puml
+│       │   │   │   │   ├── test_feature_defs_3_4.puml
+│       │   │   │   │   ├── test_feature_defs_3_5.puml
+│       │   │   │   │   ├── test_feature_defs_3_6.puml
+│       │   │   │   │   └── test_feature_defs_3_7.puml
+│       │   │   │   ├── test_snapshots
+│       │   │   │   │   ├── test_snapshot_2_1.puml
+│       │   │   │   │   ├── test_snapshot_2_2.puml
+│       │   │   │   │   ├── test_snapshot_2_3.puml
+│       │   │   │   │   ├── test_snapshot_2_4.puml
+│       │   │   │   │   ├── test_snapshot_3_1.puml
+│       │   │   │   │   ├── test_snapshot_3_2.puml
+│       │   │   │   │   ├── test_snapshot_3_3.puml
+│       │   │   │   │   ├── test_snapshot_3_4.puml
+│       │   │   │   │   ├── test_snapshot_3_5.puml
+│       │   │   │   │   ├── test_snapshot_3_6.puml
+│       │   │   │   │   ├── test_snapshot_3_7.puml
+│       │   │   │   │   ├── test_snapshot_3_8.puml
+│       │   │   │   │   ├── test_snapshot_4_1.puml
+│       │   │   │   │   ├── test_snapshot_4_2.puml
+│       │   │   │   │   ├── test_snapshot_4_3.puml
+│       │   │   │   │   ├── test_snapshot_4_4.puml
+│       │   │   │   │   ├── test_snapshot_4_5.puml
+│       │   │   │   │   └── test_snapshot_4_6.puml
+│       │   │   │   └── test_timers_1
+│       │   │   │       ├── test_candidate_timeout_1_1.puml
+│       │   │   │       ├── test_candidate_timeout_1_2.puml
+│       │   │   │       ├── test_candidate_timeout_1_3.puml
+│       │   │   │       ├── test_candidate_timeout_1_4.puml
+│       │   │   │       ├── test_candidate_timeout_1_5.puml
+│       │   │   │       ├── test_heartbeat_1_1.puml
+│       │   │   │       ├── test_heartbeat_2_1.puml
+│       │   │   │       ├── test_heartbeat_2_2.puml
+│       │   │   │       ├── test_lost_leader_1_1.puml
+│       │   │   │       └── test_lost_leader_1_2.puml
+│       │   │   ├── edges
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_bogus_pilot.rst
+│       │   │   │   ├── test_message_errors.rst
+│       │   │   │   └── test_slow_voter.rst
+│       │   │   ├── elections
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_election_1.rst
+│       │   │   │   ├── test_election_2.rst
+│       │   │   │   ├── test_election_candidate_log_too_old_1.rst
+│       │   │   │   ├── test_election_candidate_log_too_old_2.rst
+│       │   │   │   ├── test_election_candidate_term_too_old_1.rst
+│       │   │   │   ├── test_election_candidate_too_slow_1.rst
+│       │   │   │   ├── test_election_timeout_1.rst
+│       │   │   │   ├── test_election_vote_once_1.rst
+│       │   │   │   ├── test_failed_first_election_1.rst
+│       │   │   │   ├── test_failed_first_election_2.rst
+│       │   │   │   ├── test_power_transfer_1.rst
+│       │   │   │   ├── test_power_transfer_2.rst
+│       │   │   │   ├── test_power_transfer_fails_1.rst
+│       │   │   │   ├── test_pre_election_1.rst
+│       │   │   │   ├── test_pre_vote_reject_1.rst
+│       │   │   │   ├── test_reelection_1.rst
+│       │   │   │   ├── test_reelection_2.rst
+│       │   │   │   ├── test_reelection_3.rst
+│       │   │   │   ├── test_run_to_election_1.rst
+│       │   │   │   └── test_stepwise_election_1.rst
+│       │   │   ├── events
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_event_handlers.rst
+│       │   │   │   └── test_message_errors.rst
+│       │   │   ├── features
+│       │   │   │   ├── leader_election
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   ├── all_yes_votes
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── all_yes_votes.without_pre_vote
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── all_yes_votes.with_pre_vote
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── authorized_campaign
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── automated_election_process
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── candidate_resignation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── competing_candidates
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── controlled_timeout_victory
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── failed_election_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── failed_election_recovery_with_pre_vote
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── follower_promotion
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── higher_term_discovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── leader_demotion
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── leader_lost_simulation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── log_comparison
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── manual_stepwise_control
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── outdated_log_detection
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── outdated_term_detection
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── partial_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── partition_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── power_transfer
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── power_transfer_timeout
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── power_transfer_with_outdated_target
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── prevote_rejection
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── pre_vote_term_check
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── pre_vote_with_log_check
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── re_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── role_transitions
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── sequence_controlled_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── single_vote_per_term
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── split_brain_resolution
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── split_vote_resolution
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── split_vote_scenario
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── stale_vote_handling
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── term_manipulation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── term_rejection
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── timeout_driven_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── timeout_equalization
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── timeout_manipulation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── timer_based_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── voluntary_step_down
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── vote_acceptance
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── vote_rejection
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   └── without_pre_vote
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── log_replication
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   ├── batch_catchup
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── command_retry_logic
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── conflict_resolution
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── empty_log_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── follower_recovery_catchup
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── full_recovery_catchup
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── heartbeat_authority
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── heartbeat_commit_confirmation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── heartbeat_commit_update
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── heartbeat_only
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── heartbeat_processing
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── log_catchup
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── log_resync_operations
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── log_term_conflict_resolution
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── normal_replication
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── partial_failure_tolerance
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── slow_follower_backdown
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── term_start_entry
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── term_start_interruption
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   └── term_start_log_entry
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── log_storage
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   └── sqlite_compatibility
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── network_partition
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   ├── delayed_message_delivery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── follower_isolation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── leader_isolation
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── message_loss_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   └── post_partition_recovery
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── node_lifecycle
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   └── crash_simulation
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── state_machine_command
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   ├── all_in_sync
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── apply_on_delayed_replication
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── discovery_redirect
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── error_handling
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── follower_error_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── leader_error_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── minimal_node_count
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── request_redirect
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   └── retry_during_election
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   ├── system_reliability
+│       │   │   │   │   ├── branches
+│       │   │   │   │   │   ├── api_error_handling
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── crash_recovery
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── event_system
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   ├── leader_crash_during_election
+│       │   │   │   │   │   │   ├── features.rst
+│       │   │   │   │   │   │   ├── narative.rst
+│       │   │   │   │   │   │   └── short.rst
+│       │   │   │   │   │   └── message_error_handling
+│       │   │   │   │   │       ├── features.rst
+│       │   │   │   │   │       ├── narative.rst
+│       │   │   │   │   │       └── short.rst
+│       │   │   │   │   ├── features.rst
+│       │   │   │   │   ├── narative.rst
+│       │   │   │   │   └── short.rst
+│       │   │   │   └── test_infrastructure
+│       │   │   │       ├── branches
+│       │   │   │       │   ├── error_injection
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   ├── event_handlers
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   ├── message_flow_control
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   ├── message_interception
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   ├── network_blocking
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   ├── pausing_cluster_control
+│       │   │   │       │   │   ├── features.rst
+│       │   │   │       │   │   ├── narative.rst
+│       │   │   │       │   │   └── short.rst
+│       │   │   │       │   └── timer_operations
+│       │   │   │       │       ├── features.rst
+│       │   │   │       │       ├── narative.rst
+│       │   │   │       │       └── short.rst
+│       │   │   │       ├── features.rst
+│       │   │   │       ├── narative.rst
+│       │   │   │       └── short.rst
+│       │   │   ├── features_in_tests.rst
+│       │   │   ├── log_recovery
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_empty_log_1.rst
+│       │   │   │   └── test_empty_log_2.rst
+│       │   │   ├── member_changes
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_add_follower_1.rst
+│       │   │   │   ├── test_add_follower_2_rounds_1.rst
+│       │   │   │   ├── test_add_follower_2.rst
+│       │   │   │   ├── test_add_follower_3_rounds_1.rst
+│       │   │   │   ├── test_add_follower_errors_1.rst
+│       │   │   │   ├── test_add_follower_round_2_timeout_1.rst
+│       │   │   │   ├── test_add_follower_timeout_1.rst
+│       │   │   │   ├── test_add_follower_too_many_rounds_1.rst
+│       │   │   │   ├── test_member_change_messages.rst
+│       │   │   │   ├── test_remove_candidate_1.rst
+│       │   │   │   ├── test_remove_follower_1.rst
+│       │   │   │   ├── test_remove_leader_1.rst
+│       │   │   │   ├── test_reverse_add_follower_1.rst
+│       │   │   │   ├── test_reverse_remove_follower_1.rst
+│       │   │   │   ├── test_reverse_remove_follower_2.rst
+│       │   │   │   ├── test_reverse_remove_follower_3.rst
+│       │   │   │   └── test_update_settings.rst
+│       │   │   ├── partitions
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_partition_1.rst
+│       │   │   │   ├── test_partition_2_leader.rst
+│       │   │   │   ├── test_partition_3_follower.rst
+│       │   │   │   └── test_partition_3_leader.rst
+│       │   │   ├── random_code
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_feature_defs_1.rst
+│       │   │   │   ├── test_feature_defs_2.rst
+│       │   │   │   └── test_feature_defs_3.rst
+│       │   │   ├── snapshots
+│       │   │   │   ├── index.rst
+│       │   │   │   ├── test_snapshot_1.rst
+│       │   │   │   ├── test_snapshot_2.rst
+│       │   │   │   ├── test_snapshot_3.rst
+│       │   │   │   └── test_snapshot_4.rst
+│       │   │   ├── table_legend.rst
+│       │   │   ├── test_tracing_guide.rst
+│       │   │   └── timers
+│       │   │       ├── index.rst
+│       │   │       ├── test_candidate_timeout_1.rst
+│       │   │       ├── test_heartbeat_1.rst
+│       │   │       ├── test_heartbeat_2.rst
+│       │   │       └── test_lost_leader_1.rst
+│       │   ├── test_suite.rst
+│       │   └── tracing.rst
+│       ├── index.rst
+│       ├── _static
+│       │   ├── css
+│       │   │   └── custom.css
+│       │   ├── diagrams
+│       │   │   ├── snapshot_component.puml
+│       │   │   ├── snapshot_export.puml
+│       │   │   ├── snapshot_import.puml
+│       │   │   ├── snapshot_transfer_summary.puml
+│       │   │   ├── take_snapshot.puml
+│       │   │   ├── test_snapshot_3.dot
+│       │   │   └── test_trace_pics
+│       │   │       └── test_elections_1
+│       │   │           └── test_pre_election_1
+│       │   │               └── diag1.puml
+│       │   ├── FullApp.odg
+│       │   └── test_data
+│       │       ├── test_add_follower_1.csv
+│       │       ├── test_add_follower_2.csv
+│       │       ├── test_add_follower_2_rounds_1.csv
+│       │       ├── test_add_follower_3_rounds_1.csv
+│       │       ├── test_add_follower_errors_1.csv
+│       │       ├── test_add_follower_round_2_timeout_1.csv
+│       │       ├── test_add_follower_timeout_1.csv
+│       │       ├── test_add_follower_too_many_rounds_1.csv
+│       │       ├── test_candidate_timeout_1.csv
+│       │       ├── test_command_1.csv
+│       │       ├── test_command_2_leaders_1.csv
+│       │       ├── test_command_2_leaders_2.csv
+│       │       ├── test_command_2_leaders_3.csv
+│       │       ├── test_command_after_heal_1.csv
+│       │       ├── test_command_after_heal_2.csv
+│       │       ├── test_command_sqlite_1.csv
+│       │       ├── test_election_1.csv
+│       │       ├── test_election_2.csv
+│       │       ├── test_election_candidate_log_too_old_1.csv
+│       │       ├── test_election_candidate_log_too_old_2.csv
+│       │       ├── test_election_candidate_term_too_old_1.csv
+│       │       ├── test_election_candidate_too_slow_1.csv
+│       │       ├── test_election_timeout_1.csv
+│       │       ├── test_election_vote_once_1.csv
+│       │       ├── test_empty_log_1.csv
+│       │       ├── test_empty_log_2.csv
+│       │       ├── test_event_handlers.csv
+│       │       ├── test_failed_first_election_1.csv
+│       │       ├── test_failed_first_election_2.csv
+│       │       ├── test_follower_explodes_in_command.csv
+│       │       ├── test_follower_rewrite_1.csv
+│       │       ├── test_follower_run_error.csv
+│       │       ├── test_full_catchup.csv
+│       │       ├── test_heartbeat_1.csv
+│       │       ├── test_heartbeat_2.csv
+│       │       ├── test_leader_explodes_in_command.csv
+│       │       ├── test_long_catchup.csv
+│       │       ├── test_lost_leader_1.csv
+│       │       ├── test_message_errors.csv
+│       │       ├── test_partition_1.csv
+│       │       ├── test_partition_2_leader.csv
+│       │       ├── test_partition_3_follower.csv
+│       │       ├── test_partition_3_leader.csv
+│       │       ├── test_power_transfer_1.csv
+│       │       ├── test_power_transfer_2.csv
+│       │       ├── test_power_transfer_fails_1.csv
+│       │       ├── test_pre_election_1.csv
+│       │       ├── test_pre_vote_reject_1.csv
+│       │       ├── test_reelection_1.csv
+│       │       ├── test_reelection_2.csv
+│       │       ├── test_reelection_3.csv
+│       │       ├── test_remove_candidate_1.csv
+│       │       ├── test_remove_follower_1.csv
+│       │       ├── test_remove_leader_1.csv
+│       │       ├── test_reverse_add_follower_1.csv
+│       │       ├── test_reverse_remove_follower_1.csv
+│       │       ├── test_reverse_remove_follower_2.csv
+│       │       ├── test_reverse_remove_follower_3.csv
+│       │       ├── test_run_to_election_1.csv
+│       │       ├── test_slow_voter.csv
+│       │       ├── test_snapshot_1.csv
+│       │       ├── test_snapshot_2.csv
+│       │       ├── test_snapshot_3.csv
+│       │       ├── test_snapshot_4.csv
+│       │       ├── test_stepwise_election_1.csv
+│       │       └── test_update_settings.csv
+│       └── user
+│           ├── index.rst
+│           ├── modules.rst
+│           ├── raftengine.api.deck_api.rst
+│           ├── raftengine.api.deck_config.rst
+│           ├── raftengine.api.events.rst
+│           ├── raftengine.api.log_api.rst
+│           ├── raftengine.api.pilot_api.rst
+│           ├── raftengine.api.rst
+│           ├── raftengine.api.snapshot_api.rst
+│           ├── raftengine.api.types.rst
+│           └── users_guide
+│               ├── index.rst
+│               └── snapshot_process.rst
+├── examples
+│   ├── counters
+│   │   ├── coverage.cfg
+│   │   ├── pytest.ini
+│   │   ├── src
+│   │   │   ├── base
+│   │   │   │   ├── counters.py
+│   │   │   │   ├── demo_counters.py
+│   │   │   │   ├── demo.py
+│   │   │   │   ├── test_counters.py
+│   │   │   │   └── validator.py
+│   │   │   ├── ops
+│   │   │   │   ├── admin_common.py
+│   │   │   │   ├── cluster_cmd.py
+│   │   │   │   ├── cluster_mgr.py
+│   │   │   │   ├── command_loop.py
+│   │   │   │   ├── create_cluster.py
+│   │   │   │   ├── demo_ops.py
+│   │   │   │   ├── direct.py
+│   │   │   │   ├── raft_counters.py
+│   │   │   │   ├── requirements.txt
+│   │   │   │   ├── run_server.py
+│   │   │   │   ├── server_procs.py
+│   │   │   │   ├── test_common.py
+│   │   │   │   └── validate.py
+│   │   │   ├── raft
+│   │   │   │   ├── cluster.py
+│   │   │   │   ├── demo_raft.py
+│   │   │   │   ├── dev_requirements.txt
+│   │   │   │   ├── direct.py
+│   │   │   │   ├── pilot.py
+│   │   │   │   ├── raft_client.py
+│   │   │   │   ├── raft_server.py
+│   │   │   │   ├── requirements.txt
+│   │   │   │   ├── run_server.py
+│   │   │   │   ├── test_common.py
+│   │   │   │   └── test_raft.py
+│   │   │   ├── rpc
+│   │   │   │   ├── demo_rpc.py
+│   │   │   │   ├── raft_stub.py
+│   │   │   │   ├── rpc_client.py
+│   │   │   │   ├── rpc_server.py
+│   │   │   │   ├── run_tools.py
+│   │   │   │   └── test_rpc.py
+│   │   │   └── split_base
+│   │   │       ├── collector.py
+│   │   │       ├── demo_split.py
+│   │   │       ├── dispatcher.py
+│   │   │       ├── pipe.py
+│   │   │       └── test_split.py
+│   │   └── tests
+│   │       ├── conftest.py
+│   │       ├── log_control.py
+│   │       ├── requirements.txt
+│   │       ├── test_cluster_cmd.py
+│   │       ├── test_cluster_manager.py
+│   │       └── test_cluster.py
+│   ├── docs
+│   │   └── outline.org
+│   ├── options
+│   │   ├── src
+│   │   │   ├── base
+│   │   │   │   ├── counters.py
+│   │   │   │   ├── demo_counters.py
+│   │   │   │   ├── demo.py
+│   │   │   │   ├── test_counters.py
+│   │   │   │   └── validator.py
+│   │   │   ├── perftest
+│   │   │   │   ├── client_runner.py
+│   │   │   │   ├── graph_json.py
+│   │   │   │   ├── graph_multi.py
+│   │   │   │   ├── perf_runner.py
+│   │   │   │   └── time_runs
+│   │   │   │       ├── cmp1
+│   │   │   │       │   ├── astream_hybrid.json
+│   │   │   │       │   ├── astream_lmdb.json
+│   │   │   │       │   ├── astream_sqlite.json
+│   │   │   │       │   └── comparison.png
+│   │   │   │       ├── memory_log
+│   │   │   │       │   ├── comparison.png
+│   │   │   │       │   ├── run1_aiozmq.json
+│   │   │   │       │   ├── run1_astream.json
+│   │   │   │       │   └── run1_grpc.json
+│   │   │   │       └── sqlite3
+│   │   │   │           ├── comparison.png
+│   │   │   │           ├── run1_aiozmq.json
+│   │   │   │           ├── run1_astream.json
+│   │   │   │           ├── run1_grpc.json
+│   │   │   │           └── run1_grpc.png
+│   │   │   ├── raft
+│   │   │   │   ├── cluster_control.py
+│   │   │   │   ├── cluster.py
+│   │   │   │   ├── demo_raft.py
+│   │   │   │   ├── dev_requirements.txt
+│   │   │   │   ├── do_one.py
+│   │   │   │   ├── pilot.py
+│   │   │   │   ├── raft_client.py
+│   │   │   │   ├── raft_counters.py
+│   │   │   │   ├── raft_server.py
+│   │   │   │   ├── requirements.txt
+│   │   │   │   ├── run_server.py
+│   │   │   │   ├── test_common.py
+│   │   │   │   └── test_raft.py
+│   │   │   ├── rpc
+│   │   │   │   ├── aiozmq
+│   │   │   │   │   ├── requirements.txt
+│   │   │   │   │   ├── rpc_client.py
+│   │   │   │   │   └── rpc_server.py
+│   │   │   │   ├── astream
+│   │   │   │   │   ├── rpc_client.py
+│   │   │   │   │   └── rpc_server.py
+│   │   │   │   ├── demo_rpc.py
+│   │   │   │   ├── grpc
+│   │   │   │   │   ├── generate.py
+│   │   │   │   │   ├── raft_service.proto
+│   │   │   │   │   ├── requirements.txt
+│   │   │   │   │   ├── rpc_client.py
+│   │   │   │   │   └── rpc_server.py
+│   │   │   │   ├── raft_stub.py
+│   │   │   │   ├── run_tools.py
+│   │   │   │   └── test_rpc.py
+│   │   │   └── split_base
+│   │   │       ├── collector.py
+│   │   │       ├── demo_split.py
+│   │   │       ├── dispatcher.py
+│   │   │       ├── pipe.py
+│   │   │       └── test_split.py
+│   │   └── todo.org
+│   └── todo.org
+├── extras_tests
+│   ├── coverage.cfg
+│   ├── pytest.ini
+│   └── tests
+│       ├── conftest.py
+│       ├── log_common.py
+│       ├── requirements.txt
+│       ├── rpc_common.py
+│       ├── test_aiozmq.py
+│       ├── test_astream.py
+│       ├── test_grpc.py
+│       ├── test_hybrid_mp.py
+│       ├── test_hybrid.py
+│       ├── test_import_errors.py
+│       ├── test_lmdb.py
+│       ├── test_logs_perf.py
+│       ├── test_memlog.py
+│       └── test_sqlite.py
+├── LICENSE.md
+├── pyproject.toml
+├── pytest.ini
+├── raftengine
+│   ├── api
+│   │   ├── deck_api.py
+│   │   ├── deck_config.py
+│   │   ├── events.py
+│   │   ├── __init__.py
+│   │   ├── log_api.py
+│   │   ├── pilot_api.py
+│   │   ├── snapshot_api.py
+│   │   └── types.py
+│   ├── deck
+│   │   ├── cluster_ops.py
+│   │   ├── deck.py
+│   │   ├── event_control.py
+│   │   ├── __init__.py
+│   │   └── log_control.py
+│   ├── extras
+│   │   ├── aiozmq_rpc
+│   │   │   ├── __init__.py
+│   │   │   ├── requirements.txt
+│   │   │   ├── rpc_client.py
+│   │   │   └── rpc_server.py
+│   │   ├── astream_rpc
+│   │   │   ├── __init__.py
+│   │   │   ├── rpc_client.py
+│   │   │   └── rpc_server.py
+│   │   ├── grpc_rpc
+│   │   │   ├── generated
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── raft_service_pb2_grpc.py
+│   │   │   │   └── raft_service_pb2.py
+│   │   │   ├── generate.py
+│   │   │   ├── __init__.py
+│   │   │   ├── raft_service.proto
+│   │   │   ├── requirements.txt
+│   │   │   ├── rpc_client.py
+│   │   │   └── rpc_server.py
+│   │   ├── hybrid_log
+│   │   │   ├── hybrid_log.py
+│   │   │   ├── __init__.py
+│   │   │   └── sqlite_writer.py
+│   │   ├── __init__.py
+│   │   ├── lmdb_log
+│   │   │   ├── __init__.py
+│   │   │   └── lmdb_log.py
+│   │   ├── memory_log
+│   │   │   ├── __init__.py
+│   │   │   └── memory_log.py
+│   │   └── sqlite_log
+│   │       ├── __init__.py
+│   │       └── sqlite_log.py
+│   ├── __init__.py
+│   ├── messages
+│   │   ├── append_entries.py
+│   │   ├── base_message.py
+│   │   ├── cluster_change.py
+│   │   ├── __init__.py
+│   │   ├── log_msg.py
+│   │   ├── message_codec.py
+│   │   ├── power.py
+│   │   ├── pre_vote.py
+│   │   ├── request_vote.py
+│   │   └── snapshot.py
+│   └── roles
+│       ├── base_role.py
+│       ├── candidate.py
+│       ├── follower.py
+│       ├── __init__.py
+│       └── leader.py
+├── README.org
+├── run_tests.sh
+├── tests
+│   ├── conftest.py
+│   ├── requirements.txt
+│   ├── test_class_edges.py
+│   ├── test_commands_1.py
+│   ├── test_dev_tools.py
+│   ├── test_elections_1.py
+│   ├── test_elections_2.py
+│   ├── test_events.py
+│   ├── test_log_fiddles.py
+│   ├── test_member_changes.py
+│   ├── test_msg_edges.py
+│   ├── test_partition_1.py
+│   ├── test_random_code.py
+│   ├── test_snapshots.py
+│   └── test_timers_1.py
+├── test_tools.sh
+├── todo.org
+├── tox.ini
+└── tree.txt
+
+190 directories, 943 files
