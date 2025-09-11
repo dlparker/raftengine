@@ -73,8 +73,6 @@ from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from dataclasses import dataclass, asdict
-from multiprocessing import Manager, Process, Queue
-import queue
 import traceback
 from pathlib import Path
 from copy import deepcopy
@@ -414,7 +412,7 @@ class HybridLog(LogAPI):
         
         # Wait for response with timeout
         try:
-            await asyncio.wait_for(self.stats_request_event.wait(), timeout=0.1)
+            await asyncio.wait_for(self.stats_request_event.wait(), timeout=0.2)
             return self.writer_stats.copy()
         finally:
             self.stats_request_event = None

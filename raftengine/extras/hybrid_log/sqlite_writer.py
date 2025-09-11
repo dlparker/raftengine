@@ -2,13 +2,14 @@ import asyncio
 import time
 import sys
 import json
+import socket
 from random import randint
 from dataclasses import dataclass, field, asdict
 from typing import Union, List, Optional
 import logging
 from dataclasses import dataclass, asdict
-from multiprocessing import Manager, Process, Queue
-import queue
+from multiprocessing import Process
+import multiprocessing as mp
 import traceback
 from pathlib import Path
 from copy import deepcopy
@@ -42,8 +43,14 @@ class SqliteWriterControl:
     async def start(self, callback, error_callback, port=None, inprocess=False):
         self.callback = callback
         self.error_callback = error_callback
+        def get_free_port():
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(('localhost', 0))  # OS assigns a free port
+            port = s.getsockname()[1]
+            s.close()
+            return port        
         if port is None:
-            port = randint(8000, 65000)
+            port = get_free_port()
         self.port = port
         if inprocess:
             # This is just for testing support, having it run
@@ -54,14 +61,28 @@ class SqliteWriterControl:
                 writer_task(self.sqlite_db_path, self.lmdb_db_path, self.port, self.snap_size, self.copy_block_size))
             await asyncio.sleep(0.01)
             logger.warning("sqlwriter Task started, test and debug only!!!")
+            self.reader, self.writer = await asyncio.open_connection('localhost', self.port)
         else:
             args = [self.sqlite_db_path, self.lmdb_db_path, self.port, self.snap_size, self.copy_block_size]
+            mp.set_start_method('spawn', force=True)
             self.writer_proc = Process(target=writer_process, args=args)
             self.writer_proc.start()
-            await asyncio.sleep(0.01)
-            logger.debug("sqlwriter process started")
+
+            # Retry connection with timeout
+            timeout = 5.0  # seconds
+            retry_interval = 0.1  # seconds
+            elapsed = 0.0
+            while elapsed < timeout:
+                try:
+                    self.reader, self.writer = await asyncio.open_connection('localhost', self.port)
+                    logger.debug("sqlwriter process started and connected")
+                    break
+                except (ConnectionRefusedError, OSError) as e:
+                    await asyncio.sleep(retry_interval)
+                    elapsed += retry_interval
+                else:
+                    raise TimeoutError(f"Failed to connect to sqlwriter on port {self.port} after {timeout}s")
         self.running = True
-        self.reader, self.writer = await asyncio.open_connection('localhost', self.port)
         asyncio.create_task(self.read_backchannel())
 
     async def stop(self):
