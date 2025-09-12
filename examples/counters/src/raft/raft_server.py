@@ -14,7 +14,7 @@ from dataclasses import asdict
 from raftengine.deck.deck import Deck
 from raftengine.api.types import CommandResult
 from raftengine.deck.log_control import LogController
-from raftengine_logs.sqlite_log.sqlite_log import SqliteLog
+from raftengine.extras.sqlite_log import SqliteLog
 
 #from base.counters import Counters
 from raft.pilot import Pilot

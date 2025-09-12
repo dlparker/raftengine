@@ -4,5 +4,7 @@ pytest-cov>=6.0.0
 ipdb>=0.13.13
 # the following should be installed from src/raft/dev_requirements.txt, or the released
 # equivalents from src/raft/requirements.txt
-#-e /home/dparker/projects/raft/raftengine
-#-e /home/dparker/projects/raft/logs_git/raftengine_logs/packages/sqlitelog
+-e ../../../raftengine
+uvloop==0.21.0
+
+

@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import asdict
 from raftengine.api.deck_config import ClusterInitConfig, LocalConfig
 from raftengine.deck.log_control import LogController
-from raftengine_logs.sqlite_log import SqliteLog
+from raftengine.extras.sqlite_log import SqliteLog
 
 from raft.raft_server import RaftServer, logger as raft_server_logger
 from ops.direct import DirectCommander
