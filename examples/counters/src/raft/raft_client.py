@@ -2,7 +2,7 @@ import asyncio
 import time
 import json
 from raftengine.api.types import CommandResult
-from rpc.rpc_client import RPCClient
+from raftengine.extras.astream_rpc import RPCClient
         
 class RaftClient:
 

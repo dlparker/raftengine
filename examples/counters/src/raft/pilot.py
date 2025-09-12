@@ -9,7 +9,7 @@ from raftengine.deck.log_control import LogController
 from raftengine.deck.deck import Deck
 from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.messages.message_codec import MessageCodec
-from rpc.rpc_client import RPCClient
+from raftengine.extras.astream_rpc import RPCClient
 
 log_controller = LogController.get_controller()
 logger = log_controller.add_logger("raft.Pilot",

@@ -8,9 +8,6 @@ import argparse
 import pickle
 import traceback
 src_dir = Path(__file__).parent.parent
-logs_dir = Path(src_dir, 'logs')
-sys.path.insert(0, str(logs_dir))
-src_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(src_dir))
 
 from raftengine.deck.log_control import LogController

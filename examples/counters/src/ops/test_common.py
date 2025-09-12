@@ -5,7 +5,7 @@ from pathlib import Path
 import pickle
 from split_base.collector import Collector
 from ops.admin_common import ClusterBuilder, ClusterFinder, get_client, get_server_status, take_snapshot 
-from ops.cluster_cmd import ClusterCLI
+from ops.cluster_mgr import ClusterMgr
 
 
 
@@ -17,10 +17,10 @@ async def main(args, run_class_dict):
         cb = ClusterBuilder()
         local_servers = cb.build_local(name=target, base_port=50010)
         cb.setup_local_files(local_servers, "/tmp", overwrite=True)
-    cli = ClusterCLI()
-    await cli.discover_cluster_files(search_dir="tmp")
-    await cli.do_select(target)
-    status_dict = await cli.get_status()
+    manager = ClusterMgr()
+    await manager.discover_cluster_files(search_dir="/tmp")
+    await manager.select_cluster(target)
+    status_dict = await manager.get_status()
     cluster_ready = True
     uri_0 = None
     started_servers = False
@@ -43,12 +43,12 @@ async def main(args, run_class_dict):
         elif args.debug:
             default_logging_level = 'debug'
             
-        await cli.do_start_servers()
+        await manager.start_servers()
         started_servers = True
         start_time = time.time()
         while time.time() - start_time < 3.0:
             await asyncio.sleep(0.1)
-            status_dict = await cli.get_status()
+            status_dict = await manager.get_status()
             cluster_ready = True
             for index, status in status_dict.items():
                 if status is None:
@@ -71,11 +71,11 @@ async def main(args, run_class_dict):
 
     for name, item in run_class_dict.items():
         print(f"doing {name}")
-        run_object = item(collector, cli)
+        run_object = item(collector, manager)
         await run_object.run()
         
     if (started_servers and not args.leave_running) or args.stop_cluster:
-        await cli.do_stop_cluster()
+        await manager.stop_cluster()
         
 def do_run_args():
     parser = argparse.ArgumentParser(description='Counters Raft Cluster Operations Test')
@@ -98,10 +98,10 @@ def do_run_args():
     args = parser.parse_args()
     return args
 
-async def test_snapshots(cli, demo_print=True):
+async def test_snapshots(manager, demo_print=True):
 
     # snapshot every server, starting with non-leaders than moving to leader
-    status_dict = await cli.get_status()
+    status_dict = await manager.get_status()
     cluster_ready = True
     order = []
     leader_uri = None
@@ -166,7 +166,7 @@ async def test_snapshots(cli, demo_print=True):
         assert counts['a'] != post_snap_a_value
         print(f'reading server {index} snapshot file went as expected')
 
-    status_dict = await cli.get_status()
+    status_dict = await manager.get_status()
     for index, status in status_dict.items():
         print(f"{status['uri']} is_leader={status['is_leader']}")
         
