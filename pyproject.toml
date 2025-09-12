@@ -42,7 +42,7 @@ bi_lmdb_grpc = ["lmdb>=1.7.3", "grpcio>=1.50.0"]  # Counters + lmdb + grpc
 
 [build-system]
 requires = ["pdm-backend"]  # Or hatchling/setuptools
-build-backend = "pdm_backend"
+build-backend = "pdm.backend"
 #- **Notes**:
 #  - `min` and `bi_min` have no deps since SqliteLog/Astream use stdlib.
 #  - `lmdb` covers LmdbLog/HybridLog (assuming HybridLog uses lmdb).
