@@ -369,8 +369,8 @@ class Records:
         """Install snapshot and prune old log entries."""
         if self.env is None:
             self.open() # pragma: no cover
-        if snapshot.index > self.max_index or snapshot.index == 0:
-            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.max_index}")
+        if snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index=0")
 
         # installing the snapshot in a separate transactions is fine,
         # when it is done before pruning the records
@@ -481,6 +481,9 @@ class LmdbLog(LogAPI):
         self.records.set_term(self.records.term + 1)
         return self.records.term
 
+    async def append(self, record: LogRec) -> LogRec:
+        return await self.insert(record)
+    
     async def insert(self, entry: LogRec) -> LogRec:
         save_rec = LogRec.from_dict(entry.__dict__)
         if save_rec.index == 0 or save_rec.index is None:

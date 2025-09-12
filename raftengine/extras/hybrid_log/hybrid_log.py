@@ -239,6 +239,10 @@ class HybridLog(LogAPI):
         return await self.lmdb_log.get_applied_index()
         
     #API Method
+    async def append(self, record: LogRec) -> LogRec:
+        return await self.insert(record)
+    
+    #API Method
     async def insert(self, record: LogRec) -> None:
         async def relieve_pressure(new_limit):
             await self.sw_control.send_limit(new_limit,
@@ -321,8 +325,8 @@ class HybridLog(LogAPI):
     async def install_snapshot(self, snapshot:SnapShot):
         await self.sqlite_log.refresh_stats()
         max_index = await self.lmdb_log.get_last_index()
-        if snapshot.index > max_index or snapshot.index == 0:
-            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {max_index}")
+        if snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index=0")
         
         await self.sqlite_log.special_install_snapshot(snapshot)
         lm_snap = await self.lmdb_log.get_snapshot()
@@ -465,10 +469,12 @@ class HybridLog(LogAPI):
                 logger.debug(f"after installing sqlite snap {curr_snapshot}, "\
                              f"lmdb_last_index = {last_index}, lmdb_first_index = {first_index}")
                 self.last_lmdb_snap = curr_snapshot
-            except:
+            except Exception as e:
                 logger.error(f"sqlwriter snapshot {curr_snapshot} caused error {traceback.format_exc()}")
-                await self.stop()
-                raise
+                try:
+                    await self.stop()
+                finally:
+                    raise e
         if code == "snapshot":
             logger.debug("got sqlitewriter snapshot %s", str(data))
             await process_snapshot(data)
@@ -481,6 +487,7 @@ class HybridLog(LogAPI):
             logger.error("got unknown code from sqlitewriter %s", code)
             await self.stop()
             raise Exception(f"got unknown code from sqlitewriter {code}")
+        
     async def handle_writer_error(self, error):
         logger.error(f"sqlwriter got error {error}")
         self.fatal_error = error

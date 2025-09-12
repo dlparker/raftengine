@@ -148,7 +148,7 @@ async def inner_log_test_deletes(log_create, log_close_and_reopen):
     next_i = 1
     while next_i < 11:
         rec = LogRec(command=f"add {next_i}", serial=next_i)
-        new_rec = await log.insert(rec)
+        new_rec = await log.append(rec)
         assert new_rec.index == next_i
         next_i += 1
     assert await log.get_last_index() == 10
@@ -166,7 +166,7 @@ async def inner_log_test_deletes(log_create, log_close_and_reopen):
     next_i = 1
     while next_i < 11:
         rec = LogRec(command=f"add {next_i}", serial=next_i)
-        new_rec = await log.insert(rec)
+        new_rec = await log.append(rec)
         assert new_rec.index == next_i
         next_i += 1
     assert await log.get_last_index() == 10
@@ -185,15 +185,12 @@ async def inner_log_test_snapshots(log_create, log_close_and_reopen):
     next_i = 1
     while next_i < 101:
         rec = LogRec(command=f"add {next_i}", serial=next_i)
-        new_rec = await log.insert(rec)
+        new_rec = await log.append(rec)
         assert new_rec.index == next_i
         next_i += 1
 
     pre_snap_index = await log.get_last_index()
     assert pre_snap_index == 100
-    with pytest.raises(Exception):
-        bad_snap = SnapShot(pre_snap_index +1, 1)
-        await log.install_snapshot(bad_snap)
         
     with pytest.raises(Exception):
         bad_snap = SnapShot(0, 1)
@@ -244,7 +241,7 @@ async def inner_log_test_snapshots(log_create, log_close_and_reopen):
     assert await log.get_last_term() == 2 # should be read from shapshot term
     
     rec = LogRec(command=f"add {pre_snap_index + 1}", serial=pre_snap_index)
-    await log.insert(rec)
+    await log.append(rec)
     assert await log.get_last_index() == pre_snap_index + 1
     assert await log.get_first_index() == pre_snap_index + 1
 
@@ -343,7 +340,7 @@ async def inner_log_perf_run(log_create, loops=10000):
         loop_start = time.perf_counter()
         rec = LogRec(command=f"add {loop_count}", serial=loop_count)
         insert_start = time.perf_counter()
-        save_rec = await log.insert(rec)
+        save_rec = await log.append(rec)
         insert_end = time.perf_counter()
         read_start = time.perf_counter()
         read_rec = await log.read(save_rec.index)

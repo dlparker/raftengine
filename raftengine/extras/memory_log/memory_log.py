@@ -158,15 +158,15 @@ class MemoryLog(LogAPI):
     async def get_applied_index(self):
         return self.max_apply
 
-    async def insert(self, record: LogRec) -> None:
+    async def append(self, record: LogRec) -> LogRec:
+        return await self.insert(record)
+    
+    async def insert(self, record: LogRec) -> LogRec:
         save_rec = LogRec.from_dict(record.__dict__)
         self.insert_entry(save_rec)
         return_rec = LogRec.from_dict(save_rec.__dict__)
         logger.debug("new log record %s", return_rec.index)
         return return_rec
-    
-    async def append(self, record: LogRec) -> None:
-        return await self.insert(record)
     
     async def mark_committed(self, index:int) -> None:
         self.max_commit = max(index, self.max_commit)

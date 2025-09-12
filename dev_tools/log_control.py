@@ -9,7 +9,8 @@ def setup_logging():
     test_loggers = [('ClusterOps', 'Cluster operations'),
                     ('PausingServer', 'Test server implementation'),
                     ('SimulatedNetwork', 'Network simulation'),
-                    ('test_code', 'Test code logger')]
+                    ('test_code', 'Test code logger'),
+                    ]
     log_control = LogController(additional_loggers=test_loggers)
     if "RAFT_DEBUG_LOGGING" in os.environ:
         log_control.set_default_level('debug')

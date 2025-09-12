@@ -281,11 +281,8 @@ class LogController:
             desc = ""
             if l_name == logger_name:
                 desc = description
-                if l_name not in self.known_loggers:
-                    self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=handler_names)
-            else:
-                if l_name not in self.known_loggers:
-                    self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=self.default_handlers.copy())
+            if l_name not in self.known_loggers:
+                self.known_loggers[l_name] = LoggerDef(l_name, desc, handler_names=handler_names)
             logging.getLogger(l_name)
         
             if l_name != logger_name:

@@ -472,7 +472,7 @@ class SqliteLog(LogAPI):
         return_rec = self.records.save_entry(save_rec)
         return return_rec
 
-    async def append(self, record: LogRec) -> None:
+    async def append(self, record: LogRec) -> LogRec:
         return await self.insert(record)
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:

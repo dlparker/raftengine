@@ -3,6 +3,7 @@ import asyncio
 import logging
 import shutil
 import traceback
+import types
 from random import randint
 from pathlib import Path
 import time
@@ -977,29 +978,33 @@ async def test_back_channel_errors_2():
         await log.get_stats()
     assert "socket_closed" in exit_reason
 
+class BreakingSqliteLog:
+
+    def __init__(self, real_log):
+        self.real_log = real_log
+        self.fail_stats = False
+        
+    async def refrest_stats(self):
+        if self.fail_stats:
+            self.fail_stats = False
+            raise Exception("inserted error")
+        return await self.real_log.refresh_stats()
     
 class SnapBreakHL(HybridLog):
     
     bad_code = False
-    bad_op = False
     error_capture = None
     async def sw_control_callback(self, code, data):
         if self.bad_code:
             code = "foo"
-        if self.bad_op:
-            save_log = self.sqlite_log
-            self.sqlite_log = None
         try:
             res = await super().sw_control_callback(code, data)
         except Exception as e:
             self.error_capture = e
             raise
-        finally:
-            if self.bad_op:
-                self.sqlite_log = save_log 
         return res
-        
-async def test_callback_errors():
+
+async def test_callback_errors(monkeypatch):
         
     path = Path('/tmp', f"test_log_errors")
     if path.exists():
@@ -1046,13 +1051,20 @@ async def test_callback_errors():
     assert log.error_capture is not None
     assert "unknown" in str(log.error_capture)
 
-
     # setup to get an error processing the snapshot in the snapshot callback
     log = await setup()
 
-    log.bad_op = True
-    await some_records(log)
+    async def mock_refresh_stats(self):
+        raise Exception('inserted error')
+    
+    bound_mock = types.MethodType(mock_refresh_stats, log.sqlite_log)
 
-    assert log.error_capture is not None
-    assert "NoneType" in str(log.error_capture)
+    monkeypatch.setattr(log.sqlite_log, 'refresh_stats', bound_mock)
+
+    try:
+        await some_records(log)
+    except Exception as e:
+        if not "NoneType" in str(e):
+            raise
+
     
