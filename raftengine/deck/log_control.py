@@ -184,12 +184,14 @@ class LogController:
         logger.setLevel(level)
         # Don't set custom_level - this is for default level changes
         
-    def set_default_level(self, level: Union[str, int]) -> None:
+    def set_default_level(self, level: Union[str, int], save_custom=False) -> None:
         """
-        Set the default logging level for all known loggers that don't have a custom level.
+        Set the default logging level for all known loggers. If save_custom is True,
+        then the logger level will only be changed if it does not have a custom level.
         
         Args:
-            level: Logging level to apply to loggers without custom levels
+            level: Logging level to apply to loggers
+            save_custom: if there is a custom level for the logger, don't change the level
         """
         # Convert level to string format for storage
         if isinstance(level, int):
@@ -210,7 +212,7 @@ class LogController:
         # Apply to all loggers that don't have custom levels
         for logger_name, logger_def in self.known_loggers.items():
             # Only set level if logger doesn't have a custom level
-            if logger_def.custom_level is None:
+            if logger_def.custom_level is None or not save_custom:
                 self._set_logger_level_without_custom_flag(logger_name, level)
         
     def get_logger_level(self, logger_name: str) -> int:
@@ -287,11 +289,8 @@ class LogController:
         
             if l_name != logger_name:
                 # only set the actual leaf to the requested level
-                self.set_logger_level(l_name, self.default_level)
-            else:
-                if level is None:
-                    level = self.default_level
-                self.set_logger_level(l_name, level)
+                if level is not None:
+                    self.set_logger_level(l_name, self.default_level)
         return logging.getLogger(logger_name)
         
     def get_known_loggers(self) -> Dict[str, LoggerDef]:

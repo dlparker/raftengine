@@ -44,7 +44,7 @@ async def add_and_run_server(working_dir, join_uri,  cluster_uri):
 async def test_one():
     mgr = ClusterMgr()
     cluster_name = "cluster_one"
-    logger.setLevel('INFO')
+    #logger.setLevel('INFO')
 
 
     # We want to first start the servers with normal operations so that
