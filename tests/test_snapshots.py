@@ -12,8 +12,8 @@ from raftengine.api.log_api import LogRec, RecordCode, LogAPI
 from raftengine.api.pilot_api import PilotAPI
 from raftengine.api.deck_config import ClusterInitConfig
 from raftengine.api.snapshot_api import SnapShot
-from raftengine_logs.memory_log import MemoryLog
-from raftengine_logs.sqlite_log import SqliteLog
+from raftengine.extras.memory_log import MemoryLog
+from raftengine.extras.sqlite_log import SqliteLog
 from dev_tools.sequences import SNormalElection, SNormalCommand, SPartialElection, SPartialCommand
 from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
@@ -52,10 +52,11 @@ async def test_dict_ops():
     for logc in [MemoryLog, SqliteLog]:
         fs1 = FakeServer(1, logc)
         ops1 = fs1.ops
-    
+
         for i in range(1, 11):
             command = f'add {i} {random.randint(1,100)}'
             await fs1.process_command(command, i)
+
         assert len(ops1.totals) == 10
         last_applied = await fs1.log.get_applied_index()
         last_rec  = await fs1.log.read(last_applied)

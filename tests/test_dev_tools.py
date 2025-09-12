@@ -6,8 +6,8 @@ import pytest
 
 from raftengine.messages.append_entries import AppendEntriesMessage
 from raftengine.api.log_api import LogRec
-from raftengine_logs.memory_log import MemoryLog
-from raftengine_logs.sqlite_log import SqliteLog
+from raftengine.extras.memory_log import MemoryLog
+from raftengine.extras.sqlite_log import SqliteLog
 from dev_tools.log_control import setup_logging
 
 log_control = setup_logging()

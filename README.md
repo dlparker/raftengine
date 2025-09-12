@@ -1,0 +1,148 @@
+
+# Table of Contents
+
+1.  [Raft Based Server Library](#org6fbc4a3)
+    1.  [Key Features](#org1975765)
+    2.  [Distinctions from other python Raft libraries](#org4377142)
+    3.  [Why the distinctions might matter](#org61fd32d)
+        1.  [Message transport management](#org2303448)
+        2.  [Storage design and management](#org9491d4e)
+    4.  [Raft Details](#orga75bd1c)
+    5.  [TBD](#orged07bc1)
+
+
+<a id="org6fbc4a3"></a>
+
+# Raft Based Server Library
+
+The main purpose of this project is to provide a generalized library
+to aid in the construction of a cluster of servers by supplying
+Raft consensus as an internal service.
+
+
+<a id="org1975765"></a>
+
+## Key Features
+
+-   **Modular Architecture**: Clean separation between Raft logic and transport/storage
+-   **Pluggable Storage**: Integrate with any database or storage system via LogAPI
+-   **Flexible Transport**: Support any message transport mechanism (HTTP, gRPC, message queues, etc.)
+-   **Comprehensive Testing**: Extensive test suite with detailed execution tracing
+-   **Pure Python**: No external dependencies beyond the Python standard library
+-   **Async-First**: Built on asyncio for high-performance concurrent operations
+
+
+<a id="org4377142"></a>
+
+## Distinctions from other python Raft libraries
+
+-   It allows you to supply your own message transport, so you can integrate it with your own message transport needs and management.
+-   It allows you to supply your own Raft Log implementation, so you can integrate it with your own persistent storage needs and management.
+-   It does not require that the transport mechanism be RPC as it deals with messages and responses asynchronously, meaning you can use an
+    asynchronous transport such as a message queue.
+
+
+<a id="org61fd32d"></a>
+
+## Why the distinctions might matter
+
+The target user is the developer of a distributed system that performs
+functions that are not mediated by the Raft operations, but where
+such operations can help solve the thorny problems of cluster management.
+
+For example, a cluster might not be symmetrical with respect to a given
+client request. A log streaming cluster might want to direct client
+requests based on the topic of interest, and only some of the servers
+in the cluster manage that topic. Any time you want to change the
+association of specific servers with specific topics, you find yourself
+dealing with the tricky problem that Raft is meant to solve.
+
+You could just use a standalone Raft based data-store such as etcd, and
+in many cases that's the best thing to do. There are other uses cases
+however where integration the Raft service directly into the larger
+server program makes sense.
+
+
+<a id="org2303448"></a>
+
+### Message transport management
+
+There are plenty of other implementations of Raft, even if you want
+it in python. However, a Raft library with its own transport mechanism may 
+not provide all or your message transport needs for your cluster. If it does,
+then there is no particular reason to prefer this implementation over
+others.
+
+If you application servers need some form of server to server
+communication, via RPCs, message passing, etc, then you already
+have to manage endpoints such as sockets, HTTP uris, etc. By using
+a Raft implementation that has its own transport, you also
+have to manage transports for it, configuration, some sort of lookup
+mechanism, etc.
+
+It also might present challenges with any diagnostic
+instrumentation in your servers, possibly bypassing your monitoring
+and control efforts. By using your existing transport to supply a
+transport service to Raft, you can integrate all your transport
+management efforts without an annoying side channel.
+
+
+<a id="org9491d4e"></a>
+
+### Storage design and management
+
+They typically also have some requirements for managing
+persistent storage that is outside the Raft Log needs. SQL databases,
+NOSQL databases, etc. If the Raft implementation provides its own
+storage mechanism, then you need to add management of that to your
+own data-store management concerns. You also might not be able to
+integrate them in anyway.
+
+By providing your own implementation of the LogAPI in this library,
+you can use whatever data store you are already using, so little or
+more likely no additional management workload. It should also be
+possible for you to integrate important operations in a database
+transaction.
+
+The way that might be accomplished depends on an understanding of the
+relationship between the Raft commit of a log record and the application
+of a "command" to the "state machine". You define what those last two mean.
+When the Raft Leader has declared a log record "committed", then the
+followers learn about this in due course.
+
+When the server (Leader or Follower) marks the record as committed,
+if it is a command record then the command is applied to the state
+machine. If the order seems odd, think of it like a bank account.
+They record your withdrawal first, then give you the money, so there
+is no way you get them money if they don't already have a record of it.
+
+So, you could write your Raft LogAPI implementation to start a
+transaction on commit, the run the command and do what ever database
+updates that requires, then commit the Raft Log update and your own
+updates transactionally. 
+
+
+<a id="orga75bd1c"></a>
+
+## Raft Details
+
+The code implements the algorithm described in the orignal paper and
+the thesis. The PreVote and CheckQuorum additions to the original
+protocol are optional and are controlled by the cluster configuation,
+so there is no mechanism for setting it on a per server basis. Each
+addition can be selected individually.
+
+
+<a id="orged07bc1"></a>
+
+## TBD
+
+An optional part of the library provides implementations of these
+services for the user to use, or to modify and use. These are
+referred to as transport and log "assists".
+
+Demos are provided to do from scratch implementations and modified
+assists.
+
+-   [protocol extensions](<https://dev.to/tarantool/raft-notalmighty-how-to-make-it-more-robust-3a11>)
+

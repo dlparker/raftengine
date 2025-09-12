@@ -14,7 +14,7 @@ from raftengine.api.types import RoleName
 from raftengine.api.log_api import LogRec
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.log_control import setup_logging
-from raftengine_logs.sqlite_log import SqliteLog
+from raftengine.extras.sqlite_log import SqliteLog
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")

@@ -1,6 +1,6 @@
-[build-system]
-requires = ["setuptools>=45", "wheel"]
-build-backend = "setuptools.build_meta"
+#[build-system]
+#requires = ["setuptools>=45", "wheel"]
+#build-backend = "setuptools.build_meta"
 
 [project]
 name = "raftengine"
@@ -9,9 +9,7 @@ description = "A Python implementation of the Raft consensus algorithm for distr
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [
-    {name = "RaftEngine Contributors"}
-]
+authors = [{name = "Dennis Parker", email = "denns@windhavengroup.com"}]
 keywords = ["raft", "consensus", "distributed", "systems", "replication"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -33,6 +31,27 @@ Repository = "https://github.com/dlparker/raftengine"
 Issues = "https://github.com/dlparker/raftengine/issues"
 
 [project.optional-dependencies]
+min = ["raftengine"]  # No extra deps; SqliteLog/Astream use stdlib
+lmdb = ["lmdb>=1.7.3"]  # For LmdbLog, HybridLog
+aiozmq = ["aiozmq>=1.0.0"]  # For Aiozmq RPC
+grpc = ["grpcio>=1.50.0"]  # For Grpc RPC
+bi_min = ["raftengine"]  # Counters, SqliteLog, Astream (stdlib)
+bi_lmdb = ["lmdb>=1.7.3"]  # Counters + lmdb logs
+bi_lmdb_aiozmq = ["lmdb>=1.7.3", "aiozmq>=1.0.0"]  # Counters + lmdb + aiozmq
+bi_lmdb_grpc = ["lmdb>=1.7.3", "grpcio>=1.50.0"]  # Counters + lmdb + grpc
+
+[build-system]
+requires = ["pdm-backend"]  # Or hatchling/setuptools
+build-backend = "pdm_backend"
+#- **Notes**:
+#  - `min` and `bi_min` have no deps since SqliteLog/Astream use stdlib.
+#  - `lmdb` covers LmdbLog/HybridLog (assuming HybridLog uses lmdb).
+#  - `bi_*` extras include counters; no extra deps for `bi_min` since counters is stdlib-based (per your examples).
+#  - Use PDM for dev (editable install, testing); `pdm-backend` for building.
+
+
+[tool.pdm]
+[tool.pdm.dev-dependencies]
 dev = [
     "pytest>=8.4",
     "pytest-asyncio>=0.25",
@@ -54,7 +73,7 @@ docs = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["raftengine*"]
-exclude = ["tests*", "examples*", "dev_tools*", "docs*"]
+exclude = ["tests*", "extras_tests*", "examples*", "dev_tools*", "docs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

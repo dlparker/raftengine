@@ -165,6 +165,9 @@ class MemoryLog(LogAPI):
         logger.debug("new log record %s", return_rec.index)
         return return_rec
     
+    async def append(self, record: LogRec) -> None:
+        return await self.insert(record)
+    
     async def mark_committed(self, index:int) -> None:
         self.max_commit = max(index, self.max_commit)
 
@@ -242,8 +245,8 @@ class MemoryLog(LogAPI):
                              settings=deepcopy(self.cluster_settings))
     
     async def install_snapshot(self, snapshot:SnapShot):
-        if snapshot.index > self.last_index or snapshot.index == 0:
-            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.last_index}")
+        if snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot with index=0")
         
         self.snapshot = snapshot
         end_index = self.snapshot.index

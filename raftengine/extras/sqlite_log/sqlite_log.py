@@ -394,8 +394,8 @@ class Records:
     async def install_snapshot(self, snapshot):
         if self.db is None: # pragma: no cover
             self.open() # pragma: no cover
-        if snapshot.index > self.max_index or snapshot.index == 0:
-            raise Exception(f"Cannot install snapshot at index={snapshot.index}, last record index is {self.max_index}")
+        if snapshot.index == 0:
+            raise Exception(f"Cannot install snapshot at index=0")
         cursor = self.db.cursor()
         sql = "delete from snapshot"
         cursor.execute(sql)
@@ -471,6 +471,9 @@ class SqliteLog(LogAPI):
             raise Exception('cannont insert at index less that one')
         return_rec = self.records.save_entry(save_rec)
         return return_rec
+
+    async def append(self, record: LogRec) -> None:
+        return await self.insert(record)
 
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:

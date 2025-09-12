@@ -15,10 +15,10 @@ from raftengine.api.snapshot_api import SnapShot, SnapShotToolAPI
 from raftengine.deck.deck import Deck
 from dev_tools.triggers import TriggerSet
 from dev_tools.operations import SimpleOps
-from raftengine_logs.memory_log import MemoryLog
-from raftengine_logs.sqlite_log import SqliteLog
-from raftengine_logs.lmdb_log import LmdbLog
-from raftengine_logs.hybrid_log import HybridLog
+from raftengine.extras.memory_log import MemoryLog
+from raftengine.extras.sqlite_log import SqliteLog
+from raftengine.extras.lmdb_log import LmdbLog
+from raftengine.extras.hybrid_log import HybridLog
 
 class PausingServer(PilotAPI):
 
