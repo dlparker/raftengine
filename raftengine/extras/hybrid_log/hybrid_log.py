@@ -111,6 +111,13 @@ class HybridStats:
     upstream_apply_lag: int
     copy_blocks_per_minute: float
     
+def ensure_open(func):
+    def wrapper(self, *args, **kwargs):
+        if not self.sqlite_log or not self.lmdb_log or not self.running:
+            raise Exception('HybridLog is not running, start not called or stop has been called')
+        result = func(self, *args, **kwargs)
+        return result
+    return wrapper
 
 
 LMDB_MAP_SIZE=10**9 * 2
@@ -172,54 +179,66 @@ class HybridLog(LogAPI):
             self.sw_control = None
             
     #API Method
+    @ensure_open
     async def get_broken(self) -> bool:
         return  await self.sqlite_log.get_broken() or await self.lmdb_log.get_broken()
     
     #API Method
+    @ensure_open
     async def set_broken(self) -> None:
         await self.sqlite_log.set_broken()
         return await self.lmdb_log.set_broken()
     
     #API Method
+    @ensure_open
     async def set_fixed(self) -> None:
         await self.sqlite_log.set_fixed()
         return await self.lmdb_log.set_fixed()
 
     #API Method
+    @ensure_open
     async def get_uri(self) -> Union[str, None]:
         return await self.lmdb_log.get_uri()
     
     #API Method
+    @ensure_open
     async def set_uri(self, uri: str):
         await self.lmdb_log.set_uri(uri)
 
     #API Method
+    @ensure_open
     async def get_term(self) -> Union[int, None]:
         return await self.lmdb_log.get_term()
     
     #API Method
+    @ensure_open
     async def set_term(self, value: int):
         await self.sqlite_log.set_term(value)
         return await self.lmdb_log.set_term(value)
 
     #API Method
+    @ensure_open
     async def incr_term(self):
         return await self.set_term(await self.get_term() + 1)
 
     #API Method
+    @ensure_open
     async def get_voted_for(self) -> Union[str, None]:
         return await self.lmdb_log.get_voted_for()
     
     #API Method
+    @ensure_open
     async def set_voted_for(self, value: str):
         await self.sqlite_log.set_voted_for(value)
         return await self.lmdb_log.set_voted_for(value)
 
     #API Method
+    @ensure_open
     async def get_last_index(self):
         return await self.lmdb_log.get_last_index()
 
     #API Method
+    @ensure_open
     async def get_first_index(self):
         lfirst = await self.lmdb_log.get_first_index()
         if lfirst is None:
@@ -227,22 +246,27 @@ class HybridLog(LogAPI):
         return lfirst
     
     #API Method
+    @ensure_open
     async def get_last_term(self):
         return await self.lmdb_log.get_last_term()
     
     #API Method
+    @ensure_open
     async def get_commit_index(self):
         return await self.lmdb_log.get_commit_index()
 
     #API Method
+    @ensure_open
     async def get_applied_index(self):
         return await self.lmdb_log.get_applied_index()
         
     #API Method
+    @ensure_open
     async def append(self, record: LogRec) -> LogRec:
         return await self.insert(record)
     
     #API Method
+    @ensure_open
     async def insert(self, record: LogRec) -> None:
         async def relieve_pressure(new_limit):
             await self.sw_control.send_limit(new_limit,
@@ -269,14 +293,17 @@ class HybridLog(LogAPI):
         return rec
 
     #API Method
+    @ensure_open
     async def mark_committed(self, index:int) -> None:
         return await self.lmdb_log.mark_committed(index)
 
     #API Method
+    @ensure_open
     async def mark_applied(self, index:int) -> None:
         return await self.lmdb_log.mark_applied(index)
     
     #API Method
+    @ensure_open
     async def read(self, index: Union[int, None] = None) -> Union[LogRec, None]:
         if index is None:
             return await self.lmdb_log.read(index)
@@ -285,6 +312,7 @@ class HybridLog(LogAPI):
         return await self.lmdb_log.read(index)
     
     #API Method
+    @ensure_open
     async def delete_all_from(self, index: int):
         snapshot = await self.sqlite_log.get_snapshot()
         if snapshot and index < snapshot.index + 1:
@@ -313,15 +341,18 @@ class HybridLog(LogAPI):
         return
 
     #API Method
+    @ensure_open
     async def save_cluster_config(self, config: ClusterConfig) -> None:
         await self.sqlite_log.save_cluster_config(config)
         return await self.lmdb_log.save_cluster_config(config)
     
     #API Method
+    @ensure_open
     async def get_cluster_config(self):
         return await self.lmdb_log.get_cluster_config()
     
     #API Method
+    @ensure_open
     async def install_snapshot(self, snapshot:SnapShot):
         await self.sqlite_log.refresh_stats()
         max_index = await self.lmdb_log.get_last_index()
@@ -342,6 +373,7 @@ class HybridLog(LogAPI):
         return snapshot
             
     #API Method
+    @ensure_open
     async def get_snapshot(self):
         # always get it from sqlite, that way we can use
         # the one in lmdb to track snapshost to sqlite
@@ -349,6 +381,7 @@ class HybridLog(LogAPI):
         return await self.sqlite_log.get_snapshot()
 
     #API Method
+    @ensure_open
     async def get_stats(self) -> LogStats:
         lmdb_stats = await self.lmdb_log.get_stats()
         sqlite_stats = await self.sqlite_log.get_stats()
@@ -400,6 +433,7 @@ class HybridLog(LogAPI):
             extra_stats=await self.get_hybrid_stats()
         )
 
+    @ensure_open
     async def push_all(self):
         # Force all the current records to sqlite. This has value for testing,
         # and it may have value for adminstrative purposes. For example, you
@@ -411,6 +445,7 @@ class HybridLog(LogAPI):
                                             await self.lmdb_log.get_applied_index())
         
         
+    @ensure_open
     async def get_writer_stats(self) -> dict:
         """Get stats from writer process via socket"""
         self.stats_request_event = asyncio.Event()
@@ -423,6 +458,7 @@ class HybridLog(LogAPI):
         finally:
             self.stats_request_event = None
     
+    @ensure_open
     async def get_hybrid_stats(self) -> HybridStats:
         """Get comprehensive hybrid log statistics"""
         # Get base stats from both logs

@@ -1064,7 +1064,7 @@ async def test_callback_errors(monkeypatch):
     try:
         await some_records(log)
     except Exception as e:
-        if not "NoneType" in str(e):
+        if not "not running" in str(e).lower():
             raise
 
     
