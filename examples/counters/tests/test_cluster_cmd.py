@@ -311,7 +311,7 @@ async def test_run_ops_json():
         await asyncio.sleep(0.1)
         a_clust = await run_command(cluster_name, working_parent=cluster_base_dir, find_local=True, run_ops=['cluster_status'])
         cluster = json.loads(a_clust)
-    assert len(cluster) == 3
+    assert len(cluster) == 3, f"Server {cluster['3'].uri} no exit"
     path = Path(new_config.working_dir)
     shutil.rmtree(path)
 

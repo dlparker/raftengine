@@ -1,6 +1,6 @@
 
 * Extras
-1. []. Add RPC api class
+1. [] Add RPC api class
 2. [] Add RPCSelector and RaftLogSelector classes
 3. [] Add decorator to HybridLog to check for ready on all API calls, maybe same for other logs too.
 4. [] Need to add event monitoring to examples code
@@ -11,6 +11,9 @@
 
 * Example
 1. [] Add "app_spec" call to direct commands returns app name and version
+2. [] Full coverage is just a slog, not a challenge. Maybe bite off some files to do first?
+   direct.py is a good target cause it just needs to run in process, logging level checking
+   should even work.
 
 * Core Completion
 1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in
@@ -23,8 +26,6 @@
 4. [] Need to see if an exited server can rejoin without clearing log. This would be useful for fixing errors. Maybe
    figure out how to insert and error that breaks the server, remove it from cluster via call to leader, fix it,
    add it back and see that it catches up normally?
-   
-
 
 * Core Enhancement
 
@@ -43,7 +44,8 @@
    8. [X] raftengine[bi_lmdb_aiozmq] same as bi_min but adds lmdb and aiozmq
    9. [X] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
 4. []  Need an error propogation mechanism that lets low level errors bubble up to error events and even
-    deck shutdown
+    deck shutdown (What was I thinking? I am not sure what this means. Maybe for tasks without waiter? Maybe
+    this could be a decorator?
    
 
        

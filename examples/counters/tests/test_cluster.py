@@ -114,6 +114,9 @@ async def test_one():
     res = await client_0.direct_server_command('dump_status')
     wdir = Path(server_0['config'].working_dir)
     stdout_file = Path(wdir, "server.stdout")
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and not stdout_file.exists():
+        await asyncio.sleep(0.01)
     with open(stdout_file, 'r') as f:
         buff = f.read()
     do_capture = False
@@ -227,12 +230,14 @@ async def test_one():
 
 
     logger.info(f"telling new server at {new_uri} to exit cluster")
+    save_status = json.dumps(c_status['3'], default=lambda o:o.__dict__, indent=2)
     exit_res = await mgr.server_exit_cluster('3')
     start_time = time.time()
-    while len(c_status) > 3 and time.time() - start_time < 1:
+    while len(c_status) > 3 and time.time() - start_time < 2:
         await asyncio.sleep(0.1)
         c_status = await mgr.cluster_status(cluster_name)
-    assert len(c_status) == 3
+    assert len(c_status) == 3, f"Exiting server still running, {save_status}"
+    
 
     logger.info("stopping cluster")
     await mgr.stop_cluster()
