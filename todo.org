@@ -1,31 +1,48 @@
 
+* Extras
+1. []. Add RPC api class
+2. [] Add RPCSelector and RaftLogSelector classes
+3. [] Add decorator to HybridLog to check for ready on all API calls, maybe same for other logs too.
+4. [] Need to add event monitoring to examples code
+5. [] Need to add change cluster settings to example
+6. [] Once example is fixed to use new rpc setup, see if restarting servers in process works
+   because the client close was commented out, which is probably why the servers couldn't
+   open their ports. Figure out why I commented out the close and fix the real problem.
+
+* Example
+1. [] Add "app_spec" call to direct commands returns app name and version
+
+* Core Completion
 1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in
 2. [] Need to reject node exit if only two nodes left. Really? Maybe we can allow a single node to lead
    a cluster for extreme circumstances? Yes, let's make that work. This would be especially usefull when
    constructing a new node. Imagine starting a server on one maching, going to the next and starting another
    and having it add itself to the cluster. Probably a good plan.
-3. [] Need to add event monitoring to examples code
-4. [] Need to try RPC mode again now that we have message serials
-5. [] Need to add support in deck for periodic (timed? by record added?) events to track log
+3. [] Need to add support in deck for periodic (timed? by record added?) events to track log
    usage for snapshot trigger, something like "add event snapshot trigger lesser of 50000 records or 1 hour)"
-6. [] Need to test re-adding a server that has exited and still has log hanging around. Usefull for moving
+4. [] Need to see if an exited server can rejoin without clearing log. This would be useful for fixing errors. Maybe
+   figure out how to insert and error that breaks the server, remove it from cluster via call to leader, fix it,
+   add it back and see that it catches up normally?
+   
+
+
+* Core Enhancement
+
+1. [] Need to try RPC mode again now that we have message serials
+2. [] Need to test re-adding a server that has exited and still has log hanging around. Usefull for moving
    a server from one machine to another, so need to allow startup to change URI
-7. [] Need to add change cluster settings to example
-8. [] Need to restructure package. Ideal would be:
-   1. [] Installation of raftengine means no log or RPC impl
-   2. [] raftengine[min]  adds SqliteLog and Astream RPC (no external requirements)
-   3. [] raftengine[lmdb] adds LmdbLog and HybridLog
-   4. [] raftengine[aiozmq] adds (and selects, have to think about additions to cluster init config) aiozmq
-   5. [] raftengine[grpc] adds (and selects, have to think about additions to cluster init config) grpc
-   6. [] raftengine[bi_min] (batteries included) adds counters example with stubs for
+3. [X] Need to restructure package. Ideal would be:
+   1. [X] Installation of raftengine means no log or RPC impl
+   2. [X] raftengine[min]  adds SqliteLog and Astream RPC (no external requirements)
+   3. [X] raftengine[lmdb] adds LmdbLog and HybridLog
+   4. [X] raftengine[aiozmq] adds (and selects, have to think about additions to cluster init config) aiozmq
+   5. [X] raftengine[grpc] adds (and selects, have to think about additions to cluster init config) grpc
+   6. [X] raftengine[bi_min] (batteries included) adds counters example with stubs for
       base.state_machine (counters), base.validator, base.demo, split_base.collector, split_base.dispatcher
-   7. [] raftengine[bi_lmdb] same as bi_min but adds lmdb
-   8. [] raftengine[bi_lmdb_aiozmq] same as bi_min but adds lmdb and aiozmq
-   9. [] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
-9. Once example is fixed to use new rpc setup, see if restarting servers in process works
-   because the client close was commented out, which is probably why the servers couldn't
-   open their ports. Figure out why I commented out the close and fix the real problem.
-10. Need an error propogation mechanism that lets low level errors bubble up to error events and even
+   7. [X] raftengine[bi_lmdb] same as bi_min but adds lmdb
+   8. [X] raftengine[bi_lmdb_aiozmq] same as bi_min but adds lmdb and aiozmq
+   9. [X] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
+4. []  Need an error propogation mechanism that lets low level errors bubble up to error events and even
     deck shutdown
    
 

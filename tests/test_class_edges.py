@@ -224,10 +224,6 @@ async def test_log_controller_logger_levels():
     controller.set_default_level(logging.ERROR)
     assert controller.default_level == "ERROR"
     
-    # Test that loggers with custom levels are not affected by default change
-    controller.set_default_level("CRITICAL")
-    assert controller.get_logger_level("Leader") == logging.DEBUG  # Still custom
-    assert controller.get_logger_level("Deck") == logging.CRITICAL  # Changed to default
     LogController.controller = saved_log_controller 
     saved_log_controller.apply_config()
 

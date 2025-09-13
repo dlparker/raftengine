@@ -71,6 +71,8 @@ class LogStats:
     first_index: int
     last_index: int
     last_term: int
+    commit_index: int
+    applied_index: int
     record_count: int
     records_since_snapshot: int
     records_per_minute: float

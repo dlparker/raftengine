@@ -291,7 +291,15 @@ class LogController:
                 # only set the actual leaf to the requested level
                 if level is not None:
                     self.set_logger_level(l_name, self.default_level)
-        return logging.getLogger(logger_name)
+        logger =  logging.getLogger(logger_name)
+        if level is None:
+            level = self.default_level
+        else:
+            self.known_loggers[logger_name].custom_level = level.upper()
+
+        logger.setLevel(level)
+        return logger
+    
         
     def get_known_loggers(self) -> Dict[str, LoggerDef]:
         """

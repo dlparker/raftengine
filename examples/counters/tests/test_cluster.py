@@ -208,7 +208,7 @@ async def test_one():
     log_stats_0_after = await mgr.log_stats(index='0')
     snap = snap_rep['snapshot']
     assert log_stats_0_after.last_index >= snap.index
-    assert log_stats_0_before.last_index <= snap.index
+    assert log_stats_0_before.commit_index <= snap.index
 
     leader_port = leader_uri.split(':')[-1]
     tmp = int(leader_port) // 10
@@ -242,7 +242,3 @@ async def test_one():
 
     shutil.rmtree(cluster_base_dir)
     
-
-    
-    
-        

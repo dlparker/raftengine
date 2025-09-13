@@ -388,6 +388,8 @@ class HybridLog(LogAPI):
             first_index=first_index,
             last_index=last_index, 
             last_term=await self.lmdb_log.get_last_term(),
+            commit_index=await self.get_commit_index(),
+            applied_index=await self.get_applied_index(),
             record_count=record_count, 
             records_since_snapshot=records_since,
             records_per_minute=lmdb_stats.records_per_minute,
