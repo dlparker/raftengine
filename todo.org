@@ -14,6 +14,8 @@
 2. [] Full coverage is just a slog, not a challenge. Maybe bite off some files to do first?
    direct.py is a good target cause it just needs to run in process, logging level checking
    should even work.
+3. [] Make snapshot process separate dict into two parts to illustrate chunking. Split by upper
+   and lower should work after running validator.
 
 * Core Completion
 1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in
