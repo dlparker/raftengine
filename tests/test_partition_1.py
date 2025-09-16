@@ -8,9 +8,11 @@ from pathlib import Path
 from dev_tools.sequences import SNormalElection, SNormalCommand
 from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import cluster_maker
+from dev_tools.features import FeatureRegistry
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 async def test_partition_1(cluster_maker):
     """
@@ -34,6 +36,15 @@ async def test_partition_1(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions for basic network partition with recovery
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_minority_isolation = registry.get_raft_feature("network_partition", "follower_isolation")
+    f_majority_continues = registry.get_raft_feature("network_partition", "majority_partition_operation")
+    f_partition_healing = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    f_log_catchup = registry.get_raft_feature("log_replication", "log_catchup")
+    
     cluster = cluster_maker(5)
     cluster.set_configs()
 
@@ -41,7 +52,9 @@ async def test_partition_1(cluster_maker):
     ts_1, ts_2, ts_3, ts_4, ts_5 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3, uri_4, uri_5]]
 
     await cluster.test_trace.define_test("Testing basic network partitioning and recovery", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election with 5 nodes", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
 
@@ -57,7 +70,8 @@ async def test_partition_1(cluster_maker):
 
     logger.info('-------- Election done, saving a command record')
 
-    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit, check follower's final state")
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Run one command, normal sequence till leader commit, check follower's final state", features=spec)
     
     await cluster.start_auto_comms()
     sequence2 = SNormalCommand(cluster, "add 1", 1)
@@ -80,7 +94,8 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Everbody has first record, partitioning network to isolate nodes 2 and 3')
 
-    await cluster.test_trace.start_subtest("Partitioning the network to isolate nodes 2 and 3")
+    spec = dict(used=[], tested=[f_minority_isolation])
+    await cluster.test_trace.start_subtest("Partitioning the network to isolate nodes 2 and 3", features=spec)
     # the partition sets were chosen to make the traces easier to follow
     part1 = {uri_1: ts_1,
              uri_4: ts_4,
@@ -90,7 +105,9 @@ async def test_partition_1(cluster_maker):
     await cluster.split_network([part1, part2])
     
     logger.info('--------- Everbody has first record, partition done, repeating command')
-    await cluster.test_trace.start_subtest("Running two commands, only nodes 1, 4 and 5 should participate")
+    
+    spec = dict(used=[f_minority_isolation], tested=[f_majority_continues])
+    await cluster.test_trace.start_subtest("Running two commands, only nodes 1, 4 and 5 should participate", features=spec)
     sequence3 = SNormalCommand(cluster, "add 1", 1)
     command_result = await cluster.run_sequence(sequence3)
     assert command_result is not None
@@ -122,7 +139,9 @@ async def test_partition_1(cluster_maker):
 
     logger.info('--------- Now healing partition and looking for sync ----')
     await cluster.stop_auto_comms()
-    await cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats")
+    
+    spec = dict(used=[f_majority_continues], tested=[f_partition_healing])
+    await cluster.test_trace.start_subtest("Healing network, nodes 2 and 3 will now be reachable from leader node 1, sending heartbeats", features=spec)
     await cluster.unsplit()
     logger.info('--------- Sending heartbeats ----')
     await ts_1.send_heartbeats()
@@ -148,7 +167,8 @@ async def test_partition_1(cluster_maker):
         assert msg.sender in [uri_4, uri_5]
     # so know we can let are behind the times ones respond
 
-    await cluster.test_trace.start_subtest("Nodes 4 and 5 have processed heartbeats, now nodes 2 and 3 should do so")
+    spec = dict(used=[f_partition_healing], tested=[f_log_catchup])
+    await cluster.test_trace.start_subtest("Nodes 4 and 5 have processed heartbeats, now nodes 2 and 3 should do so", features=spec)
     logger.debug('--------- 2 and 3 should be pending, doing message sequence on one then other ')
     for node in [ts_2, ts_3]:
         msg = await node.do_next_in_msg() 
@@ -218,13 +238,28 @@ async def test_partition_2_leader(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions for leader isolation and recovery
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_leader_isolation = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_majority_continues = registry.get_raft_feature("network_partition", "majority_partition_operation")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_network_partitioning = registry.get_raft_feature("test_infrastructure", "network_partitioning")
+    f_quorum_checking = registry.get_raft_feature("leader_election", "quorum_checking")
+    f_partition_healing = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    f_split_brain_resolution = registry.get_raft_feature("network_partition", "split_brain_resolution")
+    f_post_partition_recovery = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    f_leader_demotion = registry.get_raft_feature("leader_election", "leader_demotion")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    
     cluster = cluster_maker(3)
     cluster.set_configs()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    logger = logging.getLogger(__name__)
-    await cluster.test_trace.define_test("Testing leader isolation and recovery in network partition", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing leader isolation and recovery in network partition", logger=logging.getLogger("test_code"))
+    
+    spec = dict(used=[f_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election with 3 nodes", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -233,7 +268,9 @@ async def test_partition_2_leader(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    await cluster.test_trace.start_subtest("Election complete, running a command ")
+    # Section 2: Command execution to establish state before partition
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Election complete, running a command ", features=spec)
     logger.info('------------------------ Election done')
     logger.info('---------!!!!!!! starting comms')
     command_result = await cluster.run_command("add 1", 1)
@@ -249,33 +286,45 @@ async def test_partition_2_leader(cluster_maker):
     # demote to follower. Another heartbeat from the real
     # leader and it should update everything.
 
-
-    await cluster.test_trace.start_subtest("Command complete, partitioning leader ")
+    
+    # Section 3: Leader isolation from majority partition
+    spec = dict(used=[f_network_partitioning], tested=[f_leader_isolation])
+    await cluster.test_trace.start_subtest("Command complete, partitioning leader ", features=spec)
     part1 = {uri_1: ts_1}
     part2 = {uri_2: ts_2,
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
     logger.info('---------!!!!!!! stopping comms')
-    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
+    # Section 4: Majority partition election with new leader
+    spec = dict(used=[f_automated_election], tested=[f_majority_continues])
+    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ", features=spec)
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
-    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ")
+    # Section 5: Split brain scenario - new leader operates with quorum
+    spec = dict(used=[f_command_execution], tested=[f_split_brain_resolution])
+    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, but only node 2 has a quorum, running command there ", features=spec)
     command_result = await cluster.run_command("add 1", 1)
     assert ts_2.operations.total == 2
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Letting old leader re-join majority network")
+    # Section 6: Network partition healing
+    spec = dict(used=[f_network_partitioning], tested=[f_partition_healing])
+    await cluster.test_trace.start_subtest("Letting old leader re-join majority network", features=spec)
     await cluster.unsplit()
     logger.info('------------------------ Sending heartbeats from out of date leader')
-    await cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign")
+    # Section 7: Old leader detection of new term and resignation
+    spec = dict(used=[f_heartbeat_processing], tested=[f_leader_demotion])
+    await cluster.test_trace.start_subtest("Sending heartbeats from old leader, should resign", features=spec)
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.get_role_name() == "FOLLOWER"
     # let ex-leader catch up
-    await cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader")
+    # Section 8: Log synchronization and cluster state consistency
+    spec = dict(used=[f_heartbeat_processing], tested=[f_post_partition_recovery])
+    await cluster.test_trace.start_subtest("Sending heartbeats from new leader, sould catch up old leader", features=spec)
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
     assert ts_1.operations.total == 2
@@ -303,6 +352,16 @@ async def test_partition_3_leader(cluster_maker):
     
     """
     
+    # Feature definitions - leader quorum checking and self-resignation
+    f_leader_isolation = registry.get_raft_feature("network_partition", "leader_isolation")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_network_partitioning = registry.get_raft_feature("test_infrastructure", "network_partitioning")
+    f_quorum_checking = registry.get_raft_feature("leader_election", "quorum_checking")
+    f_leader_self_resignation = registry.get_raft_feature("leader_election", "leader_self_resignation")
+    f_timer_operations = registry.get_raft_feature("test_infrastructure", "timer_operations")
+    f_partition_healing = registry.get_raft_feature("network_partition", "post_partition_recovery")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.001
     election_timeout_min = 0.009
@@ -315,7 +374,10 @@ async def test_partition_3_leader(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.test_trace.define_test("Testing leader isolation with check quorum logic", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -324,7 +386,9 @@ async def test_partition_3_leader(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    await cluster.test_trace.start_subtest("Election complete, partitioning leader")
+    # Section 2: Leader isolation from majority partition
+    spec = dict(used=[f_network_partitioning], tested=[f_leader_isolation])
+    await cluster.test_trace.start_subtest("Election complete, partitioning leader", features=spec)
     logger.info('------------------------ Election done, partitioning')
 
     part1 = {uri_1: ts_1}
@@ -332,14 +396,18 @@ async def test_partition_3_leader(cluster_maker):
              uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
-    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ")
+    # Section 3: Majority partition election with new leader
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Holding new election, node 2 will win ", features=spec)
     await ts_2.start_campaign(authorized=True)
     await cluster.run_election()
     assert ts_1.get_role_name() == "LEADER"
     assert ts_2.get_role_name() == "LEADER"
     assert ts_3.get_leader_uri() == uri_2
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ")
+    # Section 4: Isolated leader quorum checking and self-resignation
+    spec = dict(used=[f_timer_operations], tested=[f_quorum_checking, f_leader_self_resignation])
+    await cluster.test_trace.start_subtest("Both node 1 and node 2 think they are leaders, node 2 has quorum, enabling timers on node 1 and waiting  ", features=spec)
 
     await cluster.start_auto_comms()
     await ts_1.enable_timers() # resets
@@ -349,7 +417,9 @@ async def test_partition_3_leader(cluster_maker):
         await asyncio.sleep(heartbeat_period/4.0)
     assert ts_1.get_role_name() != "LEADER"
     
-    await cluster.test_trace.start_subtest("Old leader resigned on check quorum, healing network and waiting for it to rejoin")
+    # Section 5: Network healing and log synchronization
+    spec = dict(used=[f_network_partitioning, f_timer_operations], tested=[f_partition_healing])
+    await cluster.test_trace.start_subtest("Old leader resigned on check quorum, healing network and waiting for it to rejoin", features=spec)
     await ts_2.enable_timers() # resets
     await ts_3.enable_timers() # resets
     await cluster.unsplit()
@@ -382,6 +452,16 @@ async def test_partition_3_follower(cluster_maker):
 
     """
     
+    # Feature definitions - follower isolation with leader quorum maintenance
+    f_follower_isolation = registry.get_raft_feature("network_partition", "follower_isolation")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_network_partitioning = registry.get_raft_feature("test_infrastructure", "network_partitioning")
+    f_quorum_checking = registry.get_raft_feature("leader_election", "quorum_checking")
+    f_leader_stability = registry.get_raft_feature("leader_election", "leader_stability")
+    f_timer_operations = registry.get_raft_feature("test_infrastructure", "timer_operations")
+    f_majority_operations = registry.get_raft_feature("network_partition", "majority_partition_operation")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.001
     election_timeout_min = 0.009
@@ -394,7 +474,10 @@ async def test_partition_3_follower(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     logger = logging.getLogger(__name__)
     await cluster.test_trace.define_test("Testing follower isolation with leader quorum intact", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -403,14 +486,18 @@ async def test_partition_3_follower(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
     logger = logging.getLogger(__name__)
-    await cluster.test_trace.start_subtest("Election complete, partitioning one follower")
+    # Section 2: Single follower isolation from majority
+    spec = dict(used=[f_network_partitioning], tested=[f_follower_isolation])
+    await cluster.test_trace.start_subtest("Election complete, partitioning one follower", features=spec)
     logger.info('------------------------ Election done, partitioning one follower')
 
     part1 = {uri_1: ts_1, uri_2: ts_2}
     part2 = {uri_3: ts_3}
     await cluster.split_network([part1, part2])
 
-    await cluster.test_trace.start_subtest("Leader has quorum, enabling timers and waiting long enough ")
+    # Section 3: Leader quorum maintenance despite follower isolation
+    spec = dict(used=[f_timer_operations], tested=[f_quorum_checking, f_leader_stability, f_majority_operations])
+    await cluster.test_trace.start_subtest("Leader has quorum, enabling timers and waiting long enough ", features=spec)
 
     await ts_1.enable_timers() # resets
     await ts_2.enable_timers() # resets

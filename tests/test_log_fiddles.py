@@ -137,7 +137,16 @@ async def test_empty_log_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     await cluster.test_trace.define_test("Testing follower recovery with empty log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    # Feature definitions - empty log recovery testing for follower
+    f_empty_log_recovery = registry.get_raft_feature("log_replication", "empty_log_recovery")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_timer_operations = registry.get_raft_feature("test_infrastructure", "timer_operations")
+    f_log_catchup = registry.get_raft_feature("log_replication", "log_catchup")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -147,7 +156,9 @@ async def test_empty_log_2(cluster_maker):
     assert ts_3.get_leader_uri() == uri_1
     logger.info('------------------------ Election done')
 
-    await cluster.test_trace.start_subtest("Node 1 is leader, crashing and recovering node 2 with an empty log then waiting for it to catch up")
+    # Section 2: Follower crash, empty log recovery, and automated catchup
+    spec = dict(used=[f_crash_recovery, f_timer_operations], tested=[f_empty_log_recovery, f_log_catchup])
+    await cluster.test_trace.start_subtest("Node 1 is leader, crashing and recovering node 2 with an empty log then waiting for it to catch up", features=spec)
     # Now "crash" the a follower and clear its log
     await ts_2.simulate_crash()
     await ts_2.recover_from_crash(save_log=False)

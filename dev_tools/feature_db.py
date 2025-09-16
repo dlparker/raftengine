@@ -275,8 +275,9 @@ class FeatureDB:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feature_branches (
                 branch_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT UNIQUE NOT NULL,
+                path TEXT NOT NULL,
                 feature_id INTEGER NOT NULL,
+                UNIQUE (path, feature_id),
                 FOREIGN KEY (feature_id) REFERENCES features(feature_id)
             )
         """)

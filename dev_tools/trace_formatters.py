@@ -133,6 +133,8 @@ class OrgFormatter:
         # Header section (identical to original)
         all_rows.append(f"* Test {self.trace_output.test_data.test_name} from file {self.trace_output.test_data.test_path}")
         all_rows.append("")
+        if self.trace_output.test_data.test_doc_string is None:
+            import ipdb; ipdb.set_trace()
         all_rows.append(self.trace_output.test_data.test_doc_string)
         all_rows.append("")
                 

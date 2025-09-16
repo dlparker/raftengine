@@ -19,16 +19,21 @@ from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import PausingCluster, cluster_maker
 from dev_tools.pausing_server import setup_log
 from dev_tools.operations import DictTotalsOps, SnapShotTool
+from dev_tools.features import FeatureRegistry
 from raftengine.messages.snapshot import SnapShotMessage, SnapShotResponseMessage
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 
 async def test_dict_ops():
     """
     Tests dictionary operations for snapshot functionality without Raft operations.
     """
+    
+    # Feature definitions for snapshot infrastructure testing
+    f_snapshot_operations = registry.get_raft_feature("test_infrastructure", "snapshot_operations")
     class FakeServer:
 
         def __init__(self, index, logc):
@@ -97,10 +102,19 @@ async def test_snapshot_1(cluster_maker):
 
     No raft operations are run, so the traces will contain only the node start trace.
     """
+    
+    # Feature definitions for snapshot infrastructure
+    f_snapshot_creation = registry.get_raft_feature("snapshots", "snapshot_creation")
+    f_snapshot_transfer = registry.get_raft_feature("snapshots", "snapshot_transfer")
+    f_snapshot_installation = registry.get_raft_feature("snapshots", "snapshot_installation")
+    
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs(use_ops=DictTotalsOps)
     await cluster.test_trace.define_test("Testing snapshot mechanisms in dev_tools", logger=logger)
+    
+    spec = dict(used=[], tested=[f_snapshot_creation, f_snapshot_transfer, f_snapshot_installation])
+    await cluster.test_trace.start_test_prep("Testing snapshot infrastructure without Raft operations", features=spec)
 
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -151,19 +165,32 @@ async def test_snapshot_2(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
     """
+    
+    # Feature definitions for follower snapshot process
+    f_election_without_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "all_in_sync")
+    f_follower_snapshot = registry.get_raft_feature("snapshots", "follower_snapshot_creation")
+    f_log_compaction = registry.get_raft_feature("snapshots", "log_compaction")
+    f_leader_transition = registry.get_raft_feature("leader_election", "voluntary_step_down")
+    f_snapshot_based_leadership = registry.get_raft_feature("snapshots", "snapshot_based_leadership")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing simplest snapshot process at a follower", logger=logger)
-    await cluster.test_trace.start_test_prep("Running election to elect node 1")
+    
+    spec = dict(used=[f_election_without_pre_vote], tested=[])
+    await cluster.test_trace.start_test_prep("Running election to elect node 1", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
     
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by indirect fake path")
+    
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, running commands by indirect fake path", features=spec)
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.
@@ -187,7 +214,8 @@ async def test_snapshot_2(cluster_maker):
     assert await ts_2.log.get_last_index() == ts_2_ss.index
     assert await ts_2.log.get_last_term() == 1
 
-    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
+    spec = dict(used=[f_follower_snapshot, f_log_compaction], tested=[f_leader_transition, f_snapshot_based_leadership])
+    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader", features=spec)
         
     await ts_1.do_demote_and_handle()
     await ts_2.start_campaign(authorized=True)
@@ -238,12 +266,26 @@ async def test_snapshot_3(cluster_maker):
 
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - leader-initiated snapshot with power transfer
+    f_snapshot_creation = registry.get_raft_feature("snapshots", "snapshot_creation")
+    f_power_transfer = registry.get_raft_feature("leader_election", "power_transfer")
+    f_snapshot_based_leadership = registry.get_raft_feature("snapshots", "snapshot_based_leadership")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_node_addition = registry.get_raft_feature("membership_changes", "add_follower")
+    f_snapshot_installation = registry.get_raft_feature("snapshots", "snapshot_installation")
+    f_log_compaction = registry.get_raft_feature("snapshots", "log_compaction")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing snapshot process when leader is told to snapshot", logger=logger)
-    await cluster.test_trace.start_test_prep("Running election to elect node 1")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Running election to elect node 1", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -252,7 +294,9 @@ async def test_snapshot_3(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by indirect fake path")
+    # Section 2: Command execution to populate log for snapshotting
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands by indirect fake path", features=spec)
 
     # The operations object maintains a dictionary of totals,
     # so "add x 1" adds one to the "x" dictionary entry.
@@ -267,10 +311,14 @@ async def test_snapshot_3(cluster_maker):
     last_index = await ts_1.log.get_last_index()
     last_term = await ts_1.log.get_last_term()
     rec = await ts_1.log.read(last_index)
-    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot but blocking net, should fail because it can't transfer power")
+    # Section 3: Failed snapshot attempt without power transfer capability
+    spec = dict(used=[], tested=[f_power_transfer])
+    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot but blocking net, should fail because it can't transfer power", features=spec)
     with pytest.raises(Exception):
         ts_1_ss = await ts_1.take_snapshot(timeout=0.05)
-    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot, should make it transfer power")
+    # Section 4: Successful snapshot creation with power transfer
+    spec = dict(used=[f_power_transfer], tested=[f_snapshot_creation, f_log_compaction])
+    await cluster.test_trace.start_subtest("Telling leader node (node 1) to snapshot, should make it transfer power", features=spec)
     await cluster.start_auto_comms()
     ts_1_ss = await ts_1.take_snapshot()
     await cluster.stop_auto_comms()
@@ -298,13 +346,17 @@ async def test_snapshot_3(cluster_maker):
     assert await new_leader.log.get_last_index() == ts_1_ss.index + 1
     assert await new_leader.log.get_last_term() == 2
 
-    await cluster.test_trace.start_subtest("Node 1 has snapshot and empty log, {new_leader.uri} is leader, running command")
+    # Section 5: Command execution with snapshot-based state
+    spec = dict(used=[f_command_execution], tested=[f_snapshot_based_leadership])
+    await cluster.test_trace.start_subtest("Node 1 has snapshot and empty log, {new_leader.uri} is leader, running command", features=spec)
         
     command_result = await cluster.run_command("add 1 1", 1)
     assert await ts_1.log.get_first_index() == ts_1_ss.index + 1
     assert await ts_1.log.get_last_index() == ts_1_ss.index + 2
         
-    await cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot")
+    # Section 6: Leadership transition back to snapshot node
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Changing leader back to node 1 so that join will process snapshot", features=spec)
     await new_leader.do_demote_and_handle()
     await ts_1.start_campaign()
     await cluster.run_election()
@@ -313,7 +365,9 @@ async def test_snapshot_3(cluster_maker):
     assert await ts_2.log.get_last_index() == await ts_1.log.get_last_index()
     assert await ts_3.log.get_last_index() == await ts_1.log.get_last_index()
     
-    await cluster.test_trace.start_subtest("Adding a node to and checking that it receives snapshot before joining")
+    # Section 7: Node addition with snapshot installation during join
+    spec = dict(used=[f_node_addition], tested=[f_snapshot_installation])
+    await cluster.test_trace.start_subtest("Adding a node to and checking that it receives snapshot before joining", features=spec)
     ts_4 = await cluster.add_node()
     done_by_callback = None
     async def join_done(ok, new_uri):
@@ -350,12 +404,26 @@ async def test_snapshot_4(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     
     """
+    
+    # Feature definitions - slow follower snapshot installation with persistent storage
+    f_snapshot_installation = registry.get_raft_feature("snapshots", "snapshot_installation")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_crash_recovery = registry.get_raft_feature("system_reliability", "crash_recovery")
+    f_snapshot_creation = registry.get_raft_feature("snapshots", "snapshot_creation")
+    f_snapshot_based_leadership = registry.get_raft_feature("snapshots", "snapshot_based_leadership")
+    f_log_catchup = registry.get_raft_feature("log_replication", "log_catchup")
+    f_persistent_storage = registry.get_raft_feature("test_infrastructure", "persistent_storage")
+    
     cluster = cluster_maker(3, use_log=SqliteLog)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config, use_ops=DictTotalsOps)
 
     await cluster.test_trace.define_test("Testing snapshot installation on a slow follower", logger=logger)
-    await cluster.test_trace.start_test_prep("Running election to elect node 1")
+    
+    # Section 1: Initial election establishment with persistent storage
+    spec = dict(used=[f_automated_election, f_persistent_storage], tested=[])
+    await cluster.test_trace.start_test_prep("Running election to elect node 1", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -364,14 +432,18 @@ async def test_snapshot_4(cluster_maker):
     await cluster.run_election()
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
-    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands ")
+    # Section 2: Command execution to create log entries for snapshot scenario
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, runing commands ", features=spec)
 
     for x in range(1, 6):
         command = f'add {x} {random.randint(1,100)}'
         for ts in [ts_1, ts_2, ts_3]:
             command_result = await cluster.run_command(command, 1)
                 
-    await cluster.test_trace.start_subtest("Crashing node 3, running a command, then taking snapshot at node 2")
+    # Section 3: Creating gap between nodes - crash, command, and snapshot creation
+    spec = dict(used=[f_crash_recovery, f_command_execution], tested=[f_snapshot_creation])
+    await cluster.test_trace.start_subtest("Crashing node 3, running a command, then taking snapshot at node 2", features=spec)
     logger.debug(f"\ncrash 3, run command\n")
     await ts_3.simulate_crash()
     command_result = await cluster.run_command("add 1 1", 1)
@@ -388,7 +460,9 @@ async def test_snapshot_4(cluster_maker):
     assert await ts_2.log.get_last_index() == ts_2_ss.index
     assert await ts_2.log.get_last_term() == 1
 
-    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader")
+    # Section 4: Leadership transition to snapshot node
+    spec = dict(used=[f_automated_election], tested=[f_snapshot_based_leadership])
+    await cluster.test_trace.start_subtest("Node 2 has snapshot and empty log, switching it to leader", features=spec)
         
     logger.debug(f"\nnode 2 election\n")
     await ts_1.do_demote_and_handle()
@@ -408,7 +482,9 @@ async def test_snapshot_4(cluster_maker):
     assert term_start_rec.term == 2
     assert await ts_2.log.get_last_index() == last_index + 1
 
-    await cluster.test_trace.start_subtest("Restarting node 3, should be behind enough to need snapshot transfer")
+    # Section 5: Slow follower recovery with snapshot installation and catchup
+    spec = dict(used=[f_crash_recovery, f_persistent_storage], tested=[f_snapshot_installation, f_log_catchup])
+    await cluster.test_trace.start_subtest("Restarting node 3, should be behind enough to need snapshot transfer", features=spec)
     logger.debug(f"\nrestert node 3\n")
     await ts_3.recover_from_crash()
     await ts_2.send_heartbeats()

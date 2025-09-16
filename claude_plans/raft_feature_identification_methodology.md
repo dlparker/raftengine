@@ -4,6 +4,11 @@
 
 This document provides a systematic methodology for identifying and documenting Raft consensus algorithm elements in test traces, with specific focus on mapping test behaviors to Diego Ongaro's Raft thesis concepts.
 
+**Important Notes**:
+- This methodology applies only to tests in the main `tests/` directory  
+- Tests in `extras_tests/` are excluded as they target optional components in `raftengine/extras/`
+- Some tests may already have correct feature analysis - verify existing implementations before starting new analysis
+
 ## Background: Existing Infrastructure
 
 ### Test Tracing System
@@ -500,6 +505,8 @@ for section_id, section in test_sections.items():
 - **Leverages existing filtering logic** from digest CSV generation
 
 ### For Adding New Feature Definitions
+
+**IMPORTANT**: Before starting analysis of any test, check if it already has correct feature registry calls implemented. Some tests may already be properly analyzed.
 
 1. **Follow naming convention**: `{primary_feature}.{scenario_branch}`
 2. **Create documentation stubs**: Use `dev_tools/build_docs.py` auto-generation

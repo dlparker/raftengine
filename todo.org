@@ -23,7 +23,7 @@
    and lower should work after running validator.
 
 * Core Completion
-1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in
+1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in deck
 2. [] Need to reject node exit if only two nodes left. Really? Maybe we can allow a single node to lead
    a cluster for extreme circumstances? Yes, let's make that work. This would be especially usefull when
    constructing a new node. Imagine starting a server on one maching, going to the next and starting another

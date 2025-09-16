@@ -10,5 +10,3 @@ class RPCServer(abc.ABC):
     @abc.abstractmethod
     def __init__(self, raft_server, rm_wait_for_result=False):
         raise NotImplementedError
-
-    

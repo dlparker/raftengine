@@ -143,17 +143,6 @@ class DeckAPI(Protocol): # pragma: no cover
         """
         ...
 
-    async def on_rpc_message(self, in_message: bytes, timeout: float = 5.0) -> str:
-        """
-        RPC-style message handling that waits for a response.
-        
-        :param bytes in_message: The incoming message bytes
-        :param float timeout: Maximum time to wait for response in seconds
-        :rtype: str The response message as a string
-        :raises: Exception If an error occurs or timeout is reached
-        """
-        ...
-
     async def run_command(self, command: str, timeout: float = 2.0) -> CommandResult:
         """
         Call this method to run a command through the Raft consensus process.
@@ -200,8 +189,13 @@ class DeckAPI(Protocol): # pragma: no cover
 
     async def take_snapshot(self, timeout: float = 2.0) -> SnapShot:
         """
-        This method causes the deck to run the snapshot process.
-
+        This method causes the deck to run the snapshot process. This will cause this
+        node to be unavailable while the snapshot is being prepared, as it will no longer
+        respond to raft messages. Once the snapshot is complete raft operations will
+        resume. If this node is currently the leader, it will attempt an orderly transfer
+        of power to another node before the snapshot begins. If this transfer fails it
+        will cause an exception.
+        
         :param float timeout: Maximum time to wait for the snapshot process
         :rtype: SnapShot
         """
@@ -209,7 +203,9 @@ class DeckAPI(Protocol): # pragma: no cover
 
     async def exit_cluster(self, timeout: float = 10.0, callback: Optional[Callable[[], None]] = None) -> None:
         """
-        Exit the cluster gracefully.
+        Exit the cluster gracefully by asking the leader to remove this node from the cluster config. If
+        this node is the leader the process will begin with a transfer of power. Does not wait for
+        exit, returns immediately but will call callback on exit.
 
         :param float timeout: Maximum time to wait for the exit process
         :param Optional[Callable[[], None]] callback: Optional callback to invoke upon completion

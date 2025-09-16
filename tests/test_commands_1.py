@@ -175,50 +175,6 @@ async def test_command_1(cluster_maker):
     logger.debug('------------------------ Tardy follower caught up ---')
     await cluster.test_trace.end_subtest()
 
-async def test_command_1a(cluster_maker):
-    cluster = cluster_maker(3)
-    cluster.set_configs()
-    uri_1, uri_2, uri_3 = cluster.node_uris
-    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
-    logger = logging.getLogger("test_code")
-    await cluster.test_trace.define_test("Testing command operations with SQLite log", logger=logger)
-    f_normal_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
-    spec = dict(used=[f_normal_election], tested=[])
-    await cluster.test_trace.start_test_prep("Normal election", features=spec)
-    await cluster.start()
-    await ts_3.start_campaign()
-
-    await cluster.run_election()
-    assert ts_3.get_role_name() == "LEADER"
-    assert ts_1.get_leader_uri() == uri_3
-    assert ts_2.get_leader_uri() == uri_3
-    logger.info('------------------------ Election done')
-    await cluster.start_auto_comms()
-
-    f_sqlite_compat = registry.get_raft_feature("log_storage", "sqlite_compatibility")
-    f_state_machine_cmd = registry.get_raft_feature("state_machine_command", "all_in_sync")
-    f_log_replication = registry.get_raft_feature("log_replication", "normal_replication")
-    f_heartbeat = registry.get_raft_feature("log_replication", "heartbeat_only")
-    spec = dict(used=[f_log_replication, f_heartbeat], tested=[f_sqlite_compat, f_state_machine_cmd])
-    await cluster.test_trace.start_subtest("Run command and check results at all nodes", features=spec)
-    command_result = await cluster.run_command("add 1", 1)
-    
-    assert ts_1.operations.total == 1
-    assert ts_2.operations.total == 1
-    assert ts_3.operations.total == 1
-    term = await ts_3.log.get_term()
-    index = await ts_3.log.get_last_index()
-    assert index == 2 # first index will be the start term record
-    assert await ts_1.log.get_term() == term
-    assert await ts_1.log.get_last_index() == index
-    assert await ts_2.log.get_term() == term
-    assert await ts_2.log.get_last_index() == index
-    logger.debug('------------------------ Correct command done')
-    rec_1 = await ts_1.log.read(index)
-    rec_2 = await ts_2.log.read(index)
-    rec_3 = await ts_3.log.read(index)
-    await cluster.stop_auto_comms()
-    
 async def test_command_sqlite_1(cluster_maker):
     """
     Test election and state machine command operations while using

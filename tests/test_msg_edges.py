@@ -11,6 +11,10 @@ from raftengine.messages.message_codec import MessageCodec
 from dev_tools.sequences import SNormalElection
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.log_control import setup_logging
+from dev_tools.features import FeatureRegistry
+
+# Initialize feature registry
+registry = FeatureRegistry.get_registry()
 
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
@@ -38,6 +42,15 @@ async def test_slow_voter(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - stale vote handling and election edge cases
+    f_stale_vote_handling = registry.get_raft_feature("leader_election", "stale_vote_handling")
+    f_term_advancement = registry.get_raft_feature("leader_election", "term_advancement")
+    f_election_timeout_retry = registry.get_raft_feature("leader_election", "election_timeout_retry")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    f_role_transitions = registry.get_raft_feature("leader_election", "role_transitions")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
@@ -50,7 +63,10 @@ async def test_slow_voter(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.test_trace.define_test("Testing slow voter scenario in election", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -65,7 +81,9 @@ async def test_slow_voter(cluster_maker):
     # candidate to retry, which will up the term, then let
     # the old votes flow in. They should get ignored
     # and the election should succeed
-    await cluster.test_trace.start_subtest("Node 3 is leader, demoting and ensuring vote requests are delivered, but responses not accepted yet")
+    # Section 2: First election setup with stale vote creation
+    spec = dict(used=[f_test_sequencing, f_role_transitions], tested=[])
+    await cluster.test_trace.start_subtest("Node 3 is leader, demoting and ensuring vote requests are delivered, but responses not accepted yet", features=spec)
     await ts_3.do_demote_and_handle(None)
     await ts_3.do_leader_lost()
     await ts_3.do_next_out_msg()
@@ -77,7 +95,9 @@ async def test_slow_voter(cluster_maker):
     assert len(ts_1.out_messages) == 1
     assert len(ts_2.out_messages) == 1
     old_term = await ts_3.log.get_term()
-    await cluster.test_trace.start_subtest("Starting another election at node 3, whose term is now 3 and checking that pending messages are stale")
+    # Section 3: Second election with stale vote detection
+    spec = dict(used=[f_term_advancement], tested=[f_stale_vote_handling])
+    await cluster.test_trace.start_subtest("Starting another election at node 3, whose term is now 3 and checking that pending messages are stale", features=spec)
     await ts_3.start_campaign()
     assert old_term + 1 == await ts_3.log.get_term()
     # this should be a stale vote
@@ -96,7 +116,9 @@ async def test_slow_voter(cluster_maker):
     # then two outs from them to get their new votes
     # then two ins to candiate and the first one should
     # settle the election
-    await cluster.test_trace.start_subtest("Allowing some messages for second election, checking that term is correct")
+    # Section 4: Election completion with correct term handling
+    spec = dict(used=[f_test_sequencing], tested=[f_election_timeout_retry])
+    await cluster.test_trace.start_subtest("Allowing some messages for second election, checking that term is correct", features=spec)
     new_term = await ts_3.log.get_term()
     await ts_3.do_next_out_msg()
     await ts_3.do_next_out_msg()
@@ -108,7 +130,9 @@ async def test_slow_voter(cluster_maker):
     msg = await ts_1.do_next_out_msg()
     assert msg.term == new_term
     assert msg.vote == True
-    await cluster.test_trace.start_subtest("Allowing remainging messages for normal election to complete")
+    # Section 5: Final election completion
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Allowing remainging messages for normal election to complete", features=spec)
     await cluster.deliver_all_pending()
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
@@ -125,6 +149,15 @@ async def test_message_errors(cluster_maker):
     
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
+    
+    # Feature definitions - message error handling and corruption testing
+    f_error_injection = registry.get_raft_feature("test_infrastructure", "error_injection")
+    f_message_error_handling = registry.get_raft_feature("system_reliability", "message_error_handling")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    f_message_corruption = registry.get_raft_feature("system_reliability", "message_corruption_handling")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -137,7 +170,10 @@ async def test_message_errors(cluster_maker):
     ts_3 = cluster.nodes[uri_3]
 
     await cluster.test_trace.define_test("Testing message processing errors", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_test_sequencing], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_3.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -145,6 +181,10 @@ async def test_message_errors(cluster_maker):
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
+    
+    # Section 2: Message explosion error injection and handling
+    spec = dict(used=[f_error_injection, f_heartbeat_processing], tested=[f_message_error_handling])
+    await cluster.test_trace.start_subtest("Injecting message explosion errors during heartbeat processing", features=spec)
     
     ts_1.deck.explode_on_message_code = AppendEntriesMessage.get_code()
     
@@ -158,6 +198,10 @@ async def test_message_errors(cluster_maker):
     assert len(hist) == 1
     
     ts_1.deck.explode_on_message_code = None
+
+    # Section 3: Message corruption error injection and handling
+    spec = dict(used=[f_error_injection, f_heartbeat_processing], tested=[f_message_corruption])
+    await cluster.test_trace.start_subtest("Injecting message corruption errors during heartbeat processing", features=spec)
 
     ts_1.deck.corrupt_message_with_code = AppendEntriesMessage.get_code()
     await ts_3.send_heartbeats()
@@ -173,6 +217,15 @@ async def test_message_serializer(cluster_maker):
     the on_message method that serializes message handling to FIFO order.
     In the words of the Project Farm youtube channel, we're gonna test that!
     """
+    
+    # Feature definitions - message serialization and processing order
+    f_message_serialization = registry.get_raft_feature("system_reliability", "message_serialization")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_message_interceptors = registry.get_raft_feature("test_infrastructure", "message_interceptors")
+    f_serializer_timeout = registry.get_raft_feature("system_reliability", "serializer_timeout_handling")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config()
     cluster.set_configs(config)
@@ -184,8 +237,11 @@ async def test_message_serializer(cluster_maker):
     ts_2 = cluster.nodes[uri_2]
     ts_3 = cluster.nodes[uri_3]
 
-    await cluster.test_trace.define_test("Testing message processing errors", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing message serialization and FIFO ordering", logger=logger)
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election, f_test_sequencing], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     await ts_1.start_campaign()
     sequence = SNormalElection(cluster, 1)
@@ -194,6 +250,10 @@ async def test_message_serializer(cluster_maker):
     assert ts_2.get_leader_uri() == uri_1
     assert ts_3.get_leader_uri() == uri_1
 
+    # Section 2: Message serialization with interceptor testing
+    spec = dict(used=[f_message_interceptors, f_command_execution], tested=[f_message_serialization])
+    await cluster.test_trace.start_subtest("Setting up message interceptor to test FIFO serialization during command processing", features=spec)
+    
     # I need a message to get delayed in processing so that I can send another
     # message while it is pending. We'll do that by making the pausing server
     # route outgoing messages to an intercepter and having it hold up
@@ -244,6 +304,10 @@ async def test_message_serializer(cluster_maker):
         release_msg.notify_all()
     await asyncio.sleep(0.0001)
 
+    # Section 3: Serializer timeout testing
+    spec = dict(used=[f_test_sequencing], tested=[f_serializer_timeout])
+    await cluster.test_trace.start_subtest("Testing message serializer timeout handling", features=spec)
+    
     # now make the message serialize timeout
     command_result = await cluster.run_command("add 1", timeout=2.0, voters=voters)
     trapped_msg = None

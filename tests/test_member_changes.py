@@ -18,6 +18,7 @@ from dev_tools.sequences import SPartialElection
 from raftengine.extras.memory_log import MemoryLog
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.log_control import setup_logging
+from dev_tools.features import FeatureRegistry
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
@@ -25,6 +26,7 @@ default_level="error"
 #default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 class PilotSim(PilotAPI):
 
@@ -60,9 +62,16 @@ async def test_member_change_messages(cluster_maker):
     """
     Test some basic features of the messages classes used to coordinate membership changes.
     """
+    
+    # Feature definitions for membership change message handling
+    f_message_serialization = registry.get_raft_feature("membership_changes", "message_serialization")
+    f_message_validation = registry.get_raft_feature("membership_changes", "message_validation")
+    
     cluster = cluster_maker(1)
     await cluster.test_trace.define_test("Testing membership change message operations", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[], tested=[f_message_serialization, f_message_validation])
+    await cluster.test_trace.start_test_prep("Testing membership change message classes", features=spec)
     m1 = MembershipChangeMessage('mcpy://1', 'mcpy://2', ChangeOp.add, target_uri="mcpy://4")
     r1 = MembershipChangeResponseMessage('mcpy://2', 'mcpy://1', ChangeOp.add, target_uri="mcpy://4", ok=True)
     
@@ -85,9 +94,16 @@ async def test_cluster_config_ops(cluster_maker):
     Tests the cluster configuration operations and their database operations used to track
     the progress of membership change operations. No message or timer operations are involved.
     """
+    
+    # Feature definitions for cluster configuration operations
+    f_config_tracking = registry.get_raft_feature("membership_changes", "config_tracking")
+    f_database_operations = registry.get_raft_feature("membership_changes", "database_operations")
+    
     cluster = cluster_maker(1)
     await cluster.test_trace.define_test("Testing cluster configuration operations for membership changes", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[], tested=[f_config_tracking, f_database_operations])
+    await cluster.test_trace.start_test_prep("Testing cluster configuration change tracking", features=spec)
     cluster = cluster_maker(3)
     tconfig = cluster.build_cluster_config()
     cluster.set_configs()
@@ -152,19 +168,29 @@ async def test_remove_follower_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions for follower removal
+    f_election_without_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_event_handling = registry.get_raft_feature("membership_changes", "event_handling")
+    f_heartbeat_adjustment = registry.get_raft_feature("log_replication", "heartbeat_adjustment")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing removal of a follower from the cluster", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_without_pre_vote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election without pre-vote", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself.")
+    
+    spec = dict(used=[f_event_handling], tested=[f_remove_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself", features=spec)
     logger.debug("\n\n\nRemoving node 3\n\n\n")
     # now remove number 3
     removed = None
@@ -199,6 +225,8 @@ async def test_remove_follower_1(cluster_maker):
     assert done_by_event is not None
     assert ts_3.deck.role.stopped
 
+    spec = dict(used=[f_remove_follower], tested=[f_heartbeat_adjustment])
+    await cluster.test_trace.start_subtest("Verifying heartbeat adjustment after node removal", features=spec)
     # now make sure heartbeat send only goes to the one remaining follower
     await ts_1.send_heartbeats()
     assert len(ts_1.out_messages) == 1
@@ -210,19 +238,29 @@ async def test_remove_leader_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions for leader removal
+    f_election_without_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_remove_leader = registry.get_raft_feature("membership_changes", "remove_leader")
+    f_leader_step_down = registry.get_raft_feature("leader_election", "leader_step_down")
+    f_re_election = registry.get_raft_feature("leader_election", "re_election")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing removal of the leader from the cluster", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    spec = dict(used=[f_election_without_pre_vote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election without pre-vote", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to exit the cluster")
+    
+    spec = dict(used=[f_leader_step_down], tested=[f_remove_leader, f_re_election])
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling it to exit the cluster", features=spec)
 
     logger.debug("\n\n\nRemoving leader node 1\n\n\n")
     await ts_1.exit_cluster()
@@ -247,19 +285,32 @@ async def test_add_follower_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - adding follower with short log
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_log_replication = registry.get_raft_feature("log_replication", "log_replication")
+    f_cluster_expansion = registry.get_raft_feature("membership_changes", "cluster_expansion")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with a short log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
+    # Section 2: Command execution and node addition process
+    spec = dict(used=[f_command_execution, f_cluster_expansion], tested=[f_add_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, starting process off adding node 4", features=spec)
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -288,19 +339,34 @@ async def test_re_add_follower_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - re-adding follower after removal
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_re_add_follower = registry.get_raft_feature("membership_changes", "re_add_follower")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("log_replication", "command_execution")
+    f_cluster_expansion = registry.get_raft_feature("membership_changes", "cluster_expansion")
+    f_membership_sequencing = registry.get_raft_feature("membership_changes", "membership_sequencing")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
-    await cluster.test_trace.define_test("Testing addition of a follower with a short log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing re-addition of a follower after removal", logger=logger)
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, starting process off  adding node 4")
+    
+    # Section 2: Initial follower addition for re-add testing
+    spec = dict(used=[f_command_execution, f_cluster_expansion], tested=[f_add_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, adding node 4 for subsequent removal and re-addition", features=spec)
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -328,7 +394,10 @@ async def test_re_add_follower_1(cluster_maker):
     assert ts_4.uri in cc.nodes
     cc = await ts_3.log.get_cluster_config()
     assert ts_4.uri in cc.nodes
-    await cluster.test_trace.start_subtest("Node 4 added, now removing it")
+    
+    # Section 3: Follower removal for re-addition testing
+    spec = dict(used=[], tested=[f_remove_follower])
+    await cluster.test_trace.start_subtest("Node 4 added, now removing it", features=spec)
     removed = None
     done_by_event = None
     async def cb(success, uri):
@@ -371,7 +440,9 @@ async def test_re_add_follower_1(cluster_maker):
     assert ts_4.uri not in (await ts_2.log.get_cluster_config()).nodes
     assert ts_4.uri not in (await ts_3.log.get_cluster_config()).nodes
     
-    await cluster.test_trace.start_subtest("Node 4 removed, now re-adding it")
+    # Section 4: Follower re-addition after removal
+    spec = dict(used=[f_cluster_expansion, f_membership_sequencing], tested=[f_re_add_follower])
+    await cluster.test_trace.start_subtest("Node 4 removed, now re-adding it", features=spec)
     # not really crashed, but this method does a cleanup of last run elements like
     # log and ops, so it's good
     await ts_4.recover_from_crash(deliver=False, save_log=False, save_ops=False)

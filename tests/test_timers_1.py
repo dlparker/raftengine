@@ -10,6 +10,7 @@ from raftengine.messages.append_entries import AppendEntriesMessage, AppendRespo
 from dev_tools.log_control import setup_logging
 from dev_tools.pausing_cluster import cluster_maker
 from dev_tools.sequences import SNormalElection
+from dev_tools.features import FeatureRegistry
 
 #extra_logging = [dict(name=__name__, level="debug"),]
 #setup_logging(extra_logging)
@@ -17,6 +18,7 @@ default_level="error"
 #default_level="debug"
 log_control = setup_logging()
 logger = logging.getLogger("test_code")
+registry = FeatureRegistry.get_registry()
 
 
 async def test_heartbeat_1(cluster_maker):
@@ -27,6 +29,13 @@ async def test_heartbeat_1(cluster_maker):
     waiting for append entry messages to be sent to followers. 
 
     """
+    
+    # Feature definitions for heartbeat timer functionality
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_heartbeat_timer = registry.get_raft_feature("timers", "heartbeat_timer")
+    f_automatic_heartbeats = registry.get_raft_feature("timers", "automatic_heartbeats")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.01
     config = cluster.build_cluster_config(heartbeat_period=heartbeat_period)
@@ -34,8 +43,10 @@ async def test_heartbeat_1(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    await cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages")
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing heartbeat timer causing heartbeat messages", logger=logger)
+    
+    spec = dict(used=[f_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election with timers enabled", features=spec)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -45,6 +56,8 @@ async def test_heartbeat_1(cluster_maker):
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
 
+    spec = dict(used=[f_election], tested=[f_heartbeat_timer, f_automatic_heartbeats, f_heartbeat_processing])
+    await cluster.test_trace.start_subtest("Testing automatic heartbeat timer functionality", features=spec)
     # Test that heartbeat happens in approx expected time
     start_time = time.time()
     full_in_ledger = []
@@ -75,6 +88,13 @@ async def test_heartbeat_2(cluster_maker):
     election_timeout max value is allowed to pass. If the leader
     is still the leader and the term is still the term, then party.
     """
+    
+    # Feature definitions for timer coordination
+    f_election = registry.get_raft_feature("leader_election", "all_yes_votes.with_pre_vote")
+    f_heartbeat_timer = registry.get_raft_feature("timers", "heartbeat_timer")
+    f_election_timeout = registry.get_raft_feature("timers", "election_timeout")
+    f_timeout_prevention = registry.get_raft_feature("timers", "election_timeout_prevention")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.02
     election_timeout_min = 0.1
@@ -87,8 +107,10 @@ async def test_heartbeat_2(cluster_maker):
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
-    await cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections")
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing correct timer values preventing unnecessary elections", logger=logger)
+    
+    spec = dict(used=[f_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election with configured timers", features=spec)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
 
@@ -98,7 +120,9 @@ async def test_heartbeat_2(cluster_maker):
     assert ts_3.get_role_name() == "LEADER"
     assert ts_1.get_leader_uri() == uri_3
     assert ts_2.get_leader_uri() == uri_3
-    await cluster.test_trace.start_subtest(f"Node 3 is leader, starting auto comms and waiting for {election_timeout_max * 2}")
+    
+    spec = dict(used=[f_heartbeat_timer, f_election_timeout], tested=[f_timeout_prevention])
+    await cluster.test_trace.start_subtest(f"Node 3 is leader, starting auto comms and waiting for {election_timeout_max * 2}", features=spec)
     await cluster.start_auto_comms()
     # make sure running for a time exceeding the timeout does not
     # cause a leader lost situation
@@ -124,6 +148,14 @@ async def test_lost_leader_1(cluster_maker):
     
     """
     
+    # Feature definitions - leader failure detection and automatic re-election
+    f_election_timeout = registry.get_raft_feature("timers", "election_timeout")
+    f_leader_failure_detection = registry.get_raft_feature("timers", "leader_failure_detection")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_heartbeat_timer = registry.get_raft_feature("timers", "heartbeat_timer")
+    f_role_transitions = registry.get_raft_feature("leader_election", "role_transitions")
+    f_term_advancement = registry.get_raft_feature("leader_election", "term_advancement")
+    
     cluster = cluster_maker(3)
     # make leader too slow, will cause re-election
     heartbeat_period = 0.2
@@ -138,7 +170,10 @@ async def test_lost_leader_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing timers causing lost leader condition and new election")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment with slow heartbeat configuration
+    spec = dict(used=[f_automated_election, f_heartbeat_timer], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start(timers_disabled=False)
     await ts_3.start_campaign()
     await cluster.deliver_all_pending()
@@ -149,7 +184,9 @@ async def test_lost_leader_1(cluster_maker):
     assert ts_2.get_leader_uri() == uri_3
     await ts_3.do_demote_and_handle(None)
 
-    await cluster.test_trace.start_subtest("Node 3 is leader, waiting for someone to timeout and start an election")
+    # Section 2: Leader failure detection and automatic re-election via timeout
+    spec = dict(used=[f_election_timeout], tested=[f_leader_failure_detection, f_role_transitions, f_term_advancement])
+    await cluster.test_trace.start_subtest("Node 3 is leader, waiting for someone to timeout and start an election", features=spec)
     # Test that election starts in appoximately the leader_lost timeout
     start_time = time.time()
     fraction = election_timeout_max/10.0
@@ -192,6 +229,16 @@ async def test_candidate_timeout_1(cluster_maker):
     When that works, the other nodes are unblocked and the election is allowed to proceed.
     
     """
+    
+    # Feature definitions - candidate timeout and election retry mechanisms
+    f_candidate_timeout = registry.get_raft_feature("timers", "candidate_timeout")
+    f_election_timeout_retry = registry.get_raft_feature("leader_election", "election_timeout_retry")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_network_blocking = registry.get_raft_feature("test_infrastructure", "network_blocking")
+    f_term_advancement = registry.get_raft_feature("leader_election", "term_advancement")
+    f_role_transitions = registry.get_raft_feature("leader_election", "role_transitions")
+    f_timer_operations = registry.get_raft_feature("test_infrastructure", "timer_operations")
+    
     cluster = cluster_maker(3)
     heartbeat_period = 0.001
     election_timeout_min = 0.009
@@ -205,7 +252,10 @@ async def test_candidate_timeout_1(cluster_maker):
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await cluster.test_trace.define_test("Testing candidate timeout and new election start")
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Initial election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
 
     await cluster.start(timers_disabled=True)
     await ts_1.start_campaign()
@@ -218,13 +268,17 @@ async def test_candidate_timeout_1(cluster_maker):
     # Now arrange another election and make sure that the candidate
     # experiences a timeout, no votes in required time. It should
     # incr the term and retry so we can monitor by term value
-    await cluster.test_trace.start_subtest("Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower")
+    # Section 2: Network isolation setup for candidate timeout testing
+    spec = dict(used=[f_network_blocking, f_role_transitions], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, blocking comms to node 1 and node 2, and demoting node 1 to follower", features=spec)
     orig_term = await ts_2.log.get_term()
     ts_1.block_network()
     # we don't want ts_3 to vote yes, so block it too
     ts_3.block_network()
     await ts_1.do_demote_and_handle(None)
-    await cluster.test_trace.start_subtest("Starting auto comms, enabling timers at node 2 and it to start election")
+    # Section 3: Isolated candidate election initiation with timer enable
+    spec = dict(used=[f_timer_operations], tested=[f_term_advancement])
+    await cluster.test_trace.start_subtest("Starting auto comms, enabling timers at node 2 and it to start election", features=spec)
     await cluster.start_auto_comms()
     await ts_2.enable_timers()
     start_time = time.time()
@@ -234,7 +288,9 @@ async def test_candidate_timeout_1(cluster_maker):
         await asyncio.sleep(fraction)
     term_now = await ts_2.log.get_term()
     assert term_now != orig_term
-    await cluster.test_trace.start_subtest("Node 2 started election, waiting for it to timeout")
+    # Section 4: Candidate timeout detection and election retry
+    spec = dict(used=[], tested=[f_candidate_timeout, f_election_timeout_retry])
+    await cluster.test_trace.start_subtest("Node 2 started election, waiting for it to timeout", features=spec)
     if term_now == orig_term + 1:
         # not done yet, just running as candidate for first time,
         start_time = time.time()
@@ -244,7 +300,9 @@ async def test_candidate_timeout_1(cluster_maker):
     final_term = await ts_2.log.get_term()
     assert final_term == orig_term + 2
 
-    await cluster.test_trace.start_subtest("Node 2 election timeout detected, enabling other nodes to let election finish")
+    # Section 5: Network restoration and successful election completion
+    spec = dict(used=[f_network_blocking, f_automated_election], tested=[])
+    await cluster.test_trace.start_subtest("Node 2 election timeout detected, enabling other nodes to let election finish", features=spec)
     ts_1.unblock_network()
     ts_3.unblock_network()
     # now make sure it can win

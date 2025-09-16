@@ -82,7 +82,7 @@ class TraceOutput:
         org_lines = OrgFormatter(self).format(include_legend)
         if len(org_lines) > 0:
             with open(filepath, 'w') as f:
-                for line in org_lines:
+                for index, line in enumerate(org_lines):
                     f.write(line + "\n")
 
     def write_rst_file(self):
