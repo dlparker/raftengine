@@ -212,3 +212,12 @@ class DeckAPI(Protocol): # pragma: no cover
         :rtype: None
         """
         ...
+
+    async def remove_node(self, target_uri: str) -> None:
+        """
+        Start the remove node sequence at the leader for the node with the provided uri.
+
+        :param str target_uri: The node that should be removed
+        :rtype: None
+        """
+        ...

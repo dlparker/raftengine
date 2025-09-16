@@ -191,7 +191,7 @@ async def test_remove_follower_1(cluster_maker):
     
     spec = dict(used=[f_event_handling], tested=[f_remove_follower])
     await cluster.test_trace.start_subtest("Node 1 is leader, telling node 3 to trigger cluster exit for itself", features=spec)
-    logger.debug("\n\n\nRemoving node 3\n\n\n")
+    logger.debug("Removing node 3")
     # now remove number 3
     removed = None
     done_by_event = None
@@ -231,6 +231,106 @@ async def test_remove_follower_1(cluster_maker):
     await ts_1.send_heartbeats()
     assert len(ts_1.out_messages) == 1
     assert ts_1.out_messages[0].receiver == ts_2.uri
+
+async def test_remove_follower_2(cluster_maker):
+    """
+    Simple case of removing a follower from the cluster by direct request of the leader.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    # Feature definitions for follower removal
+    f_election_without_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_event_handling = registry.get_raft_feature("membership_changes", "event_handling")
+    f_heartbeat_adjustment = registry.get_raft_feature("log_replication", "heartbeat_adjustment")
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    await cluster.test_trace.define_test("Testing removal of a follower from the cluster by direct leader request", logger=logger)
+    
+    spec = dict(used=[f_election_without_pre_vote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election without pre-vote", features=spec)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    spec = dict(used=[f_event_handling], tested=[f_remove_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling leader to remove node 3 with direct leader call", features=spec)
+    logger.debug("Removing node 3")
+
+    await ts_1.deck.remove_node(ts_3.uri)
+    await cluster.deliver_all_pending()
+    await ts_1.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and not ts_3.deck.role.stopped:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    await asyncio.sleep(0.0)
+    assert ts_3.deck.role.stopped
+
+    spec = dict(used=[f_remove_follower], tested=[f_heartbeat_adjustment])
+    await cluster.test_trace.start_subtest("Verifying heartbeat adjustment after node removal", features=spec)
+    # now make sure heartbeat send only goes to the one remaining follower
+    await ts_1.send_heartbeats()
+    assert len(ts_1.out_messages) == 1
+    assert ts_1.out_messages[0].receiver == ts_2.uri
+
+async def test_remove_follower_3(cluster_maker):
+    """
+    Simple case of removing a follower from the cluster by indirect request of the leader.
+    
+    Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
+    """
+    
+    # Feature definitions for follower removal
+    f_election_without_pre_vote = registry.get_raft_feature("leader_election", "without_pre_vote")
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_event_handling = registry.get_raft_feature("membership_changes", "event_handling")
+    f_heartbeat_adjustment = registry.get_raft_feature("log_replication", "heartbeat_adjustment")
+    
+    cluster = cluster_maker(3)
+    config = cluster.build_cluster_config(use_pre_vote=False)
+    cluster.set_configs(config)
+
+    await cluster.test_trace.define_test("Testing removal of a follower from the cluster by indirect request to leader", logger=logger)
+    
+    spec = dict(used=[f_election_without_pre_vote], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election without pre-vote", features=spec)
+    await cluster.start()
+    uri_1, uri_2, uri_3 = cluster.node_uris
+    ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+
+    await ts_1.start_campaign()
+    await cluster.run_election()
+    
+    spec = dict(used=[f_event_handling], tested=[f_remove_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, telling leader to remove node 3 with indirect leader call", features=spec)
+    logger.debug("Removing node 3")
+
+    # ask node 2 to remove node 3, neither the leader nor the target
+    await ts_2.deck.remove_node(ts_3.uri)
+    await cluster.deliver_all_pending()
+    await ts_1.send_heartbeats()
+    start_time = time.time()
+    while time.time() - start_time < 0.5 and not ts_3.deck.role.stopped:
+        await cluster.deliver_all_pending()
+        await asyncio.sleep(0.0001)
+    await asyncio.sleep(0.0)
+    assert ts_3.deck.role.stopped
+
+    spec = dict(used=[f_remove_follower], tested=[f_heartbeat_adjustment])
+    await cluster.test_trace.start_subtest("Verifying heartbeat adjustment after node removal", features=spec)
+    # now make sure heartbeat send only goes to the one remaining follower
+    await ts_1.send_heartbeats()
+    assert len(ts_1.out_messages) == 1
+    assert ts_1.out_messages[0].receiver == ts_2.uri
+
 
 async def test_remove_leader_1(cluster_maker):
     """

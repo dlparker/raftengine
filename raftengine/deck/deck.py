@@ -249,6 +249,18 @@ class Deck(DeckAPI):
             await asyncio.sleep(0)
         
     # Part of DeckAPI 
+    async def remove_node(self, target_uri: str) -> None:
+        if self.role.role_name == "LEADER":
+            await self.role.do_node_exit(target_uri)
+            return
+        leader_uri = await self.get_leader_uri()
+        message = MembershipChangeMessage(sender=self.get_my_uri(),
+                                          receiver=leader_uri,
+                                          op=ChangeOp.remove,
+                                          target_uri=target_uri)
+        await self.send_message(message)
+        
+    # Part of DeckAPI 
     async def update_settings(self, settings):
         if not self.stopped:
             if self.role.role_name != "LEADER":
@@ -391,6 +403,8 @@ class Deck(DeckAPI):
     async def note_exit_done(self, success):
         self.exit_result = success
         self.logger.warning("%s exit call to leader result is %s", self.get_my_uri(), self.exit_result)
+        if self._exit_waiter_handle is None:
+            asyncio.create_task(self.stop())
         
     async def _exit_waiter(self, timeout, callback=None):
         start_time = time.time()
