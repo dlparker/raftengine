@@ -1,20 +1,25 @@
 
 * Extras
 1. [] Add RPC api class
-2. [] Add RPCSelector and RaftLogSelector classes
-3. [] Add decorator to HybridLog to check for ready on all API calls, maybe same for other logs too.
-4. [] Need to add event monitoring to examples code
-5. [] Need to add change cluster settings to example
-6. [] Once example is fixed to use new rpc setup, see if restarting servers in process works
+2. [X] Add decorator to HybridLog to check for ready on all API calls, maybe same for other logs too.
+5. [X] NOPE! Once example is fixed to use new rpc setup, see if restarting servers in process works
    because the client close was commented out, which is probably why the servers couldn't
    open their ports. Figure out why I commented out the close and fix the real problem.
+6. [] Rough out a plan for tying RPC ops into dev_tools network sim and tracing. This could be
+   a great tool for developers.
+   
 
 * Example
 1. [] Add "app_spec" call to direct commands returns app name and version
-2. [] Full coverage is just a slog, not a challenge. Maybe bite off some files to do first?
+2. [] Add RPCSelector and RaftLogSelector classes
+3. [] Need to add event monitoring to examples code
+4. [] Need to add change cluster settings to example, change pre-vote maybe?
+5. [] Add an aggregate config that includes cluster, config and new stuff for rpc and log choices.
+6. [] Determine possible move of Raft dir contents to extras
+7. [] Full coverage is just a slog, not a challenge. Maybe bite off some files to do first?
    direct.py is a good target cause it just needs to run in process, logging level checking
    should even work.
-3. [] Make snapshot process separate dict into two parts to illustrate chunking. Split by upper
+8. [] Make snapshot process separate dict into two parts to illustrate chunking. Split by upper
    and lower should work after running validator.
 
 * Core Completion
