@@ -1,0 +1,1 @@
+Leader Self-Resignation on Isolation

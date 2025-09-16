@@ -568,19 +568,35 @@ async def test_add_follower_2(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - long log follower addition with catchup
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_log_catchup = registry.get_raft_feature("membership_changes", "log_catchup")
+    f_multi_round_catchup = registry.get_raft_feature("membership_changes", "multi_round_catchup")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with a long log", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs")
+    
+    # Section 2: Long log preparation for catchup testing
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs", features=spec)
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = (msg_per *3) + 2 # get three blocks of update, will start at 2 because we have one record already
@@ -630,7 +646,10 @@ async def test_add_follower_2(cluster_maker):
                 done_by_event = False
 
     logger.debug("\n\nStarting join from node 4\n\n")
-    await cluster.test_trace.start_subtest("Records inserted, starting add of node 4")
+    
+    # Section 3: Follower addition with long log catchup
+    spec = dict(used=[f_event_handling, f_membership_coordination], tested=[f_add_follower, f_log_catchup, f_multi_round_catchup])
+    await cluster.test_trace.start_subtest("Records inserted, starting add of node 4", features=spec)
     await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
     await ts_4.start_and_join(leader.uri, join_done)
     start_time = time.time()
@@ -641,6 +660,9 @@ async def test_add_follower_2(cluster_maker):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
 
+    # Section 4: Final validation of successful long log catchup
+    spec = dict(used=[f_callback_validation], tested=[])
+    await cluster.test_trace.start_subtest("Validating successful follower addition with complete log catchup", features=spec)
     assert ts_4.operations.total == ts_1.operations.total
     await asyncio.sleep(0.00)
     assert done_by_callback 
@@ -654,19 +676,36 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - controlled multi-round catchup testing
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_log_catchup = registry.get_raft_feature("membership_changes", "log_catchup")
+    f_multi_round_catchup = registry.get_raft_feature("membership_changes", "multi_round_catchup")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_message_sequencing = registry.get_raft_feature("test_infrastructure", "message_sequencing")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_log_replication = registry.get_raft_feature("log_replication", "log_replication")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with multiple log catch-up rounds", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via indirect insert")
+    
+    # Section 2: Initial log preparation for multi-round testing
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, adding records to log via indirect insert", features=spec)
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -735,7 +774,9 @@ async def test_add_follower_2_rounds_1(cluster_maker):
     assert await ts_4.log.get_commit_index() == limit
     assert ts_4.operations.total == limit - 1
 
-    await cluster.test_trace.start_subtest("New node has added all first round records, but leader not yet informed, adding new records")
+    # Section 3: Multi-round catchup orchestration
+    spec = dict(used=[f_message_sequencing, f_command_execution], tested=[f_multi_round_catchup, f_log_catchup])
+    await cluster.test_trace.start_subtest("New node has added all first round records, but leader not yet informed, adding new records", features=spec)
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking commands\n")
     await ts_1.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now\n")
@@ -750,6 +791,9 @@ async def test_add_follower_2_rounds_1(cluster_maker):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
 
+    # Section 5: Final validation of multi-round catchup success
+    spec = dict(used=[f_callback_validation], tested=[])
+    await cluster.test_trace.start_subtest("Validating successful completion of multi-round catchup process", features=spec)
     assert ts_4.operations.total == ts_1.operations.total
     await asyncio.sleep(0.001)
     assert done_by_callback 
@@ -766,19 +810,37 @@ async def test_add_follower_3_rounds_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - advanced multi-round catchup with intervention
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_log_catchup = registry.get_raft_feature("membership_changes", "log_catchup")
+    f_multi_round_catchup = registry.get_raft_feature("membership_changes", "multi_round_catchup")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_message_sequencing = registry.get_raft_feature("test_infrastructure", "message_sequencing")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_log_replication = registry.get_raft_feature("log_replication", "log_replication")
+    f_test_intervention = registry.get_raft_feature("test_infrastructure", "test_intervention")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing addition of a follower with three log catch-up rounds", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4")
+    
+    # Section 2: Initial log preparation for three-round testing
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, loading log records and then starting add of node 4", features=spec)
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -881,6 +943,9 @@ async def test_add_follower_3_rounds_1(cluster_maker):
         await cluster.deliver_all_pending()
         await asyncio.sleep(0.001)
 
+    # Section 3: Final validation of three-round catchup success
+    spec = dict(used=[f_callback_validation], tested=[f_multi_round_catchup])
+    await cluster.test_trace.start_subtest("Validating successful completion of three-round catchup process", features=spec)
     assert ts_4.operations.total == ts_1.operations.total
     assert done_by_callback 
     await asyncio.sleep(0.00)
@@ -897,19 +962,37 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - membership change abort due to excessive rounds
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_log_catchup = registry.get_raft_feature("membership_changes", "log_catchup")
+    f_multi_round_catchup = registry.get_raft_feature("membership_changes", "multi_round_catchup")
+    f_membership_abort = registry.get_raft_feature("membership_changes", "membership_abort")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_test_intervention = registry.get_raft_feature("test_infrastructure", "test_intervention")
+    f_error_handling = registry.get_raft_feature("system_reliability", "error_handling")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing abort of follower addition due to too many log catch-up rounds", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs")
+    
+    # Section 2: Initial log preparation for abort testing
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest("Node 1 is leader, inserting some records via indirect acceess to logs", features=spec)
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
@@ -1001,11 +1084,15 @@ async def test_add_follower_too_many_rounds_1(cluster_maker):
             await ts_4.do_next_in_msg()
 
             
-    await cluster.test_trace.start_subtest("Starting a loop of round update and inserted new rounds")
+    # Section 3: Multi-round exhaustion testing
+    spec = dict(used=[f_test_intervention, f_command_execution], tested=[f_multi_round_catchup, f_membership_abort])
+    await cluster.test_trace.start_subtest("Starting a loop of round update and inserted new rounds", features=spec)
     for i in range(1, 11):
         await buy_another_round(i)
         
-    await cluster.test_trace.start_subtest("Leader is about to get another cycle of round complete but records pending, should abort")
+    # Section 4: Final abort validation
+    spec = dict(used=[f_event_handling, f_callback_validation], tested=[f_membership_abort, f_error_handling])
+    await cluster.test_trace.start_subtest("Leader is about to get another cycle of round complete but records pending, should abort", features=spec)
     # poised to finish round 9, forcing another round should force abort
     await ts_4.do_next_out_msg()
     
@@ -1080,6 +1167,20 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     
     """
     
+    # Feature definitions - timeout handling during second round catchup
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_log_catchup = registry.get_raft_feature("membership_changes", "log_catchup")
+    f_multi_round_catchup = registry.get_raft_feature("membership_changes", "multi_round_catchup")
+    f_membership_abort = registry.get_raft_feature("membership_changes", "membership_abort")
+    f_timeout_handling = registry.get_raft_feature("system_reliability", "timeout_handling")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_test_intervention = registry.get_raft_feature("test_infrastructure", "test_intervention")
+    f_network_control = registry.get_raft_feature("test_infrastructure", "network_control")
+    f_timer_control = registry.get_raft_feature("test_infrastructure", "timer_control")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(heartbeat_period=0.005,
                                           election_timeout_min=0.01,
@@ -1088,7 +1189,10 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing timeout during second round of follower log loading", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment with timer configuration
+    spec = dict(used=[f_automated_election, f_timer_control], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
@@ -1098,7 +1202,9 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
 
     msg_per = await ts_1.deck.get_max_entries_per_message()
     limit = int(msg_per/2) + 2 # get just one block to update, index starts at two because of term start log entry
-    await cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records")
+    # Section 2: Initial log preparation for timeout testing
+    spec = dict(used=[f_command_execution], tested=[])
+    await cluster.test_trace.start_subtest(f"Node 1 is leader, cheat loading {limit-1} log records", features=spec)
     for i in range(2, limit+1):
         for ts in [ts_1, ts_2, ts_3]:
             await ts.fake_command("add", 1)
@@ -1139,7 +1245,9 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     # first exchange will tell leader that node 4 needs catchup, by
     # how much from maxIndex in response
     await ts_4.deck.add_event_handler(MembershipChangeResultHandler())
-    await cluster.test_trace.start_subtest("Node 4 created, telling it to start_and_join, waiting for append entries sequences")
+    # Section 3: Initial follower addition with controlled messaging
+    spec = dict(used=[f_event_handling, f_test_intervention], tested=[f_add_follower, f_log_catchup])
+    await cluster.test_trace.start_subtest("Node 4 created, telling it to start_and_join, waiting for append entries sequences", features=spec)
     await ts_4.start_and_join(leader.uri, join_done, timeout=100.0)
 
     ts_1.set_trigger(WhenMessageIn(AppendResponseMessage.get_code()))
@@ -1172,14 +1280,18 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     assert ts_4.operations.total == limit - 1
 
     logger.debug("\n\nappend 3 done, node 4 caught up but leader doesn't know yet, faking command\n")
-    await cluster.test_trace.start_subtest("Node 4 has caught up its log, but last append response is paused before delivery to leader, adding log record")
+    # Section 4: Second round setup with timeout preparation
+    spec = dict(used=[f_command_execution, f_test_intervention], tested=[f_multi_round_catchup])
+    await cluster.test_trace.start_subtest("Node 4 has caught up its log, but last append response is paused before delivery to leader, adding log record", features=spec)
     await ts_1.fake_command("add", 1)
     await ts_2.fake_command("add", 1)
     await ts_3.fake_command("add", 1)
     logger.debug("\n\nfaked command at leader, should start round 2 now, but blocking node 4 so timeout should happen\n")
 
     # let leader run until timeout causes send of member change response, but don't let it deliver
-    await cluster.test_trace.start_subtest("Blocking comms at node 4, running network ops and Waiting for leader to timeout and notify node 4")
+    # Section 5: Timeout testing with network blocking
+    spec = dict(used=[f_network_control, f_test_intervention], tested=[f_timeout_handling, f_membership_abort])
+    await cluster.test_trace.start_subtest("Blocking comms at node 4, running network ops and Waiting for leader to timeout and notify node 4", features=spec)
     ts_1.set_trigger(WhenMessageOut(MembershipChangeResponseMessage.get_code(), flush_when_done=False))
     ts_4.block_network()
     await ts_1.run_till_triggers()
@@ -1203,7 +1315,9 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     cc = await ts_1.deck.cluster_ops.get_cluster_config()
     assert ts_4.uri not in cc.nodes
     assert cc.pending_node is None
-    await cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal")
+    # Section 6: Retry after timeout abort
+    spec = dict(used=[f_callback_validation, f_event_handling], tested=[f_add_follower])
+    await cluster.test_trace.start_subtest("Node 4 callback and handler results correct and cluster node list state correct, restarting add with all normal", features=spec)
 
     # trying to add node again should work
     await ts_4.tmp_stop()
@@ -1232,6 +1346,10 @@ async def test_add_follower_round_2_timeout_1(cluster_maker):
     assert ts_4.uri in cc.nodes
     assert cc.pending_node is None
 
+    # Section 7: Final validation of successful retry
+    spec = dict(used=[f_callback_validation], tested=[])
+    await cluster.test_trace.start_subtest("Validating successful follower addition after timeout recovery", features=spec)
+    
     await ts_1.send_heartbeats()
     await cluster.deliver_all_pending()
 
@@ -1254,19 +1372,37 @@ async def test_reverse_add_follower_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - membership change reversal due to leader crash
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_membership_reversal = registry.get_raft_feature("membership_changes", "membership_reversal")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_leader_crash_recovery = registry.get_raft_feature("system_reliability", "leader_crash_recovery")
+    f_log_consistency = registry.get_raft_feature("log_replication", "log_consistency")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_node_lifecycle = registry.get_raft_feature("test_infrastructure", "node_lifecycle")
+    f_timeout_handling = registry.get_raft_feature("system_reliability", "timeout_handling")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
 
     await cluster.test_trace.define_test("Testing reversal of follower addition due to leader crash", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, running a command then adding node 4 and starting the join")
+    
+    # Section 2: Initial command and follower addition setup
+    spec = dict(used=[f_command_execution, f_membership_coordination], tested=[f_add_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, running a command then adding node 4 and starting the join", features=spec)
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1335,7 +1471,9 @@ async def test_reverse_add_follower_1(cluster_maker):
     # 
     assert await ts_1.log.get_last_index() > await ts_2.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_3.log.get_last_index()
-    await cluster.test_trace.start_subtest("Node 4 up to date and leader saved membership change log record, crashing leader and running election")
+    # Section 3: Leader crash during membership change
+    spec = dict(used=[f_node_lifecycle, f_automated_election], tested=[f_leader_crash_recovery, f_membership_reversal])
+    await cluster.test_trace.start_subtest("Node 4 up to date and leader saved membership change log record, crashing leader and running election", features=spec)
 
     await ts_1.simulate_crash()
     await ts_2.start_campaign(authorized=True)
@@ -1352,7 +1490,9 @@ async def test_reverse_add_follower_1(cluster_maker):
     # now restart the old leader, send a heart beat from new leader, hold old leader before
     # processing message, check to see that it has temporary add (restored from log). Then
     # let it process message and make sure it discards add.
-    await cluster.test_trace.start_subtest("Node 2 is now leader, restarting crashed old leader and sending heartbeats")
+    # Section 4: Recovery and log consistency validation
+    spec = dict(used=[f_node_lifecycle, f_event_handling], tested=[f_log_consistency, f_membership_reversal])
+    await cluster.test_trace.start_subtest("Node 2 is now leader, restarting crashed old leader and sending heartbeats", features=spec)
     await ts_1.recover_from_crash()
     await ts_2.send_heartbeats(target_only=ts_1.uri)
     ts_1.set_trigger(WhenMessageIn(AppendEntriesMessage.get_code()))
@@ -1372,6 +1512,10 @@ async def test_reverse_add_follower_1(cluster_maker):
     await ts_2.do_next_out_msg()
     await ts_1.do_next_in_msg()
     assert ts_1.out_messages[0].success
+    
+    # Section 5: Final validation of membership reversal
+    spec = dict(used=[f_timeout_handling], tested=[f_membership_reversal])
+    await cluster.test_trace.start_subtest("Validating successful membership change reversal and cleanup", features=spec)
     
     cc = await ts_1.get_cluster_config()
     assert cc.pending_node is None
@@ -1486,11 +1630,27 @@ async def test_reverse_remove_follower_1(cluster_maker):
 
     """
     
+    # Feature definitions - follower removal reversal due to leader crash
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_membership_reversal = registry.get_raft_feature("membership_changes", "membership_reversal")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_leader_crash_recovery = registry.get_raft_feature("system_reliability", "leader_crash_recovery")
+    f_log_consistency = registry.get_raft_feature("log_replication", "log_consistency")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_node_lifecycle = registry.get_raft_feature("test_infrastructure", "node_lifecycle")
+    f_timeout_handling = registry.get_raft_feature("system_reliability", "timeout_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with timeout", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
 
     done_by_callback = None
     done_by_event = None
@@ -1514,8 +1674,16 @@ async def test_reverse_remove_follower_1(cluster_maker):
                 logger.debug('in handler with success = False\n')
                 done_by_event = False
 
+    # Section 2: Follower removal with leader crash scenario
+    spec = dict(used=[f_command_execution, f_event_handling, f_node_lifecycle], tested=[f_remove_follower, f_membership_reversal, f_leader_crash_recovery])
+    await cluster.test_trace.start_subtest("Running follower removal with simulated leader crash and recovery", features=spec)
+    
     await reverse_remove_part_1(cluster, 0.02, exit_done, MembershipChangeResultHandler())
 
+    # Section 3: Final validation of removal reversal with timeout
+    spec = dict(used=[f_timeout_handling, f_callback_validation], tested=[f_membership_reversal])
+    await cluster.test_trace.start_subtest("Validating timeout and callback results for reversed follower removal", features=spec)
+    
     start_time = time.time()
     while time.time() - start_time < 0.05 and done_by_callback is None:
         await cluster.deliver_all_pending()
@@ -1534,11 +1702,26 @@ async def test_reverse_remove_follower_2(cluster_maker):
 
     """
     
+    # Feature definitions - follower removal reversal with early node stop
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_membership_reversal = registry.get_raft_feature("membership_changes", "membership_reversal")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_leader_crash_recovery = registry.get_raft_feature("system_reliability", "leader_crash_recovery")
+    f_event_handling = registry.get_raft_feature("test_infrastructure", "event_handling")
+    f_node_lifecycle = registry.get_raft_feature("test_infrastructure", "node_lifecycle")
+    f_cleanup_handling = registry.get_raft_feature("system_reliability", "cleanup_handling")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to leader crash with stop before timeout", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
 
     done_by_callback = None
     done_by_event = None
@@ -1562,9 +1745,18 @@ async def test_reverse_remove_follower_2(cluster_maker):
                 logger.debug('in handler with success = False\n')
                 done_by_event = False
 
+    # Section 2: Follower removal with leader crash and early node stop
+    spec = dict(used=[f_command_execution, f_event_handling, f_node_lifecycle], tested=[f_remove_follower, f_membership_reversal, f_leader_crash_recovery])
+    await cluster.test_trace.start_subtest("Running follower removal with simulated leader crash and early node stop", features=spec)
+    
     await reverse_remove_part_1(cluster, 0.1, exit_done, MembershipChangeResultHandler())
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
+    
+    # Section 3: Early node stop and cleanup validation
+    spec = dict(used=[f_node_lifecycle], tested=[f_cleanup_handling])
+    await cluster.test_trace.start_subtest("Stopping exiting node before timeout to test cleanup handling", features=spec)
+    
     await ts_3.stop()
     
 async def test_reverse_remove_follower_3(cluster_maker):
@@ -1594,11 +1786,28 @@ async def test_reverse_remove_follower_3(cluster_maker):
 
     """
     
+    # Feature definitions - complex membership reversal with network partition
+    f_remove_follower = registry.get_raft_feature("membership_changes", "remove_follower")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_membership_reversal = registry.get_raft_feature("membership_changes", "membership_reversal")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_command_execution = registry.get_raft_feature("state_machine_command", "command_execution")
+    f_network_partition = registry.get_raft_feature("network_partition", "partition_handling")
+    f_network_healing = registry.get_raft_feature("network_partition", "partition_recovery")
+    f_log_consistency = registry.get_raft_feature("log_replication", "log_consistency")
+    f_term_advancement = registry.get_raft_feature("leader_election", "term_advancement")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    f_log_overwrite = registry.get_raft_feature("log_replication", "log_overwrite")
+    f_test_sequencing = registry.get_raft_feature("test_infrastructure", "test_sequencing")
+    
     cluster = cluster_maker(5)
     config = cluster.build_cluster_config(use_pre_vote=False)
     cluster.set_configs(config)
     await cluster.test_trace.define_test("Testing reversal of follower removal due to network partition and election", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    
+    # Section 1: Five-node election establishment
+    spec = dict(used=[f_automated_election], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
 
     await cluster.start()
     uri_1, uri_2, uri_3, uri_4, uri_5 = cluster.node_uris
@@ -1606,7 +1815,10 @@ async def test_reverse_remove_follower_3(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 5")
+    
+    # Section 2: Initial command and follower exit setup
+    spec = dict(used=[f_command_execution, f_membership_coordination], tested=[f_remove_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, running a command, then starting cluster exit at node 5", features=spec)
     
     command_result = await cluster.run_command("add 1", 1)
     assert ts_1.operations.total == 1
@@ -1635,7 +1847,9 @@ async def test_reverse_remove_follower_3(cluster_maker):
     assert await ts_1.log.get_last_index() > await ts_4.log.get_last_index()
     assert await ts_1.log.get_last_index() > await ts_5.log.get_last_index()
 
-    await cluster.test_trace.start_subtest("Leader has saved member change log record, splitting network, delivering pending, starting election")
+    # Section 3: Network partition during membership change
+    spec = dict(used=[f_network_partition, f_test_sequencing, f_automated_election], tested=[f_membership_reversal, f_term_advancement])
+    await cluster.test_trace.start_subtest("Leader has saved member change log record, splitting network, delivering pending, starting election", features=spec)
     part1 = {uri_1: ts_1, uri_5: ts_5}
     part2 = {uri_2: ts_2,
              uri_3: ts_3,
@@ -1665,7 +1879,9 @@ async def test_reverse_remove_follower_3(cluster_maker):
     assert await ts_1.log.get_last_term() != await ts_4.log.get_last_term()
 
     # now heal network, send a heart beat from new leader, let things run until settled and check conditions
-    await cluster.test_trace.start_subtest("Log state verified, healing partition and triggering heartbeats")
+    # Section 4: Network healing and log consistency restoration
+    spec = dict(used=[f_network_healing, f_heartbeat_processing], tested=[f_log_consistency, f_log_overwrite, f_membership_reversal])
+    await cluster.test_trace.start_subtest("Log state verified, healing partition and triggering heartbeats", features=spec)
     await cluster.unsplit()
     await ts_2.send_heartbeats()
     await cluster.deliver_all_pending()
@@ -1681,6 +1897,15 @@ async def test_add_follower_timeout_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - simple follower addition timeout
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_timeout_handling = registry.get_raft_feature("system_reliability", "timeout_handling")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_timer_control = registry.get_raft_feature("test_infrastructure", "timer_control")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_network_control = registry.get_raft_feature("test_infrastructure", "network_control")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(heartbeat_period=0.05,
                                           election_timeout_min=0.1,
@@ -1688,15 +1913,21 @@ async def test_add_follower_timeout_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Testing simple follower addition timeout", logger=logger)
+    
+    # Section 1: Election establishment with timer configuration
+    spec = dict(used=[f_automated_election, f_timer_control], tested=[])
+    await cluster.test_trace.start_test_prep("Normal election", features=spec)
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
     ts_1, ts_2, ts_3 = [cluster.nodes[uri] for uri in [uri_1, uri_2, uri_3]]
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, starting node 4 join but setting timeout low and sisabling messages")
+    
+    # Section 2: Follower addition setup with timeout testing
+    spec = dict(used=[f_membership_coordination, f_timer_control], tested=[f_add_follower])
+    await cluster.test_trace.start_subtest("Node 1 is leader, starting node 4 join but setting timeout low and disabling messages", features=spec)
     
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1710,6 +1941,10 @@ async def test_add_follower_timeout_1(cluster_maker):
     assert await ts_1.deck.get_election_timeout() > 0.01
     assert await ts_1.deck.get_heartbeat_period() > 0.01
     assert (await ts_1.deck.get_election_timeout_range())[1] > 0.01
+    
+    # Section 3: Timeout testing with network blocking
+    spec = dict(used=[f_network_control], tested=[f_timeout_handling, f_callback_validation])
+    await cluster.test_trace.start_subtest("Starting join with short timeout and blocked network to trigger timeout", features=spec)
     
     await ts_4.start_and_join(leader.uri, join_done, timeout=0.01)
     ts_1.block_network()
@@ -1728,6 +1963,16 @@ async def test_add_follower_errors_1(cluster_maker):
     Timers are disabled, so all timer driven operations such as heartbeats are manually triggered.
     """
     
+    # Feature definitions - error handling for follower addition
+    f_add_follower = registry.get_raft_feature("membership_changes", "add_follower")
+    f_error_handling = registry.get_raft_feature("system_reliability", "error_handling")
+    f_automated_election = registry.get_raft_feature("leader_election", "automated_election_process")
+    f_timer_control = registry.get_raft_feature("test_infrastructure", "timer_control")
+    f_callback_validation = registry.get_raft_feature("test_infrastructure", "callback_validation")
+    f_membership_coordination = registry.get_raft_feature("membership_changes", "membership_coordination")
+    f_role_validation = registry.get_raft_feature("leader_election", "role_validation")
+    f_heartbeat_processing = registry.get_raft_feature("log_replication", "heartbeat_processing")
+    
     cluster = cluster_maker(3)
     config = cluster.build_cluster_config(heartbeat_period=0.05,
                                           election_timeout_min=0.1,
@@ -1735,8 +1980,8 @@ async def test_add_follower_errors_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    await cluster.test_trace.define_test("Starting election at node 1 of 3", logger=logger)
-    await cluster.test_trace.start_test_prep("Normal election")
+    await cluster.test_trace.define_test("Follower addition error handling validation", logger=logger, features=[f_add_follower, f_error_handling])
+    await cluster.test_trace.start_test_prep("Normal election for error testing", features=[f_automated_election, f_timer_control])
                                   
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
@@ -1744,7 +1989,10 @@ async def test_add_follower_errors_1(cluster_maker):
 
     await ts_1.start_campaign()
     await cluster.run_election()
-    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit")
+    
+    # Section 1: Leadership establishment and heartbeat validation
+    spec = dict(used=[f_automated_election, f_heartbeat_processing], tested=[f_role_validation])
+    await cluster.test_trace.start_subtest("Node 1 is leader, sending heartbeat so replies will tell us that followers did commit", features=spec)
     
     ts_4 = await cluster.add_node()
     leader = cluster.get_leader()
@@ -1755,10 +2003,16 @@ async def test_add_follower_errors_1(cluster_maker):
         logger.debug(f"Join callback said {ok} joining as {new_uri}")
         callback_result = ok
 
+    # Section 2: Bogus leader ID error validation
+    spec = dict(used=[f_membership_coordination, f_callback_validation], tested=[f_error_handling, f_add_follower])
+    await cluster.test_trace.start_subtest("Testing error handling for bogus leader ID in join request", features=spec)
     # bogus leader id should raise
     with pytest.raises(Exception):
         await ts_4.start_and_join('xxx', join_done, timeout=0.01)
 
+    # Section 3: Non-leader target error validation
+    spec = dict(used=[f_membership_coordination, f_callback_validation], tested=[f_error_handling, f_role_validation])
+    await cluster.test_trace.start_subtest("Testing error response when joining via non-leader node", features=spec)
     # Trying to join at non-leader should get error response
     await ts_4.start_and_join(ts_2.uri, join_done, timeout=0.1)
     start_time = time.time()

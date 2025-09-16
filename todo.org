@@ -23,11 +23,16 @@
    and lower should work after running validator.
 
 * Core Completion
-1. [] Need to be able to remove a server from cluster without it running. This will be a new API call in deck
+1. [X] Need to be able to remove a server from cluster without it running. This will be a new API call in deck
 2. [] Need to reject node exit if only two nodes left. Really? Maybe we can allow a single node to lead
    a cluster for extreme circumstances? Yes, let's make that work. This would be especially usefull when
-   constructing a new node. Imagine starting a server on one maching, going to the next and starting another
+   constructing a new node. Imagine starting a server on one machine, going to the next and starting another
    and having it add itself to the cluster. Probably a good plan.
+   1. Deck API should probably support a cluster_status call that includes the cluster config along
+      with leader_uri and list of "current" nodes, which implies asking leader, which implies a new
+      message? Maybe a condensed addition to append entries? Like a list of missing indices in nodes list? That would typically
+      be empty, and the cost would be low even if the cluster was unhappy, certainly less than ten and probably less than 3. This
+      could be added to the partition tests.
 3. [] Need to add support in deck for periodic (timed? by record added?) events to track log
    usage for snapshot trigger, something like "add event snapshot trigger lesser of 50000 records or 1 hour)"
 4. [] Need to see if an exited server can rejoin without clearing log. This would be useful for fixing errors. Maybe
@@ -52,7 +57,10 @@
    9. [X] raftengine[bi_lmdb_grpc] same as bi_min but adds lmdb and grpc
 4. []  Need an error propogation mechanism that lets low level errors bubble up to error events and even
     deck shutdown (What was I thinking? I am not sure what this means. Maybe for tasks without waiter? Maybe
-    this could be a decorator?
+    this could be a decorator?)
+   1. Maybe things like logs and rpcs need to allow a callback on the start method? Then any error condition
+      that causes and exit can go there?
+   2. Deck could have one as well, but also support a raft_broken event.
    
 
        

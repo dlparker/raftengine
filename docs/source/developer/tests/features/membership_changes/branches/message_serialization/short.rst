@@ -1,0 +1,1 @@
+Membership Change Message Serialization

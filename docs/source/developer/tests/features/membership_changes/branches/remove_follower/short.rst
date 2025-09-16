@@ -1,0 +1,1 @@
+Follower Node Removal from Cluster
