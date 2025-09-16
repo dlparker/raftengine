@@ -1980,8 +1980,9 @@ async def test_add_follower_errors_1(cluster_maker):
                                           use_pre_vote=False)
     cluster.set_configs(config)
 
-    await cluster.test_trace.define_test("Follower addition error handling validation", logger=logger, features=[f_add_follower, f_error_handling])
-    await cluster.test_trace.start_test_prep("Normal election for error testing", features=[f_automated_election, f_timer_control])
+    await cluster.test_trace.define_test("Follower addition error handling validation", logger=logger)
+    spec = dict(used=[], tested=[f_automated_election, f_timer_control])
+    await cluster.test_trace.start_test_prep("Normal election for error testing", features=spec)
                                   
     await cluster.start()
     uri_1, uri_2, uri_3 = cluster.node_uris
